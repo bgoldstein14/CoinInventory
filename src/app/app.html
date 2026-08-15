@@ -1,0 +1,288 @@
+<main class="app-shell">
+  <header class="topbar">
+    <div>
+      <p class="eyebrow">Numismatic portfolio</p>
+      <h1>Coin Inventory</h1>
+    </div>
+
+    <div class="summary-cards">
+      <div class="metric-card">
+        <span>Inventory</span>
+        <strong>{{ inventory().length }}</strong>
+      </div>
+      <div class="metric-card">
+        <span>Total cost</span>
+        <strong>${{ totalCost() | number: '1.2-2' }}</strong>
+      </div>
+      <div class="metric-card">
+        <span>Current value</span>
+        <strong>${{ totalValue() | number: '1.2-2' }}</strong>
+      </div>
+    </div>
+  </header>
+
+  <section class="workspace-grid">
+    <aside class="panel import-panel">
+      <h2>Quicken import</h2>
+
+      <label class="file-picker file-picker--inline">
+        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" />
+        Load QIF file
+      </label>
+
+      <textarea
+        [ngModel]="quickenText()"
+        (ngModelChange)="onQuickenTextChange($event)"
+        rows="12"
+        aria-label="Quicken import text"
+      ></textarea>
+
+      @if (quickenAccounts().length > 0) {
+        <div class="account-selector">
+          <div class="account-header">
+            <span>Accounts</span>
+            <button type="button" class="secondary" (click)="refreshQuickenAccounts()">Refresh</button>
+          </div>
+
+          <div class="account-header account-header--tight">
+            <button type="button" class="secondary" (click)="toggleAllAccounts()">
+              {{ selectedAccounts().length === quickenAccounts().length ? 'Clear all' : 'Select all' }}
+            </button>
+          </div>
+
+          <div class="account-list">
+            @for (account of quickenAccounts(); track account) {
+              <label class="account-checkbox">
+                <input
+                  type="checkbox"
+                  [checked]="selectedAccounts().includes(account)"
+                  (change)="toggleAccount(account)"
+                />
+                <span>{{ account }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="import-actions">
+        <button type="button" class="secondary" (click)="previewImport()">Preview import</button>
+        <button type="button" (click)="importQuicken()">Import selected</button>
+      </div>
+
+      @if (importedRecords().length > 0) {
+        <div class="import-preview">
+          <h3>Import preview</h3>
+          @for (accountName of groupedAccountNames(); track accountName) {
+            <div class="account-group-preview">
+              <h4>{{ accountName }}</h4>
+              <ul>
+                @for (record of groupedImportedRecords()[accountName]; track record.id) {
+                  <li>
+                    <span>{{ record.name }}</span>
+                    <span>{{ record.denomination }}</span>
+                    <strong>${{ record.currentValue | number: '1.2-2' }}</strong>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      }
+    </aside>
+
+    <aside class="panel image-panel">
+      <h2>Image matching</h2>
+      <label class="file-picker">
+        <input type="file" multiple (change)="handleImageSelection($event)" />
+        Browse image folder
+      </label>
+
+      @if (imageMatches().length > 0) {
+        <div class="match-results">
+          <h3>Matched images</h3>
+          <ul>
+            @for (match of imageMatches(); track match.imagePath) {
+              <li>
+                <span>{{ match.imagePath }}</span>
+                <small>{{ match.reason }}</small>
+                <em>{{ match.confidence * 100 | number: '1.0-0' }}%</em>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (manualReviewQueue().length > 0) {
+        <div class="manual-review-panel">
+          <h3>Manual review</h3>
+          @for (match of manualReviewQueue(); track match.imagePath) {
+            <div class="manual-review-item">
+              <div class="manual-review-header">
+                <span>{{ match.imagePath }}</span>
+                <em>{{ match.confidence * 100 | number: '1.0-0' }}%</em>
+              </div>
+              <small>{{ match.reason }}</small>
+              <select (change)="assignManualReviewMatch(match.imagePath, $any($event.target).value)">
+                <option value="">Select a coin</option>
+                @for (coin of inventory(); track coin.id) {
+                  <option [value]="coin.id">{{ coin.name }}</option>
+                }
+              </select>
+            </div>
+          }
+        </div>
+      }
+
+      @if (unmatchedImages().length > 0) {
+        <div class="unmatched-list">
+          <h3>Unmatched images</h3>
+          <ul>
+            @for (image of unmatchedImages(); track image.imagePath) {
+              <li>{{ image.imagePath }}</li>
+            }
+          </ul>
+        </div>
+      }
+    </aside>
+  </section>
+
+  <section class="panel inventory-panel">
+    <div class="panel-header">
+      <h2>Inventory list</h2>
+      <button type="button">Add coin</button>
+    </div>
+
+    <div class="column-picker">
+      @for (column of inventoryColumnOptions(); track column) {
+        <label class="toggle-item">
+          <input type="checkbox" [checked]="visibleInventoryColumns().includes(column)" (change)="toggleColumn(column)" />
+          <span>{{ inventoryColumnLabels[column] }}</span>
+        </label>
+      }
+    </div>
+
+    <div class="inventory-table-wrap">
+      <table class="inventory-table">
+        <thead>
+          <tr>
+            @for (column of visibleInventoryColumns(); track column) {
+              <th>{{ inventoryColumnLabels[column] }}</th>
+            }
+            <th>Images</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (coin of inventory(); track coin.id) {
+            <tr [class.selected]="selectedCoinId() === coin.id" (click)="selectCoin(coin.id)">
+              @for (column of visibleInventoryColumns(); track column) {
+                <td>{{ formatInventoryCell(coin, column) }}</td>
+              }
+              <td>
+                <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); selectCoin(coin.id); toggleImageGallery()">
+                  {{ coin.imagePaths.length > 0 ? 'Images' : 'Add image' }}
+                </button>
+              </td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  @if (selectedCoin) {
+    <aside class="panel detail-panel">
+      <div class="panel-header panel-header--tight">
+        <div>
+          <p class="eyebrow">Selected coin</p>
+          <h2>{{ selectedCoin.name }}</h2>
+        </div>
+        <button type="button" class="secondary" (click)="toggleImageGallery()">
+          {{ showImageGallery() ? 'Hide images' : 'Show images' }}
+        </button>
+      </div>
+
+      <div class="detail-editor">
+        <label>
+          <span>Name</span>
+          <input [ngModel]="selectedCoin.name" (ngModelChange)="updateSelectedCoin('name', $event)" />
+        </label>
+        <label>
+          <span>Grade</span>
+          <input [ngModel]="selectedCoin.grade" (ngModelChange)="updateSelectedCoin('grade', $event)" />
+        </label>
+        <label>
+          <span>Category</span>
+          <input [ngModel]="selectedCoin.category" (ngModelChange)="updateSelectedCoin('category', $event)" />
+        </label>
+        <label>
+          <span>Denomination</span>
+          <input [ngModel]="selectedCoin.denomination" (ngModelChange)="updateSelectedCoin('denomination', $event)" />
+        </label>
+        <label>
+          <span>Country</span>
+          <input [ngModel]="selectedCoin.country" (ngModelChange)="updateSelectedCoin('country', $event)" />
+        </label>
+        <label>
+          <span>Year</span>
+          <input type="number" [ngModel]="selectedCoin.year ?? ''" (ngModelChange)="updateSelectedCoin('year', $event === '' ? null : Number($event))" />
+        </label>
+        <label>
+          <span>Mint mark</span>
+          <input [ngModel]="selectedCoin.mintMark" (ngModelChange)="updateSelectedCoin('mintMark', $event)" />
+        </label>
+        <label>
+          <span>Variety</span>
+          <input [ngModel]="selectedCoin.variety" (ngModelChange)="updateSelectedCoin('variety', $event)" />
+        </label>
+        <label>
+          <span>Cert company</span>
+          <input [ngModel]="selectedCoin.certCompany" (ngModelChange)="updateSelectedCoin('certCompany', $event)" />
+        </label>
+        <label>
+          <span>Cert number</span>
+          <input [ngModel]="selectedCoin.certNumber" (ngModelChange)="updateSelectedCoin('certNumber', $event)" />
+        </label>
+        <label>
+          <span>Purchase price</span>
+          <input type="number" step="0.01" [ngModel]="selectedCoin.purchasePrice" (ngModelChange)="updateSelectedCoin('purchasePrice', Number($event))" />
+        </label>
+        <label>
+          <span>Current value</span>
+          <input type="number" step="0.01" [ngModel]="selectedCoin.currentValue" (ngModelChange)="updateSelectedCoin('currentValue', Number($event))" />
+        </label>
+      </div>
+
+      <div class="detail-notes">
+        <h3>Notes</h3>
+        <textarea [ngModel]="selectedCoin.notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea>
+      </div>
+
+      @if (showImageGallery()) {
+        <div class="image-gallery">
+          <div class="image-gallery__header">
+            <h3>Images</h3>
+            <label class="file-picker file-picker--inline">
+              <input type="file" multiple (change)="addCoinImages($event)" />
+              Add images
+            </label>
+          </div>
+
+          @if (selectedCoin.imagePaths.length > 0) {
+            <div class="image-list">
+              @for (imagePath of selectedCoin.imagePaths; track imagePath) {
+                <div class="image-item">
+                  <img [src]="imagePath" alt="Coin image" class="coin-thumb" />
+                  <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+                  <button type="button" class="secondary small-button" (click)="removeCoinImage(imagePath)">Delete</button>
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No images attached yet.</p>
+          }
+        </div>
+      }
+    </aside>
+  }
+</main>
