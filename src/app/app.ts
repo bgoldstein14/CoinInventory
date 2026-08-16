@@ -3,8 +3,14 @@ import { Component, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ImageMatchingService } from './services/image-matching.service';
 import { QuickenImportService } from './services/quicken-import.service';
+import { StorageKeys, StorageService } from './services/storage.service';
 import { CoinRecord, ImageMatchCandidate, QuickenImportRecord } from './types/coin.model';
 
+/**
+ * Starter inventory shown the first time the app runs (before anything has
+ * been saved to IndexedDB). Also used as the fallback when stored data is
+ * missing, empty, or fails to parse.
+ */
 const seedInventory: CoinRecord[] = [
   {
     id: 'c-001',
@@ -86,9 +92,37 @@ const inventoryColumnLabels: Record<InventoryColumn, string> = {
   source: 'Source'
 };
 
-const inventoryStorageKey = 'coin-inventory-data';
-const inventoryColumnStorageKey = 'coin-inventory-column-visibility';
+/** Columns shown by default before the user customizes visibility. */
+const defaultVisibleColumns: InventoryColumn[] = [
+  'name',
+  'grade',
+  'category',
+  'denomination',
+  'country',
+  'year',
+  'purchasePrice',
+  'currentValue'
+];
 
+type SortDirection = 'asc' | 'desc';
+
+interface SortState {
+  column: InventoryColumn;
+  direction: SortDirection;
+}
+
+/** Category filter value meaning "show every category". */
+const allCategoriesFilter = 'All';
+
+/**
+ * Root component for the Coin Inventory application.
+ *
+ * Owns the inventory data model, the Quicken (QIF) import workflow, the
+ * filename-based image matching workflow, and the inventory table's
+ * search / filter / sort / column-visibility state. Persistence goes
+ * through {@link StorageService} (IndexedDB), since coin photos stored as
+ * base64 data URLs quickly exceed what localStorage can hold.
+ */
 @Component({
   selector: 'app-root',
   imports: [FormsModule, DecimalPipe],
@@ -96,13 +130,13 @@ const inventoryColumnStorageKey = 'coin-inventory-column-visibility';
   styleUrl: './app.scss'
 })
 export class App {
-  protected readonly inventory = signal<CoinRecord[]>(this.loadInventoryState());
+  protected readonly inventory = signal<CoinRecord[]>(seedInventory);
   protected readonly quickenText = signal<string>(`!Type:Invst
 D2024-01-15
-NLiberty Head Double Eagle
+NBuy
+YLiberty Head Double Eagle
 T2450.00
 MUnited States Gold
-YCoin Collection
 ^
 `);
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
@@ -114,13 +148,69 @@ YCoin Collection
   protected readonly showPhotoViewer = signal(false);
   protected readonly photoViewerIndex = signal<number>(0);
   protected readonly inventoryColumnOptions = signal<InventoryColumn[]>([...inventoryColumnOrder]);
-  protected readonly visibleInventoryColumns = signal<InventoryColumn[]>(this.loadVisibleColumns());
+  protected readonly visibleInventoryColumns = signal<InventoryColumn[]>([...defaultVisibleColumns]);
   protected readonly manualReviewMatches = signal<Array<{ imagePath: string; matchedRecordId: string | null; confidence: number; reason: string }>>([]);
   protected readonly inventoryColumnLabels = inventoryColumnLabels;
+
+  /** Free-text search across name, denomination, grade, cert, variety, notes, and tags. */
+  protected readonly searchQuery = signal<string>('');
+  /** Selected category filter, or `allCategoriesFilter` to show everything. */
+  protected readonly categoryFilter = signal<string>(allCategoriesFilter);
+  /** Active inventory table sort column/direction. */
+  protected readonly sortState = signal<SortState>({ column: 'name', direction: 'asc' });
+  protected readonly allCategoriesFilter = allCategoriesFilter;
+
+  /** Promise that resolves once any previously saved state has been loaded. Exposed for tests. */
+  protected readonly ready: Promise<void>;
 
   protected readonly inventoryCategories = computed(() => {
     const categories = this.inventory().map((coin) => coin.category).filter(Boolean);
     return [...new Set(categories)];
+  });
+
+  /**
+   * The inventory rows to render: filtered by the active search text and
+   * category, then sorted by the active sort column/direction. Selection,
+   * deletion, and persistence always operate on the full `inventory()`
+   * signal - only the table's visible rows are affected by this.
+   */
+  protected readonly filteredInventory = computed(() => {
+    const query = this.searchQuery().trim().toLowerCase();
+    const category = this.categoryFilter();
+    const { column, direction } = this.sortState();
+
+    const filtered = this.inventory().filter((coin) => {
+      if (category !== allCategoriesFilter && coin.category !== category) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = [
+        coin.name,
+        coin.denomination,
+        coin.type,
+        coin.country,
+        coin.grade,
+        coin.certCompany,
+        coin.certNumber,
+        coin.variety,
+        coin.mintMark,
+        coin.notes,
+        ...coin.tags
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return haystack.includes(query);
+    });
+
+    return [...filtered].sort((left, right) => {
+      const comparison = this.compareColumnValues(left[column], right[column]);
+      return direction === 'asc' ? comparison : -comparison;
+    });
   });
 
   protected readonly groupedImportedRecords = computed(() => {
@@ -150,10 +240,12 @@ YCoin Collection
 
   constructor(
     private readonly quickenImportService: QuickenImportService,
-    private readonly imageMatchingService: ImageMatchingService
+    private readonly imageMatchingService: ImageMatchingService,
+    private readonly storageService: StorageService
   ) {
     this.refreshQuickenAccounts();
     this.ensureSelectedCoin();
+    this.ready = this.hydrateFromStorage();
   }
 
   protected onQuickenTextChange(value: string): void {
@@ -471,6 +563,57 @@ YCoin Collection
     }
   }
 
+  /** The coin's first attached image, if any - used for the inventory table thumbnail. */
+  protected primaryImage(coin: CoinRecord): string | null {
+    return coin.imagePaths[0] ?? null;
+  }
+
+  /**
+   * CSS class for the grade badge shown in the inventory table, grouping
+   * grades into the tiers a dealer or collector recognizes at a glance:
+   * mint state / proof, circulated-but-attractive, worn, and ungraded.
+   */
+  protected gradeBadgeClass(grade: string): string {
+    const normalized = (grade || '').trim().toUpperCase();
+    if (!normalized || normalized === 'UNGRADED') {
+      return 'badge badge--ungraded';
+    }
+    if (/^(MS|PR|PF)/.test(normalized)) {
+      return 'badge badge--mint';
+    }
+    if (/^(AU|XF|VF)/.test(normalized)) {
+      return 'badge badge--circulated';
+    }
+    return 'badge badge--worn';
+  }
+
+  /** Combined certification badge label (e.g. "NGC #255481-016"), or null when uncertified. */
+  protected certBadgeLabel(coin: CoinRecord): string | null {
+    if (!coin.certCompany && !coin.certNumber) {
+      return null;
+    }
+    const company = coin.certCompany || 'Cert';
+    return coin.certNumber ? `${company} #${coin.certNumber}` : company;
+  }
+
+  /** Toggles the inventory table's sort column, flipping direction on repeat clicks. */
+  protected setSortColumn(column: InventoryColumn): void {
+    const current = this.sortState();
+    this.sortState.set(
+      current.column === column
+        ? { column, direction: current.direction === 'asc' ? 'desc' : 'asc' }
+        : { column, direction: 'asc' }
+    );
+  }
+
+  protected onSearchQueryChange(value: string): void {
+    this.searchQuery.set(value);
+  }
+
+  protected onCategoryFilterChange(value: string): void {
+    this.categoryFilter.set(value);
+  }
+
   protected assignManualReviewMatch(imagePath: string, coinId: string): void {
     const updated = this.imageMatches().map((match) =>
       match.imagePath === imagePath
@@ -551,55 +694,44 @@ YCoin Collection
     this.showImageGallery.set(true);
   }
 
-  private loadInventoryState(): CoinRecord[] {
-    if (typeof window === 'undefined') {
-      return seedInventory;
+  /**
+   * Loads previously saved inventory and column-visibility state from
+   * IndexedDB, if any exists, and applies it over the seed defaults the
+   * signals were constructed with. Safe to call once at startup; a
+   * missing or empty stored value is treated as "nothing to restore".
+   */
+  private async hydrateFromStorage(): Promise<void> {
+    const [storedInventory, storedColumns] = await Promise.all([
+      this.storageService.get<CoinRecord[]>(StorageKeys.Inventory),
+      this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns)
+    ]);
+
+    if (Array.isArray(storedInventory) && storedInventory.length > 0) {
+      this.inventory.set(storedInventory);
+      this.ensureSelectedCoin();
     }
 
-    try {
-      const stored = window.localStorage.getItem(inventoryStorageKey);
-      if (!stored) {
-        return seedInventory;
-      }
-
-      const parsed = JSON.parse(stored) as CoinRecord[];
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : seedInventory;
-    } catch {
-      return seedInventory;
-    }
-  }
-
-  private loadVisibleColumns(): InventoryColumn[] {
-    if (typeof window === 'undefined') {
-      return ['name', 'grade', 'category', 'denomination', 'country', 'year', 'purchasePrice', 'currentValue'];
-    }
-
-    try {
-      const stored = window.localStorage.getItem(inventoryColumnStorageKey);
-      if (!stored) {
-        return ['name', 'grade', 'category', 'denomination', 'country', 'year', 'purchasePrice', 'currentValue'];
-      }
-
-      const parsed = JSON.parse(stored) as InventoryColumn[];
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : ['name', 'grade', 'category', 'denomination', 'country', 'year', 'purchasePrice', 'currentValue'];
-    } catch {
-      return ['name', 'grade', 'category', 'denomination', 'country', 'year', 'purchasePrice', 'currentValue'];
+    if (Array.isArray(storedColumns) && storedColumns.length > 0) {
+      this.visibleInventoryColumns.set(storedColumns);
     }
   }
 
   private persistInventoryState(): void {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    window.localStorage.setItem(inventoryStorageKey, JSON.stringify(this.inventory()));
+    void this.storageService.set(StorageKeys.Inventory, this.inventory());
   }
 
   private persistVisibleColumns(columns: InventoryColumn[]): void {
-    if (typeof window === 'undefined') {
-      return;
+    void this.storageService.set(StorageKeys.VisibleColumns, columns);
+  }
+
+  /** Ordering comparator for a single inventory column's value, used by the sortable table header. */
+  private compareColumnValues(left: unknown, right: unknown): number {
+    if (typeof left === 'number' && typeof right === 'number') {
+      return left - right;
     }
 
-    window.localStorage.setItem(inventoryColumnStorageKey, JSON.stringify(columns));
+    const leftText = (left ?? '').toString().toLowerCase();
+    const rightText = (right ?? '').toString().toLowerCase();
+    return leftText.localeCompare(rightText);
   }
 }
