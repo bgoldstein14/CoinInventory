@@ -1,12 +1,39 @@
+import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import { App } from './app';
 import { ImageMatchingService } from './services/image-matching.service';
 import { QuickenImportService } from './services/quicken-import.service';
+import { StorageService } from './services/storage.service';
+
+/**
+ * Builds an `App` instance with fresh service instances, wired to the
+ * IndexedDB stand-in reset in `beforeEach` below.
+ *
+ * `App`'s public surface is intentionally narrow (most members are
+ * `protected`, exposed to the template but not to external callers).
+ * Tests reach those members via bracket-notation property access
+ * (`app['inventory']`) rather than dot access -- TypeScript only
+ * enforces `protected`/`private` on dot access, so bracket access is the
+ * conventional, compiler-sanctioned way to reach internal state from a
+ * spec file without weakening the component's real API.
+ */
+function createApp(): App {
+  return new App(new QuickenImportService(), new ImageMatchingService(), new StorageService());
+}
 
 describe('App', () => {
+  beforeEach(() => {
+    // Each test gets a brand-new, empty IndexedDB. App's storage hydration
+    // runs asynchronously in the constructor, but only ever overwrites
+    // signal state when it finds non-empty stored data -- against an
+    // empty database it is always a no-op, so tests never race against it.
+    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
   it('creates the app and starts with seeded inventory totals', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
 
     expect(app).toBeTruthy();
     expect(app['inventory']().length).toBeGreaterThan(0);
@@ -15,17 +42,11 @@ describe('App', () => {
   });
 
   it('imports Quicken records into the inventory', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
 
-    app['quickenText'].set(`!Type:Invst
-D2024-02-01
-NUS Half Dime
-T12.50
-MUS 1/2 Dime
-YCoin Collection
-^`);
+    app['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\nMUS 1/2 Dime\n^`);
 
-    app.importQuicken();
+    app['importQuicken']();
 
     expect(app['importedRecords']()).toHaveLength(1);
     expect(app['inventory']().at(-1)?.name).toContain('Half Dime');
@@ -33,7 +54,7 @@ YCoin Collection
   });
 
   it('filters the image match list down to unmatched images only', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
 
     app['imageMatches'].set([
       {
@@ -50,14 +71,14 @@ YCoin Collection
       }
     ]);
 
-    const unmatched = app.unmatchedImages();
+    const unmatched = app['unmatchedImages']();
 
     expect(unmatched).toHaveLength(1);
     expect(unmatched[0].imagePath).toBe('mystery_coin.jpg');
   });
 
   it('tracks image matches from the selected files', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
     const imageFile = new File(['image'], 'mercury_dime_1945.jpg', { type: 'image/jpeg' });
 
     const event = {
@@ -66,7 +87,7 @@ YCoin Collection
       }
     } as unknown as Event;
 
-    app.handleImageSelection(event);
+    app['handleImageSelection'](event);
 
     expect(app['imageMatches']()).toHaveLength(1);
     expect(app['imageMatches']()[0].matchedRecordId).toBe('c-002');
@@ -74,66 +95,74 @@ YCoin Collection
   });
 
   it('adds a blank coin and keeps the selected coin in sync', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
 
-    app.addBlankCoin();
+    app['addBlankCoin']();
 
-    expect(app.inventory().at(-1)?.name).toBe('New Coin');
-    expect(app.selectedCoin?.id).toBe(app.inventory().at(-1)?.id);
+    expect(app['inventory']().at(-1)?.name).toBe('New Coin');
+    expect(app.selectedCoin?.id).toBe(app['inventory']().at(-1)?.id);
   });
 
   it('selects and clears all Quicken accounts in one action', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
     app['quickenAccounts'].set(['Checking', 'Savings', 'Brokerage']);
 
-    app.toggleAllAccounts();
+    app['toggleAllAccounts']();
     expect(app['selectedAccounts']()).toHaveLength(3);
 
-    app.toggleAllAccounts();
+    app['toggleAllAccounts']();
     expect(app['selectedAccounts']()).toHaveLength(0);
   });
 
   it('loads a Quicken file and imports the parsed record set', async () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
-    const file = new File([
-      '!Type:Invst\nD2024-02-01\nNUS Half Dime\nT12.50\nMUS 1/2 Dime\nYCoin Collection\n^'
-    ], 'import.qif', { type: 'text/plain' });
+    const app = createApp();
+    const file = new File(
+      ['!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\nMUS 1/2 Dime\n^'],
+      'import.qif',
+      { type: 'text/plain' }
+    );
 
-    await app.handleQuickenFileSelection({ target: { files: [file] } } as unknown as Event);
+    await app['handleQuickenFileSelection']({ target: { files: [file] } } as unknown as Event);
 
     expect(app['importedRecords']()).toHaveLength(1);
     expect(app['importedRecords']()[0].name).toContain('Half Dime');
   });
 
   it('tracks a selected coin and manages its images from the detail view', async () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
 
-    app.selectCoin('c-002');
+    app['selectCoin']('c-002');
     expect(app.selectedCoin?.id).toBe('c-002');
     expect(app.selectedCoin?.grade).toBe('XF');
 
-    await app.addCoinImages({ target: { files: [new File(['a'], 'front.jpg', { type: 'image/jpeg' })] } } as unknown as Event);
-    expect(app.selectedCoin?.imagePaths.some((path) => path.includes('data:') || path.endsWith('front.jpg'))).toBe(true);
+    await app['addCoinImages']({
+      target: { files: [new File(['a'], 'front.jpg', { type: 'image/jpeg' })] }
+    } as unknown as Event);
+    expect(
+      app.selectedCoin?.imagePaths.some((path) => path.includes('data:') || path.endsWith('front.jpg'))
+    ).toBe(true);
 
-    app.removeCoinImage(app.selectedCoin?.imagePaths[app.selectedCoin.imagePaths.length - 1] ?? '');
-    expect(app.selectedCoin?.imagePaths.some((path) => path.includes('data:') || path.endsWith('front.jpg'))).toBe(false);
+    app['removeCoinImage'](app.selectedCoin?.imagePaths[app.selectedCoin.imagePaths.length - 1] ?? '');
+    expect(
+      app.selectedCoin?.imagePaths.some((path) => path.includes('data:') || path.endsWith('front.jpg'))
+    ).toBe(false);
   });
 
   it('deletes the selected coin from the inventory', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
-    app.selectCoin('c-002');
+    const app = createApp();
+    app['selectCoin']('c-002');
 
-    app.deleteSelectedCoin();
+    app['deleteSelectedCoin']();
 
-    expect(app.inventory().some((coin) => coin.id === 'c-002')).toBe(false);
+    expect(app['inventory']().some((coin) => coin.id === 'c-002')).toBe(false);
     expect(app.selectedCoin?.id).toBe('c-001');
   });
 
   it('exports and imports the inventory JSON payload', async () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
-    const payload = JSON.stringify(app.inventory());
+    const app = createApp();
+    const payload = JSON.stringify(app['inventory']());
 
-    const exportData = app.exportInventoryData();
+    const exportData = app['exportInventoryData']();
     expect(exportData).toBe(payload);
 
     const replacement = [
@@ -161,13 +190,13 @@ YCoin Collection
       }
     ] as const;
 
-    await app.importInventoryData(JSON.stringify(replacement));
-    expect(app.inventory()).toHaveLength(1);
-    expect(app.inventory()[0].name).toBe('Test Coin');
+    await app['importInventoryData'](JSON.stringify(replacement));
+    expect(app['inventory']()).toHaveLength(1);
+    expect(app['inventory']()[0].name).toBe('Test Coin');
   });
 
   it('groups preview records by account and supports manual review assignment', () => {
-    const app = new App(new QuickenImportService(), new ImageMatchingService());
+    const app = createApp();
     app['importedRecords'].set([
       {
         id: 'r1',
@@ -207,8 +236,49 @@ YCoin Collection
       }
     ]);
 
-    app.assignManualReviewMatch('unknown_coin.jpg', 'c-002');
+    app['assignManualReviewMatch']('unknown_coin.jpg', 'c-002');
     expect(app['manualReviewMatches']().length).toBe(0);
     expect(app['imageMatches']()[0].matchedRecordId).toBe('c-002');
+  });
+
+  it('filters the inventory table by search text', () => {
+    const app = createApp();
+
+    app['onSearchQueryChange']('mercury');
+
+    const results = app['filteredInventory']();
+    expect(results).toHaveLength(1);
+    expect(results[0].name).toBe('Mercury Dime');
+  });
+
+  it('filters the inventory table by category', () => {
+    const app = createApp();
+
+    app['onCategoryFilterChange']('Gold Coin');
+
+    const results = app['filteredInventory']();
+    expect(results).toHaveLength(1);
+    expect(results[0].category).toBe('Gold Coin');
+  });
+
+  it('sorts the inventory table and flips direction on repeat clicks', () => {
+    const app = createApp();
+
+    app['setSortColumn']('currentValue');
+    let results = app['filteredInventory']();
+    expect(results[0].currentValue).toBeLessThan(results.at(-1)!.currentValue);
+
+    app['setSortColumn']('currentValue');
+    results = app['filteredInventory']();
+    expect(results[0].currentValue).toBeGreaterThan(results.at(-1)!.currentValue);
+  });
+
+  it('builds a certification badge label only when cert data is present', () => {
+    const app = createApp();
+    const certified = app['inventory']().find((coin) => coin.id === 'c-001')!;
+    const uncertified = app['inventory']().find((coin) => coin.id === 'c-002')!;
+
+    expect(app['certBadgeLabel'](certified)).toBe('NGC #255481-016');
+    expect(app['certBadgeLabel'](uncertified)).toBeNull();
   });
 });
