@@ -140,6 +140,8 @@ MUnited States Gold
 ^
 `);
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
+  /** Warnings surfaced by the last Quicken parse (e.g. skipped sales, unrecognized action codes). */
+  protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly imageMatches = signal<ImageMatchCandidate[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
   protected readonly selectedAccounts = signal<string[]>([]);
@@ -281,6 +283,7 @@ MUnited States Gold
   protected previewImport(): void {
     const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
     this.importedRecords.set(result.importedRecords);
+    this.quickenWarnings.set(result.warnings);
   }
 
   protected async handleQuickenFileSelection(event: Event): Promise<void> {
@@ -296,11 +299,13 @@ MUnited States Gold
 
     const result = this.quickenImportService.parse(text, this.selectedAccounts());
     this.importedRecords.set(result.importedRecords);
+    this.quickenWarnings.set(result.warnings);
   }
 
   protected importQuicken(): void {
     const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
     this.importedRecords.set(result.importedRecords);
+    this.quickenWarnings.set(result.warnings);
 
     const merged: CoinRecord[] = [
       ...this.inventory(),
@@ -604,6 +609,15 @@ MUnited States Gold
         ? { column, direction: current.direction === 'asc' ? 'desc' : 'asc' }
         : { column, direction: 'asc' }
     );
+  }
+
+  /** Arrow glyph shown in a sortable column header: active direction, or a neutral hint otherwise. */
+  protected sortIndicator(column: InventoryColumn): string {
+    const current = this.sortState();
+    if (current.column !== column) {
+      return '';
+    }
+    return current.direction === 'asc' ? '▲' : '▼';
   }
 
   protected onSearchQueryChange(value: string): void {
