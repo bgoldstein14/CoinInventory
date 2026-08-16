@@ -6,6 +6,10 @@ describe('StorageService', () => {
   let service: StorageService;
 
   beforeEach(() => {
+    // fake-indexeddb persists its in-memory database across tests unless
+    // explicitly reset, so each test gets a fresh backing store to avoid
+    // bleeding state between assertions.
+    indexedDB.deleteDatabase('coin-inventory-db');
     service = new StorageService();
   });
 
@@ -14,13 +18,25 @@ describe('StorageService', () => {
     expect(value).toBeUndefined();
   });
 
-  it('round-trips a stored value', async () => {
+  it('round-trips a simple stored value', async () => {
     const coins = [{ id: 'c-001', name: 'Test Coin' }];
 
     await service.set(StorageKeys.Inventory, coins);
     const loaded = await service.get(StorageKeys.Inventory);
 
     expect(loaded).toEqual(coins);
+  });
+
+  it('round-trips a large inventory payload including image data URLs', async () => {
+    const largeImage = `data:image/jpeg;base64,${'A'.repeat(200_000)}`;
+    const inventory = [
+      { id: 'c-001', name: 'Liberty Head Double Eagle', imagePaths: [largeImage] }
+    ];
+
+    await service.set(StorageKeys.Inventory, inventory);
+    const loaded = await service.get<typeof inventory>(StorageKeys.Inventory);
+
+    expect(loaded).toEqual(inventory);
   });
 
   it('overwrites a previously stored value', async () => {
