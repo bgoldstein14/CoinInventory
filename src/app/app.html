@@ -70,6 +70,17 @@
         <button type="button" (click)="importQuicken()">Import selected</button>
       </div>
 
+      @if (quickenWarnings().length > 0) {
+        <div class="import-warnings">
+          <h3>Review before importing</h3>
+          <ul>
+            @for (warning of quickenWarnings(); track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        </div>
+      }
+
       @if (importedRecords().length > 0) {
         <div class="import-preview">
           <h3>Import preview</h3>
@@ -150,7 +161,30 @@
   <section class="panel inventory-panel">
     <div class="panel-header">
       <h2>Inventory list</h2>
-      <button type="button">Add coin</button>
+      <button type="button" (click)="addBlankCoin()">Add coin</button>
+    </div>
+
+    <div class="inventory-toolbar">
+      <input
+        type="search"
+        class="inventory-search"
+        placeholder="Search name, denomination, grade, cert, variety, notes..."
+        [ngModel]="searchQuery()"
+        (ngModelChange)="onSearchQueryChange($event)"
+        aria-label="Search inventory"
+      />
+
+      <select
+        class="inventory-category-filter"
+        [ngModel]="categoryFilter()"
+        (ngModelChange)="onCategoryFilterChange($event)"
+        aria-label="Filter by category"
+      >
+        <option [value]="allCategoriesFilter">All categories</option>
+        @for (category of inventoryCategories(); track category) {
+          <option [value]="category">{{ category }}</option>
+        }
+      </select>
     </div>
 
     <div class="column-picker">
@@ -166,23 +200,46 @@
       <table class="inventory-table">
         <thead>
           <tr>
+            <th class="thumb-column">Photo</th>
             @for (column of visibleInventoryColumns(); track column) {
-              <th>{{ inventoryColumnLabels[column] }}</th>
+              <th class="sortable-header" (click)="setSortColumn(column)">
+                {{ inventoryColumnLabels[column] }}
+                <span class="sort-indicator">{{ sortIndicator(column) }}</span>
+              </th>
             }
             <th>Images</th>
           </tr>
         </thead>
         <tbody>
-          @for (coin of inventory(); track coin.id) {
+          @for (coin of filteredInventory(); track coin.id) {
             <tr [class.selected]="selectedCoinId() === coin.id" (click)="selectCoin(coin.id)">
+              <td class="thumb-column">
+                @if (primaryImage(coin); as thumbnail) {
+                  <img [src]="thumbnail" alt="{{ coin.name }}" class="row-thumb" />
+                } @else {
+                  <span class="row-thumb row-thumb--empty" aria-hidden="true">No photo</span>
+                }
+              </td>
               @for (column of visibleInventoryColumns(); track column) {
-                <td>{{ formatInventoryCell(coin, column) }}</td>
+                <td>
+                  @if (column === 'grade') {
+                    <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
+                  } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
+                    <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
+                  } @else {
+                    {{ formatInventoryCell(coin, column) }}
+                  }
+                </td>
               }
               <td>
                 <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); selectCoin(coin.id); toggleImageGallery()">
                   {{ coin.imagePaths.length > 0 ? 'Images' : 'Add image' }}
                 </button>
               </td>
+            </tr>
+          } @empty {
+            <tr class="empty-row">
+              <td [attr.colspan]="visibleInventoryColumns().length + 2">No coins match the current search and filter.</td>
             </tr>
           }
         </tbody>
@@ -196,10 +253,19 @@
         <div>
           <p class="eyebrow">Selected coin</p>
           <h2>{{ selectedCoin.name }}</h2>
+          <div class="detail-badges">
+            <span [class]="gradeBadgeClass(selectedCoin.grade)">{{ selectedCoin.grade || 'Ungraded' }}</span>
+            @if (certBadgeLabel(selectedCoin); as certLabel) {
+              <span class="badge badge--cert">{{ certLabel }}</span>
+            }
+          </div>
         </div>
-        <button type="button" class="secondary" (click)="toggleImageGallery()">
-          {{ showImageGallery() ? 'Hide images' : 'Show images' }}
-        </button>
+        <div class="detail-header-actions">
+          <button type="button" class="secondary" (click)="toggleImageGallery()">
+            {{ showImageGallery() ? 'Hide images' : 'Show images' }}
+          </button>
+          <button type="button" class="danger" (click)="deleteSelectedCoin()">Delete coin</button>
+        </div>
       </div>
 
       <div class="detail-editor">
@@ -259,7 +325,7 @@
       </div>
 
       @if (showImageGallery()) {
-        <div class="image-gallery">
+        <div class="image-gallery" (drop)="handleImageDrop($event)" (dragover)="handleDragOver($event)">
           <div class="image-gallery__header">
             <h3>Images</h3>
             <label class="file-picker file-picker--inline">
@@ -270,19 +336,35 @@
 
           @if (selectedCoin.imagePaths.length > 0) {
             <div class="image-list">
-              @for (imagePath of selectedCoin.imagePaths; track imagePath) {
+              @for (imagePath of selectedCoin.imagePaths; track imagePath; let index = $index) {
                 <div class="image-item">
-                  <img [src]="imagePath" alt="Coin image" class="coin-thumb" />
+                  <img
+                    [src]="imagePath"
+                    alt="Coin image"
+                    class="coin-thumb"
+                    (click)="openPhotoViewer(index)"
+                  />
                   <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
                   <button type="button" class="secondary small-button" (click)="removeCoinImage(imagePath)">Delete</button>
                 </div>
               }
             </div>
           } @else {
-            <p class="empty-state">No images attached yet.</p>
+            <p class="empty-state">No images attached yet. Drag and drop photos here, or use "Add images".</p>
           }
         </div>
       }
     </aside>
+  }
+
+  @if (showPhotoViewer() && selectedCoin && selectedCoin.imagePaths.length > 0) {
+    <div class="photo-viewer-backdrop" (click)="closePhotoViewer()">
+      <div class="photo-viewer" (click)="$event.stopPropagation()">
+        <button type="button" class="secondary small-button photo-viewer__close" (click)="closePhotoViewer()">Close</button>
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="movePhotoViewer(-1)">&#8249;</button>
+        <img [src]="selectedCoin.imagePaths[photoViewerIndex()]" alt="Coin image, enlarged" class="photo-viewer__image" />
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="movePhotoViewer(1)">&#8250;</button>
+      </div>
+    </div>
   }
 </main>
