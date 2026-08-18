@@ -131,14 +131,7 @@ const allCategoriesFilter = 'All';
 })
 export class App {
   protected readonly inventory = signal<CoinRecord[]>(seedInventory);
-  protected readonly quickenText = signal<string>(`!Type:Invst
-D2024-01-15
-NBuy
-YLiberty Head Double Eagle
-T2450.00
-MUnited States Gold
-^
-`);
+  protected readonly quickenText = signal<string>(`!Type:Invst\nD2024-01-15\nNBuy\nYLiberty Head Double Eagle\nT2450.00\nMUnited States Gold\n^\n`);
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
   /** Warnings surfaced by the last Quicken parse (e.g. skipped sales, unrecognized action codes). */
   protected readonly quickenWarnings = signal<string[]>([]);
@@ -401,8 +394,15 @@ MUnited States Gold
     this.ensureSelectedCoin();
   }
 
+  /**
+   * Serializes the full inventory as compact JSON. This is the canonical
+   * "current state as a string" used for round-tripping (e.g. detecting
+   * whether an imported file actually differs). The user-facing download
+   * in {@link downloadInventoryJson} pretty-prints its own copy instead,
+   * since that file is meant to be opened and read by a person.
+   */
   protected exportInventoryData(): string {
-    return JSON.stringify(this.inventory(), null, 2);
+    return JSON.stringify(this.inventory());
   }
 
   protected async importInventoryData(json: string): Promise<void> {
@@ -443,7 +443,10 @@ MUnited States Gold
   }
 
   protected downloadInventoryJson(): void {
-    const payload = this.exportInventoryData();
+    // Pretty-printed for readability when a user opens the exported file in
+    // a text editor; exportInventoryData() itself stays compact since it is
+    // used for internal round-tripping rather than human consumption.
+    const payload = JSON.stringify(this.inventory(), null, 2);
     const blob = new Blob([payload], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement('a');
@@ -683,13 +686,34 @@ MUnited States Gold
     this.persistInventoryState();
   }
 
-  private readFileAsDataUrl(file: File): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(String(reader.result ?? file.name));
-      reader.onerror = () => resolve(file.name);
-      reader.readAsDataURL(file);
-    });
+  /**
+   * Reads a File's bytes and returns a base64 `data:` URL. Deliberately
+   * avoids `FileReader`, which is a browser-only API not available under
+   * the Node-based unit test environment this project runs on; Node does
+   * provide a global `File`, but not `FileReader`. `File.arrayBuffer()`
+   * plus manual base64 encoding works identically in the browser and in
+   * Node/Vitest, so image handling can be unit tested without a DOM.
+   */
+  private async readFileAsDataUrl(file: File): Promise<string> {
+    try {
+      const buffer = await file.arrayBuffer();
+      const base64 = this.encodeBase64(new Uint8Array(buffer));
+      const mimeType = file.type || 'application/octet-stream';
+      return `data:${mimeType};base64,${base64}`;
+    } catch {
+      return file.name;
+    }
+  }
+
+  /** Encodes raw bytes as base64, chunked to avoid call-stack limits on large images. */
+  private encodeBase64(bytes: Uint8Array): string {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+      const chunk = bytes.subarray(offset, offset + chunkSize);
+      binary += String.fromCharCode(...chunk);
+    }
+    return btoa(binary);
   }
 
   private async addDroppedFiles(files: File[]): Promise<void> {

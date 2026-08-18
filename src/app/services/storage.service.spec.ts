@@ -1,4 +1,5 @@
 import 'fake-indexeddb/auto';
+import { IDBFactory } from 'fake-indexeddb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { StorageKeys, StorageService } from './storage.service';
 
@@ -6,10 +7,14 @@ describe('StorageService', () => {
   let service: StorageService;
 
   beforeEach(() => {
-    // fake-indexeddb persists its in-memory database across tests unless
-    // explicitly reset, so each test gets a fresh backing store to avoid
-    // bleeding state between assertions.
-    indexedDB.deleteDatabase('coin-inventory-db');
+    // Swap in a brand-new, empty IndexedDB factory for every test rather
+    // than deleting the previous database in place. `StorageService`
+    // caches its open connection for its lifetime and never closes it, so
+    // a same-name `indexedDB.deleteDatabase()` call would queue behind the
+    // still-open connection from the previous test and hang indefinitely
+    // (observed as a 5s test timeout). A fresh `IDBFactory` sidesteps that
+    // entirely since it shares no state with anything opened before it.
+    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
     service = new StorageService();
   });
 
