@@ -155,6 +155,15 @@ export class App {
   protected readonly sortState = signal<SortState>({ column: 'name', direction: 'asc' });
   protected readonly allCategoriesFilter = allCategoriesFilter;
 
+  /**
+   * Reference to the global `Number` constructor, exposed as a component
+   * member so the template can call it. Angular's template type-checker
+   * only resolves whitelisted globals inside bindings - a bare `Number(...)`
+   * call in app.html fails to compile even though it's valid TypeScript;
+   * routing it through `this.Number` resolves the same global correctly.
+   */
+  protected readonly Number = Number;
+
   /** Promise that resolves once any previously saved state has been loaded. Exposed for tests. */
   protected readonly ready: Promise<void>;
 
