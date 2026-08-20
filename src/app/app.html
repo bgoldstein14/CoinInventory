@@ -231,6 +231,14 @@
                 <td>
                   @if (column === 'grade') {
                     <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
+                    @if (coin.hasCacSticker) {
+                      <img
+                        [src]="cacGreenBeanIconPath"
+                        alt="CAC green bean sticker"
+                        title="CAC green bean"
+                        class="cac-bean cac-bean--inline"
+                      />
+                    }
                   } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
                     <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
                   } @else {
@@ -266,6 +274,12 @@
             <span [class]="gradeBadgeClass(selectedCoin.grade)">{{ selectedCoin.grade || 'Ungraded' }}</span>
             @if (certBadgeLabel(selectedCoin); as certLabel) {
               <span class="badge badge--cert">{{ certLabel }}</span>
+            }
+            @if (selectedCoin.hasCacSticker) {
+              <span class="cac-bean-badge">
+                <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean" />
+                CAC green bean
+              </span>
             }
           </div>
         </div>
@@ -325,6 +339,13 @@
         <label>
           <span>Current value</span>
           <input type="number" step="0.01" [ngModel]="selectedCoin.currentValue" (ngModelChange)="updateSelectedCoin('currentValue', Number($event))" />
+        </label>
+        <label class="cac-toggle-field">
+          <span>CAC green bean</span>
+          <span class="cac-toggle">
+            <input type="checkbox" [checked]="selectedCoin.hasCacSticker ?? false" (change)="toggleCacSticker()" />
+            <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean cac-bean--toggle" />
+          </span>
         </label>
       </div>
 
