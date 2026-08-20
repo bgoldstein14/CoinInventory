@@ -7,6 +7,15 @@ import { StorageKeys, StorageService } from './services/storage.service';
 import { CoinRecord, ImageMatchCandidate, QuickenImportRecord } from './types/coin.model';
 
 /**
+ * Path to the CAC "green bean" sticker accent image, served from the
+ * `public/` folder (Angular copies everything under `public/` to the
+ * built app's root, per the `assets` glob in angular.json). Centralized
+ * here so the template and any future logic reference one source of
+ * truth for the path.
+ */
+export const cacGreenBeanIconPath = 'CACGreenBean-trimmed.png';
+
+/**
  * Starter inventory shown the first time the app runs (before anything has
  * been saved to IndexedDB). Also used as the fallback when stored data is
  * missing, empty, or fails to parse.
@@ -32,7 +41,8 @@ const seedInventory: CoinRecord[] = [
     notes: 'Strong luster, exceptional strike, original toning.',
     imagePaths: ['liberty_head_double_eagle.jpg'],
     tags: ['gold', 'United States'],
-    source: 'manual'
+    source: 'manual',
+    hasCacSticker: true
   },
   {
     id: 'c-002',
@@ -54,7 +64,8 @@ const seedInventory: CoinRecord[] = [
     notes: 'Lightly toned, eye appeal above average.',
     imagePaths: ['mercury_dime_1945.jpg'],
     tags: ['silver', 'US'],
-    source: 'manual'
+    source: 'manual',
+    hasCacSticker: false
   }
 ];
 
@@ -154,6 +165,9 @@ export class App {
   /** Active inventory table sort column/direction. */
   protected readonly sortState = signal<SortState>({ column: 'name', direction: 'asc' });
   protected readonly allCategoriesFilter = allCategoriesFilter;
+
+  /** Path to the CAC green bean accent image, exposed for the template. */
+  protected readonly cacGreenBeanIconPath = cacGreenBeanIconPath;
 
   /**
    * Reference to the global `Number` constructor, exposed as a component
@@ -331,7 +345,8 @@ export class App {
         notes: record.notes,
         imagePaths: [],
         tags: ['imported'],
-        source: 'quicken'
+        source: 'quicken',
+        hasCacSticker: false
       }))
     ];
 
@@ -382,7 +397,8 @@ export class App {
       notes: '',
       imagePaths: [],
       tags: ['new'],
-      source: 'manual'
+      source: 'manual',
+      hasCacSticker: false
     };
 
     this.inventory.set([...this.inventory(), nextCoin]);
@@ -427,7 +443,8 @@ export class App {
         imagePaths: Array.isArray(coin.imagePaths) ? coin.imagePaths : [],
         tags: Array.isArray(coin.tags) ? coin.tags : [],
         source: coin.source || 'manual',
-        grade: coin.grade || 'Ungraded'
+        grade: coin.grade || 'Ungraded',
+        hasCacSticker: Boolean(coin.hasCacSticker)
       }));
 
       this.inventory.set(normalized);
@@ -545,6 +562,16 @@ export class App {
     }
 
     this.updateCoin(selectedCoin.id, { [field]: value } as Partial<CoinRecord>);
+  }
+
+  /** Flips the CAC green bean sticker flag on the currently selected coin. */
+  protected toggleCacSticker(): void {
+    const selectedCoin = this.selectedCoin;
+    if (!selectedCoin) {
+      return;
+    }
+
+    this.updateCoin(selectedCoin.id, { hasCacSticker: !selectedCoin.hasCacSticker });
   }
 
   protected formatInventoryCell(coin: CoinRecord, column: InventoryColumn): string {
