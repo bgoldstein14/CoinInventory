@@ -51,6 +51,18 @@ export interface CoinRecord {
   imagePaths: string[];
   tags: string[];
   source: 'manual' | 'quicken' | 'import';
+  /**
+   * Whether this coin carries a CAC "green bean" sticker. CAC does not
+   * grade coins independently - it stickers a coin already graded by a
+   * third-party service (typically PCGS or NGC) as meeting a tighter
+   * quality bar within its stated grade. So this is a layered accent on
+   * top of certCompany/certNumber, not a replacement for them - a coin
+   * can be, for example, "PCGS MS64" AND carry a green bean at once.
+   * Optional (rather than required) so records saved before this field
+   * existed keep loading without a migration; treat missing/undefined
+   * the same as `false`.
+   */
+  hasCacSticker?: boolean;
 }
 
 export interface QuickenImportRecord {
