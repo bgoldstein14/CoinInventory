@@ -499,6 +499,51 @@ button:hover {
   gap: 8px;
   margin-top: 8px;
   flex-wrap: wrap;
+  align-items: center;
+}
+
+/* CAC "green bean" accent - layered alongside the grade/cert badges,
+   never replacing them, since a coin can be e.g. "NGC MS64" AND stickered. */
+.cac-bean {
+  display: inline-block;
+  height: 18px;
+  width: auto;
+  vertical-align: middle;
+  border-radius: 3px;
+}
+
+.cac-bean--inline {
+  height: 15px;
+  margin-left: 4px;
+}
+
+.cac-bean-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 6px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #eaf7ec;
+  color: #2b6b34;
+  border: 1px solid #b9dfc0;
+}
+
+.cac-toggle-field {
+  display: grid;
+  gap: 6px;
+}
+
+.cac-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cac-bean--toggle {
+  height: 20px;
 }
 
 .detail-editor {
