@@ -21,7 +21,8 @@ const OBJECT_STORE_NAME = 'app-state';
 /** Keys used within the single key/value object store. */
 export const StorageKeys = {
   Inventory: 'coin-inventory-data',
-  VisibleColumns: 'coin-inventory-column-visibility'
+  VisibleColumns: 'coin-inventory-column-visibility',
+  CategoryOptions: 'coin-inventory-category-options'
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
