@@ -6,20 +6,8 @@ import { QuickenImportService } from './services/quicken-import.service';
 import { StorageKeys, StorageService } from './services/storage.service';
 import { CoinRecord, ImageMatchCandidate, QuickenImportRecord } from './types/coin.model';
 
-/**
- * Path to the CAC "green bean" sticker accent image, served from the
- * `public/` folder (Angular copies everything under `public/` to the
- * built app's root, per the `assets` glob in angular.json). Centralized
- * here so the template and any future logic reference one source of
- * truth for the path.
- */
 export const cacGreenBeanIconPath = 'CACGreenBean-trimmed.png';
 
-/**
- * Starter inventory shown the first time the app runs (before anything has
- * been saved to IndexedDB). Also used as the fallback when stored data is
- * missing, empty, or fails to parse.
- */
 const seedInventory: CoinRecord[] = [
   {
     id: 'c-001',
@@ -103,7 +91,6 @@ const inventoryColumnLabels: Record<InventoryColumn, string> = {
   source: 'Source'
 };
 
-/** Columns shown by default before the user customizes visibility. */
 const defaultVisibleColumns: InventoryColumn[] = [
   'name',
   'grade',
@@ -122,18 +109,10 @@ interface SortState {
   direction: SortDirection;
 }
 
-/** Category filter value meaning "show every category". */
 const allCategoriesFilter = 'All';
 
-/**
- * Root component for the Coin Inventory application.
- *
- * Owns the inventory data model, the Quicken (QIF) import workflow, the
- * filename-based image matching workflow, and the inventory table's
- * search / filter / sort / column-visibility state. Persistence goes
- * through {@link StorageService} (IndexedDB), since coin photos stored as
- * base64 data URLs quickly exceed what localStorage can hold.
- */
+const unassignedQuickenAccount = 'Unassigned';
+
 @Component({
   selector: 'app-root',
   imports: [FormsModule, DecimalPipe],
@@ -144,7 +123,6 @@ export class App {
   protected readonly inventory = signal<CoinRecord[]>(seedInventory);
   protected readonly quickenText = signal<string>(`!Type:Invst\nD2024-01-15\nNBuy\nYLiberty Head Double Eagle\nT2450.00\nMUnited States Gold\n^\n`);
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
-  /** Warnings surfaced by the last Quicken parse (e.g. skipped sales, unrecognized action codes). */
   protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly imageMatches = signal<ImageMatchCandidate[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
@@ -158,27 +136,20 @@ export class App {
   protected readonly manualReviewMatches = signal<Array<{ imagePath: string; matchedRecordId: string | null; confidence: number; reason: string }>>([]);
   protected readonly inventoryColumnLabels = inventoryColumnLabels;
 
-  /** Free-text search across name, denomination, grade, cert, variety, notes, and tags. */
+  protected readonly categoryOptions = signal<string[]>(
+    [...new Set(seedInventory.map((coin) => coin.category).filter(Boolean))].sort()
+  );
+  protected readonly newCategoryOption = signal<string>('');
+
   protected readonly searchQuery = signal<string>('');
-  /** Selected category filter, or `allCategoriesFilter` to show everything. */
   protected readonly categoryFilter = signal<string>(allCategoriesFilter);
-  /** Active inventory table sort column/direction. */
   protected readonly sortState = signal<SortState>({ column: 'name', direction: 'asc' });
   protected readonly allCategoriesFilter = allCategoriesFilter;
 
-  /** Path to the CAC green bean accent image, exposed for the template. */
   protected readonly cacGreenBeanIconPath = cacGreenBeanIconPath;
 
-  /**
-   * Reference to the global `Number` constructor, exposed as a component
-   * member so the template can call it. Angular's template type-checker
-   * only resolves whitelisted globals inside bindings - a bare `Number(...)`
-   * call in app.html fails to compile even though it's valid TypeScript;
-   * routing it through `this.Number` resolves the same global correctly.
-   */
   protected readonly Number = Number;
 
-  /** Promise that resolves once any previously saved state has been loaded. Exposed for tests. */
   protected readonly ready: Promise<void>;
 
   protected readonly inventoryCategories = computed(() => {
@@ -186,12 +157,6 @@ export class App {
     return [...new Set(categories)];
   });
 
-  /**
-   * The inventory rows to render: filtered by the active search text and
-   * category, then sorted by the active sort column/direction. Selection,
-   * deletion, and persistence always operate on the full `inventory()`
-   * signal - only the table's visible rows are affected by this.
-   */
   protected readonly filteredInventory = computed(() => {
     const query = this.searchQuery().trim().toLowerCase();
     const category = this.categoryFilter();
@@ -331,7 +296,7 @@ export class App {
         denomination: record.denomination,
         year: null,
         type: record.type,
-        category: 'Imported',
+        category: this.categoryFromQuickenAccount(record.account),
         country: record.country,
         grade: 'Unknown',
         certCompany: '',
@@ -353,6 +318,11 @@ export class App {
     this.inventory.set(merged);
     this.persistInventoryState();
     this.ensureSelectedCoin();
+
+    const newAccountNames = result.importedRecords
+      .map((record) => record.account)
+      .filter((account): account is string => Boolean(account) && account !== unassignedQuickenAccount);
+    this.mergeCategoryOptions(newAccountNames);
   }
 
   protected toggleColumn(column: InventoryColumn): void {
@@ -383,7 +353,7 @@ export class App {
       denomination: 'Unknown',
       year: null,
       type: 'Unknown',
-      category: 'Uncategorized',
+      category: '',
       country: 'Unknown',
       grade: 'Ungraded',
       certCompany: '',
@@ -419,13 +389,6 @@ export class App {
     this.ensureSelectedCoin();
   }
 
-  /**
-   * Serializes the full inventory as compact JSON. This is the canonical
-   * "current state as a string" used for round-tripping (e.g. detecting
-   * whether an imported file actually differs). The user-facing download
-   * in {@link downloadInventoryJson} pretty-prints its own copy instead,
-   * since that file is meant to be opened and read by a person.
-   */
   protected exportInventoryData(): string {
     return JSON.stringify(this.inventory());
   }
@@ -444,12 +407,16 @@ export class App {
         tags: Array.isArray(coin.tags) ? coin.tags : [],
         source: coin.source || 'manual',
         grade: coin.grade || 'Ungraded',
+        category: coin.category || '',
         hasCacSticker: Boolean(coin.hasCacSticker)
       }));
 
       this.inventory.set(normalized);
       this.persistInventoryState();
       this.ensureSelectedCoin();
+
+      const importedCategories = normalized.map((coin) => coin.category).filter(Boolean);
+      this.mergeCategoryOptions(importedCategories);
     } catch {
       return;
     }
@@ -469,9 +436,6 @@ export class App {
   }
 
   protected downloadInventoryJson(): void {
-    // Pretty-printed for readability when a user opens the exported file in
-    // a text editor; exportInventoryData() itself stays compact since it is
-    // used for internal round-tripping rather than human consumption.
     const payload = JSON.stringify(this.inventory(), null, 2);
     const blob = new Blob([payload], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -564,7 +528,6 @@ export class App {
     this.updateCoin(selectedCoin.id, { [field]: value } as Partial<CoinRecord>);
   }
 
-  /** Flips the CAC green bean sticker flag on the currently selected coin. */
   protected toggleCacSticker(): void {
     const selectedCoin = this.selectedCoin;
     if (!selectedCoin) {
@@ -572,6 +535,26 @@ export class App {
     }
 
     this.updateCoin(selectedCoin.id, { hasCacSticker: !selectedCoin.hasCacSticker });
+  }
+
+  protected addCategoryOptionFromDraft(): void {
+    const draft = this.newCategoryOption().trim();
+    if (!draft) {
+      return;
+    }
+
+    this.mergeCategoryOptions([draft]);
+    this.newCategoryOption.set('');
+  }
+
+  protected onNewCategoryOptionChange(value: string): void {
+    this.newCategoryOption.set(value);
+  }
+
+  protected removeCategoryOption(category: string): void {
+    const next = this.categoryOptions().filter((option) => option !== category);
+    this.categoryOptions.set(next);
+    this.persistCategoryOptions(next);
   }
 
   protected formatInventoryCell(coin: CoinRecord, column: InventoryColumn): string {
@@ -607,16 +590,10 @@ export class App {
     }
   }
 
-  /** The coin's first attached image, if any - used for the inventory table thumbnail. */
   protected primaryImage(coin: CoinRecord): string | null {
     return coin.imagePaths[0] ?? null;
   }
 
-  /**
-   * CSS class for the grade badge shown in the inventory table, grouping
-   * grades into the tiers a dealer or collector recognizes at a glance:
-   * mint state / proof, circulated-but-attractive, worn, and ungraded.
-   */
   protected gradeBadgeClass(grade: string): string {
     const normalized = (grade || '').trim().toUpperCase();
     if (!normalized || normalized === 'UNGRADED') {
@@ -631,7 +608,6 @@ export class App {
     return 'badge badge--worn';
   }
 
-  /** Combined certification badge label (e.g. "NGC #255481-016"), or null when uncertified. */
   protected certBadgeLabel(coin: CoinRecord): string | null {
     if (!coin.certCompany && !coin.certNumber) {
       return null;
@@ -640,7 +616,6 @@ export class App {
     return coin.certNumber ? `${company} #${coin.certNumber}` : company;
   }
 
-  /** Toggles the inventory table's sort column, flipping direction on repeat clicks. */
   protected setSortColumn(column: InventoryColumn): void {
     const current = this.sortState();
     this.sortState.set(
@@ -650,7 +625,6 @@ export class App {
     );
   }
 
-  /** Arrow glyph shown in a sortable column header: active direction, or a neutral hint otherwise. */
   protected sortIndicator(column: InventoryColumn): string {
     const current = this.sortState();
     if (current.column !== column) {
@@ -701,6 +675,34 @@ export class App {
     return Object.keys(this.groupedImportedRecords());
   }
 
+  private categoryFromQuickenAccount(account: string | undefined): string {
+    if (!account || account === unassignedQuickenAccount) {
+      return '';
+    }
+    return account;
+  }
+
+  private mergeCategoryOptions(names: string[]): void {
+    const current = new Set(this.categoryOptions());
+    let changed = false;
+
+    for (const name of names) {
+      const trimmed = name.trim();
+      if (trimmed && !current.has(trimmed)) {
+        current.add(trimmed);
+        changed = true;
+      }
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    const next = [...current].sort();
+    this.categoryOptions.set(next);
+    this.persistCategoryOptions(next);
+  }
+
   private ensureSelectedCoin(): void {
     if (this.inventory().length === 0) {
       this.selectedCoinId.set(null);
@@ -722,14 +724,6 @@ export class App {
     this.persistInventoryState();
   }
 
-  /**
-   * Reads a File's bytes and returns a base64 `data:` URL. Deliberately
-   * avoids `FileReader`, which is a browser-only API not available under
-   * the Node-based unit test environment this project runs on; Node does
-   * provide a global `File`, but not `FileReader`. `File.arrayBuffer()`
-   * plus manual base64 encoding works identically in the browser and in
-   * Node/Vitest, so image handling can be unit tested without a DOM.
-   */
   private async readFileAsDataUrl(file: File): Promise<string> {
     try {
       const buffer = await file.arrayBuffer();
@@ -741,7 +735,6 @@ export class App {
     }
   }
 
-  /** Encodes raw bytes as base64, chunked to avoid call-stack limits on large images. */
   private encodeBase64(bytes: Uint8Array): string {
     let binary = '';
     const chunkSize = 0x8000;
@@ -768,16 +761,11 @@ export class App {
     this.showImageGallery.set(true);
   }
 
-  /**
-   * Loads previously saved inventory and column-visibility state from
-   * IndexedDB, if any exists, and applies it over the seed defaults the
-   * signals were constructed with. Safe to call once at startup; a
-   * missing or empty stored value is treated as "nothing to restore".
-   */
   private async hydrateFromStorage(): Promise<void> {
-    const [storedInventory, storedColumns] = await Promise.all([
+    const [storedInventory, storedColumns, storedCategoryOptions] = await Promise.all([
       this.storageService.get<CoinRecord[]>(StorageKeys.Inventory),
-      this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns)
+      this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns),
+      this.storageService.get<string[]>(StorageKeys.CategoryOptions)
     ]);
 
     if (Array.isArray(storedInventory) && storedInventory.length > 0) {
@@ -787,6 +775,12 @@ export class App {
 
     if (Array.isArray(storedColumns) && storedColumns.length > 0) {
       this.visibleInventoryColumns.set(storedColumns);
+    }
+
+    if (Array.isArray(storedCategoryOptions) && storedCategoryOptions.length > 0) {
+      this.categoryOptions.set(storedCategoryOptions);
+    } else {
+      this.persistCategoryOptions(this.categoryOptions());
     }
   }
 
@@ -798,7 +792,10 @@ export class App {
     void this.storageService.set(StorageKeys.VisibleColumns, columns);
   }
 
-  /** Ordering comparator for a single inventory column's value, used by the sortable table header. */
+  private persistCategoryOptions(categories: string[]): void {
+    void this.storageService.set(StorageKeys.CategoryOptions, categories);
+  }
+
   private compareColumnValues(left: unknown, right: unknown): number {
     if (typeof left === 'number' && typeof right === 'number') {
       return left - right;
