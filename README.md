@@ -1,28 +1,43 @@
 # Coin Inventory
 
-A polished Angular coin inventory and valuation application built for coin collectors and dealers. It combines a searchable, sortable inventory table with a detailed per-coin editor, a Quicken (QIF) import workflow, and a filename-based photo matching workflow - all persisted locally in the browser via IndexedDB.
+A polished Angular coin inventory and valuation application built for coin collectors and dealers. It combines a searchable, sortable inventory table with a detailed per-coin editor, an admin-managed category system, a Quicken (QIF) import workflow, and a filename-based photo matching workflow - all persisted locally in the browser via IndexedDB.
 
 This README doubles as the project's living plan. Keep it current as features land so a future session (human or AI) can resume work from an accurate picture of what exists, why it's built the way it is, and what's next - rather than re-discovering the codebase from scratch.
 
 ## Current state (as of this writing)
 
-The application is functional end-to-end: inventory CRUD, Quicken import, image matching, search/filter/sort, and persistence all work and are covered by passing unit tests. The sections below describe what exists today; **Planned next steps** describes what's queued up but not yet built.
+The application is functional end-to-end: inventory CRUD, category administration, Quicken import, image matching, search/filter/sort, and persistence all work and are covered by passing unit tests. The sections below describe what exists today; **Planned next steps** describes what's queued up but not yet built.
 
 ## Features
 
 ### Inventory management
 
-- Inventory table with a photo thumbnail column, color-coded grade badges (mint/proof, circulated, worn, ungraded tiers), and a certification badge (e.g. "NGC #255481-016") shown inline
+- Inventory table with a photo thumbnail column, color-coded grade badges (mint/proof, circulated, worn, ungraded tiers), a certification badge (e.g. "NGC #255481-016"), and a CAC "green bean" accent icon shown inline
 - Free-text search across name, denomination, type, country, grade, certification company/number, variety, mint mark, notes, and tags
 - Category filter and sortable column headers (click to sort, click again to reverse direction)
 - User-configurable column visibility (show/hide any of the tracked fields in the table)
-- A detail panel for the selected coin covering every tracked trait: name, grade, category, denomination, country, year, mint mark, variety, certification company, certification number, purchase price, current value, and free-text notes
+- A detail panel for the selected coin covering every tracked trait: name, grade, category, denomination, country, year, mint mark, variety, certification company, certification number, purchase price, current value, a CAC green bean toggle, and free-text notes
 - Add / delete coins directly from the UI
 - Export the full inventory as a downloadable, human-readable JSON file, and re-import a previously exported (or hand-edited) JSON file
 
+### Category administration
+
+Category is now a controlled dropdown, not free text, backed by an admin-managed list (`categoryOptions` in `app.ts`, persisted to IndexedDB under `StorageKeys.CategoryOptions`):
+
+- A "Manage categories" panel lets the user add a new category name or remove one from the list. Removing a category does **not** touch coins already assigned to it - they keep their stored value, they just won't see it (or be able to re-pick it) in the dropdown going forward.
+- A newly added coin (`addBlankCoin`) defaults to a **blank** category (not a placeholder like "Uncategorized"), same as an ungraded coin has no fake grade.
+- **Quicken-imported coins default their category to the Quicken account name they came from** (e.g. "Coin Collection"), not a generic "Imported" label - and that account name is automatically folded into the admin-managed category list so it's immediately selectable for any coin, not just the ones just imported. A record with no account (or the parser's internal "Unassigned" placeholder) gets a blank category, same as a manually added coin.
+- Importing a full inventory JSON file similarly folds any categories it contains into the admin list.
+
 ### Coin data model (`src/app/types/coin.model.ts`)
 
-Each `CoinRecord` tracks: denomination, year, type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, notes, image paths, tags, and a `source` marker (`manual` / `quicken` / `import`) recording how the record entered the inventory.
+Each `CoinRecord` tracks: denomination, year, type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, free-text notes, image paths, tags, a `source` marker (`manual` / `quicken` / `import`), and an optional `hasCacSticker` boolean for the CAC green bean accent.
+
+### CAC "green bean" accent
+
+CAC does not grade coins independently - it "stickers" a coin already graded by PCGS/NGC as meeting a tighter quality bar within its stated grade. So `hasCacSticker` is a layered accent on top of `certCompany`/`certNumber`, never a replacement: a coin can be "NGC MS64" **and** carry a green bean at once. The accent image lives at `public/CACGreenBean-trimmed.png` (a user-supplied, pre-trimmed asset - Angular copies everything under `public/` to the built app's root, so the path resolves with no build config changes) and renders in three places: a small inline icon next to the grade badge in the inventory table, a labeled badge in the detail panel's badge row, and a checkbox-plus-icon toggle in the coin editor (`toggleCacSticker()`).
+
+The other four grading companies' own logos (PCGS, NGC, ANACS) were deliberately **not** added as images - see Planned next steps.
 
 ### Quicken (QIF) import (`src/app/services/quicken-import.service.ts`)
 
@@ -48,6 +63,7 @@ Behavior:
 - Tolerates comma-formatted amounts (`2,450.00`) and 2-digit years (`93` -> `1993`, `24` -> `2024`)
 - Supports multiple `!Account` blocks in one file, with a UI account picker to import only selected accounts
 - Best-effort denomination inference from the security name/memo text (half dime, dime, quarter, half dollar, dollar, eagle, double eagle, etc.)
+- Each imported coin's Category defaults to its Quicken account name (see Category administration above)
 
 ### Image matching (`src/app/services/image-matching.service.ts`)
 
@@ -55,7 +71,7 @@ Filename-token similarity matching (Jaccard-style overlap on normalized filename
 
 ### Persistence (`src/app/services/storage.service.ts`)
 
-All inventory data and UI preferences (column visibility) persist to **IndexedDB**, not `localStorage`. This was a deliberate fix: coin photos are stored as base64 data URLs, and `localStorage`'s ~5-10MB per-origin cap would silently fail once a collection accumulates more than a few dozen photographed coins. IndexedDB has no comparable practical ceiling. The service exposes a small async `get`/`set` API keyed by `StorageKeys` so the rest of the app never touches the IndexedDB transaction API directly.
+All inventory data, UI preferences (column visibility), and the admin-managed category list persist to **IndexedDB**, not `localStorage`. This was a deliberate fix: coin photos are stored as base64 data URLs, and `localStorage`'s ~5-10MB per-origin cap would silently fail once a collection accumulates more than a few dozen photographed coins. IndexedDB has no comparable practical ceiling. The service exposes a small async `get`/`set` API keyed by `StorageKeys` (`Inventory`, `VisibleColumns`, `CategoryOptions`) so the rest of the app never touches the IndexedDB transaction API directly.
 
 ### Image handling notes
 
@@ -94,43 +110,22 @@ npm run build
 npm test
 ```
 
-All unit tests pass as of this writing (component, both import/matching services, and the storage service).
+All unit tests pass as of this writing (component - including category-administration and Quicken-category-default coverage - both import/matching services, and the storage service).
 
 ---
 
 ## Planned next steps
 
-The items below are the agreed next round of work. They are ordered roughly by dependency (data model changes first, since the visual work depends on them).
+### 1. Certification company logos for PCGS, NGC, and ANACS
 
-### 1. Certification company logos + "raw" coin support
+The CAC green bean accent is done (see above). The user decided to **skip** adding official logo images for the four grading companies (PCGS/NGC/ANACS were never done; CAC's own wordmark logo was also skipped) because they are registered trademarks and this app is for private use only - the green bean was the one exception, since it has become a widely-recognized, informally-used visual shorthand rather than a strictly-guarded company mark. If this is revisited:
 
-Goal: replace the current text-only certification badge (e.g. "NGC #255481-016") with the actual grading-company logo/icon, shown on the inventory table row (space permitting) and always on the coin detail panel.
-
-Grading/certification services to support, each needs a small icon/logo asset:
-
-- **PCGS** (Professional Coin Grading Service)
-- **NGC** (Numismatic Guaranty Company)
-- **ANACS** (oldest US third-party grading service)
-- **CAC** (Certified Acceptance Corporation) - note CAC does not grade independently; it "stickers" a coin already graded by PCGS or NGC as meeting a higher quality bar within its stated grade
-- **CAC green bean sticker** specifically - a large portion of this collection has CAC-stickered coins, and the green bean deserves its own distinct badge/icon layered alongside (not instead of) the underlying PCGS/NGC badge, since a coin can be e.g. "PCGS MS64 + CAC green bean"
-- **Raw / ungraded** - many coins in this collection are NOT in a third-party grading holder at all. This needs its own explicit visual treatment (not just an empty/missing badge), since "raw" is a first-class, common state for a real collection, not an edge case
-
-Data model implications (`coin.model.ts`):
-
-- `certCompany` currently accepts any free-text string. Consider constraining it to a known union (`'PCGS' | 'NGC' | 'ANACS' | 'CAC' | 'Other' | ''`) plus a display fallback for anything typed outside that set, so the badge-rendering logic has a reliable key to match against.
-- Add a boolean or enum field to distinguish "raw / not certified" from "certified but the certCompany field is just empty/unset" - right now those two states are indistinguishable in the data, and they need different visual treatment (raw coins should show a clear "Raw" indicator, not just an absent badge).
-- Add a separate field for the CAC green bean sticker (e.g. `cacSticker: boolean` or `cacSticker: 'none' | 'green' | 'gold'` if gold-bean support is ever wanted), since it layers on top of an existing PCGS/NGC cert rather than replacing it.
-
-UI implications:
-
-- Source or create small logo/icon assets for PCGS, NGC, ANACS, and CAC (green bean). Likely as SVGs under a new `public/logos/` or `src/assets/logos/` folder, referenced from a small lookup map in the component (e.g. `certCompanyLogo(company: string): string | null`).
-- Decide table-row treatment: a small icon-only badge is likely the right call for the table (limited horizontal space), with the fuller text label ( company + number) reserved for the detail panel.
-- The detail panel's `.detail-badges` area (already exists) is the natural home for the larger, clearer cert-company logo + CAC green bean badge + grade badge together.
-- "Raw" coins need a badge of their own in both places - something like a neutral outline/no-holder icon - so the absence of a cert company reads as an intentional, recognized state rather than a blank spot.
+- Would need real logo assets (user-supplied, same as the CAC green bean was) or custom non-trademarked badges (colored monogram/initials) if the app is ever shared or distributed publicly.
+- Data model would need a way to distinguish "raw / not certified" from "certified but the certCompany field is just empty" - right now those two states are indistinguishable in the data. This is still an open gap independent of the logo question, since many coins in this collection are raw (not in a graded holder) and currently just show an empty cert badge rather than an explicit "Raw" indicator.
 
 ### 2. General visual polish ("add a bit more class")
 
-Raised alongside the logo work as a broader ask - once the grading-company badges land, revisit overall visual polish: refined color palette/typography pass, tighter spacing consistency, and possibly a subtle card-hover/selection treatment beyond the current background-highlight. Treat this as an open-ended follow-up rather than a fixed checklist; specific direction to be defined when the logo work is further along.
+Raised alongside the logo work as a broader ask - refined color palette/typography pass, tighter spacing consistency, and possibly a subtle card-hover/selection treatment beyond the current background-highlight. Open-ended follow-up, not a fixed checklist.
 
 ### Longer-horizon ideas (not yet scheduled)
 
@@ -140,3 +135,4 @@ Carried over from earlier project notes - still valid, not yet prioritized:
 - Valuation-service integration (e.g. pulling current market pricing by denomination/grade rather than manual entry)
 - Stronger filename normalization for image matching (currently pure token-overlap; could incorporate cert numbers embedded in filenames, fuzzy edit-distance, etc.)
 - Bulk edit / bulk tagging operations across multiple selected coins
+- "Raw" coin explicit visual state (see item 1 above)
