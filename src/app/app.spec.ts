@@ -53,6 +53,50 @@ describe('App', () => {
     expect(app['inventory']().at(-1)?.source).toBe('quicken');
   });
 
+  it('defaults an imported coin\'s category to its Quicken account name', () => {
+    const app = createApp();
+
+    app['quickenText'].set(
+      `!Account\nNCoin Collection\n^\n!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\nMUS 1/2 Dime\n^`
+    );
+    app['refreshQuickenAccounts']();
+
+    app['importQuicken']();
+
+    expect(app['inventory']().at(-1)?.category).toBe('Coin Collection');
+    expect(app['categoryOptions']()).toContain('Coin Collection');
+  });
+
+  it('leaves category blank for an imported coin with no Quicken account', () => {
+    const app = createApp();
+
+    app['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\nMUS 1/2 Dime\n^`);
+
+    app['importQuicken']();
+
+    expect(app['inventory']().at(-1)?.category).toBe('');
+  });
+
+  it('adds and removes an admin-managed category option', () => {
+    const app = createApp();
+
+    app['onNewCategoryOptionChange']('Ancient Coins');
+    app['addCategoryOptionFromDraft']();
+    expect(app['categoryOptions']()).toContain('Ancient Coins');
+    expect(app['newCategoryOption']()).toBe('');
+
+    app['removeCategoryOption']('Ancient Coins');
+    expect(app['categoryOptions']()).not.toContain('Ancient Coins');
+  });
+
+  it('defaults a newly added blank coin\'s category to empty', () => {
+    const app = createApp();
+
+    app['addBlankCoin']();
+
+    expect(app['inventory']().at(-1)?.category).toBe('');
+  });
+
   it('filters the image match list down to unmatched images only', () => {
     const app = createApp();
 
@@ -193,6 +237,7 @@ describe('App', () => {
     await app['importInventoryData'](JSON.stringify(replacement));
     expect(app['inventory']()).toHaveLength(1);
     expect(app['inventory']()[0].name).toBe('Test Coin');
+    expect(app['categoryOptions']()).toContain('Test Category');
   });
 
   it('groups preview records by account and supports manual review assignment', () => {
