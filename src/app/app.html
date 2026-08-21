@@ -70,6 +70,11 @@
         <button type="button" (click)="importQuicken()">Import selected</button>
       </div>
 
+      <p class="hint-text">
+        Each imported coin's Category defaults to its Quicken account name (e.g. "Coin Collection") and is added to the
+        managed category list below automatically.
+      </p>
+
       @if (quickenWarnings().length > 0) {
         <div class="warning-list" role="alert">
           <h3>Review before importing</h3>
@@ -158,6 +163,43 @@
     </aside>
   </section>
 
+  <section class="panel category-admin-panel">
+    <div class="panel-header">
+      <h2>Manage categories</h2>
+    </div>
+
+    <p class="hint-text">
+      These are the choices offered in every coin's Category dropdown. Add one manually, or import a Quicken file to
+      add its account names automatically.
+    </p>
+
+    <div class="category-admin-form">
+      <input
+        type="text"
+        class="category-admin-input"
+        placeholder="New category name&hellip;"
+        [ngModel]="newCategoryOption()"
+        (ngModelChange)="onNewCategoryOptionChange($event)"
+        (keydown.enter)="addCategoryOptionFromDraft()"
+        aria-label="New category name"
+      />
+      <button type="button" class="secondary" (click)="addCategoryOptionFromDraft()">Add category</button>
+    </div>
+
+    @if (categoryOptions().length > 0) {
+      <ul class="category-admin-list">
+        @for (category of categoryOptions(); track category) {
+          <li>
+            <span>{{ category }}</span>
+            <button type="button" class="secondary small-button" (click)="removeCategoryOption(category)">Remove</button>
+          </li>
+        }
+      </ul>
+    } @else {
+      <p class="empty-state">No categories yet - add one above, or import a Quicken file.</p>
+    }
+  </section>
+
   <section class="panel inventory-panel">
     <div class="panel-header">
       <h2>Inventory list</h2>
@@ -175,7 +217,7 @@
       <input
         type="search"
         class="inventory-search"
-        placeholder="Search name, grade, cert, variety, notes\u2026"
+        placeholder="Search name, grade, cert, variety, notes&hellip;"
         [ngModel]="searchQuery()"
         (ngModelChange)="onSearchQueryChange($event)"
         aria-label="Search inventory"
@@ -302,7 +344,15 @@
         </label>
         <label>
           <span>Category</span>
-          <input [ngModel]="selectedCoin.category" (ngModelChange)="updateSelectedCoin('category', $event)" />
+          <select
+            [ngModel]="selectedCoin.category"
+            (ngModelChange)="updateSelectedCoin('category', $event)"
+          >
+            <option value="">(blank)</option>
+            @for (category of categoryOptions(); track category) {
+              <option [value]="category">{{ category }}</option>
+            }
+          </select>
         </label>
         <label>
           <span>Denomination</span>
@@ -383,10 +433,10 @@
       @if (showPhotoViewer() && selectedCoin.imagePaths.length > 0) {
         <div class="photo-viewer-backdrop" (click)="closePhotoViewer()">
           <div class="photo-viewer" (click)="$event.stopPropagation()">
-            <button type="button" class="photo-viewer__close" (click)="closePhotoViewer()" aria-label="Close">×</button>
-            <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="movePhotoViewer(-1)" aria-label="Previous image">‹</button>
+            <button type="button" class="photo-viewer__close" (click)="closePhotoViewer()" aria-label="Close">&times;</button>
+            <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
             <img [src]="selectedCoin.imagePaths[photoViewerIndex()]" alt="Coin image, full size" class="photo-viewer__image" />
-            <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="movePhotoViewer(1)" aria-label="Next image">›</button>
+            <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
           </div>
         </div>
       }
