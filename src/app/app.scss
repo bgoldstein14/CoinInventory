@@ -145,6 +145,13 @@ button:hover {
   flex-wrap: wrap;
 }
 
+.hint-text {
+  margin: 12px 0 0;
+  font-size: 0.82rem;
+  color: #7a6a53;
+  line-height: 1.4;
+}
+
 .account-selector {
   margin-top: 14px;
 }
@@ -299,6 +306,45 @@ button:hover {
   padding: 8px 10px;
   border: 1px solid #d9c7a5;
   border-radius: 8px;
+}
+
+.category-admin-panel {
+  margin-bottom: 22px;
+}
+
+.category-admin-form {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+  flex-wrap: wrap;
+}
+
+.category-admin-input {
+  flex: 1 1 240px;
+  padding: 10px 14px;
+  border: 1px solid #d9c7a5;
+  border-radius: 10px;
+  background: #fffdf9;
+}
+
+.category-admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.category-admin-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 999px;
+  padding: 6px 6px 6px 14px;
+  font-size: 0.85rem;
 }
 
 .inventory-panel {
@@ -562,7 +608,8 @@ button:hover {
 }
 
 .detail-editor input,
-.detail-editor textarea {
+.detail-editor textarea,
+.detail-editor select {
   width: 100%;
   border: 1px solid #d9c7a5;
   border-radius: 10px;
