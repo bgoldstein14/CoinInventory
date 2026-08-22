@@ -1,0 +1,128 @@
+:host {
+  display: block;
+  min-height: 100vh;
+  background: #f6f3ec;
+  color: #1f1f22;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+* { box-sizing: border-box; }
+button, input, textarea, select { font: inherit; }
+
+// ---- Buttons ----
+
+button {
+  border: none;
+  background: linear-gradient(135deg, #8e5b2d, #b98748);
+  color: white;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+  white-space: nowrap;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(142, 91, 45, 0.25);
+}
+
+button:disabled { opacity: 0.5; cursor: default; }
+
+button.secondary {
+  background: #f0e8dc;
+  color: #513d2c;
+  border: 1px solid #d9c7a5;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: #e8dece;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+}
+
+button.danger {
+  background: #fbe9e7;
+  color: #8a2c22;
+  border: 1px solid #edb7ac;
+}
+
+button.small-button {
+  padding: 5px 10px;
+  font-size: 0.78rem;
+}
+
+// ---- File picker ----
+
+.file-picker {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0e8dc;
+  border: 1px dashed #b78a4c;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.12s ease;
+}
+
+.file-picker:hover { background: #e8dece; }
+.file-picker--compact { padding: 7px 12px; font-size: 0.8rem; }
+.file-picker input { display: none; }
+
+// ---- Gain / Loss colors ----
+
+.gain { color: #2b6b34; font-weight: 600; }
+.loss { color: #8a2c22; font-weight: 600; }
+
+// ---- Badges ----
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.badge--mint { background: #e5f3e6; color: #2b6b34; border: 1px solid #b9dfc0; }
+.badge--circulated { background: #eaf1fb; color: #29528a; border: 1px solid #bcd4f2; }
+.badge--worn { background: #f6efe1; color: #7a5b26; border: 1px solid #e3cfa4; }
+.badge--ungraded { background: #f1eeea; color: #665f54; border: 1px solid #ddd6c8; }
+.badge--cert { background: #f3e9fb; color: #6b3695; border: 1px solid #ddc2ee; }
+
+// ---- CAC green bean ----
+
+.cac-bean { display: inline-block; height: 16px; width: auto; vertical-align: middle; border-radius: 3px; }
+.cac-bean--inline { height: 14px; margin-left: 4px; }
+
+.cac-bean-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px 2px 4px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: #eaf7ec;
+  color: #2b6b34;
+  border: 1px solid #b9dfc0;
+}
+
+.cac-toggle-field { display: grid; gap: 4px; }
+.cac-toggle { display: inline-flex; align-items: center; gap: 6px; }
+.cac-bean--toggle { height: 18px; }
+
+// ---- Empty state ----
+
+.empty-state {
+  margin: 0;
+  color: #7a6a53;
+  font-size: 0.85rem;
+}

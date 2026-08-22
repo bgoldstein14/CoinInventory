@@ -1,0 +1,37 @@
+@use '../../styles/modal' as *;
+
+// ---- Reports ----
+
+.report-summary {
+  h3 { margin: 16px 0 8px; }
+}
+
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.report-stat {
+  padding: 12px 14px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+
+  span { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6a5a47; }
+  strong { display: block; margin-top: 4px; font-size: 1.1rem; color: #2c1c0e; }
+
+  &.gain strong { color: #2b6b34; }
+  &.loss strong { color: #8a2c22; }
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+  margin-bottom: 14px;
+
+  th, td { padding: 6px 10px; border-bottom: 1px solid #ede5d8; text-align: left; }
+  thead th { background: #f8f0e4; color: #5d4832; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+}

@@ -1,0 +1,124 @@
+// ---- Bulk edit bar ----
+
+.bulk-edit-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #2c1c0e, #4a3520);
+  color: #fff;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.bulk-count {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  select, input {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 0.82rem;
+
+    &::placeholder { color: rgba(255, 255, 255, 0.6); }
+    option { color: #1f1f22; }
+  }
+}
+
+// ---- Photo viewer ----
+
+.photo-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 14, 8, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 32px;
+}
+
+.photo-viewer {
+  position: relative;
+  max-width: min(90vw, 900px);
+  max-height: 85vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-viewer__image {
+  max-width: 100%;
+  max-height: 85vh;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.photo-viewer__close,
+.photo-viewer__nav {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2c1c0e;
+  border: none;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { transform: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+}
+
+.photo-viewer__close { top: -16px; right: -16px; }
+.photo-viewer__nav--prev { left: -48px; top: 50%; transform: translateY(-50%); }
+.photo-viewer__nav--next { right: -48px; top: 50%; transform: translateY(-50%); }
+
+// ---- Responsive ----
+
+@media (max-width: 900px) {
+  .topbar { display: block; }
+  .summary-cards { margin-top: 12px; }
+  .main-content.has-detail { grid-template-columns: 1fr; }
+  .detail-panel { position: static; max-height: none; }
+  .detail-editor { grid-template-columns: 1fr; }
+  .photo-viewer__nav--prev { left: 8px; }
+  .photo-viewer__nav--next { right: 8px; }
+  .modal { max-width: 100%; border-radius: 14px; }
+  .bulk-edit-bar { flex-wrap: wrap; }
+}
+
+// ---- Print ----
+
+@media print {
+  body { background: white; }
+
+  .topbar, .toolbar, .advanced-filters, .detail-panel,
+  .modal-backdrop, .photo-viewer-backdrop, .bulk-edit-bar {
+    display: none !important;
+  }
+
+  .main-content.has-detail { grid-template-columns: 1fr; }
+
+  .inventory-panel { border: none; box-shadow: none; padding: 0; margin: 0; }
+
+  .check-column { display: none; }
+}

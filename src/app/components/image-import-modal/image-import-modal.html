@@ -1,0 +1,119 @@
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Import Images</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="image-import-picker">
+        <label class="file-picker">
+          <input type="file" multiple webkitdirectory (change)="handleDirectorySelection($event)" />
+          Select image folder
+        </label>
+        <label class="file-picker">
+          <input type="file" multiple accept="image/*" (change)="handleDirectorySelection($event)" />
+          Or select individual images
+        </label>
+      </div>
+
+      @if (pendingImageMatches().length > 0) {
+        <div class="image-import-summary">
+          <span>{{ pendingImageMatches().length }} images found</span>
+          <span class="import-stat import-stat--matched">{{ autoMatchedImages().length }} auto-matched</span>
+          <span class="import-stat import-stat--review">{{ reviewImages().length }} need review</span>
+          <span class="import-stat import-stat--unmatched">{{ unmatchedPendingImages().length }} unmatched</span>
+        </div>
+
+        @if (autoMatchedImages().length > 0) {
+          <div class="image-match-section">
+            <h3>Auto-matched</h3>
+            <div class="image-match-list">
+              @for (match of autoMatchedImages(); track match.fileName) {
+                <div class="image-match-card" [class.image-match-card--confirmed]="match.status === 'confirmed'">
+                  @if (match.thumbnailUrl) {
+                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
+                  }
+                  <div class="match-info">
+                    <span class="match-filename">{{ match.fileName }}</span>
+                    <span class="match-coin">{{ coinNameById(match.matchedCoinId) }}</span>
+                    <span class="match-confidence">{{ match.confidence * 100 | number: '1.0-0' }}% match</span>
+                  </div>
+                  <div class="match-actions">
+                    @if (match.status === 'auto-matched') {
+                      <button type="button" class="small-button" (click)="confirmImageMatch(match.fileName)">Confirm</button>
+                      <button type="button" class="secondary small-button" (click)="rejectImageMatch(match.fileName)">Reject</button>
+                    } @else {
+                      <span class="match-confirmed-badge">Confirmed</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (reviewImages().length > 0) {
+          <div class="image-match-section">
+            <h3>Needs review</h3>
+            <div class="image-match-list">
+              @for (match of reviewImages(); track match.fileName) {
+                <div class="image-match-card image-match-card--review">
+                  @if (match.thumbnailUrl) {
+                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
+                  }
+                  <div class="match-info">
+                    <span class="match-filename">{{ match.fileName }}</span>
+                    <span class="match-coin">Suggested: {{ coinNameById(match.matchedCoinId) }}</span>
+                    <span class="match-confidence">{{ match.confidence * 100 | number: '1.0-0' }}% match</span>
+                  </div>
+                  <div class="match-assign">
+                    <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
+                      <option value="">Assign to coin&hellip;</option>
+                      @for (coin of inv.inventory(); track coin.id) {
+                        <option [value]="coin.id" [selected]="coin.id === match.matchedCoinId">{{ coin.name }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (unmatchedPendingImages().length > 0) {
+          <div class="image-match-section">
+            <h3>Unmatched</h3>
+            <div class="image-match-list">
+              @for (match of unmatchedPendingImages(); track match.fileName) {
+                <div class="image-match-card image-match-card--unmatched">
+                  @if (match.thumbnailUrl) {
+                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
+                  }
+                  <div class="match-info">
+                    <span class="match-filename">{{ match.fileName }}</span>
+                    <span class="match-coin">No match found</span>
+                  </div>
+                  <div class="match-assign">
+                    <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
+                      <option value="">Assign to coin&hellip;</option>
+                      @for (coin of inv.inventory(); track coin.id) {
+                        <option [value]="coin.id">{{ coin.name }}</option>
+                      }
+                    </select>
+                  </div>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="close()">Cancel</button>
+          <button type="button" (click)="applyConfirmedMatches()" [disabled]="confirmedCount() === 0">
+            Apply {{ confirmedCount() }} match{{ confirmedCount() === 1 ? '' : 'es' }}
+          </button>
+        </div>
+      }
+    </div>
+  </div>
+</div>

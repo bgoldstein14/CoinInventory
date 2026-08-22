@@ -157,4 +157,60 @@ T2,450.00
     expect(result.importedRecords[0].purchasePrice).toBe(2450);
     expect(result.importedRecords[0].purchaseDate).toBe('1993-08-25');
   });
+
+  it('handles single-digit years from Quicken date formats', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D8/ 8' 4
+NBuy
+Y1864 Two Cent
+T12.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    expect(result.importedRecords[0].purchaseDate).toBe('2004-08-08');
+  });
+
+  it('silently skips XIn and XOut cash transfer actions', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D5/19' 7
+NXIn
+YSome Security
+U37.00
+T37.00
+M1864 2c LM - XF45
+^
+D6/ 8' 7
+NXOut
+YAnother Security
+U25.00
+T25.00
+MSold 1864 LM 2c - VF
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(0);
+    expect(result.warnings).toHaveLength(0);
+  });
+
+  it('sets type to empty string rather than the QIF action code', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuyX
+YLiberty Head Double Eagle
+T2450.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords[0].type).toBe('');
+  });
 });

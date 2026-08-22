@@ -50,19 +50,14 @@ export interface CoinRecord {
   notes: string;
   imagePaths: string[];
   tags: string[];
-  source: 'manual' | 'quicken' | 'import';
-  /**
-   * Whether this coin carries a CAC "green bean" sticker. CAC does not
-   * grade coins independently - it stickers a coin already graded by a
-   * third-party service (typically PCGS or NGC) as meeting a tighter
-   * quality bar within its stated grade. So this is a layered accent on
-   * top of certCompany/certNumber, not a replacement for them - a coin
-   * can be, for example, "PCGS MS64" AND carry a green bean at once.
-   * Optional (rather than required) so records saved before this field
-   * existed keep loading without a migration; treat missing/undefined
-   * the same as `false`.
-   */
+  source: 'manual' | 'quicken' | 'import' | 'csv';
   hasCacSticker?: boolean;
+  soldPrice?: number;
+  soldDate?: string;
+  dealer?: string;
+  weight?: number;
+  metalContent?: string;
+  coinSet?: string;
 }
 
 export interface QuickenImportRecord {
@@ -84,4 +79,30 @@ export interface ImageMatchCandidate {
   matchedRecordId: string | null;
   confidence: number;
   reason: string;
+}
+
+export interface PendingImageMatch {
+  fileName: string;
+  thumbnailUrl: string;
+  matchedCoinId: string | null;
+  confidence: number;
+  reason: string;
+  status: 'auto-matched' | 'confirmed' | 'rejected' | 'pending' | 'unmatched';
+}
+
+export interface TransactionRecord {
+  id: string;
+  coinId: string;
+  type: 'purchase' | 'sale' | 'trade' | 'appraisal';
+  date: string;
+  amount: number;
+  dealer: string;
+  notes: string;
+}
+
+export interface SpotPrices {
+  gold: number;
+  silver: number;
+  platinum: number;
+  copper: number;
 }

@@ -1,0 +1,112 @@
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Import from Quicken (QIF)</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <label class="file-picker">
+        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" />
+        Load QIF file
+      </label>
+
+      <textarea
+        [ngModel]="quickenText()"
+        (ngModelChange)="onQuickenTextChange($event)"
+        rows="8"
+        aria-label="Quicken import text"
+        placeholder="Or paste QIF text here&hellip;"
+      ></textarea>
+
+      <!-- QIF Filters -->
+      <div class="qif-filters">
+        <h3>Filters</h3>
+        <div class="filter-group">
+          <label>
+            <span>Date from</span>
+            <input type="date" [ngModel]="qifDateFrom()" (ngModelChange)="qifDateFrom.set($event)" />
+          </label>
+          <label>
+            <span>Date to</span>
+            <input type="date" [ngModel]="qifDateTo()" (ngModelChange)="qifDateTo.set($event)" />
+          </label>
+          <label>
+            <span>Min price</span>
+            <input type="number" step="0.01" placeholder="$0" [ngModel]="qifPriceMin()" (ngModelChange)="qifPriceMin.set($event)" />
+          </label>
+          <label>
+            <span>Max price</span>
+            <input type="number" step="0.01" placeholder="$∞" [ngModel]="qifPriceMax()" (ngModelChange)="qifPriceMax.set($event)" />
+          </label>
+          <label>
+            <span>Denomination</span>
+            <input type="text" placeholder="e.g. Dime, Quarter" [ngModel]="qifDenominationFilter()" (ngModelChange)="qifDenominationFilter.set($event)" />
+          </label>
+        </div>
+      </div>
+
+      @if (quickenAccounts().length > 0) {
+        <div class="account-selector">
+          <div class="account-header">
+            <span>Accounts</span>
+            <div>
+              <button type="button" class="secondary small-button" (click)="toggleAllAccounts()">
+                {{ selectedAccounts().length === quickenAccounts().length ? 'Clear all' : 'Select all' }}
+              </button>
+              <button type="button" class="secondary small-button" (click)="refreshQuickenAccounts()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="account-list">
+            @for (account of quickenAccounts(); track account) {
+              <label class="account-checkbox">
+                <input type="checkbox" [checked]="selectedAccounts().includes(account)" (change)="toggleAccount(account)" />
+                <span>{{ account }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      }
+
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="previewImport()">Preview</button>
+        <button type="button" (click)="importQuicken()">Import Selected</button>
+      </div>
+
+      <p class="hint-text">
+        Each imported coin's category defaults to its Quicken account name. Filters apply to both preview and import.
+      </p>
+
+      @if (quickenWarnings().length > 0) {
+        <div class="warning-list" role="alert">
+          <h3>Review before importing</h3>
+          <ul>
+            @for (warning of quickenWarnings(); track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        </div>
+      }
+
+      @if (importedRecords().length > 0) {
+        <div class="import-preview">
+          <h3>Import preview ({{ importedRecords().length }} coins)</h3>
+          @for (accountName of groupedAccountNames(); track accountName) {
+            <div class="account-group-preview">
+              <h4>{{ accountName }}</h4>
+              <ul>
+                @for (record of groupedImportedRecords()[accountName]; track record.id) {
+                  <li>
+                    <span>{{ record.name }}</span>
+                    <span>{{ record.denomination }}</span>
+                    <strong>${{ record.currentValue | number: '1.2-2' }}</strong>
+                  </li>
+                }
+              </ul>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

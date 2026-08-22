@@ -1,0 +1,96 @@
+@use '../../styles/modal' as *;
+
+// ---- Image import (inside modal) ----
+
+.image-import-picker {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.image-import-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.import-stat { padding: 2px 8px; border-radius: 999px; font-size: 0.75rem; }
+.import-stat--matched { background: #e5f3e6; color: #2b6b34; }
+.import-stat--review { background: #fff8e8; color: #8a5b1f; }
+.import-stat--unmatched { background: #fbe9e7; color: #8a2c22; }
+
+.image-match-section {
+  margin-bottom: 16px;
+  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+}
+
+.image-match-list { display: grid; gap: 8px; }
+
+.image-match-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid #e8daca;
+  border-radius: 10px;
+  transition: border-color 0.15s ease;
+}
+
+.image-match-card--confirmed { border-color: #b9dfc0; background: #f6fbf6; }
+.image-match-card--review { border-color: #f0d59a; background: #fffcf5; }
+.image-match-card--unmatched { border-color: #edb7ac; background: #fef8f7; }
+
+.match-thumb {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+  flex-shrink: 0;
+}
+
+.match-info {
+  flex: 1;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.match-filename { font-size: 0.82rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.match-coin { font-size: 0.78rem; color: #5c4935; }
+.match-confidence { font-size: 0.72rem; color: #8a7a63; }
+.match-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+.match-confirmed-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #2b6b34;
+  padding: 4px 8px;
+  background: #e5f3e6;
+  border-radius: 999px;
+}
+
+.match-assign {
+  flex-shrink: 0;
+  min-width: 180px;
+
+  select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d9c7a5;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    background: #fdfaf6;
+  }
+}

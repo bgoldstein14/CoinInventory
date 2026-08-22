@@ -39,6 +39,11 @@ testem.log
 /typings
 __screenshots__/
 
+# Server
+server/node_modules
+server/dist
+server/.env
+
 # System files
 .DS_Store
 Thumbs.db

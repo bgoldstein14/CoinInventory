@@ -1,0 +1,28 @@
+{
+  "name": "coin-inventory-server",
+  "version": "1.0.0",
+  "description": "SQL Server backend for the Coin Inventory Angular app",
+  "private": true,
+  "scripts": {
+    "start": "node dist/server.js",
+    "build": "tsc",
+    "dev": "tsx watch server.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "mssql": "^11.0.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.15.0",
+    "@types/supertest": "^6.0.2",
+    "supertest": "^7.0.0",
+    "tsx": "^4.19.3",
+    "typescript": "~5.7.0",
+    "vitest": "^4.1.11"
+  }
+}

@@ -1,0 +1,88 @@
+@use '../../styles/modal' as *;
+
+// ---- QIF import (inside modal) ----
+
+.qif-filters {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+
+  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+}
+
+.account-selector { margin-top: 12px; }
+
+.account-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-weight: 600;
+  font-size: 0.85rem;
+
+  div { display: flex; gap: 6px; }
+}
+
+.account-list {
+  display: grid;
+  gap: 6px;
+  padding: 8px 10px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.account-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
+.hint-text {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: #7a6a53;
+  line-height: 1.4;
+}
+
+.warning-list {
+  margin-top: 12px;
+  background: #fff8e8;
+  border: 1px solid #f0d59a;
+  border-radius: 10px;
+  padding: 10px 12px;
+
+  h3 { margin: 0 0 6px; color: #8a5b1f; font-size: 0.8rem; }
+  ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; font-size: 0.8rem; color: #6a5030; }
+}
+
+.import-preview {
+  margin-top: 14px;
+
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+}
+
+.account-group-preview {
+  margin-bottom: 10px;
+
+  h4 { margin: 0 0 6px; color: #664f30; font-size: 0.85rem; }
+}
+
+.import-preview li {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+}

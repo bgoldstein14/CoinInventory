@@ -1,0 +1,51 @@
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Categories & Sets</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <h3>Categories</h3>
+      <p class="hint-text">These are the choices offered in every coin's Category dropdown.</p>
+      <div class="category-admin-form">
+        <input type="text" class="category-admin-input" placeholder="New category name&hellip;"
+          [ngModel]="newCategoryOption()" (ngModelChange)="newCategoryOption.set($event)"
+          (keydown.enter)="addCategoryOptionFromDraft()" aria-label="New category name" />
+        <button type="button" class="secondary" (click)="addCategoryOptionFromDraft()">Add</button>
+      </div>
+      @if (inv.categoryOptions().length > 0) {
+        <ul class="category-admin-list">
+          @for (category of inv.categoryOptions(); track category) {
+            <li>
+              <span>{{ category }}</span>
+              <button type="button" class="secondary small-button" (click)="removeCategoryOption(category)">Remove</button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty-state">No categories yet.</p>
+      }
+
+      <h3 style="margin-top: 20px">Collection Sets / Albums</h3>
+      <p class="hint-text">Organize coins into named sets, albums, or collections. Assign coins via the detail panel.</p>
+      <div class="category-admin-form">
+        <input type="text" class="category-admin-input" placeholder="New set name&hellip;"
+          [ngModel]="newCoinSet()" (ngModelChange)="newCoinSet.set($event)"
+          (keydown.enter)="addCoinSetFromDraft()" aria-label="New set name" />
+        <button type="button" class="secondary" (click)="addCoinSetFromDraft()">Add</button>
+      </div>
+      @if (inv.coinSets().length > 0) {
+        <ul class="category-admin-list">
+          @for (s of inv.coinSets(); track s) {
+            <li>
+              <span>{{ s }}</span>
+              <button type="button" class="secondary small-button" (click)="removeCoinSet(s)">Remove</button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty-state">No sets yet.</p>
+      }
+    </div>
+  </div>
+</div>

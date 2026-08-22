@@ -22,7 +22,10 @@ const OBJECT_STORE_NAME = 'app-state';
 export const StorageKeys = {
   Inventory: 'coin-inventory-data',
   VisibleColumns: 'coin-inventory-column-visibility',
-  CategoryOptions: 'coin-inventory-category-options'
+  CategoryOptions: 'coin-inventory-category-options',
+  CoinSets: 'coin-inventory-sets',
+  Transactions: 'coin-inventory-transactions',
+  SpotPrices: 'coin-inventory-spot-prices'
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

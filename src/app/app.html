@@ -1,6 +1,6 @@
 <main class="app-shell">
   <header class="topbar">
-    <div>
+    <div class="topbar-title">
       <p class="eyebrow">Numismatic portfolio</p>
       <h1>Coin Inventory</h1>
     </div>
@@ -8,438 +8,412 @@
     <div class="summary-cards">
       <div class="metric-card">
         <span>Inventory</span>
-        <strong>{{ inventory().length }}</strong>
+        <strong>{{ inv.inventory().length }}</strong>
       </div>
       <div class="metric-card">
         <span>Total cost</span>
-        <strong>${{ totalCost() | number: '1.2-2' }}</strong>
+        <strong>${{ inv.totalCost() | number: '1.2-2' }}</strong>
       </div>
       <div class="metric-card">
         <span>Current value</span>
-        <strong>${{ totalValue() | number: '1.2-2' }}</strong>
+        <strong>${{ inv.totalValue() | number: '1.2-2' }}</strong>
+      </div>
+      <div class="metric-card" [class.gain]="inv.totalProfit() >= 0" [class.loss]="inv.totalProfit() < 0">
+        <span>Gain / Loss</span>
+        <strong>{{ inv.totalProfit() >= 0 ? '+' : '' }}${{ inv.totalProfit() | number: '1.2-2' }}</strong>
       </div>
     </div>
   </header>
 
-  <section class="workspace-grid">
-    <aside class="panel import-panel">
-      <h2>Quicken import</h2>
+  <div class="toolbar">
+    <input
+      type="search"
+      class="toolbar-search"
+      placeholder="Search coins&hellip;"
+      [ngModel]="searchQuery()"
+      (ngModelChange)="onSearchQueryChange($event)"
+      aria-label="Search inventory"
+    />
 
-      <label class="file-picker file-picker--inline">
-        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" />
-        Load QIF file
-      </label>
-
-      <textarea
-        [ngModel]="quickenText()"
-        (ngModelChange)="onQuickenTextChange($event)"
-        rows="12"
-        aria-label="Quicken import text"
-      ></textarea>
-
-      @if (quickenAccounts().length > 0) {
-        <div class="account-selector">
-          <div class="account-header">
-            <span>Accounts</span>
-            <button type="button" class="secondary" (click)="refreshQuickenAccounts()">Refresh</button>
-          </div>
-
-          <div class="account-header account-header--tight">
-            <button type="button" class="secondary" (click)="toggleAllAccounts()">
-              {{ selectedAccounts().length === quickenAccounts().length ? 'Clear all' : 'Select all' }}
-            </button>
-          </div>
-
-          <div class="account-list">
-            @for (account of quickenAccounts(); track account) {
-              <label class="account-checkbox">
-                <input
-                  type="checkbox"
-                  [checked]="selectedAccounts().includes(account)"
-                  (change)="toggleAccount(account)"
-                />
-                <span>{{ account }}</span>
-              </label>
-            }
-          </div>
-        </div>
+    <select
+      class="toolbar-filter"
+      [ngModel]="categoryFilter()"
+      (ngModelChange)="onCategoryFilterChange($event)"
+      aria-label="Filter by category"
+    >
+      <option [value]="allCategoriesFilter">All categories</option>
+      @for (category of inv.inventoryCategories(); track category) {
+        <option [value]="category">{{ category }}</option>
       }
+    </select>
 
-      <div class="import-actions">
-        <button type="button" class="secondary" (click)="previewImport()">Preview import</button>
-        <button type="button" (click)="importQuicken()">Import selected</button>
-      </div>
+    <button type="button" class="secondary small-button" (click)="toggleAdvancedFilters()">
+      Filters {{ showAdvancedFilters() ? '▲' : '▼' }}
+    </button>
 
-      <p class="hint-text">
-        Each imported coin's Category defaults to its Quicken account name (e.g. "Coin Collection") and is added to the
-        managed category list below automatically.
-      </p>
-
-      @if (quickenWarnings().length > 0) {
-        <div class="warning-list" role="alert">
-          <h3>Review before importing</h3>
-          <ul>
-            @for (warning of quickenWarnings(); track warning) {
-              <li>{{ warning }}</li>
-            }
-          </ul>
-        </div>
-      }
-
-      @if (importedRecords().length > 0) {
-        <div class="import-preview">
-          <h3>Import preview</h3>
-          @for (accountName of groupedAccountNames(); track accountName) {
-            <div class="account-group-preview">
-              <h4>{{ accountName }}</h4>
-              <ul>
-                @for (record of groupedImportedRecords()[accountName]; track record.id) {
-                  <li>
-                    <span>{{ record.name }}</span>
-                    <span>{{ record.denomination }}</span>
-                    <strong>${{ record.currentValue | number: '1.2-2' }}</strong>
-                  </li>
-                }
-              </ul>
-            </div>
-          }
-        </div>
-      }
-    </aside>
-
-    <aside class="panel image-panel">
-      <h2>Image matching</h2>
-      <label class="file-picker">
-        <input type="file" multiple (change)="handleImageSelection($event)" />
-        Browse image folder
-      </label>
-
-      @if (imageMatches().length > 0) {
-        <div class="match-results">
-          <h3>Matched images</h3>
-          <ul>
-            @for (match of imageMatches(); track match.imagePath) {
-              <li>
-                <span>{{ match.imagePath }}</span>
-                <small>{{ match.reason }}</small>
-                <em>{{ match.confidence * 100 | number: '1.0-0' }}%</em>
-              </li>
-            }
-          </ul>
-        </div>
-      }
-
-      @if (manualReviewQueue().length > 0) {
-        <div class="manual-review-panel">
-          <h3>Manual review</h3>
-          @for (match of manualReviewQueue(); track match.imagePath) {
-            <div class="manual-review-item">
-              <div class="manual-review-header">
-                <span>{{ match.imagePath }}</span>
-                <em>{{ match.confidence * 100 | number: '1.0-0' }}%</em>
-              </div>
-              <small>{{ match.reason }}</small>
-              <select (change)="assignManualReviewMatch(match.imagePath, $any($event.target).value)">
-                <option value="">Select a coin</option>
-                @for (coin of inventory(); track coin.id) {
-                  <option [value]="coin.id">{{ coin.name }}</option>
-                }
-              </select>
-            </div>
-          }
-        </div>
-      }
-
-      @if (unmatchedImages().length > 0) {
-        <div class="unmatched-list">
-          <h3>Unmatched images</h3>
-          <ul>
-            @for (image of unmatchedImages(); track image.imagePath) {
-              <li>{{ image.imagePath }}</li>
-            }
-          </ul>
-        </div>
-      }
-    </aside>
-  </section>
-
-  <section class="panel category-admin-panel">
-    <div class="panel-header">
-      <h2>Manage categories</h2>
-    </div>
-
-    <p class="hint-text">
-      These are the choices offered in every coin's Category dropdown. Add one manually, or import a Quicken file to
-      add its account names automatically.
-    </p>
-
-    <div class="category-admin-form">
-      <input
-        type="text"
-        class="category-admin-input"
-        placeholder="New category name&hellip;"
-        [ngModel]="newCategoryOption()"
-        (ngModelChange)="onNewCategoryOptionChange($event)"
-        (keydown.enter)="addCategoryOptionFromDraft()"
-        aria-label="New category name"
-      />
-      <button type="button" class="secondary" (click)="addCategoryOptionFromDraft()">Add category</button>
-    </div>
-
-    @if (categoryOptions().length > 0) {
-      <ul class="category-admin-list">
-        @for (category of categoryOptions(); track category) {
-          <li>
-            <span>{{ category }}</span>
-            <button type="button" class="secondary small-button" (click)="removeCategoryOption(category)">Remove</button>
-          </li>
-        }
-      </ul>
-    } @else {
-      <p class="empty-state">No categories yet - add one above, or import a Quicken file.</p>
-    }
-  </section>
-
-  <section class="panel inventory-panel">
-    <div class="panel-header">
-      <h2>Inventory list</h2>
-      <div class="panel-header-actions">
+    <div class="toolbar-actions">
+      <button type="button" (click)="addBlankCoin()">Add Coin</button>
+      <button type="button" class="secondary" (click)="openQuickenModal()">Import QIF</button>
+      <button type="button" class="secondary" (click)="openCsvImportModal()">Import CSV</button>
+      <button type="button" class="secondary" (click)="openImageImportModal()">Import Images</button>
+      <button type="button" class="secondary" (click)="openCategoryModal()">Categories</button>
+      <button type="button" class="secondary" (click)="openReportModal()">Reports</button>
+      <button type="button" class="secondary" (click)="openSpotPriceModal()">Spot Prices</button>
+      <div class="toolbar-export-group">
         <button type="button" class="secondary" (click)="downloadInventoryJson()">Export JSON</button>
-        <label class="file-picker file-picker--inline file-picker--compact">
+        <button type="button" class="secondary" (click)="exportCsv()">Export CSV</button>
+        <label class="file-picker file-picker--compact">
           <input type="file" accept="application/json" (change)="handleInventoryImportFile($event)" />
           Import JSON
         </label>
-        <button type="button" (click)="addBlankCoin()">Add coin</button>
       </div>
     </div>
+  </div>
 
-    <div class="inventory-toolbar">
-      <input
-        type="search"
-        class="inventory-search"
-        placeholder="Search name, grade, cert, variety, notes&hellip;"
-        [ngModel]="searchQuery()"
-        (ngModelChange)="onSearchQueryChange($event)"
-        aria-label="Search inventory"
-      />
-
-      <select
-        class="inventory-category-filter"
-        [ngModel]="categoryFilter()"
-        (ngModelChange)="onCategoryFilterChange($event)"
-        aria-label="Filter by category"
-      >
-        <option [value]="allCategoriesFilter">All categories</option>
-        @for (category of inventoryCategories(); track category) {
-          <option [value]="category">{{ category }}</option>
-        }
-      </select>
-    </div>
-
-    <div class="column-picker">
-      @for (column of inventoryColumnOptions(); track column) {
-        <label class="toggle-item">
-          <input type="checkbox" [checked]="visibleInventoryColumns().includes(column)" (change)="toggleColumn(column)" />
-          <span>{{ inventoryColumnLabels[column] }}</span>
-        </label>
-      }
-    </div>
-
-    <div class="inventory-table-wrap">
-      <table class="inventory-table">
-        <thead>
-          <tr>
-            <th class="thumb-column">Photo</th>
-            @for (column of visibleInventoryColumns(); track column) {
-              <th class="sortable-header" (click)="setSortColumn(column)">
-                {{ inventoryColumnLabels[column] }}
-                <span class="sort-indicator">{{ sortIndicator(column) }}</span>
-              </th>
-            }
-            <th>Images</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (coin of filteredInventory(); track coin.id) {
-            <tr [class.selected]="selectedCoinId() === coin.id" (click)="selectCoin(coin.id)">
-              <td class="thumb-column">
-                @if (primaryImage(coin); as image) {
-                  <img [src]="image" alt="" class="row-thumb" />
-                } @else {
-                  <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
-                }
-              </td>
-              @for (column of visibleInventoryColumns(); track column) {
-                <td>
-                  @if (column === 'grade') {
-                    <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
-                    @if (coin.hasCacSticker) {
-                      <img
-                        [src]="cacGreenBeanIconPath"
-                        alt="CAC green bean sticker"
-                        title="CAC green bean"
-                        class="cac-bean cac-bean--inline"
-                      />
-                    }
-                  } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
-                    <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
-                  } @else {
-                    {{ formatInventoryCell(coin, column) }}
-                  }
-                </td>
-              }
-              <td>
-                <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); selectCoin(coin.id); toggleImageGallery()">
-                  {{ coin.imagePaths.length > 0 ? 'Images' : 'Add image' }}
-                </button>
-              </td>
-            </tr>
-          } @empty {
-            <tr class="empty-row">
-              <td [attr.colspan]="visibleInventoryColumns().length + 2">
-                No coins match the current search and filter.
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-    </div>
-  </section>
-
-  @if (selectedCoin) {
-    <aside class="panel detail-panel">
-      <div class="panel-header panel-header--tight">
-        <div>
-          <p class="eyebrow">Selected coin</p>
-          <h2>{{ selectedCoin.name }}</h2>
-          <div class="detail-badges">
-            <span [class]="gradeBadgeClass(selectedCoin.grade)">{{ selectedCoin.grade || 'Ungraded' }}</span>
-            @if (certBadgeLabel(selectedCoin); as certLabel) {
-              <span class="badge badge--cert">{{ certLabel }}</span>
-            }
-            @if (selectedCoin.hasCacSticker) {
-              <span class="cac-bean-badge">
-                <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean" />
-                CAC green bean
-              </span>
-            }
-          </div>
-        </div>
-        <div class="detail-header-actions">
-          <button type="button" class="secondary" (click)="toggleImageGallery()">
-            {{ showImageGallery() ? 'Hide images' : 'Show images' }}
-          </button>
-          <button type="button" class="danger" (click)="deleteSelectedCoin()">Delete coin</button>
-        </div>
-      </div>
-
-      <div class="detail-editor">
-        <label>
-          <span>Name</span>
-          <input [ngModel]="selectedCoin.name" (ngModelChange)="updateSelectedCoin('name', $event)" />
-        </label>
+  @if (showAdvancedFilters()) {
+    <div class="advanced-filters">
+      <div class="filter-group">
         <label>
           <span>Grade</span>
-          <input [ngModel]="selectedCoin.grade" (ngModelChange)="updateSelectedCoin('grade', $event)" />
+          <input type="text" placeholder="e.g. MS, VF, AU" [ngModel]="gradeFilter()" (ngModelChange)="gradeFilter.set($event)" />
         </label>
         <label>
-          <span>Category</span>
-          <select
-            [ngModel]="selectedCoin.category"
-            (ngModelChange)="updateSelectedCoin('category', $event)"
-          >
-            <option value="">(blank)</option>
-            @for (category of categoryOptions(); track category) {
-              <option [value]="category">{{ category }}</option>
+          <span>Min value</span>
+          <input type="number" step="0.01" placeholder="$0" [ngModel]="valueMinFilter()" (ngModelChange)="valueMinFilter.set($event)" />
+        </label>
+        <label>
+          <span>Max value</span>
+          <input type="number" step="0.01" placeholder="$∞" [ngModel]="valueMaxFilter()" (ngModelChange)="valueMaxFilter.set($event)" />
+        </label>
+        <label>
+          <span>Country</span>
+          <select [ngModel]="countryFilter()" (ngModelChange)="countryFilter.set($event)">
+            <option value="">All countries</option>
+            @for (c of inv.inventoryCountries(); track c) {
+              <option [value]="c">{{ c }}</option>
             }
           </select>
         </label>
         <label>
-          <span>Denomination</span>
-          <input [ngModel]="selectedCoin.denomination" (ngModelChange)="updateSelectedCoin('denomination', $event)" />
+          <span>Source</span>
+          <select [ngModel]="sourceFilter()" (ngModelChange)="sourceFilter.set($event)">
+            <option value="">All sources</option>
+            @for (s of inv.inventorySources(); track s) {
+              <option [value]="s">{{ s }}</option>
+            }
+          </select>
         </label>
         <label>
-          <span>Country</span>
-          <input [ngModel]="selectedCoin.country" (ngModelChange)="updateSelectedCoin('country', $event)" />
+          <span>Set</span>
+          <select [ngModel]="coinSetFilter()" (ngModelChange)="coinSetFilter.set($event)">
+            <option [value]="allSetsFilter">All sets</option>
+            @for (s of inv.coinSets(); track s) {
+              <option [value]="s">{{ s }}</option>
+            }
+          </select>
         </label>
         <label>
-          <span>Year</span>
-          <input type="number" [ngModel]="selectedCoin.year ?? ''" (ngModelChange)="updateSelectedCoin('year', $event === '' ? null : Number($event))" />
-        </label>
-        <label>
-          <span>Mint mark</span>
-          <input [ngModel]="selectedCoin.mintMark" (ngModelChange)="updateSelectedCoin('mintMark', $event)" />
-        </label>
-        <label>
-          <span>Variety</span>
-          <input [ngModel]="selectedCoin.variety" (ngModelChange)="updateSelectedCoin('variety', $event)" />
-        </label>
-        <label>
-          <span>Cert company</span>
-          <input [ngModel]="selectedCoin.certCompany" (ngModelChange)="updateSelectedCoin('certCompany', $event)" />
-        </label>
-        <label>
-          <span>Cert number</span>
-          <input [ngModel]="selectedCoin.certNumber" (ngModelChange)="updateSelectedCoin('certNumber', $event)" />
-        </label>
-        <label>
-          <span>Purchase price</span>
-          <input type="number" step="0.01" [ngModel]="selectedCoin.purchasePrice" (ngModelChange)="updateSelectedCoin('purchasePrice', Number($event))" />
-        </label>
-        <label>
-          <span>Current value</span>
-          <input type="number" step="0.01" [ngModel]="selectedCoin.currentValue" (ngModelChange)="updateSelectedCoin('currentValue', Number($event))" />
-        </label>
-        <label class="cac-toggle-field">
-          <span>CAC green bean</span>
-          <span class="cac-toggle">
-            <input type="checkbox" [checked]="selectedCoin.hasCacSticker ?? false" (change)="toggleCacSticker()" />
-            <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean cac-bean--toggle" />
-          </span>
+          <span>Dealer</span>
+          <input type="text" placeholder="Search dealers" [ngModel]="dealerFilter()" (ngModelChange)="dealerFilter.set($event)" />
         </label>
       </div>
+    </div>
+  }
 
-      <div class="detail-notes">
-        <h3>Notes</h3>
-        <textarea [ngModel]="selectedCoin.notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea>
+  <div class="main-content" [class.has-detail]="selectedCoin">
+    <section class="panel inventory-panel">
+      <div class="inventory-header">
+        <h2>
+          Inventory
+          @if (selectionCount() > 0) {
+            <span class="selection-badge">{{ selectionCount() }} selected</span>
+          }
+        </h2>
+        <button type="button" class="secondary small-button" (click)="toggleColumnPicker()">
+          Columns {{ showColumnPicker() ? '▲' : '▼' }}
+        </button>
       </div>
 
-      @if (showImageGallery()) {
-        <div class="image-gallery" (drop)="handleImageDrop($event)" (dragover)="handleDragOver($event)">
-          <div class="image-gallery__header">
-            <h3>Images</h3>
-            <label class="file-picker file-picker--inline">
-              <input type="file" multiple (change)="addCoinImages($event)" />
-              Add images
+      @if (showColumnPicker()) {
+        <div class="column-picker">
+          @for (column of inventoryColumnOptions(); track column) {
+            <label class="toggle-item">
+              <input type="checkbox" [checked]="visibleInventoryColumns().includes(column)" (change)="toggleColumn(column)" />
+              <span>{{ inventoryColumnLabels[column] }}</span>
             </label>
-          </div>
-
-          @if (selectedCoin.imagePaths.length > 0) {
-            <div class="image-list">
-              @for (imagePath of selectedCoin.imagePaths; track imagePath; let i = $index) {
-                <div class="image-item">
-                  <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="openPhotoViewer(i)" />
-                  <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
-                  <button type="button" class="secondary small-button" (click)="removeCoinImage(imagePath)">Delete</button>
-                </div>
-              }
-            </div>
-          } @else {
-            <p class="empty-state">Drag images here, or use "Add images" above.</p>
           }
         </div>
       }
 
-      @if (showPhotoViewer() && selectedCoin.imagePaths.length > 0) {
-        <div class="photo-viewer-backdrop" (click)="closePhotoViewer()">
-          <div class="photo-viewer" (click)="$event.stopPropagation()">
-            <button type="button" class="photo-viewer__close" (click)="closePhotoViewer()" aria-label="Close">&times;</button>
-            <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
-            <img [src]="selectedCoin.imagePaths[photoViewerIndex()]" alt="Coin image, full size" class="photo-viewer__image" />
-            <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
+      <div class="inventory-table-wrap">
+        <table class="inventory-table">
+          <thead>
+            <tr>
+              <th class="check-column">
+                <input type="checkbox" [checked]="allVisibleSelected()" (change)="toggleAllCoins()" title="Select all" />
+              </th>
+              <th class="thumb-column">Photo</th>
+              @for (column of visibleInventoryColumns(); track column) {
+                <th class="sortable-header" (click)="setSortColumn(column)">
+                  {{ inventoryColumnLabels[column] }}
+                  <span class="sort-indicator">{{ sortIndicator(column) }}</span>
+                </th>
+              }
+              <th>Images</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (coin of filteredInventory(); track coin.id) {
+              <tr [class.selected]="inv.selectedCoinId() === coin.id" [class.multi-selected]="isCoinSelected(coin.id)" (click)="selectCoin(coin.id)">
+                <td class="check-column" (click)="$event.stopPropagation()">
+                  <input type="checkbox" [checked]="isCoinSelected(coin.id)" (click)="toggleCoinSelection(coin.id, $event)" />
+                </td>
+                <td class="thumb-column">
+                  @if (primaryImage(coin); as image) {
+                    <img [src]="image" alt="" class="row-thumb" />
+                  } @else {
+                    <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
+                  }
+                </td>
+                @for (column of visibleInventoryColumns(); track column) {
+                  <td>
+                    @if (column === 'grade') {
+                      <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
+                      @if (coin.hasCacSticker) {
+                        <img [src]="cacGreenBeanIconPath" alt="CAC" title="CAC green bean" class="cac-bean cac-bean--inline" />
+                      }
+                    } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
+                      <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
+                    } @else if (column === 'profitLoss') {
+                      <span [class]="profitLossClass(coin)">{{ formatInventoryCell(coin, column) }}</span>
+                    } @else {
+                      {{ formatInventoryCell(coin, column) }}
+                    }
+                  </td>
+                }
+                <td>
+                  <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); selectCoin(coin.id); toggleImageGallery()">
+                    {{ coin.imagePaths.length > 0 ? 'Images' : 'Add' }}
+                  </button>
+                </td>
+              </tr>
+            } @empty {
+              <tr class="empty-row">
+                <td [attr.colspan]="visibleInventoryColumns().length + 3">
+                  @if (inv.inventory().length === 0) {
+                    No coins yet. Add one manually or import from a QIF/CSV file.
+                  } @else {
+                    No coins match the current search and filters.
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    @if (selectedCoin) {
+      <aside class="panel detail-panel">
+        <div class="detail-header">
+          <div>
+            <p class="eyebrow">Selected coin</p>
+            <h2>{{ selectedCoin.name }}</h2>
+            <div class="detail-badges">
+              @if (selectedCoin.grade) {
+                <span [class]="gradeBadgeClass(selectedCoin.grade)">{{ selectedCoin.grade }}</span>
+              }
+              @if (certBadgeLabel(selectedCoin); as certLabel) {
+                <span class="badge badge--cert">{{ certLabel }}</span>
+              }
+              @if (selectedCoin.hasCacSticker) {
+                <span class="cac-bean-badge">
+                  <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean" />
+                  CAC
+                </span>
+              }
+            </div>
+          </div>
+          <div class="detail-header-actions">
+            <button type="button" class="secondary small-button" (click)="toggleImageGallery()">
+              {{ showImageGallery() ? 'Hide images' : 'Show images' }}
+            </button>
+            <button type="button" class="danger small-button" (click)="deleteSelectedCoin()">Delete</button>
           </div>
         </div>
-      }
-    </aside>
+
+        <div class="detail-editor">
+          <label><span>Name</span><input [ngModel]="selectedCoin.name" (ngModelChange)="updateSelectedCoin('name', $event)" /></label>
+          <label><span>Grade</span><input [ngModel]="selectedCoin.grade" (ngModelChange)="updateSelectedCoin('grade', $event)" /></label>
+          <label>
+            <span>Category</span>
+            <select [ngModel]="selectedCoin.category" (ngModelChange)="updateSelectedCoin('category', $event)">
+              <option value="">(none)</option>
+              @for (category of inv.categoryOptions(); track category) { <option [value]="category">{{ category }}</option> }
+            </select>
+          </label>
+          <label>
+            <span>Set / Album</span>
+            <select [ngModel]="selectedCoin.coinSet ?? ''" (ngModelChange)="updateSelectedCoin('coinSet', $event)">
+              <option value="">(none)</option>
+              @for (s of inv.coinSets(); track s) { <option [value]="s">{{ s }}</option> }
+            </select>
+          </label>
+          <label><span>Denomination</span><input [ngModel]="selectedCoin.denomination" (ngModelChange)="updateSelectedCoin('denomination', $event)" /></label>
+          <label><span>Country</span><input [ngModel]="selectedCoin.country" (ngModelChange)="updateSelectedCoin('country', $event)" /></label>
+          <label><span>Year</span><input type="number" [ngModel]="selectedCoin.year ?? ''" (ngModelChange)="updateSelectedCoin('year', $event === '' ? null : Number($event))" /></label>
+          <label><span>Mint mark</span><input [ngModel]="selectedCoin.mintMark" (ngModelChange)="updateSelectedCoin('mintMark', $event)" /></label>
+          <label><span>Variety</span><input [ngModel]="selectedCoin.variety" (ngModelChange)="updateSelectedCoin('variety', $event)" /></label>
+          <label><span>Cert company</span><input [ngModel]="selectedCoin.certCompany" (ngModelChange)="updateSelectedCoin('certCompany', $event)" /></label>
+          <label><span>Cert number</span><input [ngModel]="selectedCoin.certNumber" (ngModelChange)="updateSelectedCoin('certNumber', $event)" /></label>
+          <label><span>Composition</span><input [ngModel]="selectedCoin.composition" (ngModelChange)="updateSelectedCoin('composition', $event)" /></label>
+          <label><span>Purchase price</span><input type="number" step="0.01" [ngModel]="selectedCoin.purchasePrice" (ngModelChange)="updateSelectedCoin('purchasePrice', Number($event))" /></label>
+          <label><span>Current value</span><input type="number" step="0.01" [ngModel]="selectedCoin.currentValue" (ngModelChange)="updateSelectedCoin('currentValue', Number($event))" /></label>
+          <label><span>Sold price</span><input type="number" step="0.01" [ngModel]="selectedCoin.soldPrice ?? 0" (ngModelChange)="updateSelectedCoin('soldPrice', Number($event))" /></label>
+          <label><span>Sold date</span><input type="date" [ngModel]="selectedCoin.soldDate ?? ''" (ngModelChange)="updateSelectedCoin('soldDate', $event)" /></label>
+          <label><span>Dealer</span><input [ngModel]="selectedCoin.dealer ?? ''" (ngModelChange)="updateSelectedCoin('dealer', $event)" /></label>
+          <label><span>Purchase date</span><input type="date" [ngModel]="selectedCoin.purchaseDate" (ngModelChange)="updateSelectedCoin('purchaseDate', $event)" /></label>
+          <label>
+            <span>Metal content</span>
+            <select [ngModel]="selectedCoin.metalContent ?? ''" (ngModelChange)="updateSelectedCoin('metalContent', $event)">
+              <option value="">(none)</option>
+              @for (m of metalContentOptions; track m) { <option [value]="m">{{ m }}</option> }
+            </select>
+          </label>
+          <label><span>Weight (troy oz)</span><input type="number" step="0.0001" [ngModel]="selectedCoin.weight ?? 0" (ngModelChange)="updateSelectedCoin('weight', Number($event))" /></label>
+          <label class="cac-toggle-field">
+            <span>CAC green bean</span>
+            <span class="cac-toggle">
+              <input type="checkbox" [checked]="selectedCoin.hasCacSticker ?? false" (change)="toggleCacSticker()" />
+              <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean cac-bean--toggle" />
+            </span>
+          </label>
+        </div>
+
+        <div class="detail-valuation">
+          <div class="valuation-row"><span>Cost</span><strong>${{ selectedCoin.purchasePrice | number: '1.2-2' }}</strong></div>
+          <div class="valuation-row"><span>Value</span><strong>${{ selectedCoin.currentValue | number: '1.2-2' }}</strong></div>
+          <div class="valuation-row" [class.gain]="selectedCoin.currentValue - selectedCoin.purchasePrice >= 0" [class.loss]="selectedCoin.currentValue - selectedCoin.purchasePrice < 0">
+            <span>Gain/Loss</span>
+            <strong>{{ selectedCoin.currentValue - selectedCoin.purchasePrice >= 0 ? '+' : '' }}${{ selectedCoin.currentValue - selectedCoin.purchasePrice | number: '1.2-2' }}</strong>
+          </div>
+          @if (meltValue(selectedCoin); as melt) {
+            <div class="valuation-row melt-row"><span>Melt value</span><strong>${{ melt | number: '1.2-2' }}</strong></div>
+          }
+        </div>
+
+        <div class="detail-notes">
+          <label><span class="detail-notes-label">Notes</span><textarea [ngModel]="selectedCoin.notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea></label>
+        </div>
+
+        <div class="detail-transactions">
+          <h3>Transactions</h3>
+          @if (inv.selectedCoinTransactions().length > 0) {
+            <ul class="transaction-list">
+              @for (txn of inv.selectedCoinTransactions(); track txn.id) {
+                <li>
+                  <span class="txn-type">{{ txn.type }}</span>
+                  <span class="txn-amount">${{ txn.amount | number: '1.2-2' }}</span>
+                  <span class="txn-date">{{ txn.date }}</span>
+                  @if (txn.dealer) { <span class="txn-dealer">{{ txn.dealer }}</span> }
+                  <button type="button" class="secondary small-button" (click)="deleteTransaction(txn.id)">×</button>
+                </li>
+              }
+            </ul>
+          }
+          <div class="add-transaction-form">
+            <select #txnType>
+              <option value="purchase">Purchase</option>
+              <option value="sale">Sale</option>
+              <option value="trade">Trade</option>
+              <option value="appraisal">Appraisal</option>
+            </select>
+            <input #txnAmount type="number" step="0.01" placeholder="Amount" />
+            <input #txnDealer type="text" placeholder="Dealer" />
+            <input #txnDate type="date" />
+            <input #txnNotes type="text" placeholder="Notes" />
+            <button type="button" class="small-button" (click)="addTransactionForSelectedCoin(txnType.value, Number(txnAmount.value), txnDealer.value, txnDate.value, txnNotes.value); txnAmount.value=''; txnDealer.value=''; txnNotes.value=''">Add</button>
+          </div>
+        </div>
+
+        @if (showImageGallery()) {
+          <div class="image-gallery" (drop)="handleImageDrop($event)" (dragover)="handleDragOver($event)">
+            <div class="image-gallery__header">
+              <h3>Images</h3>
+              <label class="file-picker file-picker--compact">
+                <input type="file" multiple (change)="addCoinImages($event)" />
+                Add images
+              </label>
+            </div>
+            @if (selectedCoin.imagePaths.length > 0) {
+              <div class="image-list">
+                @for (imagePath of selectedCoin.imagePaths; track imagePath; let i = $index) {
+                  <div class="image-item">
+                    <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="openPhotoViewer(i)" />
+                    <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+                    <button type="button" class="secondary small-button" (click)="removeCoinImage(imagePath)">Delete</button>
+                  </div>
+                }
+              </div>
+            } @else {
+              <p class="empty-state">Drag images here, or use "Add images" above.</p>
+            }
+          </div>
+        }
+      </aside>
+    }
+  </div>
+
+  <!-- Bulk edit bar -->
+  @if (selectionCount() > 0) {
+    <div class="bulk-edit-bar">
+      <span class="bulk-count">{{ selectionCount() }} coin{{ selectionCount() === 1 ? '' : 's' }} selected</span>
+      <div class="bulk-actions">
+        <select #bulkField>
+          <option value="category">Category</option>
+          <option value="grade">Grade</option>
+          <option value="country">Country</option>
+          <option value="coinSet">Set</option>
+          <option value="dealer">Dealer</option>
+          <option value="metalContent">Metal</option>
+        </select>
+        <input #bulkValue type="text" placeholder="New value" />
+        <button type="button" class="small-button" (click)="bulkUpdateField(bulkField.value, bulkValue.value); bulkValue.value=''">Apply</button>
+        <button type="button" class="danger small-button" (click)="bulkDeleteCoins()">Delete Selected</button>
+        <button type="button" class="secondary small-button" (click)="clearSelection()">Clear</button>
+      </div>
+    </div>
+  }
+
+  <!-- Child component modals -->
+  @if (showQuickenModal()) {
+    <app-quicken-import-modal (closed)="closeQuickenModal()" (imported)="onQuickenImported($event)" />
+  }
+  @if (showCsvImportModal()) {
+    <app-csv-import-modal (closed)="closeCsvImportModal()" />
+  }
+  @if (showImageImportModal()) {
+    <app-image-import-modal (closed)="closeImageImportModal()" />
+  }
+  @if (showCategoryModal()) {
+    <app-category-modal (closed)="closeCategoryModal()" />
+  }
+  @if (showReportModal()) {
+    <app-report-modal (closed)="closeReportModal()" (exportCsvRequested)="exportCsv()" (exportInsuranceCsvRequested)="exportInsuranceCsv()" />
+  }
+  @if (showSpotPriceModal()) {
+    <app-spot-price-modal (closed)="closeSpotPriceModal()" />
+  }
+
+  <!-- Full-screen photo viewer -->
+  @if (showPhotoViewer() && selectedCoin && selectedCoin.imagePaths.length > 0) {
+    <div class="photo-viewer-backdrop" (click)="closePhotoViewer()">
+      <div class="photo-viewer" (click)="$event.stopPropagation()">
+        <button type="button" class="photo-viewer__close" (click)="closePhotoViewer()" aria-label="Close">&times;</button>
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
+        <img [src]="selectedCoin.imagePaths[photoViewerIndex()]" alt="Coin image, full size" class="photo-viewer__image" />
+        <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
+      </div>
+    </div>
   }
 </main>

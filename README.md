@@ -1,93 +1,183 @@
 # Coin Inventory
 
-A polished Angular coin inventory and valuation application built for coin collectors and dealers. It combines a searchable, sortable inventory table with a detailed per-coin editor, an admin-managed category system, a Quicken (QIF) import workflow, and a filename-based photo matching workflow - all persisted locally in the browser via IndexedDB.
+A polished Angular coin inventory and valuation application built for coin collectors and dealers. It combines a searchable, sortable inventory table with a detailed per-coin editor, an admin-managed category system, a Quicken (QIF) import workflow, a directory-based photo matching workflow, and persistence via IndexedDB (with an optional SQL Server backend) — all designed around an inventory-first layout where the collection table is the center of the experience.
 
-This README doubles as the project's living plan. Keep it current as features land so a future session (human or AI) can resume work from an accurate picture of what exists, why it's built the way it is, and what's next - rather than re-discovering the codebase from scratch.
+This README doubles as the project's living plan. Keep it current as features land so a future session (human or AI) can resume work from an accurate picture of what exists, why it's built the way it is, and what's next — rather than re-discovering the codebase from scratch.
 
-## Current state (as of this writing)
+## Current state (as of 2026-08-22)
 
-The application is functional end-to-end: inventory CRUD, category administration, Quicken import, image matching, search/filter/sort, and persistence all work and are covered by passing unit tests. The sections below describe what exists today; **Planned next steps** describes what's queued up but not yet built.
+The application is functional end-to-end: inventory CRUD, category administration, Quicken import with QIF filtering, CSV import, directory-based image import with matching, spot price tracking, melt value calculations, multi-select with bulk edit/delete, transactions, report generation, search/filter/sort, and persistence all work. 82 passing unit tests across 11 test files cover the main component and all 6 child components. Server API tests are written (pending dependency install).
+
+## Architecture
+
+### Layout philosophy: inventory first
+
+The UI is organized around the principle that the inventory table *is* the application. Import workflows, category management, and other administrative functions live in modal dialogs — accessible from the toolbar but never dominating the main view. The layout is:
+
+1. **Header** — title and summary metrics (count, total cost, current value, gain/loss)
+2. **Toolbar** — search, category filter, and action buttons (Add Coin, Import QIF, Import CSV, Import Images, Categories, Reports, Spot Prices, Export/Import JSON)
+3. **Advanced filters** — collapsible panel for grade, value range, source, country, coin set, dealer
+4. **Main content grid** — inventory table (full width) + detail sidebar (400px, shown when a coin is selected)
+5. **Bulk edit bar** — fixed bottom bar when coins are multi-selected
+6. **Modal dialogs** — Quicken import, CSV import, image import, category management, reports, spot prices
+
+### Component structure
+
+The root component (`src/app/app.ts`, ~460 lines) handles layout, filtering, multi-select, and per-coin editing. Six modal child components handle specialized workflows:
+
+| Component | Selector | Location |
+| --- | --- | --- |
+| `QuickenImportModal` | `app-quicken-import-modal` | `src/app/components/quicken-import-modal/` |
+| `CsvImportModal` | `app-csv-import-modal` | `src/app/components/csv-import-modal/` |
+| `ImageImportModal` | `app-image-import-modal` | `src/app/components/image-import-modal/` |
+| `CategoryModal` | `app-category-modal` | `src/app/components/category-modal/` |
+| `ReportModal` | `app-report-modal` | `src/app/components/report-modal/` |
+| `SpotPriceModalComponent` | `app-spot-price-modal` | `src/app/components/spot-price-modal/` |
+
+Each child component uses Angular's `inject()` pattern and `output()` to communicate back to the parent. Shared modal styles live in `src/app/styles/_modal.scss` and are imported by each child via `@use`.
+
+### SCSS organization
+
+App styles are split into partials under `src/app/styles/`:
+
+| Partial | Contents |
+| --- | --- |
+| `_base.scss` | Host element, resets, buttons, file picker, gain/loss colors, badges, CAC green bean |
+| `_layout.scss` | Shell, topbar, summary cards, toolbar, advanced filters, main grid, panels |
+| `_inventory-table.scss` | Inventory header, column picker, table, rows, thumbnails |
+| `_detail-panel.scss` | Detail panel, editor, valuation, notes, transactions, image gallery |
+| `_overlays.scss` | Bulk edit bar, photo viewer, responsive, print media queries |
+| `_modal.scss` | Shared modal backdrop/chrome, imported by child components |
+
+`app.scss` imports the first five via `@use`. Child component SCSS files import `_modal.scss` plus their own component-specific styles.
+
+### Services
+
+| Service | Responsibility |
+| --- | --- |
+| `InventoryService` | Inventory CRUD, category/coin-set management, spot prices, transactions, persistence |
+| `StorageService` | IndexedDB persistence (async get/set keyed by `StorageKeys`) |
+| `QuickenImportService` | QIF parser — handles accounts, transactions, denomination inference |
+| `CsvService` | CSV parsing, auto-mapping headers, export to CSV/insurance CSV |
+| `ImageMatchingService` | Jaccard token similarity matching of filenames to coin names |
+| `SpotPriceService` | Fetches COMEX spot prices from `metals.live` API |
 
 ## Features
 
 ### Inventory management
 
-- Inventory table with a photo thumbnail column, color-coded grade badges (mint/proof, circulated, worn, ungraded tiers), a certification badge (e.g. "NGC #255481-016"), and a CAC "green bean" accent icon shown inline
-- Free-text search across name, denomination, type, country, grade, certification company/number, variety, mint mark, notes, and tags
-- Category filter and sortable column headers (click to sort, click again to reverse direction)
-- User-configurable column visibility (show/hide any of the tracked fields in the table)
-- A detail panel for the selected coin covering every tracked trait: name, grade, category, denomination, country, year, mint mark, variety, certification company, certification number, purchase price, current value, a CAC green bean toggle, and free-text notes
-- Add / delete coins directly from the UI
-- Export the full inventory as a downloadable, human-readable JSON file, and re-import a previously exported (or hand-edited) JSON file
+- Inventory table with photo thumbnails, color-coded grade badges (mint/proof green, circulated blue, worn gold, ungraded gray), certification badges (purple), and CAC green bean accent icons
+- Free-text search across name, denomination, type, country, grade, certification, variety, mint mark, notes, dealer, coin set, and tags
+- Category filter, coin set filter, and sortable column headers (click to sort, click again to reverse)
+- Advanced filters: grade prefix, value range (min/max), source, country, coin set, dealer
+- Collapsible column visibility picker (show/hide any tracked field)
+- Sticky detail sidebar for the selected coin with inline editing of all fields
+- Add / delete coins directly from the toolbar
+- Export the full inventory as downloadable JSON, and re-import a previously exported file
+- Selected row gets a left-border accent treatment for clear visual feedback
 
-### Category administration
+### Multi-select and bulk edit
 
-Category is now a controlled dropdown, not free text, backed by an admin-managed list (`categoryOptions` in `app.ts`, persisted to IndexedDB under `StorageKeys.CategoryOptions`):
+- Checkbox selection per row with shift-click range selection
+- Select/deselect all visible coins
+- Fixed bottom toolbar showing selection count with bulk actions:
+  - Bulk update any field (category, grade, country, etc.) across selected coins
+  - Bulk delete selected coins
+- Visual multi-selected row treatment (blue background, accent border)
 
-- A "Manage categories" panel lets the user add a new category name or remove one from the list. Removing a category does **not** touch coins already assigned to it - they keep their stored value, they just won't see it (or be able to re-pick it) in the dropdown going forward.
-- A newly added coin (`addBlankCoin`) defaults to a **blank** category (not a placeholder like "Uncategorized"), same as an ungraded coin has no fake grade.
-- **Quicken-imported coins default their category to the Quicken account name they came from** (e.g. "Coin Collection"), not a generic "Imported" label - and that account name is automatically folded into the admin-managed category list so it's immediately selectable for any coin, not just the ones just imported. A record with no account (or the parser's internal "Unassigned" placeholder) gets a blank category, same as a manually added coin.
-- Importing a full inventory JSON file similarly folds any categories it contains into the admin list.
+### Spot prices and melt value
+
+- Manual spot price entry for gold, silver, platinum, palladium
+- One-click fetch from COMEX via metals.live API
+- Per-coin melt value calculation based on metal content and weight (troy oz)
+- Melt value displayed in the detail panel valuation summary
+
+### Category and coin set administration (modal)
+
+- Add or remove category names from the managed list
+- Add or remove named coin sets
+- Quicken-imported coins default their category to the Quicken account name
+- Removing a category does not touch coins already assigned to it
+
+### Transactions
+
+- Per-coin transaction history (purchase, sale, appraisal, insurance)
+- Add transactions with type, amount, dealer, date, and notes
+- Transactions removed automatically when their parent coin is deleted
+
+### Reports (modal)
+
+- Summary stats: total coins, total cost, current value, profit/loss, graded count, image count
+- Breakdown by category and denomination with counts and values
+- Export to CSV and insurance CSV directly from the report modal
 
 ### Coin data model (`src/app/types/coin.model.ts`)
 
-Each `CoinRecord` tracks: denomination, year, type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, free-text notes, image paths, tags, a `source` marker (`manual` / `quicken` / `import`), and an optional `hasCacSticker` boolean for the CAC green bean accent.
+Each `CoinRecord` tracks: denomination, year, type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, sold price, dealer, coin set, metal content, weight, free-text notes, image paths, tags, a `source` marker (`manual` / `quicken` / `csv` / `import`), and `hasCacSticker`.
 
 ### CAC "green bean" accent
 
-CAC does not grade coins independently - it "stickers" a coin already graded by PCGS/NGC as meeting a tighter quality bar within its stated grade. So `hasCacSticker` is a layered accent on top of `certCompany`/`certNumber`, never a replacement: a coin can be "NGC MS64" **and** carry a green bean at once. The accent image lives at `public/CACGreenBean-trimmed.png` (a user-supplied, pre-trimmed asset - Angular copies everything under `public/` to the built app's root, so the path resolves with no build config changes) and renders in three places: a small inline icon next to the grade badge in the inventory table, a labeled badge in the detail panel's badge row, and a checkbox-plus-icon toggle in the coin editor (`toggleCacSticker()`).
+CAC stickers a coin already graded by PCGS/NGC as meeting a tighter quality bar within its stated grade. `hasCacSticker` is a layered accent on top of `certCompany`/`certNumber`. The accent image lives at `public/CACGreenBean-trimmed.png` and renders inline in the table, in the detail panel badge row, and as a checkbox toggle in the editor.
 
-The other four grading companies' own logos (PCGS, NGC, ANACS) were deliberately **not** added as images - see Planned next steps.
+### Quicken (QIF) import (modal)
 
-### Quicken (QIF) import (`src/app/services/quicken-import.service.ts`)
+Parses real Quicken Interchange Format investment-transaction exports with:
+- File picker, text area, and account selector with select/deselect all
+- **QIF filters**: filter by date range, minimum price, and denomination before importing
+- Preview with records grouped by account
+- Import creates coins with category defaulting to account name
 
-Parses real Quicken Interchange Format investment-transaction exports - not a guessed format. QIF's investment field codes are single letters with specific, easy-to-misread meanings; this parser follows the actual spec:
+### CSV import (modal)
 
-| Code | Meaning |
-| --- | --- |
-| `D` | Date |
-| `N` | Action (`Buy`, `Sell`, `ShrsIn`, `ReinvDiv`, ...) |
-| `Y` | Security name (where the coin's description lives) |
-| `I` | Price per share/unit |
-| `Q` | Quantity |
-| `T` / `U` | Transaction amount |
-| `M` | Memo |
-| `O` | Commission |
+- File picker auto-detects headers and maps them to coin fields via fuzzy matching
+- Manual mapping adjustment via dropdown per column
+- Preview shows parsed rows before import
+- Imported coins are marked with `source: 'csv'`
 
-Behavior:
+### Image import from directories (modal)
 
-- Acquisitions (`Buy`, `BuyX`, `ShrsIn`, `ReinvDiv`, etc.) are imported as new coin records
-- Dispositions (`Sell`, `SellX`, `ShrsOut`, etc.) are **skipped with a warning** rather than imported as current holdings, since a sale means the coin is no longer in the collection
-- Unrecognized action codes are imported but flagged with a warning so the cost basis can be manually verified
-- Falls back to price x quantity + commission when no explicit transaction amount is present
-- Tolerates comma-formatted amounts (`2,450.00`) and 2-digit years (`93` -> `1993`, `24` -> `2024`)
-- Supports multiple `!Account` blocks in one file, with a UI account picker to import only selected accounts
-- Best-effort denomination inference from the security name/memo text (half dime, dime, quarter, half dollar, dollar, eagle, double eagle, etc.)
-- Each imported coin's Category defaults to its Quicken account name (see Category administration above)
+Supports selecting an entire folder (`webkitdirectory`) or individual image files:
 
-### Image matching (`src/app/services/image-matching.service.ts`)
+1. Images are matched against inventory coin names using Jaccard token similarity
+2. Results are classified into three tiers:
+   - **Auto-matched** (confidence >= 60%): shown with Confirm/Reject buttons
+   - **Needs review** (confidence > 0 but < 60%): shown with a reassignment dropdown
+   - **Unmatched** (no match): shown with a manual assignment dropdown
+3. Users can confirm, reject, or reassign any match before applying
+4. "Apply" reads confirmed files as base64 data URLs and attaches them to the matched coins
 
-Filename-token similarity matching (Jaccard-style overlap on normalized filename tokens) against inventory coin names. Produces a confidence score per image; anything below threshold (or with no match at all) surfaces in a manual-review queue where the user picks the correct coin from a dropdown. Unmatched images are listed separately.
+### Per-coin image management
 
-### Persistence (`src/app/services/storage.service.ts`)
+- Add images via file picker or drag-and-drop in the detail panel
+- Click thumbnails to open a full-screen photo viewer with prev/next navigation
+- Delete individual images from the gallery
 
-All inventory data, UI preferences (column visibility), and the admin-managed category list persist to **IndexedDB**, not `localStorage`. This was a deliberate fix: coin photos are stored as base64 data URLs, and `localStorage`'s ~5-10MB per-origin cap would silently fail once a collection accumulates more than a few dozen photographed coins. IndexedDB has no comparable practical ceiling. The service exposes a small async `get`/`set` API keyed by `StorageKeys` (`Inventory`, `VisibleColumns`, `CategoryOptions`) so the rest of the app never touches the IndexedDB transaction API directly.
+### Persistence
 
-### Image handling notes
+#### IndexedDB (default: `src/app/services/storage.service.ts`)
 
-Image-to-data-URL conversion (`app.ts`, `readFileAsDataUrl`) deliberately avoids the browser-only `FileReader` API, which does not exist in the Node-based Vitest test environment this project's tests run under. It instead reads bytes via `File.arrayBuffer()` and encodes them to base64 manually - this works identically in the browser and under Node, so image handling stays unit-testable without a DOM.
+All inventory data, column visibility, and category list persist to IndexedDB (not `localStorage`, which caps at ~5-10MB — too small for base64 coin photos). The service exposes a small async `get`/`set` API keyed by `StorageKeys`.
+
+#### SQL Server (optional: `server/`)
+
+A separate Express/TypeScript backend provides a REST API backed by a local SQL Server database. The schema (`server/schema.sql`) includes tables for coins, images, tags, categories, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
+
+API endpoints: `GET/POST/PUT/DELETE /api/coins`, `/api/categories`, `/api/coinsets`, `/api/transactions`, `/api/spot-prices`, `/api/settings`.
 
 ## Tech stack
 
-- Angular 22 (standalone components, signals, new `@if`/`@for` control-flow syntax)
-- TypeScript
-- SCSS
-- Vitest for unit testing (with `fake-indexeddb` to exercise the storage service without a real browser)
+- Angular 22 (standalone components, signals, `@if`/`@for` control-flow syntax, `inject()`, `output()`)
+- TypeScript 6
+- SCSS with partials
+- Vitest 4.x for unit testing (with `fake-indexeddb` for storage tests)
+- Express + mssql (optional SQL Server backend)
+- Supertest for Express API testing
 
 ## Prerequisites
 
-- Node.js 20+ recommended
+- Node.js 22.22+ recommended (required for Angular CLI `ng` commands)
 - npm 10+
+- SQL Server Express (optional, for the `server/` backend — host at 192.168.0.10 or configure in `server/server.ts`)
 
 ## Run locally
 
@@ -98,6 +188,8 @@ npm start -- --host 0.0.0.0
 
 Then open the local URL shown in the Angular CLI output (commonly `http://localhost:4200`).
 
+**Known issue:** `ng build` / `ng serve` may fail on Windows due to esbuild-wasm's Go WASM binary using POSIX path semantics. A patch that strips the drive letter and converts backslashes has been prototyped but not yet verified. See the esbuild-wasm workaround notes in the project for details.
+
 ## Build for production
 
 ```powershell
@@ -107,32 +199,40 @@ npm run build
 ## Test
 
 ```powershell
+# Frontend tests (82 tests across 11 files)
 npm test
+
+# Server API tests
+cd server && npm test
 ```
 
-All unit tests pass as of this writing (component - including category-administration and Quicken-category-default coverage - both import/matching services, and the storage service).
+**Note:** On Windows, if the project is at a drive root (e.g., `I:\`), the test command uses `--root src` to work around a Vitest 4.x path resolution issue with drive root directories.
 
 ---
 
 ## Planned next steps
 
-### 1. Certification company logos for PCGS, NGC, and ANACS
+### 1. Fix esbuild/ng serve
 
-The CAC green bean accent is done (see above). The user decided to **skip** adding official logo images for the four grading companies (PCGS/NGC/ANACS were never done; CAC's own wordmark logo was also skipped) because they are registered trademarks and this app is for private use only - the green bean was the one exception, since it has become a widely-recognized, informally-used visual shorthand rather than a strictly-guarded company mark. If this is revisited:
+The esbuild-wasm Go WASM binary rejects Windows paths. A `__toUnix` patch has been prototyped but needs verification. Until fixed, the app can't be served or built — only tests run.
 
-- Would need real logo assets (user-supplied, same as the CAC green bean was) or custom non-trademarked badges (colored monogram/initials) if the app is ever shared or distributed publicly.
-- Data model would need a way to distinguish "raw / not certified" from "certified but the certCompany field is just empty" - right now those two states are indistinguishable in the data. This is still an open gap independent of the logo question, since many coins in this collection are raw (not in a graded holder) and currently just show an empty cert badge rather than an explicit "Raw" indicator.
+### 2. Wire up SQL Server backend
 
-### 2. General visual polish ("add a bit more class")
+Replace IndexedDB persistence with the SQL Server backend for production use. The Express API (`server/server.ts`) is built; the Angular `StorageService` needs to be swapped to HTTP calls. This enables multi-device access, backups, and sharing.
 
-Raised alongside the logo work as a broader ask - refined color palette/typography pass, tighter spacing consistency, and possibly a subtle card-hover/selection treatment beyond the current background-highlight. Open-ended follow-up, not a fixed checklist.
+### 3. Certification company logos for PCGS, NGC, and ANACS
+
+The CAC green bean accent is done. Official logos for grading companies were skipped due to trademark concerns. If revisited:
+- Would need real logo assets or custom non-trademarked badges
+- Data model needs a way to distinguish "raw / not certified" from "certified but certCompany is empty"
+
+### 4. Premium feature research
+
+Research premium coin inventory programs (PCGS CoinFacts, NGC Registry, Numismaster, etc.) and adopt the best ideas that make sense for this application.
 
 ### Longer-horizon ideas (not yet scheduled)
 
-Carried over from earlier project notes - still valid, not yet prioritized:
-
-- Real backend/database instead of client-side IndexedDB (would enable multi-device access, backups, sharing)
-- Valuation-service integration (e.g. pulling current market pricing by denomination/grade rather than manual entry)
-- Stronger filename normalization for image matching (currently pure token-overlap; could incorporate cert numbers embedded in filenames, fuzzy edit-distance, etc.)
-- Bulk edit / bulk tagging operations across multiple selected coins
-- "Raw" coin explicit visual state (see item 1 above)
+- Valuation-service integration (market pricing by denomination/grade)
+- Stronger filename normalization for image matching (cert numbers, fuzzy edit-distance)
+- "Raw" coin explicit visual state
+- Dashboard with charts (value over time, category breakdown)

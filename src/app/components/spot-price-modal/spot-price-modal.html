@@ -1,0 +1,52 @@
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Spot Prices</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <p class="hint-text">
+        Fetch live COMEX spot prices or enter manually. Coins with weight and metal content will show melt values automatically.
+      </p>
+      <div class="spot-fetch-bar">
+        <button type="button" class="fetch-btn" (click)="fetchSpotPrices()" [disabled]="spotPriceFetching()">
+          @if (spotPriceFetching()) {
+            Fetching...
+          } @else {
+            Fetch COMEX Prices
+          }
+        </button>
+        @if (spotPriceSource()) {
+          <span class="spot-source">{{ spotPriceSource() }}</span>
+        }
+        @if (spotPriceTimestamp()) {
+          <span class="spot-timestamp">Updated: {{ spotPriceTimestamp() | date:'short' }}</span>
+        }
+        @if (spotPriceError()) {
+          <span class="spot-error">{{ spotPriceError() }}</span>
+        }
+      </div>
+      <div class="spot-price-form">
+        <label>
+          <span>Gold ($/oz)</span>
+          <input type="number" step="0.01" [ngModel]="inv.spotPrices().gold" (ngModelChange)="updateSpotPrice('gold', Number($event))" />
+        </label>
+        <label>
+          <span>Silver ($/oz)</span>
+          <input type="number" step="0.01" [ngModel]="inv.spotPrices().silver" (ngModelChange)="updateSpotPrice('silver', Number($event))" />
+        </label>
+        <label>
+          <span>Platinum ($/oz)</span>
+          <input type="number" step="0.01" [ngModel]="inv.spotPrices().platinum" (ngModelChange)="updateSpotPrice('platinum', Number($event))" />
+        </label>
+        <label>
+          <span>Copper ($/lb)</span>
+          <input type="number" step="0.01" [ngModel]="inv.spotPrices().copper" (ngModelChange)="updateSpotPrice('copper', Number($event))" />
+        </label>
+      </div>
+      <div class="modal-actions">
+        <button type="button" (click)="closed.emit()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>

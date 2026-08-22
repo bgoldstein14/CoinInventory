@@ -1,0 +1,38 @@
+@use '../../styles/modal' as *;
+
+// ---- Category & set admin (inside modal) ----
+
+.category-admin-form {
+  display: flex;
+  gap: 8px;
+  margin: 12px 0;
+  flex-wrap: wrap;
+}
+
+.category-admin-input {
+  flex: 1 1 200px;
+  padding: 8px 12px;
+  border: 1px solid #d9c7a5;
+  border-radius: 8px;
+  background: #fdfaf6;
+}
+
+.category-admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #faf6f1;
+    border: 1px solid #ecdcc0;
+    border-radius: 999px;
+    padding: 4px 4px 4px 12px;
+    font-size: 0.82rem;
+  }
+}

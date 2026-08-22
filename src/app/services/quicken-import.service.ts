@@ -46,6 +46,9 @@ const ACQUISITION_ACTIONS = new Set([
 /** Action codes that represent disposing of a position -- a coin that has left the collection. */
 const DISPOSITION_ACTIONS = new Set(['sell', 'sellx', 'shrsout', 'shtsell', 'rtrncap']);
 
+/** Action codes for cash-only transfers — no security involved, skip silently. */
+const CASH_TRANSFER_ACTIONS = new Set(['xin', 'xout']);
+
 export interface QuickenParseResult {
   importedRecords: QuickenImportRecord[];
   warnings: string[];
@@ -127,6 +130,10 @@ export class QuickenImportService {
 
       const actionKey = (fields.action ?? '').toLowerCase();
 
+      if (CASH_TRANSFER_ACTIONS.has(actionKey)) {
+        continue;
+      }
+
       if (DISPOSITION_ACTIONS.has(actionKey)) {
         // A sale/transfer-out means this coin is no longer held -- importing
         // it as current inventory would misrepresent the collection.
@@ -154,7 +161,7 @@ export class QuickenImportService {
         purchasePrice,
         currentValue: purchasePrice,
         country: 'United States',
-        type: fields.action || 'Unknown',
+        type: '',
         notes: fields.memo ?? '',
         source: 'quicken'
       });
@@ -266,9 +273,8 @@ export class QuickenImportService {
 
     const [month, day, rawYear] = parts;
     let year = rawYear;
-    if (year.length === 2) {
+    if (year.length <= 2) {
       const yearNumber = Number.parseInt(year, 10);
-      // 2-digit years follow Quicken's own convention: 00-50 => 2000s, 51-99 => 1900s.
       year = String(yearNumber <= 50 ? 2000 + yearNumber : 1900 + yearNumber);
     }
 

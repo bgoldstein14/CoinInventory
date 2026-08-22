@@ -6,7 +6,7 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "vitest run"
+    "test": "vitest run --root src"
   },
   "private": true,
   "packageManager": "npm@11.17.0",
@@ -20,14 +20,20 @@
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
+  "overrides": {
+    "esbuild": "npm:esbuild-wasm@0.28.1"
+  },
   "devDependencies": {
     "@angular/build": "^22.1.3",
     "@angular/cli": "^22.1.3",
     "@angular/compiler-cli": "^22.1.0",
+    "@types/supertest": "^7.2.1",
+    "esbuild-wasm": "^0.28.2",
     "fake-indexeddb": "^6.2.5",
     "jsdom": "^28.0.0",
     "prettier": "^3.8.1",
+    "supertest": "^7.2.2",
     "typescript": "~6.0.2",
-    "vitest": "^4.0.8"
+    "vitest": "^4.1.11"
   }
 }

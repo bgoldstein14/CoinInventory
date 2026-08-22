@@ -1,0 +1,148 @@
+// ---- Inventory panel header ----
+
+.inventory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.selection-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #1d4ed8;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+// ---- Column picker ----
+
+.column-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
+// ---- Table ----
+
+.inventory-table-wrap { overflow-x: auto; }
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+}
+
+.inventory-table th,
+.inventory-table td {
+  padding: 8px 10px;
+  border-bottom: 1px solid #ede5d8;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-table thead th {
+  background: #f8f0e4;
+  color: #5d4832;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  &:hover { color: #8e5b2d; }
+}
+
+.sort-indicator {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 0.65rem;
+}
+
+.check-column {
+  width: 32px;
+  text-align: center;
+
+  input { accent-color: #8e5b2d; cursor: pointer; }
+}
+
+// ---- Table rows ----
+
+.inventory-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s ease;
+
+  &:hover { background: #fdf8f0; }
+
+  &.selected {
+    background: #f5ead8;
+    box-shadow: inset 3px 0 0 #b98748;
+  }
+
+  &.multi-selected { background: #eef2ff; }
+
+  &.selected.multi-selected {
+    background: #e8edf8;
+    box-shadow: inset 3px 0 0 #4f6dba;
+  }
+}
+
+.empty-row td {
+  text-align: center;
+  color: #8a7a63;
+  padding: 32px 12px;
+  cursor: default;
+}
+
+// ---- Row thumbnails ----
+
+.thumb-column { width: 48px; }
+
+.row-thumb {
+  display: block;
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+}
+
+.row-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  text-align: center;
+  color: #a4937a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px;
+}
