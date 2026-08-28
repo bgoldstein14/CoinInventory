@@ -3,10 +3,9 @@ import { CoinRecord } from '../types/coin.model';
 
 export const CSV_MAPPABLE_FIELDS: { key: string; label: string }[] = [
   { key: '', label: '(skip)' },
-  { key: 'name', label: 'Name' },
+  { key: 'coinType', label: 'Coin Type' },
   { key: 'denomination', label: 'Denomination' },
   { key: 'year', label: 'Year' },
-  { key: 'type', label: 'Type' },
   { key: 'category', label: 'Category' },
   { key: 'country', label: 'Country' },
   { key: 'grade', label: 'Grade' },
@@ -88,10 +87,9 @@ export class CsvService {
   mapRowToCoin(row: string[], headers: string[], mapping: Record<string, string>): CoinRecord {
     const coin: CoinRecord = {
       id: crypto.randomUUID(),
-      name: 'Imported Coin',
       denomination: '',
-      year: null,
-      type: '',
+      year: '',
+      coinType: '',
       category: '',
       country: 'United States',
       grade: '',
@@ -115,9 +113,7 @@ export class CsvService {
       const value = (row[i] ?? '').trim();
       if (!field || !value) continue;
 
-      if (field === 'year') {
-        (coin as unknown as Record<string, unknown>)[field] = Number(value) || null;
-      } else if (field === 'purchasePrice' || field === 'currentValue' || field === 'soldPrice' || field === 'weight') {
+      if (field === 'purchasePrice' || field === 'currentValue' || field === 'soldPrice' || field === 'weight') {
         (coin as unknown as Record<string, unknown>)[field] = Number(value.replace(/[$,]/g, '')) || 0;
       } else {
         (coin as unknown as Record<string, unknown>)[field] = value;
@@ -129,13 +125,13 @@ export class CsvService {
 
   exportCsv(coins: CoinRecord[]): void {
     const columns: (keyof CoinRecord)[] = [
-      'name', 'denomination', 'year', 'type', 'category', 'country', 'grade',
+      'coinType', 'denomination', 'year', 'category', 'country', 'grade',
       'certCompany', 'certNumber', 'variety', 'mintMark', 'composition',
       'purchaseDate', 'purchasePrice', 'currentValue', 'notes', 'dealer',
       'coinSet', 'metalContent', 'weight', 'soldPrice', 'soldDate', 'source'
     ];
     const headerLabels = [
-      'Name', 'Denomination', 'Year', 'Type', 'Category', 'Country', 'Grade',
+      'Coin Type', 'Denomination', 'Year', 'Category', 'Country', 'Grade',
       'Cert Company', 'Cert Number', 'Variety', 'Mint Mark', 'Composition',
       'Purchase Date', 'Purchase Price', 'Current Value', 'Notes', 'Dealer',
       'Set', 'Metal Content', 'Weight (oz)', 'Sold Price', 'Sold Date', 'Source'
@@ -151,10 +147,10 @@ export class CsvService {
   }
 
   exportInsuranceCsv(coins: CoinRecord[]): void {
-    const lines = ['Name,Grade,Cert Company,Cert Number,Current Value,Purchase Price,Purchase Date,Notes'];
+    const lines = ['Coin Type,Grade,Cert Company,Cert Number,Current Value,Purchase Price,Purchase Date,Notes'];
     for (const coin of coins) {
       lines.push([
-        this.escapeCsvField(coin.name),
+        this.escapeCsvField(coin.coinType),
         this.escapeCsvField(coin.grade),
         this.escapeCsvField(coin.certCompany),
         this.escapeCsvField(coin.certNumber),

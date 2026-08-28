@@ -24,7 +24,8 @@ describe('StorageService', () => {
   });
 
   it('round-trips a simple stored value', async () => {
-    const coins = [{ id: 'c-001', name: 'Test Coin' }];
+    // Test with simplified coin-like object (CoinRecord no longer has 'name')
+    const coins = [{ id: 'c-001', denomination: 'Quarter', coinType: 'Washington' }];
 
     await service.set(StorageKeys.Inventory, coins);
     const loaded = await service.get(StorageKeys.Inventory);
@@ -34,8 +35,9 @@ describe('StorageService', () => {
 
   it('round-trips a large inventory payload including image data URLs', async () => {
     const largeImage = `data:image/jpeg;base64,${'A'.repeat(200_000)}`;
+    // CoinRecord no longer has 'name' - use denomination/coinType instead
     const inventory = [
-      { id: 'c-001', name: 'Liberty Head Double Eagle', imagePaths: [largeImage] }
+      { id: 'c-001', denomination: 'Double Eagle', coinType: 'Liberty Head', imagePaths: [largeImage] }
     ];
 
     await service.set(StorageKeys.Inventory, inventory);
@@ -45,12 +47,13 @@ describe('StorageService', () => {
   });
 
   it('overwrites a previously stored value', async () => {
-    await service.set(StorageKeys.VisibleColumns, ['name', 'grade']);
-    await service.set(StorageKeys.VisibleColumns, ['name']);
+    // Column 'name' no longer exists - use 'coinType' instead
+    await service.set(StorageKeys.VisibleColumns, ['coinType', 'grade']);
+    await service.set(StorageKeys.VisibleColumns, ['coinType']);
 
     const loaded = await service.get(StorageKeys.VisibleColumns);
 
-    expect(loaded).toEqual(['name']);
+    expect(loaded).toEqual(['coinType']);
   });
 
   it('keeps separate keys independent of one another', async () => {

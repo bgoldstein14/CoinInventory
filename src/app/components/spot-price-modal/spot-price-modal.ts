@@ -1,6 +1,6 @@
 import { Component, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DecimalPipe, DatePipe } from '@angular/common';
+import { DatePipe } from '@angular/common';
 import { InventoryService } from '../../services/inventory.service';
 import { SpotPriceService } from '../../services/spot-price.service';
 import { SpotPrices } from '../../types/coin.model';
@@ -8,7 +8,7 @@ import { SpotPrices } from '../../types/coin.model';
 @Component({
   selector: 'app-spot-price-modal',
   standalone: true,
-  imports: [FormsModule, DecimalPipe, DatePipe],
+  imports: [FormsModule, DatePipe],
   templateUrl: './spot-price-modal.html',
   styleUrl: './spot-price-modal.scss',
 })

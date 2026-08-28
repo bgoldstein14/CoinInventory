@@ -12,7 +12,9 @@ export class ImageMatchingService {
       let bestScore = 0;
 
       for (const coin of inventory) {
-        const candidateName = this.normalizeFileName(coin.name);
+        // Build a searchable name from coinType, denomination, and year
+        const coinLabel = [coin.coinType, coin.denomination, coin.year].filter(Boolean).join(' ');
+        const candidateName = this.normalizeFileName(coinLabel);
         const score = this.similarity(imageName, candidateName);
         if (score > bestScore) {
           bestScore = score;
@@ -20,12 +22,15 @@ export class ImageMatchingService {
         }
       }
 
+      const matchLabel = bestRecord
+        ? [bestRecord.coinType, bestRecord.denomination].filter(Boolean).join(' ')
+        : '';
       mapped.push({
         imagePath,
         matchedRecordId: bestRecord ? bestRecord.id : null,
         confidence: bestRecord ? Number(bestScore.toFixed(2)) : 0,
         reason: bestRecord
-          ? `Matched ${bestRecord.name} based on filename similarity.`
+          ? `Matched ${matchLabel} based on filename similarity.`
           : 'No inventory record matched the image filename.'
       });
     }

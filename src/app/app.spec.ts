@@ -1,16 +1,22 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app';
 import { CsvService } from './services/csv.service';
-import { InventoryService } from './services/inventory.service';
-import { StorageService } from './services/storage.service';
 import { CoinRecord } from './types/coin.model';
+import { createTestInventoryService } from './testing/test-helpers';
 
+/**
+ * Creates an App instance with all dependencies properly wired up.
+ *
+ * InventoryService uses Angular's inject() function internally, so it must be
+ * created inside an injection context with all its dependencies provided.
+ * The createTestInventoryService() helper handles this setup.
+ */
 function createApp(): App {
-  const storage = new StorageService();
-  return new App(storage, new InventoryService(storage), new CsvService());
+  const { inv, storage } = createTestInventoryService();
+  return new App(storage, inv, new CsvService());
 }
 
 function addTestCoin(app: App, overrides: Partial<CoinRecord> = {}): CoinRecord {
@@ -40,7 +46,9 @@ describe('App', () => {
     app['addBlankCoin']();
 
     const coin = app['inv'].inventory().at(-1)!;
-    expect(coin.name).toBe('New Coin');
+    // CoinRecord no longer has a 'name' field - it's derived from denomination/coinType/year
+    expect(coin.denomination).toBe('');
+    expect(coin.coinType).toBe('');
     expect(coin.category).toBe('');
     expect(coin.grade).toBe('');
     expect(coin.source).toBe('manual');
@@ -49,7 +57,7 @@ describe('App', () => {
 
   it('deletes the selected coin from the inventory', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { name: 'Doomed Coin' });
+    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
     app['selectCoin'](coin.id);
 
     app['deleteSelectedCoin']();
@@ -59,40 +67,42 @@ describe('App', () => {
 
   it('imports inventory JSON data', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Test Coin', category: 'Test Category', grade: 'MS65' });
+    addTestCoin(app, { denomination: 'Dime', coinType: 'Mercury', category: 'Test Category', grade: 'MS65' });
 
     const exported = JSON.stringify(app['inv'].inventory());
-    expect(exported).toContain('Test Coin');
+    expect(exported).toContain('Mercury');
 
+    // Updated CoinRecord structure: no 'name', 'type' -> 'coinType', year is string
     const replacement = [{
-      id: 'new-1', name: 'Imported Coin', denomination: 'Dollar', year: 2024,
-      type: 'Test', category: 'Imported Category', country: 'United States',
-      grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: '',
+      id: 'new-1', denomination: 'Dollar', year: '2024', coinType: 'Test',
+      category: 'Imported Category', country: 'United States', grade: 'MS65',
+      certCompany: '', certNumber: '', variety: '', mintMark: '',
       composition: '', purchaseDate: '2024-01-01', purchasePrice: 10,
       currentValue: 15, notes: '', imagePaths: [], tags: ['test'], source: 'manual'
     }] as const;
 
     app['inv'].importInventoryData(JSON.stringify(replacement));
     expect(app['inv'].inventory()).toHaveLength(1);
-    expect(app['inv'].inventory()[0].name).toBe('Imported Coin');
+    expect(app['inv'].inventory()[0].denomination).toBe('Dollar');
+    expect(app['inv'].inventory()[0].coinType).toBe('Test');
     expect(app['inv'].categoryOptions()).toContain('Imported Category');
   });
 
   it('filters the inventory table by search text', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Mercury Dime' });
-    addTestCoin(app, { name: 'Liberty Eagle' });
+    addTestCoin(app, { denomination: 'Dime', coinType: 'Mercury' });
+    addTestCoin(app, { denomination: 'Eagle', coinType: 'Liberty' });
 
     app['onSearchQueryChange']('mercury');
     const results = app['filteredInventory']();
     expect(results).toHaveLength(1);
-    expect(results[0].name).toBe('Mercury Dime');
+    expect(results[0].coinType).toBe('Mercury');
   });
 
   it('filters the inventory table by category', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Gold Coin', category: 'Gold' });
-    addTestCoin(app, { name: 'Silver Coin', category: 'Silver' });
+    addTestCoin(app, { denomination: 'Eagle', category: 'Gold' });
+    addTestCoin(app, { denomination: 'Dollar', category: 'Silver' });
 
     app['onCategoryFilterChange']('Gold');
     const results = app['filteredInventory']();
@@ -102,8 +112,8 @@ describe('App', () => {
 
   it('sorts the inventory table and flips direction on repeat clicks', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'A', currentValue: 10 });
-    addTestCoin(app, { name: 'B', currentValue: 50 });
+    addTestCoin(app, { denomination: 'Cent', currentValue: 10 });
+    addTestCoin(app, { denomination: 'Dollar', currentValue: 50 });
 
     app['setSortColumn']('currentValue');
     let results = app['filteredInventory']();
@@ -204,7 +214,8 @@ describe('App', () => {
 
   it('tracks a selected coin and manages its images', async () => {
     const app = createApp();
-    const coin = addTestCoin(app, { name: 'Test Coin' });
+    await app['ready']; // Wait for hydration to finish before adding test data
+    const coin = addTestCoin(app, { denomination: 'Eagle', coinType: 'Gold' });
     app['selectCoin'](coin.id);
 
     await app['addCoinImages']({
@@ -224,8 +235,8 @@ describe('App', () => {
 
   it('selects and deselects coins individually', () => {
     const app = createApp();
-    const coin1 = addTestCoin(app, { name: 'Coin A' });
-    const coin2 = addTestCoin(app, { name: 'Coin B' });
+    const coin1 = addTestCoin(app, { denomination: 'Quarter' });
+    const coin2 = addTestCoin(app, { denomination: 'Dime' });
 
     const mockEvent = { stopPropagation: () => {}, shiftKey: false } as MouseEvent;
 
@@ -243,9 +254,9 @@ describe('App', () => {
 
   it('selects and clears all visible coins', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Coin A' });
-    addTestCoin(app, { name: 'Coin B' });
-    addTestCoin(app, { name: 'Coin C' });
+    addTestCoin(app, { denomination: 'Quarter' });
+    addTestCoin(app, { denomination: 'Dime' });
+    addTestCoin(app, { denomination: 'Nickel' });
 
     app['toggleAllCoins']();
     expect(app['selectionCount']()).toBe(3);
@@ -257,7 +268,7 @@ describe('App', () => {
 
   it('clears selection explicitly', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { name: 'Coin A' });
+    const coin = addTestCoin(app, { denomination: 'Quarter' });
     const mockEvent = { stopPropagation: () => {}, shiftKey: false } as MouseEvent;
 
     app['toggleCoinSelection'](coin.id, mockEvent);
@@ -269,9 +280,9 @@ describe('App', () => {
 
   it('bulk updates a field across selected coins', () => {
     const app = createApp();
-    const coin1 = addTestCoin(app, { name: 'Coin A', category: '' });
-    const coin2 = addTestCoin(app, { name: 'Coin B', category: '' });
-    addTestCoin(app, { name: 'Coin C', category: '' });
+    const coin1 = addTestCoin(app, { denomination: 'Quarter', category: '' });
+    const coin2 = addTestCoin(app, { denomination: 'Dime', category: '' });
+    addTestCoin(app, { denomination: 'Nickel', category: '' });
 
     app['selectedCoinIds'].set(new Set([coin1.id, coin2.id]));
     app['bulkUpdateField']('category', 'Gold');
@@ -283,15 +294,15 @@ describe('App', () => {
 
   it('bulk deletes selected coins', () => {
     const app = createApp();
-    const coin1 = addTestCoin(app, { name: 'Keep' });
-    const coin2 = addTestCoin(app, { name: 'Delete Me' });
-    const coin3 = addTestCoin(app, { name: 'Also Delete' });
+    const coin1 = addTestCoin(app, { denomination: 'Keep' });
+    const coin2 = addTestCoin(app, { denomination: 'Delete Me' });
+    const coin3 = addTestCoin(app, { denomination: 'Also Delete' });
 
     app['selectedCoinIds'].set(new Set([coin2.id, coin3.id]));
     app['bulkDeleteCoins']();
 
     expect(app['inv'].inventory()).toHaveLength(1);
-    expect(app['inv'].inventory()[0].name).toBe('Keep');
+    expect(app['inv'].inventory()[0].denomination).toBe('Keep');
     expect(app['selectionCount']()).toBe(0);
   });
 
@@ -299,30 +310,30 @@ describe('App', () => {
 
   it('filters by grade prefix', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'MS Coin', grade: 'MS65' });
-    addTestCoin(app, { name: 'VF Coin', grade: 'VF30' });
+    addTestCoin(app, { denomination: 'Quarter', grade: 'MS65' });
+    addTestCoin(app, { denomination: 'Dime', grade: 'VF30' });
 
     app['gradeFilter'].set('MS');
     expect(app['filteredInventory']()).toHaveLength(1);
-    expect(app['filteredInventory']()[0].name).toBe('MS Coin');
+    expect(app['filteredInventory']()[0].grade).toBe('MS65');
   });
 
   it('filters by value range', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Cheap', currentValue: 5 });
-    addTestCoin(app, { name: 'Mid', currentValue: 50 });
-    addTestCoin(app, { name: 'Expensive', currentValue: 500 });
+    addTestCoin(app, { denomination: 'Cent', currentValue: 5 });
+    addTestCoin(app, { denomination: 'Quarter', currentValue: 50 });
+    addTestCoin(app, { denomination: 'Eagle', currentValue: 500 });
 
     app['valueMinFilter'].set('10');
     app['valueMaxFilter'].set('100');
     expect(app['filteredInventory']()).toHaveLength(1);
-    expect(app['filteredInventory']()[0].name).toBe('Mid');
+    expect(app['filteredInventory']()[0].currentValue).toBe(50);
   });
 
   it('filters by source', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Manual Coin', source: 'manual' });
-    addTestCoin(app, { name: 'Quicken Coin', source: 'quicken' });
+    addTestCoin(app, { denomination: 'Quarter', source: 'manual' });
+    addTestCoin(app, { denomination: 'Dime', source: 'quicken' });
 
     app['sourceFilter'].set('quicken');
     expect(app['filteredInventory']()).toHaveLength(1);
@@ -331,8 +342,8 @@ describe('App', () => {
 
   it('filters by country', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'US Coin', country: 'United States' });
-    addTestCoin(app, { name: 'UK Coin', country: 'United Kingdom' });
+    addTestCoin(app, { denomination: 'Quarter', country: 'United States' });
+    addTestCoin(app, { denomination: 'Shilling', country: 'United Kingdom' });
 
     app['countryFilter'].set('United Kingdom');
     expect(app['filteredInventory']()).toHaveLength(1);
@@ -343,22 +354,22 @@ describe('App', () => {
     const app = createApp();
     app['inv'].addCoinSet('Set A');
 
-    addTestCoin(app, { name: 'In Set', coinSet: 'Set A' });
-    addTestCoin(app, { name: 'Not in Set' });
+    addTestCoin(app, { denomination: 'Quarter', coinSet: 'Set A' });
+    addTestCoin(app, { denomination: 'Dime' });
 
     app['coinSetFilter'].set('Set A');
     expect(app['filteredInventory']()).toHaveLength(1);
-    expect(app['filteredInventory']()[0].name).toBe('In Set');
+    expect(app['filteredInventory']()[0].coinSet).toBe('Set A');
   });
 
   it('filters by dealer', () => {
     const app = createApp();
-    addTestCoin(app, { name: 'Heritage Coin', dealer: 'Heritage' });
-    addTestCoin(app, { name: 'Other Coin', dealer: 'Stack' });
+    addTestCoin(app, { denomination: 'Eagle', dealer: 'Heritage' });
+    addTestCoin(app, { denomination: 'Dollar', dealer: 'Stack' });
 
     app['dealerFilter'].set('heritage');
     expect(app['filteredInventory']()).toHaveLength(1);
-    expect(app['filteredInventory']()[0].name).toBe('Heritage Coin');
+    expect(app['filteredInventory']()[0].dealer).toBe('Heritage');
   });
 
   // --- Valuation ---
@@ -406,18 +417,27 @@ describe('App', () => {
     const app = createApp();
     app['inv'].updateSpotPrices({ ...app['inv'].spotPrices(), gold: 2000 });
 
-    const coin = addTestCoin(app, { metalContent: 'Gold', weight: 0.5 });
-    expect(app['meltValue'](coin)).toBe(1000);
+    // Melt value now uses pmWeightGrams and pmPercent instead of weight
+    // pmWeightGrams: 15.55175 grams (exactly 0.5 troy oz), pmPercent: 90 (90% gold)
+    const coin = addTestCoin(app, {
+      metalContent: 'Gold',
+      pmWeightGrams: 15.55175,
+      pmPercent: 90
+    });
+    // Expected: (15.55175 / 31.1035) * (90 / 100) * 2000 = 0.5 * 0.9 * 2000 = 900
+    expect(app['meltValue'](coin)).toBeCloseTo(900, 1);
   });
 
   it('returns null melt value when weight or metal is missing', () => {
     const app = createApp();
     app['inv'].updateSpotPrices({ ...app['inv'].spotPrices(), gold: 2000 });
 
-    const noWeight = addTestCoin(app, { metalContent: 'Gold' });
+    // Missing pmWeightGrams
+    const noWeight = addTestCoin(app, { metalContent: 'Gold', pmPercent: 90 });
     expect(app['meltValue'](noWeight)).toBeNull();
 
-    const noMetal = addTestCoin(app, { weight: 0.5 });
+    // Missing metalContent
+    const noMetal = addTestCoin(app, { pmWeightGrams: 15.5175, pmPercent: 90 });
     expect(app['meltValue'](noMetal)).toBeNull();
   });
 
@@ -425,7 +445,7 @@ describe('App', () => {
 
   it('adds and deletes transactions for a coin', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { name: 'Test Coin' });
+    const coin = addTestCoin(app, { denomination: 'Eagle', coinType: 'Gold' });
     app['selectCoin'](coin.id);
 
     app['addTransactionForSelectedCoin']('purchase', 150, 'Heritage Auctions', '2024-01-15', 'Great deal');
@@ -442,7 +462,7 @@ describe('App', () => {
 
   it('deleting a coin also removes its transactions', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { name: 'Doomed Coin' });
+    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
     app['selectCoin'](coin.id);
 
     app['addTransactionForSelectedCoin']('purchase', 100, '', '', '');
@@ -472,9 +492,10 @@ describe('App', () => {
 
   it('adds coins via onQuickenImported callback', () => {
     const app = createApp();
+    // Updated CoinRecord structure: no 'name', 'type' -> 'coinType', year is string
     const coins: CoinRecord[] = [{
-      id: 'q1', name: 'Quicken Coin', denomination: 'Dime', year: null,
-      type: '', category: 'Coins', country: 'US', grade: 'Unknown',
+      id: 'q1', denomination: 'Dime', year: '1964', coinType: 'Roosevelt',
+      category: 'Coins', country: 'US', grade: 'Unknown',
       certCompany: '', certNumber: '', variety: '', mintMark: '',
       composition: '', purchaseDate: '2024-01-01', purchasePrice: 12.50,
       currentValue: 12.50, notes: '', imagePaths: [], tags: [],
@@ -483,6 +504,7 @@ describe('App', () => {
 
     app['onQuickenImported'](coins);
     expect(app['inv'].inventory()).toHaveLength(1);
-    expect(app['inv'].inventory()[0].name).toBe('Quicken Coin');
+    expect(app['inv'].inventory()[0].denomination).toBe('Dime');
+    expect(app['inv'].inventory()[0].coinType).toBe('Roosevelt');
   });
 });

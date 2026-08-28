@@ -23,6 +23,7 @@ export class QuickenImportModal {
 
   protected readonly quickenText = signal<string>('');
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
+  protected readonly skippedRecords = signal<QuickenImportRecord[]>([]); // Sold/transferred coins
   protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
   protected readonly selectedAccounts = signal<string[]>([]);
@@ -73,6 +74,7 @@ export class QuickenImportModal {
     const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
     const filtered = this.applyQifFilters(result.importedRecords);
     this.importedRecords.set(filtered);
+    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
     this.quickenWarnings.set(result.warnings);
   }
 
@@ -89,6 +91,7 @@ export class QuickenImportModal {
     const result = this.quickenImportService.parse(text, this.selectedAccounts());
     const filtered = this.applyQifFilters(result.importedRecords);
     this.importedRecords.set(filtered);
+    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
     this.quickenWarnings.set(result.warnings);
   }
 
@@ -96,17 +99,31 @@ export class QuickenImportModal {
     const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
     const filtered = this.applyQifFilters(result.importedRecords);
     this.importedRecords.set(filtered);
+    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
     this.quickenWarnings.set(result.warnings);
 
+    // Map QuickenImportRecord to CoinRecord (note: no 'name' field, using coinType instead)
     const newCoins: CoinRecord[] = filtered.map((record): CoinRecord => ({
-      id: record.id, name: record.name, denomination: record.denomination,
-      year: null, type: record.type,
+      id: record.id,
+      coinType: record.coinType, // Use coinType instead of name
+      denomination: record.denomination,
+      year: record.year, // Now a string (supports ranges)
       category: this.categoryFromQuickenAccount(record.account),
-      country: record.country, grade: 'Unknown', certCompany: '', certNumber: '',
-      variety: '', mintMark: '', composition: '',
-      purchaseDate: record.purchaseDate ?? '', purchasePrice: record.purchasePrice,
-      currentValue: record.currentValue, notes: record.notes,
-      imagePaths: [], tags: [], source: 'quicken', hasCacSticker: false
+      country: record.country,
+      grade: record.grade, // Parsed from Quicken data
+      certCompany: '', certNumber: '',
+      variety: record.variety, // Parsed variety
+      mintMark: record.mintMark, // Parsed mint mark
+      composition: '',
+      purchaseDate: record.purchaseDate ?? '',
+      purchasePrice: record.purchasePrice,
+      currentValue: record.currentValue,
+      notes: record.notes,
+      imagePaths: [], tags: [],
+      source: 'quicken',
+      hasCacSticker: false,
+      pmWeightGrams: record.pmWeightGrams,
+      pmPercent: record.pmPercent
     }));
 
     this.imported.emit(newCoins);

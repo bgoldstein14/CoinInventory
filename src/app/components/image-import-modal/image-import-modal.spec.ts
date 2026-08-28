@@ -5,12 +5,12 @@ import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ImageMatchingService } from '../../services/image-matching.service';
 import { InventoryService } from '../../services/inventory.service';
-import { StorageService } from '../../services/storage.service';
 import { ImageImportModal } from './image-import-modal';
+import { createTestInventoryService } from '../../testing/test-helpers';
 
 function createModal() {
-  const storage = new StorageService();
-  const inv = new InventoryService(storage);
+  // InventoryService uses inject() so must be created in an injection context
+  const { inv } = createTestInventoryService();
   const imageMatching = new ImageMatchingService();
   const injector = Injector.create({
     providers: [
@@ -36,8 +36,9 @@ describe('ImageImportModal', () => {
 
   it('classifies image matches from directory selection', async () => {
     const { modal, inv } = createModal();
-    addCoin(inv, { name: 'Mercury Dime' });
-    addCoin(inv, { name: 'Liberty Head Double Eagle' });
+    // CoinRecord no longer has 'name' property - use 'coinType' instead
+    addCoin(inv, { coinType: 'Mercury Dime' });
+    addCoin(inv, { coinType: 'Liberty Head Double Eagle' });
 
     const files = [
       new File(['img1'], 'mercury_dime_1945.jpg', { type: 'image/jpeg' }),
@@ -61,7 +62,7 @@ describe('ImageImportModal', () => {
 
   it('confirms and rejects image matches', async () => {
     const { modal, inv } = createModal();
-    addCoin(inv, { name: 'Mercury Dime' });
+    addCoin(inv, { coinType: 'Mercury Dime' });
 
     await modal['handleDirectorySelection']({
       target: { files: [new File(['img'], 'mercury_dime.jpg', { type: 'image/jpeg' })], value: '' }
@@ -77,8 +78,8 @@ describe('ImageImportModal', () => {
 
   it('reassigns an image match to a different coin', async () => {
     const { modal, inv } = createModal();
-    addCoin(inv, { name: 'Mercury Dime' });
-    const coin2 = addCoin(inv, { name: 'Liberty Eagle' });
+    addCoin(inv, { coinType: 'Mercury Dime' });
+    const coin2 = addCoin(inv, { coinType: 'Liberty Eagle' });
 
     await modal['handleDirectorySelection']({
       target: { files: [new File(['img'], 'some_image.jpg', { type: 'image/jpeg' })], value: '' }
@@ -92,7 +93,7 @@ describe('ImageImportModal', () => {
 
   it('applies confirmed matches and attaches images to coins', async () => {
     const { modal, inv } = createModal();
-    const coin = addCoin(inv, { name: 'Mercury Dime' });
+    const coin = addCoin(inv, { coinType: 'Mercury Dime' });
 
     await modal['handleDirectorySelection']({
       target: { files: [new File(['img'], 'mercury_dime.jpg', { type: 'image/jpeg' })], value: '' }
@@ -107,7 +108,7 @@ describe('ImageImportModal', () => {
 
   it('resolves coin name by id', () => {
     const { modal, inv } = createModal();
-    const coin = addCoin(inv, { name: 'Test Coin' });
+    const coin = addCoin(inv, { coinType: 'Test Coin' });
 
     expect(modal['coinNameById'](coin.id)).toBe('Test Coin');
     expect(modal['coinNameById'](null)).toBe('None');

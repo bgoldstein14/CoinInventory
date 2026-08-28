@@ -91,20 +91,69 @@
       @if (importedRecords().length > 0) {
         <div class="import-preview">
           <h3>Import preview ({{ importedRecords().length }} coins)</h3>
+          <p class="hint-text">Review parsed attributes before importing. Values are extracted from Quicken security names.</p>
           @for (accountName of groupedAccountNames(); track accountName) {
             <div class="account-group-preview">
               <h4>{{ accountName }}</h4>
-              <ul>
-                @for (record of groupedImportedRecords()[accountName]; track record.id) {
-                  <li>
-                    <span>{{ record.name }}</span>
-                    <span>{{ record.denomination }}</span>
-                    <strong>${{ record.currentValue | number: '1.2-2' }}</strong>
-                  </li>
-                }
-              </ul>
+              <!-- Enhanced preview table showing parsed attributes -->
+              <table class="import-preview-table">
+                <thead>
+                  <tr>
+                    <th>Coin Type</th>
+                    <th>Denomination</th>
+                    <th>Year</th>
+                    <th>Grade</th>
+                    <th>Mint Mark</th>
+                    <th>Variety</th>
+                    <th>Value</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (record of groupedImportedRecords()[accountName]; track record.id) {
+                    <tr>
+                      <td>{{ record.coinType || '—' }}</td>
+                      <td>{{ record.denomination || '—' }}</td>
+                      <td>{{ record.year || '—' }}</td>
+                      <td>{{ record.grade || '—' }}</td>
+                      <td>{{ record.mintMark || '—' }}</td>
+                      <td>{{ record.variety || '—' }}</td>
+                      <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
             </div>
           }
+        </div>
+      }
+
+      <!-- Show skipped records (sold/transferred coins) -->
+      @if (skippedRecords().length > 0) {
+        <div class="import-preview skipped-preview">
+          <h3>Skipped Records ({{ skippedRecords().length }} coins)</h3>
+          <p class="hint-text">
+            These coins were sold or transferred out (net quantity &le; 0) and will not be imported.
+          </p>
+          <table class="import-preview-table">
+            <thead>
+              <tr>
+                <th>Coin Type</th>
+                <th>Denomination</th>
+                <th>Year</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (record of skippedRecords(); track record.id) {
+                <tr class="skipped-row">
+                  <td>{{ record.coinType || '—' }}</td>
+                  <td>{{ record.denomination || '—' }}</td>
+                  <td>{{ record.year || '—' }}</td>
+                  <td><span class="badge badge--warning">Sold/Transferred</span></td>
+                </tr>
+              }
+            </tbody>
+          </table>
         </div>
       }
     </div>

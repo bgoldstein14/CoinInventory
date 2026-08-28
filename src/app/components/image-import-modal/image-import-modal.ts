@@ -113,7 +113,9 @@ export class ImageImportModal {
 
   coinNameById(coinId: string | null): string {
     if (!coinId) return 'None';
-    return this.inv.inventory().find(c => c.id === coinId)?.name ?? 'Unknown';
+    const coin = this.inv.inventory().find(c => c.id === coinId);
+    if (!coin) return 'Unknown';
+    return [coin.coinType, coin.denomination, coin.year].filter(Boolean).join(' ') || 'Unknown';
   }
 
   close(): void {
