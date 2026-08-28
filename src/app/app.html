@@ -1,3 +1,6 @@
+<!-- Notification toast at the top of the app for system messages -->
+<app-notification-toast />
+
 <main class="app-shell">
   <header class="topbar">
     <div class="topbar-title">
@@ -218,7 +221,8 @@
         <div class="detail-header">
           <div>
             <p class="eyebrow">Selected coin</p>
-            <h2>{{ selectedCoin.name }}</h2>
+            <!-- Display coin type + denomination as the heading (name field removed) -->
+            <h2>{{ selectedCoin.coinType || 'Untitled' }} {{ selectedCoin.denomination }}</h2>
             <div class="detail-badges">
               @if (selectedCoin.grade) {
                 <span [class]="gradeBadgeClass(selectedCoin.grade)">{{ selectedCoin.grade }}</span>
@@ -243,8 +247,26 @@
         </div>
 
         <div class="detail-editor">
-          <label><span>Name</span><input [ngModel]="selectedCoin.name" (ngModelChange)="updateSelectedCoin('name', $event)" /></label>
-          <label><span>Grade</span><input [ngModel]="selectedCoin.grade" (ngModelChange)="updateSelectedCoin('grade', $event)" /></label>
+          <!-- Coin Type field (replaces Name field) - describes the coin variant -->
+          <label>
+            <span>Coin Type</span>
+            <input
+              [ngModel]="selectedCoin.coinType"
+              (ngModelChange)="updateSelectedCoin('coinType', $event)"
+              placeholder="e.g., Walking Liberty, Morgan, Lincoln Cent"
+            />
+          </label>
+
+          <!-- Grade field with wider input for long grade descriptions like "VF Details" -->
+          <label>
+            <span>Grade</span>
+            <input
+              style="min-width: 150px;"
+              [ngModel]="selectedCoin.grade"
+              (ngModelChange)="updateSelectedCoin('grade', $event)"
+              placeholder="e.g., MS-65, VF Details, AU-50"
+            />
+          </label>
           <label>
             <span>Category</span>
             <select [ngModel]="selectedCoin.category" (ngModelChange)="updateSelectedCoin('category', $event)">
@@ -259,11 +281,94 @@
               @for (s of inv.coinSets(); track s) { <option [value]="s">{{ s }}</option> }
             </select>
           </label>
-          <label><span>Denomination</span><input [ngModel]="selectedCoin.denomination" (ngModelChange)="updateSelectedCoin('denomination', $event)" /></label>
+
+          <!-- Denomination dropdown with grouped options by country -->
+          <label>
+            <span>Denomination</span>
+            <select
+              [ngModel]="selectedCoin.denomination"
+              (ngModelChange)="updateSelectedCoin('denomination', $event)"
+            >
+              <option value="">(select)</option>
+              <!-- Group denominations by country -->
+              @for (country of ['US', 'GB']; track country) {
+                <optgroup [label]="country">
+                  @for (denom of inv.denominations(); track denom.denominationId) {
+                    @if (denom.country === country && denom.isActive) {
+                      <option [value]="denom.label">{{ denom.label }}</option>
+                    }
+                  }
+                </optgroup>
+              }
+              <!-- Other option reveals custom input -->
+              <option value="__OTHER__">Other (custom)</option>
+            </select>
+          </label>
+
+          <!-- Show custom denomination input when "Other" is selected -->
+          @if (selectedCoin.denomination === '__OTHER__') {
+            <label>
+              <span>Custom Denomination</span>
+              <input
+                [ngModel]="customDenominationValue()"
+                (ngModelChange)="customDenominationValue.set($event); updateSelectedCoin('denomination', $event)"
+                placeholder="Enter custom denomination"
+              />
+            </label>
+          }
+
           <label><span>Country</span><input [ngModel]="selectedCoin.country" (ngModelChange)="updateSelectedCoin('country', $event)" /></label>
-          <label><span>Year</span><input type="number" [ngModel]="selectedCoin.year ?? ''" (ngModelChange)="updateSelectedCoin('year', $event === '' ? null : Number($event))" /></label>
-          <label><span>Mint mark</span><input [ngModel]="selectedCoin.mintMark" (ngModelChange)="updateSelectedCoin('mintMark', $event)" /></label>
-          <label><span>Variety</span><input [ngModel]="selectedCoin.variety" (ngModelChange)="updateSelectedCoin('variety', $event)" /></label>
+
+          <!-- Year field changed to text input (supports ranges like "1916-1945") -->
+          <label>
+            <span>Year</span>
+            <input
+              type="text"
+              [ngModel]="selectedCoin.year ?? ''"
+              (ngModelChange)="updateSelectedCoin('year', $event)"
+              placeholder="e.g., 1916, 1916-1945"
+            />
+          </label>
+
+          <!-- Mint mark dropdown with options from service -->
+          <label>
+            <span>Mint mark</span>
+            <select
+              [ngModel]="selectedCoin.mintMark"
+              (ngModelChange)="updateSelectedCoin('mintMark', $event)"
+            >
+              <option value="">(none)</option>
+              @for (mm of inv.mintMarks(); track mm.mintMarkId) {
+                @if (mm.isActive) {
+                  <option [value]="mm.label" [title]="mm.description">{{ mm.label }}</option>
+                }
+              }
+              <!-- Other option reveals custom input -->
+              <option value="__OTHER__">Other (custom)</option>
+            </select>
+          </label>
+
+          <!-- Show custom mint mark input when "Other" is selected -->
+          @if (selectedCoin.mintMark === '__OTHER__') {
+            <label>
+              <span>Custom Mint Mark</span>
+              <input
+                [ngModel]="customMintMarkValue()"
+                (ngModelChange)="customMintMarkValue.set($event); updateSelectedCoin('mintMark', $event)"
+                placeholder="Enter custom mint mark"
+              />
+            </label>
+          }
+
+          <!-- Variety field (free text for coin variety/subtype) -->
+          <label>
+            <span>Variety</span>
+            <input
+              [ngModel]="selectedCoin.variety"
+              (ngModelChange)="updateSelectedCoin('variety', $event)"
+              placeholder="e.g., DDO, Micro S, Type 1"
+            />
+          </label>
           <label><span>Cert company</span><input [ngModel]="selectedCoin.certCompany" (ngModelChange)="updateSelectedCoin('certCompany', $event)" /></label>
           <label><span>Cert number</span><input [ngModel]="selectedCoin.certNumber" (ngModelChange)="updateSelectedCoin('certNumber', $event)" /></label>
           <label><span>Composition</span><input [ngModel]="selectedCoin.composition" (ngModelChange)="updateSelectedCoin('composition', $event)" /></label>
@@ -281,6 +386,31 @@
             </select>
           </label>
           <label><span>Weight (troy oz)</span><input type="number" step="0.0001" [ngModel]="selectedCoin.weight ?? 0" (ngModelChange)="updateSelectedCoin('weight', Number($event))" /></label>
+
+          <!-- Precious metal tracking fields -->
+          <label>
+            <span>PM Weight (g)</span>
+            <input
+              type="number"
+              step="0.01"
+              [ngModel]="selectedCoin.pmWeightGrams ?? 0"
+              (ngModelChange)="updateSelectedCoin('pmWeightGrams', Number($event))"
+              placeholder="Precious metal weight in grams"
+            />
+          </label>
+
+          <label>
+            <span>PM %</span>
+            <input
+              type="number"
+              step="0.01"
+              max="100"
+              [ngModel]="selectedCoin.pmPercent ?? 0"
+              (ngModelChange)="updateSelectedCoin('pmPercent', Number($event))"
+              placeholder="Precious metal percentage"
+            />
+          </label>
+
           <label class="cac-toggle-field">
             <span>CAC green bean</span>
             <span class="cac-toggle">
@@ -297,8 +427,12 @@
             <span>Gain/Loss</span>
             <strong>{{ selectedCoin.currentValue - selectedCoin.purchasePrice >= 0 ? '+' : '' }}${{ selectedCoin.currentValue - selectedCoin.purchasePrice | number: '1.2-2' }}</strong>
           </div>
+          <!-- Show melt value computed from PM weight, %, and spot prices -->
           @if (meltValue(selectedCoin); as melt) {
-            <div class="valuation-row melt-row"><span>Melt value</span><strong>${{ melt | number: '1.2-2' }}</strong></div>
+            <div class="valuation-row melt-row">
+              <span>Melt value</span>
+              <strong>${{ melt | number: '1.2-2' }}</strong>
+            </div>
           }
         </div>
 
@@ -332,7 +466,7 @@
             <input #txnDealer type="text" placeholder="Dealer" />
             <input #txnDate type="date" />
             <input #txnNotes type="text" placeholder="Notes" />
-            <button type="button" class="small-button" (click)="addTransactionForSelectedCoin(txnType.value, Number(txnAmount.value), txnDealer.value, txnDate.value, txnNotes.value); txnAmount.value=''; txnDealer.value=''; txnNotes.value=''">Add</button>
+            <button type="button" class="small-button" (click)="addTransactionForSelectedCoin($any(txnType.value), Number(txnAmount.value), txnDealer.value, txnDate.value, txnNotes.value); txnAmount.value=''; txnDealer.value=''; txnNotes.value=''">Add</button>
           </div>
         </div>
 

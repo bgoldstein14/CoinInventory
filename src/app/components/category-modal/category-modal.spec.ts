@@ -4,12 +4,12 @@ import '@angular/compiler';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { InventoryService } from '../../services/inventory.service';
-import { StorageService } from '../../services/storage.service';
 import { CategoryModal } from './category-modal';
+import { createTestInventoryService } from '../../testing/test-helpers';
 
 function createModal() {
-  const storage = new StorageService();
-  const inv = new InventoryService(storage);
+  // InventoryService uses inject() so must be created in an injection context
+  const { inv } = createTestInventoryService();
   const injector = Injector.create({
     providers: [{ provide: InventoryService, useValue: inv }]
   });

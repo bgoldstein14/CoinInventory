@@ -1,0 +1,152 @@
+/**
+ * Notification Toast Styles
+ *
+ * Provides a stacked toast notification system with color-coded types.
+ * Fixed positioning at top-right with smooth animations.
+ */
+
+// Container for all toasts - fixed at top-right of viewport
+.notification-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999; // High z-index to appear above all other content
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem; // Space between stacked toasts
+  max-width: 400px; // Prevent toasts from being too wide
+  pointer-events: none; // Allow clicks to pass through empty space
+
+  // Make individual toasts clickable
+  > * {
+    pointer-events: auto;
+  }
+}
+
+// Individual toast notification
+.toast {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  backdrop-filter: blur(8px);
+  animation: slide-in 0.3s ease-out;
+
+  // Smooth transitions for color changes
+  transition: all 0.2s ease;
+}
+
+// Slide-in animation from the right
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+// Info toast - blue color scheme
+.toast-info {
+  background-color: rgba(219, 234, 254, 0.95); // blue-100 with opacity
+  border-left: 4px solid #3b82f6; // blue-500
+  color: #1e3a8a; // blue-900
+
+  .toast-icon {
+    color: #3b82f6; // blue-500
+  }
+}
+
+// Warning toast - amber color scheme
+.toast-warning {
+  background-color: rgba(254, 243, 199, 0.95); // amber-100 with opacity
+  border-left: 4px solid #f59e0b; // amber-500
+  color: #78350f; // amber-900
+
+  .toast-icon {
+    color: #f59e0b; // amber-500
+  }
+}
+
+// Error toast - red color scheme
+.toast-error {
+  background-color: rgba(254, 226, 226, 0.95); // red-100 with opacity
+  border-left: 4px solid #ef4444; // red-500
+  color: #7f1d1d; // red-900
+
+  .toast-icon {
+    color: #ef4444; // red-500
+  }
+}
+
+// Icon container
+.toast-icon {
+  flex-shrink: 0; // Prevent icon from shrinking
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-top: 0.125rem; // Align with first line of text
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Message text
+.toast-message {
+  flex: 1; // Take up remaining space
+  font-size: 0.875rem;
+  line-height: 1.5;
+  word-break: break-word; // Prevent long words from overflowing
+}
+
+// Dismiss button (shown on error toasts)
+.toast-dismiss {
+  flex-shrink: 0;
+  width: 1.25rem;
+  height: 1.25rem;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+
+  &:hover {
+    opacity: 1;
+  }
+
+  &:focus {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    border-radius: 0.25rem;
+  }
+
+  svg {
+    width: 100%;
+    height: 100%;
+  }
+}
+
+// Dark mode support (if your app has a dark mode)
+@media (prefers-color-scheme: dark) {
+  .toast-info {
+    background-color: rgba(30, 58, 138, 0.95); // blue-900 with opacity
+    color: #dbeafe; // blue-100
+  }
+
+  .toast-warning {
+    background-color: rgba(120, 53, 15, 0.95); // amber-900 with opacity
+    color: #fef3c7; // amber-100
+  }
+
+  .toast-error {
+    background-color: rgba(127, 29, 29, 0.95); // red-900 with opacity
+    color: #fee2e2; // red-100
+  }
+}

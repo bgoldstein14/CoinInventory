@@ -76,38 +76,40 @@ describe('GET /api/coins', () => {
   });
 
   it('returns coins with images and tags joined', async () => {
+    // Mock data uses CamelCase database column names (CoinId, Denomination, CoinType, etc.)
     const coinRow = {
-      id: 'abc-123',
-      name: '1921 Morgan Dollar',
-      denomination: '$1',
-      year: 1921,
-      type: 'Morgan',
-      category: 'Silver Dollars',
-      country: 'USA',
-      grade: 'MS-65',
-      cert_company: 'PCGS',
-      cert_number: '12345678',
-      variety: null,
-      mint_mark: 'S',
-      composition: '90% Silver',
-      purchase_date: '2024-01-15',
-      purchase_price: 150.00,
-      current_value: 200.00,
-      notes: 'Nice toning',
-      source: 'manual',
-      has_cac_sticker: true,
-      sold_price: null,
-      sold_date: null,
-      dealer: 'Heritage',
-      weight: 0.7734,
-      metal_content: 'Silver',
-      coin_set: null,
+      CoinId: 'abc-123',
+      Denomination: '$1',
+      Year: '1921',
+      CoinType: 'Morgan',
+      Category: 'Silver Dollars',
+      Country: 'USA',
+      Grade: 'MS-65',
+      CertCompany: 'PCGS',
+      CertNumber: '12345678',
+      Variety: null,
+      MintMark: 'S',
+      Composition: '90% Silver',
+      PurchaseDate: '2024-01-15',
+      PurchasePrice: 150.00,
+      CurrentValue: 200.00,
+      Notes: 'Nice toning',
+      Source: 'manual',
+      HasCacSticker: true,
+      SoldPrice: null,
+      SoldDate: null,
+      Dealer: 'Heritage',
+      Weight: 0.7734,
+      MetalContent: 'Silver',
+      CoinSet: null,
+      PmWeightGrams: 24.06,
+      PmPercent: 90,
     };
 
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [coinRow] })
-      .mockResolvedValueOnce({ recordset: [{ coin_id: 'abc-123', image_data: 'data:image/png;base64,abc' }] })
-      .mockResolvedValueOnce({ recordset: [{ coin_id: 'abc-123', tag: 'key-date' }] });
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageData: 'data:image/png;base64,abc' }] })
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', Tag: 'key-date' }] });
 
     const res = await request(app).get('/api/coins');
     expect(res.status).toBe(200);
@@ -115,7 +117,9 @@ describe('GET /api/coins', () => {
 
     const coin = res.body[0];
     expect(coin.id).toBe('abc-123');
-    expect(coin.name).toBe('1921 Morgan Dollar');
+    expect(coin.denomination).toBe('$1');
+    expect(coin.coinType).toBe('Morgan');
+    expect(coin.year).toBe('1921');
     expect(coin.grade).toBe('MS-65');
     expect(coin.hasCacSticker).toBe(true);
     expect(coin.imagePaths).toEqual(['data:image/png;base64,abc']);
@@ -123,6 +127,8 @@ describe('GET /api/coins', () => {
     expect(coin.dealer).toBe('Heritage');
     expect(coin.weight).toBe(0.7734);
     expect(coin.metalContent).toBe('Silver');
+    expect(coin.pmWeightGrams).toBe(24.06);
+    expect(coin.pmPercent).toBe(90);
   });
 });
 
@@ -135,42 +141,44 @@ describe('GET /api/coins/:id', () => {
   });
 
   it('returns a single coin with images and tags', async () => {
+    // Mock data uses CamelCase database column names
     const coinRow = {
-      id: 'xyz-789',
-      name: '1909-S VDB Lincoln Cent',
-      denomination: '1¢',
-      year: 1909,
-      type: 'Lincoln',
-      category: null,
-      country: 'USA',
-      grade: 'VF-30',
-      cert_company: 'NGC',
-      cert_number: '99999',
-      variety: 'VDB',
-      mint_mark: 'S',
-      composition: 'Copper',
-      purchase_date: null,
-      purchase_price: 1200,
-      current_value: 1500,
-      notes: null,
-      source: 'quicken',
-      has_cac_sticker: 0,
-      sold_price: null,
-      sold_date: null,
-      dealer: null,
-      weight: null,
-      metal_content: null,
-      coin_set: null,
+      CoinId: 'xyz-789',
+      Denomination: '1¢',
+      Year: '1909',
+      CoinType: 'Lincoln',
+      Category: null,
+      Country: 'USA',
+      Grade: 'VF-30',
+      CertCompany: 'NGC',
+      CertNumber: '99999',
+      Variety: 'VDB',
+      MintMark: 'S',
+      Composition: 'Copper',
+      PurchaseDate: null,
+      PurchasePrice: 1200,
+      CurrentValue: 1500,
+      Notes: null,
+      Source: 'quicken',
+      HasCacSticker: 0,
+      SoldPrice: null,
+      SoldDate: null,
+      Dealer: null,
+      Weight: null,
+      MetalContent: null,
+      CoinSet: null,
     };
 
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [coinRow] })
       .mockResolvedValueOnce({ recordset: [] })
-      .mockResolvedValueOnce({ recordset: [{ coin_id: 'xyz-789', tag: 'rare' }] });
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'xyz-789', Tag: 'rare' }] });
 
     const res = await request(app).get('/api/coins/xyz-789');
     expect(res.status).toBe(200);
-    expect(res.body.name).toBe('1909-S VDB Lincoln Cent');
+    expect(res.body.denomination).toBe('1¢');
+    expect(res.body.coinType).toBe('Lincoln');
+    expect(res.body.year).toBe('1909');
     expect(res.body.hasCacSticker).toBe(false);
     expect(res.body.imagePaths).toEqual([]);
     expect(res.body.tags).toEqual(['rare']);
@@ -178,12 +186,12 @@ describe('GET /api/coins/:id', () => {
 });
 
 describe('POST /api/coins', () => {
-  it('returns 400 when name is missing', async () => {
+  it('returns 400 when denomination is missing', async () => {
     const res = await request(app)
       .post('/api/coins')
-      .send({ denomination: '$1' });
+      .send({ coinType: 'Washington' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toContain('name');
+    expect(res.body.error).toContain('denomination');
   });
 
   it('creates a coin and returns 201 with id', async () => {
@@ -193,9 +201,9 @@ describe('POST /api/coins', () => {
       .post('/api/coins')
       .send({
         id: 'test-id',
-        name: 'Test Coin',
-        denomination: '$1',
-        year: 2024,
+        denomination: 'Quarter',
+        coinType: 'Washington',
+        year: '2024',
         imagePaths: ['data:image/png;base64,img1'],
         tags: ['test'],
       });
@@ -211,18 +219,18 @@ describe('PUT /api/coins/:id', () => {
 
     const res = await request(app)
       .put('/api/coins/nonexistent')
-      .send({ name: 'Updated' });
+      .send({ coinType: 'Updated' });
     expect(res.status).toBe(404);
   });
 
   it('updates a coin and returns 200', async () => {
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [{ id: 'abc-123' }] })
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
       .mockResolvedValue({ recordset: [], rowsAffected: [1] });
 
     const res = await request(app)
       .put('/api/coins/abc-123')
-      .send({ name: 'Updated Morgan', denomination: '$1' });
+      .send({ coinType: 'Updated Morgan', denomination: '$1' });
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('abc-123');
   });
@@ -250,8 +258,9 @@ describe('DELETE /api/coins/:id', () => {
 
 describe('GET /api/categories', () => {
   it('returns category names', async () => {
+    // Server reads row['CategoryName']
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ name: 'Gold' }, { name: 'Silver' }],
+      recordset: [{ CategoryName: 'Gold' }, { CategoryName: 'Silver' }],
     });
 
     const res = await request(app).get('/api/categories');
@@ -292,8 +301,9 @@ describe('DELETE /api/categories/:name', () => {
 
 describe('GET /api/coin-sets', () => {
   it('returns set names', async () => {
+    // Server reads row['SetName']
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ name: 'Morgan Set' }, { name: 'Peace Set' }],
+      recordset: [{ SetName: 'Morgan Set' }, { SetName: 'Peace Set' }],
     });
 
     const res = await request(app).get('/api/coin-sets');
@@ -325,15 +335,16 @@ describe('POST /api/coin-sets', () => {
 
 describe('GET /api/transactions', () => {
   it('returns all transactions', async () => {
+    // Server reads CamelCase column names: TransactionId, CoinId, TransactionType, TransactionDate, Amount, Dealer, Notes
     mockRequest.query.mockResolvedValueOnce({
       recordset: [{
-        id: 'tx-1',
-        coin_id: 'abc-123',
-        type: 'purchase',
-        date: '2024-03-01',
-        amount: 150.00,
-        dealer: 'Heritage',
-        notes: 'Won auction',
+        TransactionId: 'tx-1',
+        CoinId: 'abc-123',
+        TransactionType: 'purchase',
+        TransactionDate: '2024-03-01',
+        Amount: 150.00,
+        Dealer: 'Heritage',
+        Notes: 'Won auction',
       }],
     });
 
@@ -401,14 +412,15 @@ describe('GET /api/spot-prices/latest', () => {
   });
 
   it('returns latest spot prices', async () => {
+    // Server reads CamelCase column names: Gold, Silver, Platinum, Copper, Source, FetchedAt
     mockRequest.query.mockResolvedValueOnce({
       recordset: [{
-        gold: 2350.50,
-        silver: 28.75,
-        platinum: 1025.00,
-        copper: 4.15,
-        source: 'metals.live',
-        fetched_at: '2024-03-01T12:00:00Z',
+        Gold: 2350.50,
+        Silver: 28.75,
+        Platinum: 1025.00,
+        Copper: 4.15,
+        Source: 'metals.live',
+        FetchedAt: '2024-03-01T12:00:00Z',
       }],
     });
 
@@ -422,8 +434,9 @@ describe('GET /api/spot-prices/latest', () => {
 
 describe('POST /api/spot-prices', () => {
   it('saves spot prices', async () => {
+    // Server reads SpotPriceId and FetchedAt from OUTPUT INSERTED
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ id: 1, fetched_at: '2024-03-01T12:00:00Z' }],
+      recordset: [{ SpotPriceId: 1, FetchedAt: '2024-03-01T12:00:00Z' }],
     });
 
     const res = await request(app)
@@ -448,7 +461,7 @@ describe('GET /api/settings/:key', () => {
 
   it('returns a JSON-parsed setting value', async () => {
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ setting_value: '["col1","col2"]' }],
+      recordset: [{ SettingValue: '["col1","col2"]' }],
     });
 
     const res = await request(app).get('/api/settings/visibleColumns');
@@ -459,7 +472,7 @@ describe('GET /api/settings/:key', () => {
 
   it('returns a plain string setting value', async () => {
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ setting_value: 'dark' }],
+      recordset: [{ SettingValue: 'dark' }],
     });
 
     const res = await request(app).get('/api/settings/theme');
@@ -474,7 +487,7 @@ describe('PUT /api/settings/:key', () => {
 
     const res = await request(app)
       .put('/api/settings/visibleColumns')
-      .send({ value: ['name', 'grade', 'value'] });
+      .send({ value: ['coinType', 'grade', 'value'] });
     expect(res.status).toBe(200);
     expect(res.body.key).toBe('visibleColumns');
   });

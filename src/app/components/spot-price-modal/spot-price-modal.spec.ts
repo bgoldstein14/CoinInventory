@@ -5,13 +5,13 @@ import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { InventoryService } from '../../services/inventory.service';
 import { SpotPriceService } from '../../services/spot-price.service';
-import { StorageService } from '../../services/storage.service';
 import { SpotPriceModalComponent } from './spot-price-modal';
+import { createTestInventoryService, createTestSpotPriceService } from '../../testing/test-helpers';
 
 function createModal() {
-  const storage = new StorageService();
-  const inv = new InventoryService(storage);
-  const spotPrice = new SpotPriceService();
+  // Both InventoryService and SpotPriceService use inject()
+  const { inv } = createTestInventoryService();
+  const { service: spotPrice } = createTestSpotPriceService();
   const injector = Injector.create({
     providers: [
       { provide: InventoryService, useValue: inv },

@@ -46,6 +46,99 @@
       } @else {
         <p class="empty-state">No sets yet.</p>
       }
+
+      <!-- Denomination Management Section -->
+      <h3 style="margin-top: 20px">Denominations</h3>
+      <p class="hint-text">
+        Manage the list of denominations shown in the detail panel dropdown.
+        Requires database connection.
+      </p>
+      <div class="category-admin-form">
+        <input
+          type="text"
+          class="category-admin-input"
+          placeholder="New denomination (e.g., Quarter, Half Dollar)&hellip;"
+          [ngModel]="newDenominationLabel()"
+          (ngModelChange)="newDenominationLabel.set($event)"
+          (keydown.enter)="addDenominationFromDraft()"
+          aria-label="New denomination label"
+        />
+        <select
+          [ngModel]="newDenominationCountry()"
+          (ngModelChange)="newDenominationCountry.set($event)"
+          aria-label="Country"
+        >
+          <option value="US">US</option>
+          <option value="GB">GB</option>
+          <option value="CA">CA</option>
+        </select>
+        <button type="button" class="secondary" (click)="addDenominationFromDraft()">Add</button>
+      </div>
+      @if (inv.denominations().length > 0) {
+        <ul class="category-admin-list">
+          @for (denom of inv.denominations(); track denom.denominationId) {
+            <li>
+              <span>{{ denom.label }} ({{ denom.country }})</span>
+              <button
+                type="button"
+                class="secondary small-button"
+                (click)="removeDenomination(denom.denominationId)"
+              >
+                Remove
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty-state">No denominations yet.</p>
+      }
+
+      <!-- Mint Mark Management Section -->
+      <h3 style="margin-top: 20px">Mint Marks</h3>
+      <p class="hint-text">
+        Manage the list of mint marks shown in the detail panel dropdown.
+        Requires database connection.
+      </p>
+      <div class="category-admin-form">
+        <input
+          type="text"
+          class="category-admin-input"
+          placeholder="Mark (e.g., D, S, P)&hellip;"
+          [ngModel]="newMintMarkLabel()"
+          (ngModelChange)="newMintMarkLabel.set($event)"
+          (keydown.enter)="addMintMarkFromDraft()"
+          aria-label="New mint mark label"
+          style="max-width: 100px;"
+        />
+        <input
+          type="text"
+          class="category-admin-input"
+          placeholder="Description (e.g., Denver Mint)&hellip;"
+          [ngModel]="newMintMarkDescription()"
+          (ngModelChange)="newMintMarkDescription.set($event)"
+          (keydown.enter)="addMintMarkFromDraft()"
+          aria-label="Mint mark description"
+        />
+        <button type="button" class="secondary" (click)="addMintMarkFromDraft()">Add</button>
+      </div>
+      @if (inv.mintMarks().length > 0) {
+        <ul class="category-admin-list">
+          @for (mm of inv.mintMarks(); track mm.mintMarkId) {
+            <li>
+              <span>{{ mm.label }} - {{ mm.description }}</span>
+              <button
+                type="button"
+                class="secondary small-button"
+                (click)="removeMintMark(mm.mintMarkId)"
+              >
+                Remove
+              </button>
+            </li>
+          }
+        </ul>
+      } @else {
+        <p class="empty-state">No mint marks yet.</p>
+      }
     </div>
   </div>
 </div>

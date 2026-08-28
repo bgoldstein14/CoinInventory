@@ -5,12 +5,12 @@ import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { InventoryService } from '../../services/inventory.service';
 import { QuickenImportService } from '../../services/quicken-import.service';
-import { StorageService } from '../../services/storage.service';
 import { QuickenImportModal } from './quicken-import-modal';
+import { createTestInventoryService } from '../../testing/test-helpers';
 
 function createModal() {
-  const storage = new StorageService();
-  const inv = new InventoryService(storage);
+  // InventoryService uses inject() so must be created in an injection context
+  const { inv } = createTestInventoryService();
   const quicken = new QuickenImportService();
   const injector = Injector.create({
     providers: [
@@ -36,7 +36,8 @@ describe('QuickenImportModal', () => {
     modal['importQuicken']();
 
     expect(emitted).toHaveLength(1);
-    expect((emitted[0] as { name: string }).name).toContain('Half Dime');
+    // parseAttributes converts "US Half Dime" to symbolic "5¢"
+    expect((emitted[0] as { denomination: string }).denomination).toBe('5¢');
   });
 
   it('defaults an imported coin category to its Quicken account name', () => {
@@ -50,6 +51,7 @@ describe('QuickenImportModal', () => {
     modal['refreshQuickenAccounts']();
     modal['importQuicken']();
 
+    // Category should be set from the Quicken account name
     expect((emitted[0] as { category: string }).category).toBe('Coin Collection');
   });
 
@@ -89,11 +91,14 @@ describe('QuickenImportModal', () => {
 
   it('groups preview records by account', () => {
     const { modal } = createModal();
+    // QuickenImportRecord no longer has 'name' or 'type' - use 'coinType', 'year', 'grade', etc.
     modal['importedRecords'].set([
-      { id: 'r1', name: 'Mercury Dime', denomination: 'Dime', account: 'Checking',
-        purchasePrice: 10, currentValue: 12, country: 'US', type: '', notes: '', source: 'quicken' },
-      { id: 'r2', name: 'Liberty Eagle', denomination: '10 Dollar', account: 'Savings',
-        purchasePrice: 1800, currentValue: 1900, country: 'US', type: '', notes: '', source: 'quicken' }
+      { id: 'r1', denomination: 'Dime', account: 'Checking', coinType: 'Mercury',
+        purchasePrice: 10, currentValue: 12, country: 'US', year: '1945', grade: 'VF-30',
+        mintMark: 'S', variety: '', notes: '', source: 'quicken' },
+      { id: 'r2', denomination: '10 Dollar', account: 'Savings', coinType: 'Liberty Eagle',
+        purchasePrice: 1800, currentValue: 1900, country: 'US', year: '1907', grade: 'MS-63',
+        mintMark: '', variety: '', notes: '', source: 'quicken' }
     ]);
 
     const grouped = modal['groupedImportedRecords']();
@@ -109,7 +114,8 @@ describe('QuickenImportModal', () => {
     modal['previewImport']();
 
     expect(modal['importedRecords']()).toHaveLength(1);
-    expect(modal['importedRecords']()[0].name).toBe('New Coin');
+    // Check purchase price instead of name (which no longer exists)
+    expect(modal['importedRecords']()[0].purchasePrice).toBe(200);
   });
 
   it('applies QIF price filter during import', () => {
@@ -121,7 +127,8 @@ describe('QuickenImportModal', () => {
     modal['previewImport']();
 
     expect(modal['importedRecords']()).toHaveLength(1);
-    expect(modal['importedRecords']()[0].name).toBe('Expensive Coin');
+    // Check purchase price instead of name (which no longer exists)
+    expect(modal['importedRecords']()[0].purchasePrice).toBe(500);
   });
 
   it('applies QIF denomination filter during import', () => {
@@ -129,10 +136,11 @@ describe('QuickenImportModal', () => {
     modal['quickenText'].set(
       `!Type:Invst\nD01/15/2024\nNBuy\nYUS Half Dime\nT12\n^\n!Type:Invst\nD01/15/2024\nNBuy\nYQuarter\nT30\n^`
     );
-    modal['qifDenominationFilter'].set('quarter');
+    // Filter by symbolic denomination "25" to match "25¢"
+    modal['qifDenominationFilter'].set('25');
     modal['previewImport']();
 
     expect(modal['importedRecords']()).toHaveLength(1);
-    expect(modal['importedRecords']()[0].denomination).toBe('Quarter');
+    expect(modal['importedRecords']()[0].denomination).toBe('25¢');
   });
 });

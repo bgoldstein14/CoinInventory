@@ -1,9 +1,10 @@
-import { DatePipe, DecimalPipe } from '@angular/common';
+import { DecimalPipe } from '@angular/common';
 import { Component, computed, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CategoryModal } from './components/category-modal/category-modal';
 import { CsvImportModal } from './components/csv-import-modal/csv-import-modal';
 import { ImageImportModal } from './components/image-import-modal/image-import-modal';
+import { NotificationToast } from './components/notification-toast/notification-toast';
 import { QuickenImportModal } from './components/quicken-import-modal/quicken-import-modal';
 import { ReportModal } from './components/report-modal/report-modal';
 import { SpotPriceModalComponent } from './components/spot-price-modal/spot-price-modal';
@@ -25,8 +26,8 @@ const allSetsFilter = 'All';
 @Component({
   selector: 'app-root',
   imports: [
-    FormsModule, DecimalPipe, DatePipe,
-    CategoryModal, CsvImportModal, ImageImportModal,
+    FormsModule, DecimalPipe,
+    CategoryModal, CsvImportModal, ImageImportModal, NotificationToast,
     QuickenImportModal, ReportModal, SpotPriceModalComponent
   ],
   templateUrl: './app.html',
@@ -43,6 +44,10 @@ export class App {
   protected readonly visibleInventoryColumns = signal<InventoryColumn[]>([...defaultVisibleColumns]);
   protected readonly inventoryColumnLabels = inventoryColumnLabels;
 
+  // Signals for custom "Other" denomination and mint mark inputs
+  protected readonly customDenominationValue = signal<string>('');
+  protected readonly customMintMarkValue = signal<string>('');
+
   // --- Multi-select ---
   protected readonly selectedCoinIds = signal<Set<string>>(new Set());
   private lastClickedIndex = -1;
@@ -50,7 +55,8 @@ export class App {
   // --- Search & filter ---
   protected readonly searchQuery = signal<string>('');
   protected readonly categoryFilter = signal<string>(allCategoriesFilter);
-  protected readonly sortState = signal<SortState>({ column: 'name', direction: 'asc' });
+  // Default sort by coinType instead of name (which no longer exists)
+  protected readonly sortState = signal<SortState>({ column: 'coinType', direction: 'asc' });
   protected readonly allCategoriesFilter = allCategoriesFilter;
   protected readonly showAdvancedFilters = signal(false);
   protected readonly gradeFilter = signal<string>('');
@@ -101,8 +107,9 @@ export class App {
       if (dealer && !(coin.dealer ?? '').toLowerCase().includes(dealer)) return false;
       if (!query) return true;
 
+      // Search across all coin fields (note: 'name' field removed, replaced by 'coinType')
       const haystack = [
-        coin.name, coin.denomination, coin.type, coin.country,
+        coin.coinType, coin.denomination, coin.country,
         coin.grade, coin.certCompany, coin.certNumber, coin.variety,
         coin.mintMark, coin.notes, coin.dealer ?? '', coin.coinSet ?? '',
         ...coin.tags

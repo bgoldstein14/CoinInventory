@@ -16,12 +16,14 @@ MOriginal owner note
     const result = service.parse(qif);
 
     expect(result.importedRecords).toHaveLength(1);
-    expect(result.importedRecords[0].name).toBe('US Half Dime FS-101');
-    expect(result.importedRecords[0].denomination).toBe('Half Dime');
+    // parseAttributes converts "Half Dime" to symbolic "5¢"
+    expect(result.importedRecords[0].denomination).toBe('5¢');
     expect(result.importedRecords[0].purchasePrice).toBe(12.5);
     expect(result.importedRecords[0].currentValue).toBe(12.5);
     expect(result.importedRecords[0].purchaseDate).toBe('2024-01-15');
     expect(result.importedRecords[0].notes).toBe('Original owner note');
+    expect(result.importedRecords[0].year).toBe(''); // No year in security name
+    expect(result.importedRecords[0].coinType).toBe(''); // Blank by default
   });
 
   it('records a warning and skips a block with no security name', () => {
@@ -56,8 +58,8 @@ T30.00
     const result = service.parse(qif);
 
     expect(result.importedRecords).toHaveLength(2);
-    expect(result.importedRecords[0].denomination).toBe('Half Dime');
-    expect(result.importedRecords[1].denomination).toBe('Quarter');
+    expect(result.importedRecords[0].denomination).toBe('5¢');
+    expect(result.importedRecords[1].denomination).toBe('25¢');
   });
 
   it('allows importing only the selected account when multiple accounts are present', () => {
@@ -86,11 +88,14 @@ T30.00
 
     expect(result.accounts).toEqual(expect.arrayContaining(['Checking', 'Savings']));
     expect(result.importedRecords).toHaveLength(1);
-    expect(result.importedRecords[0].name).toBe('US Half Dime');
+    expect(result.importedRecords[0].denomination).toBe('5¢');
+    expect(result.importedRecords[0].account).toBe('Checking');
   });
 
-  it('skips a disposed (sold) holding and records why', () => {
+  it('silently drops a standalone sell with no matching buy', () => {
     const service = new QuickenImportService();
+    // A standalone Sell (no prior Buy) means no latestRecord was ever set,
+    // so the net-quantity filter has nothing to skip or warn about.
     const qif = `!Type:Invst
 D03/01/2024
 NSell
@@ -103,8 +108,8 @@ MSold to dealer
     const result = service.parse(qif);
 
     expect(result.importedRecords).toHaveLength(0);
-    expect(result.warnings[0]).toContain('Sell');
-    expect(result.warnings[0]).toContain('Mercury Dime 1945-S');
+    // No warning for standalone sells — no acquisition record to reference
+    expect(result.skippedRecords).toHaveLength(0);
   });
 
   it('warns but still imports an unrecognized action code', () => {
@@ -199,7 +204,7 @@ MSold 1864 LM 2c - VF
     expect(result.warnings).toHaveLength(0);
   });
 
-  it('sets type to empty string rather than the QIF action code', () => {
+  it('sets coinType to empty string rather than the QIF action code', () => {
     const service = new QuickenImportService();
     const qif = `!Type:Invst
 D01/15/2024
@@ -211,6 +216,171 @@ T2450.00
 
     const result = service.parse(qif);
 
-    expect(result.importedRecords[0].type).toBe('');
+    // Field renamed from 'type' to 'coinType' in overhaul
+    expect(result.importedRecords[0].coinType).toBe('');
+  });
+
+  // --- Net-quantity filtering tests ---
+
+  it('filters out coins with net quantity <= 0 (bought then sold)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1964 Quarter
+T5.00
+^
+D02/20/2024
+NSell
+Y1964 Quarter
+T6.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    // Coin was bought then sold - net quantity is 0, should be skipped
+    expect(result.importedRecords).toHaveLength(0);
+    expect(result.skippedRecords).toHaveLength(1);
+    expect(result.skippedRecords[0].denomination).toBe('25¢');
+    expect(result.warnings.some(w => w.includes('net quantity is 0'))).toBe(true);
+  });
+
+  it('imports coins with net quantity > 0 (bought, never sold)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1964 Quarter
+T5.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    // Coin was bought but never sold - net quantity is 1, should be imported
+    expect(result.importedRecords).toHaveLength(1);
+    expect(result.skippedRecords).toHaveLength(0);
+    expect(result.importedRecords[0].denomination).toBe('25¢');
+  });
+
+  // --- Attribute parsing tests ---
+
+  it('parses year, mintmark, denomination, and grade from security name (1875S 20c-XF)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1875S 20c-XF
+T25.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    expect(coin.year).toBe('1875');
+    expect(coin.mintMark).toBe('S');
+    expect(coin.denomination).toBe('20¢');
+    expect(coin.grade).toBe('XF');
+  });
+
+  it('parses 3CS as 3¢ Silver with year and grade (1861 3CS - AU)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1861 3CS - AU
+T50.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    expect(coin.year).toBe('1861');
+    expect(coin.denomination).toBe('3¢ Silver');
+    expect(coin.grade).toBe('AU');
+  });
+
+  it('parses complex mintmark (1878CC Dollar MS63)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1878CC Dollar MS63
+T150.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    expect(coin.year).toBe('1878');
+    expect(coin.mintMark).toBe('CC');
+    // parseAttributes converts "Dollar" to symbolic "$1"
+    expect(coin.denomination).toBe('$1');
+    expect(coin.grade).toBe('MS63');
+  });
+
+  // --- PM pre-fill tests ---
+
+  it('pre-fills pmWeightGrams and pmPercent for known US silver coins (1960 Quarter)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1960 Quarter
+T5.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    // 1960 US Quarter: 90% silver, 5.63g PM weight
+    expect(coin.pmWeightGrams).toBeCloseTo(5.63, 2);
+    expect(coin.pmPercent).toBe(90);
+  });
+
+  it('pre-fills pmWeightGrams and pmPercent for known US silver coins (1964D Dime)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1964D Dime
+T3.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    // 1964 US Dime: 90% silver, 2.25g PM weight
+    expect(coin.pmWeightGrams).toBeCloseTo(2.25, 2);
+    expect(coin.pmPercent).toBe(90);
+  });
+
+  it('does not pre-fill pmWeightGrams for unknown coins', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1890 Random Token
+T10.00
+^
+`;
+
+    const result = service.parse(qif);
+
+    expect(result.importedRecords).toHaveLength(1);
+    const coin = result.importedRecords[0];
+    expect(coin.pmWeightGrams).toBeUndefined();
+    expect(coin.pmPercent).toBeUndefined();
   });
 });

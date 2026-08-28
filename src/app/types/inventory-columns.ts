@@ -1,7 +1,15 @@
 import { CoinRecord } from './coin.model';
 
+/**
+ * Column order for the inventory table.
+ * This defines the available columns and their default display order.
+ *
+ * Key changes from legacy schema:
+ * - Replaced 'name' with 'coinType' (aligns with CoinRecord changes)
+ * - Added 'pmWeightGrams', 'pmPercent', 'meltValue' for precious metal tracking
+ */
 export const inventoryColumnOrder = [
-  'name',
+  'coinType', // Changed from 'name' - displays the coin type/variant
   'grade',
   'category',
   'denomination',
@@ -10,6 +18,7 @@ export const inventoryColumnOrder = [
   'purchasePrice',
   'currentValue',
   'profitLoss',
+  'meltValue', // New: computed melt value based on PM content and spot prices
   'soldPrice',
   'mintMark',
   'variety',
@@ -18,14 +27,20 @@ export const inventoryColumnOrder = [
   'coinSet',
   'metalContent',
   'weight',
+  'pmWeightGrams', // New: precious metal weight in grams
+  'pmPercent', // New: precious metal purity percentage
   'tags',
   'source'
 ] as const;
 
 export type InventoryColumn = (typeof inventoryColumnOrder)[number];
 
+/**
+ * Human-readable labels for each inventory column.
+ * These labels are displayed in the table header and column selector UI.
+ */
 export const inventoryColumnLabels: Record<InventoryColumn, string> = {
-  name: 'Name',
+  coinType: 'Type', // Changed from 'Name' - displays coin variant (e.g., "Walking Liberty")
   grade: 'Grade',
   category: 'Category',
   denomination: 'Denomination',
@@ -34,6 +49,7 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   purchasePrice: 'Cost',
   currentValue: 'Value',
   profitLoss: 'Gain/Loss',
+  meltValue: 'Melt Value', // New: computed melt value
   soldPrice: 'Sold Price',
   mintMark: 'Mint Mark',
   variety: 'Variety',
@@ -42,12 +58,18 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   coinSet: 'Set',
   metalContent: 'Metal',
   weight: 'Weight (oz)',
+  pmWeightGrams: 'PM Weight (g)', // New: precious metal weight in grams
+  pmPercent: 'PM %', // New: precious metal purity percentage
   tags: 'Tags',
   source: 'Source'
 };
 
+/**
+ * Default set of visible columns when the inventory table first loads.
+ * Users can customize this via the column selector UI.
+ */
 export const defaultVisibleColumns: InventoryColumn[] = [
-  'name',
+  'coinType', // Changed from 'name'
   'grade',
   'category',
   'denomination',
@@ -65,33 +87,93 @@ export interface SortState {
   direction: SortDirection;
 }
 
+/**
+ * Formats a cell value for display in the inventory table.
+ * Each column has custom formatting logic (currency, percentages, badges, etc.).
+ *
+ * @param coin - The coin record to format
+ * @param column - The column identifier
+ * @returns Formatted string for display
+ */
 export function formatInventoryCell(coin: CoinRecord, column: InventoryColumn): string {
   switch (column) {
-    case 'name': return coin.name;
-    case 'grade': return coin.grade || '—';
-    case 'category': return coin.category || '—';
-    case 'denomination': return coin.denomination || '—';
-    case 'country': return coin.country || '—';
-    case 'year': return coin.year ? String(coin.year) : '—';
-    case 'purchasePrice': return `$${coin.purchasePrice.toFixed(2)}`;
-    case 'currentValue': return `$${coin.currentValue.toFixed(2)}`;
+    case 'coinType': // Changed from 'name' - displays coin variant
+      return coin.coinType || '—';
+
+    case 'grade':
+      return coin.grade || '—';
+
+    case 'category':
+      return coin.category || '—';
+
+    case 'denomination':
+      return coin.denomination || '—';
+
+    case 'country':
+      return coin.country || '—';
+
+    case 'year': // Now a string (not number|null), so no conversion needed
+      return coin.year || '—';
+
+    case 'purchasePrice':
+      return `$${coin.purchasePrice.toFixed(2)}`;
+
+    case 'currentValue':
+      return `$${coin.currentValue.toFixed(2)}`;
+
     case 'profitLoss': {
       const pl = coin.currentValue - coin.purchasePrice;
       if (pl >= 0) return `+$${pl.toFixed(2)}`;
       return `-$${Math.abs(pl).toFixed(2)}`;
     }
-    case 'soldPrice': return (coin.soldPrice ?? 0) > 0 ? `$${(coin.soldPrice ?? 0).toFixed(2)}` : '—';
-    case 'mintMark': return coin.mintMark || '—';
-    case 'variety': return coin.variety || '—';
+
+    case 'meltValue': // New: computed column (requires spot prices for full calculation)
+      // TODO: Compute melt value based on pmWeightGrams, pmPercent, and current spot prices
+      // Formula: (pmWeightGrams * pmPercent / 100) * spotPricePerGram
+      // For now, return placeholder until spot price service is wired up
+      if (coin.pmWeightGrams && coin.pmPercent) {
+        return '—'; // Placeholder until spot prices are available
+      }
+      return '—';
+
+    case 'soldPrice':
+      return (coin.soldPrice ?? 0) > 0 ? `$${(coin.soldPrice ?? 0).toFixed(2)}` : '—';
+
+    case 'mintMark':
+      return coin.mintMark || '—';
+
+    case 'variety':
+      return coin.variety || '—';
+
     case 'certNumber':
       return coin.certCompany || coin.certNumber ? `${coin.certCompany} ${coin.certNumber}`.trim() || '—' : '—';
-    case 'dealer': return coin.dealer || '—';
-    case 'coinSet': return coin.coinSet || '—';
-    case 'metalContent': return coin.metalContent || '—';
-    case 'weight': return (coin.weight ?? 0) > 0 ? `${(coin.weight ?? 0).toFixed(4)}` : '—';
-    case 'tags': return coin.tags.join(', ') || '—';
-    case 'source': return coin.source;
-    default: return '—';
+
+    case 'dealer':
+      return coin.dealer || '—';
+
+    case 'coinSet':
+      return coin.coinSet || '—';
+
+    case 'metalContent':
+      return coin.metalContent || '—';
+
+    case 'weight':
+      return (coin.weight ?? 0) > 0 ? `${(coin.weight ?? 0).toFixed(4)}` : '—';
+
+    case 'pmWeightGrams': // New: precious metal weight in grams
+      return coin.pmWeightGrams ? `${coin.pmWeightGrams.toFixed(3)}` : '—';
+
+    case 'pmPercent': // New: precious metal purity percentage
+      return coin.pmPercent ? `${coin.pmPercent.toFixed(1)}%` : '—';
+
+    case 'tags':
+      return coin.tags.join(', ') || '—';
+
+    case 'source':
+      return coin.source;
+
+    default:
+      return '—';
   }
 }
 
