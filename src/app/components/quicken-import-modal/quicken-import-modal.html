@@ -2,7 +2,13 @@
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h2>Import from Quicken (QIF)</h2>
-      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+      <div class="modal-header-actions">
+        <button type="button" class="secondary small-button" (click)="previewImport()" [disabled]="!quickenText()">Preview</button>
+        <button type="button" class="small-button" (click)="importQuicken()" [disabled]="importedRecords().length === 0">
+          Import {{ importedRecords().length > 0 ? importedRecords().length + ' coins' : '' }}
+        </button>
+        <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+      </div>
     </div>
     <div class="modal-body">
       <label class="file-picker">
@@ -67,11 +73,6 @@
           </div>
         </div>
       }
-
-      <div class="modal-actions">
-        <button type="button" class="secondary" (click)="previewImport()">Preview</button>
-        <button type="button" (click)="importQuicken()">Import Selected</button>
-      </div>
 
       <p class="hint-text">
         Each imported coin's category defaults to its Quicken account name. Filters apply to both preview and import.

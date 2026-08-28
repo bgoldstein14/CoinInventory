@@ -3,3 +3,15 @@
 @use 'styles/inventory-table' as *;
 @use 'styles/detail-panel' as *;
 @use 'styles/overlays' as *;
+
+.db-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.85rem;
+
+  strong { white-space: nowrap; }
+}

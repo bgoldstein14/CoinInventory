@@ -1,6 +1,13 @@
 <!-- Notification toast at the top of the app for system messages -->
 <app-notification-toast />
 
+@if (inv.connectionError()) {
+  <div class="db-error-banner" role="alert">
+    <strong>Database unavailable</strong>
+    <span>{{ inv.connectionError() }}</span>
+  </div>
+}
+
 <main class="app-shell">
   <header class="topbar">
     <div class="topbar-title">

@@ -1,0 +1,175 @@
+[2026-08-28T17:32:37.089Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T17:32:37.090Z] [INFO] Database: BRUCE_PC\SQLEXPRESS / CoinInventory
+[2026-08-28T17:32:44.480Z] [ERROR] Unhandled error | ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+Error: ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+[2026-08-28T17:32:44.655Z] [ERROR] Unhandled error | ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+Error: ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+[2026-08-28T17:32:53.543Z] [INFO] GET /coins
+[2026-08-28T17:32:53.561Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:32:53.569Z] [INFO] Connecting to SQL Server at BRUCE_PC\SQLEXPRESS/CoinInventory...
+[2026-08-28T17:32:53.594Z] [ERROR] Failed to connect to SQL Server | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:32:53.598Z] [ERROR] GET /api/coins error | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:32:53.729Z] [ERROR] Unhandled error | ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+Error: ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin Inventory\dist\coin-inventory-app\browser\index.html'
+[2026-08-28T17:35:10.800Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T17:35:10.800Z] [INFO] Database: BRUCE_PC\SQLEXPRESS / CoinInventory
+[2026-08-28T17:35:51.192Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T17:35:51.192Z] [INFO] Database: BRUCE_PC\SQLEXPRESS / CoinInventory
+[2026-08-28T17:35:57.052Z] [INFO] GET /coins
+[2026-08-28T17:35:57.053Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:35:57.053Z] [INFO] Connecting to SQL Server at BRUCE_PC\SQLEXPRESS/CoinInventory...
+[2026-08-28T17:35:57.071Z] [ERROR] Failed to connect to SQL Server | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:35:57.071Z] [ERROR] GET /api/coins error | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:35:59.806Z] [INFO] GET /coins
+[2026-08-28T17:35:59.806Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:35:59.806Z] [INFO] Connecting to SQL Server at BRUCE_PC\SQLEXPRESS/CoinInventory...
+[2026-08-28T17:35:59.812Z] [ERROR] Failed to connect to SQL Server | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:35:59.813Z] [ERROR] GET /api/coins error | Port for SQLEXPRESS not found in BRUCE_PC
+ConnectionError: Port for SQLEXPRESS not found in BRUCE_PC
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1966:16)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-28T17:55:32.274Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T17:55:32.275Z] [INFO] Database: BRUCE_PC\SQLEXPRESS / CoinInventory
+[2026-08-28T17:55:40.989Z] [INFO] GET /coins
+[2026-08-28T17:55:40.989Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:55:40.990Z] [INFO] Connecting to SQL Server at BRUCE_PC\SQLEXPRESS/CoinInventory...
+[2026-08-28T17:55:41.022Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T17:55:41.022Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T17:55:50.565Z] [INFO] GET /coins
+[2026-08-28T17:55:50.565Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:55:50.566Z] [INFO] Connecting to SQL Server at BRUCE_PC\SQLEXPRESS/CoinInventory...
+[2026-08-28T17:55:50.574Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T17:55:50.575Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T17:57:57.915Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T17:57:57.916Z] [INFO] Database: localhost / CoinInventory
+[2026-08-28T17:58:17.788Z] [INFO] GET /coins
+[2026-08-28T17:58:17.789Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T17:58:17.790Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-28T17:58:17.820Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T17:58:17.821Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T18:00:28.561Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T18:00:28.562Z] [INFO] Database: localhost / CoinInventory
+[2026-08-28T18:00:35.825Z] [INFO] GET /coins
+[2026-08-28T18:00:35.826Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T18:00:35.827Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-28T18:00:35.855Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T18:00:35.856Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-28T18:06:54.871Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-28T18:06:54.872Z] [INFO] Database: localhost / CoinInventory
+[2026-08-28T18:07:13.990Z] [INFO] GET /coins
+[2026-08-28T18:07:13.990Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T18:07:13.991Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-28T18:07:14.072Z] [INFO] Connected to SQL Server successfully
+[2026-08-28T18:07:14.092Z] [INFO] Retrieved 0 coins
+[2026-08-28T18:07:14.535Z] [INFO] GET /coins
+[2026-08-28T18:07:14.536Z] [INFO] Fetching all coins with images and tags
+[2026-08-28T18:07:14.541Z] [INFO] Retrieved 0 coins

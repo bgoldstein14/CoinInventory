@@ -20,20 +20,19 @@ import { logInfo, logError } from './logger';
 function buildDbConfig(): sql.config {
   const user = process.env['DB_USER'];
   const useWindowsAuth = !user;
+  const port = parseInt(process.env['DB_PORT'] ?? '', 10);
 
   const config: sql.config = {
-    server: process.env['DB_SERVER'] ?? 'BRUCE_PC\\SQLEXPRESS',
+    server: process.env['DB_SERVER'] ?? 'localhost',
     database: process.env['DB_NAME'] ?? 'CoinInventory',
+    ...(port ? { port } : {}),
     options: {
       encrypt: false,
       trustServerCertificate: true,
     },
   };
 
-  if (useWindowsAuth) {
-    config.driver = 'msnodesqlv8';
-    (config.options as Record<string, unknown>)['trustedConnection'] = true;
-  } else {
+  if (!useWindowsAuth) {
     config.user = user;
     config.password = process.env['DB_PASSWORD'];
   }

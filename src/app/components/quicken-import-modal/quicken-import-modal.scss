@@ -1,5 +1,11 @@
 @use '../../styles/modal' as *;
 
+.modal-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 // ---- QIF import (inside modal) ----
 
 .qif-filters {

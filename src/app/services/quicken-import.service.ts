@@ -28,6 +28,121 @@ import { Injectable } from '@angular/core';
 import { QuickenImportRecord } from '../types/coin.model';
 import { lookupPmData } from './pm-reference';
 
+interface CoinTypeRange {
+  min: number;
+  max: number;
+  coinType: string;
+}
+
+const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
+  '½¢': [
+    { min: 1793, max: 1797, coinType: 'Flowing Hair Half Cent' },
+    { min: 1800, max: 1808, coinType: 'Draped Bust Half Cent' },
+    { min: 1809, max: 1836, coinType: 'Classic Head Half Cent' },
+    { min: 1840, max: 1857, coinType: 'Braided Hair Half Cent' },
+  ],
+  '1¢': [
+    { min: 1793, max: 1796, coinType: 'Flowing Hair' },
+    { min: 1796, max: 1807, coinType: 'Draped Bust' },
+    { min: 1808, max: 1814, coinType: 'Classic Head' },
+    { min: 1816, max: 1857, coinType: 'Braided Hair' },
+    { min: 1856, max: 1858, coinType: 'Flying Eagle' },
+    { min: 1859, max: 1909, coinType: 'Indian Head' },
+    { min: 1909, max: 2024, coinType: 'Lincoln' },
+  ],
+  '2¢': [
+    { min: 1864, max: 1873, coinType: 'Two Cent' },
+  ],
+  '3CS': [
+    { min: 1851, max: 1873, coinType: 'Three Cent Silver' },
+  ],
+  '3CN': [
+    { min: 1865, max: 1889, coinType: 'Three Cent Nickel' },
+  ],
+  '5¢': [
+    { min: 1794, max: 1805, coinType: 'Draped Bust Half Dime' },
+    { min: 1829, max: 1837, coinType: 'Capped Bust Half Dime' },
+    { min: 1837, max: 1873, coinType: 'Seated Liberty Half Dime' },
+    { min: 1866, max: 1883, coinType: 'Shield' },
+    { min: 1883, max: 1913, coinType: 'Liberty Head' },
+    { min: 1913, max: 1938, coinType: 'Buffalo' },
+    { min: 1938, max: 2024, coinType: 'Jefferson' },
+  ],
+  '10¢': [
+    { min: 1796, max: 1807, coinType: 'Draped Bust' },
+    { min: 1809, max: 1837, coinType: 'Capped Bust' },
+    { min: 1837, max: 1891, coinType: 'Liberty Seated' },
+    { min: 1892, max: 1916, coinType: 'Barber' },
+    { min: 1916, max: 1945, coinType: 'Mercury' },
+    { min: 1946, max: 2024, coinType: 'Roosevelt' },
+  ],
+  '20¢': [
+    { min: 1875, max: 1878, coinType: 'Twenty Cent' },
+  ],
+  '25¢': [
+    { min: 1796, max: 1807, coinType: 'Draped Bust' },
+    { min: 1815, max: 1838, coinType: 'Capped Bust' },
+    { min: 1838, max: 1891, coinType: 'Liberty Seated' },
+    { min: 1892, max: 1916, coinType: 'Barber' },
+    { min: 1916, max: 1930, coinType: 'Standing Liberty' },
+    { min: 1932, max: 2024, coinType: 'Washington' },
+  ],
+  '50¢': [
+    { min: 1794, max: 1795, coinType: 'Flowing Hair' },
+    { min: 1796, max: 1807, coinType: 'Draped Bust' },
+    { min: 1807, max: 1839, coinType: 'Capped Bust' },
+    { min: 1839, max: 1891, coinType: 'Liberty Seated' },
+    { min: 1892, max: 1915, coinType: 'Barber' },
+    { min: 1916, max: 1947, coinType: 'Walking Liberty' },
+    { min: 1948, max: 1963, coinType: 'Franklin' },
+    { min: 1964, max: 2024, coinType: 'Kennedy' },
+  ],
+  '$1': [
+    { min: 1794, max: 1795, coinType: 'Flowing Hair' },
+    { min: 1795, max: 1804, coinType: 'Draped Bust' },
+    { min: 1836, max: 1873, coinType: 'Liberty Seated' },
+    { min: 1873, max: 1885, coinType: 'Trade' },
+    { min: 1878, max: 1921, coinType: 'Morgan' },
+    { min: 1921, max: 1935, coinType: 'Peace' },
+    { min: 1971, max: 1978, coinType: 'Eisenhower' },
+    { min: 1979, max: 1999, coinType: 'Susan B. Anthony' },
+    { min: 2000, max: 2011, coinType: 'Sacagawea' },
+  ],
+  '$2.50': [
+    { min: 1796, max: 1807, coinType: 'Draped Bust' },
+    { min: 1808, max: 1834, coinType: 'Capped Bust' },
+    { min: 1840, max: 1907, coinType: 'Coronet' },
+    { min: 1908, max: 1929, coinType: 'Indian Head' },
+  ],
+  '$3': [
+    { min: 1854, max: 1889, coinType: 'Indian Princess' },
+  ],
+  '$5': [
+    { min: 1795, max: 1807, coinType: 'Draped Bust' },
+    { min: 1807, max: 1834, coinType: 'Capped Bust' },
+    { min: 1839, max: 1908, coinType: 'Coronet' },
+    { min: 1908, max: 1929, coinType: 'Indian Head' },
+  ],
+  '$10': [
+    { min: 1795, max: 1804, coinType: 'Draped Bust' },
+    { min: 1838, max: 1907, coinType: 'Coronet' },
+    { min: 1907, max: 1933, coinType: 'Indian Head' },
+  ],
+  '$20': [
+    { min: 1849, max: 1907, coinType: 'Coronet' },
+    { min: 1907, max: 1933, coinType: 'Saint-Gaudens' },
+  ],
+};
+
+function inferCoinTypeByYear(denomination: string, year: number): string {
+  const ranges = COIN_TYPE_BY_DENOMINATION[denomination];
+  if (!ranges) return '';
+  for (const range of ranges) {
+    if (year >= range.min && year <= range.max) return range.coinType;
+  }
+  return '';
+}
+
 /** Action codes that represent acquiring a position -- i.e. a coin entering the collection. */
 const ACQUISITION_ACTIONS = new Set([
   'buy',
@@ -353,21 +468,6 @@ export class QuickenImportService {
     return `${year}-${paddedMonth}-${paddedDay}`;
   }
 
-  /** Best-effort denomination guess from the security name and memo text. */
-  private inferDenomination(name: string, notes: string): string {
-    const text = `${name} ${notes}`.toLowerCase();
-    if (/half[\s-]?dime/.test(text)) return 'Half Dime';
-    if (/\bcent\b|\bpenny\b/.test(text)) return 'Cent';
-    if (/\bnickel\b/.test(text)) return 'Nickel';
-    if (/\bdime\b/.test(text)) return 'Dime';
-    if (/\bquarter\b/.test(text)) return 'Quarter';
-    if (/half[\s-]?dollar|50c/.test(text)) return 'Half Dollar';
-    if (/double eagle|\$?20\s*dollar/.test(text)) return '20 Dollar';
-    if (/\beagle\b|\$?10\s*dollar/.test(text)) return '10 Dollar';
-    if (/\bdollar\b/.test(text)) return 'Dollar';
-    return 'Unknown';
-  }
-
   /**
    * Parses structured attributes from a Quicken security name.
    *
@@ -381,7 +481,7 @@ export class QuickenImportService {
    * - Mintmark: Single letter immediately after 4-digit year with no space (e.g., "1875S" -> "S")
    * - Grade: After "-" or space, patterns like VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F,
    *          plus modifiers like AU58, MS63, CH+AU, VF/EF, VF/XF
-   * - Denomination: Pattern match to symbolic format (3CS→3¢ Silver, 20c→20¢, half→50¢, etc.)
+   * - Denomination: Pattern match to symbolic format (3CS→3CS, 20c→20¢, half→50¢, etc.)
    * - Variety: Only if explicit keywords (Type I, Type II, DDO, DDR)
    * - CoinType: Left blank (determined later by UI or enrichment)
    *
@@ -401,7 +501,7 @@ export class QuickenImportService {
     let grade = '';
     let denomination = '';
     let variety = '';
-    const coinType = ''; // Left blank for now
+    let coinType = '';
 
     // Extract year (leading 4-digit number)
     const yearMatch = securityName.match(/^(\d{4})/);
@@ -440,29 +540,27 @@ export class QuickenImportService {
     // Extract denomination (convert to symbolic format)
     const lowerName = securityName.toLowerCase();
 
-    // Special patterns first
-    if (/3cs\b/.test(lowerName)) {
-      denomination = '3¢ Silver';
-    } else if (/3cn\b/.test(lowerName)) {
-      denomination = '3¢ Nickel';
+    // Multi-word compound denominations first (order matters — must precede their components)
+    if (/half[\s-]?cent/i.test(lowerName)) {
+      denomination = '½¢';
+    } else if (/half[\s-]?dime/i.test(lowerName)) {
+      denomination = '5¢';
+    } else if (/half[\s-]?dollar/i.test(lowerName)) {
+      denomination = '50¢';
+    } else if (/twenty[\s-]?cent/i.test(lowerName)) {
+      denomination = '20¢';
+    } else if (/two[\s-]?cent/i.test(lowerName)) {
+      denomination = '2¢';
+    } else if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
+      denomination = '3CS';
+    } else if (/three[\s-]?cent[\s-]?nickel|3cn\b/i.test(lowerName)) {
+      denomination = '3CN';
     } else if (/\b2c\b/.test(lowerName)) {
       denomination = '2¢';
     } else if (/\b20c\b/.test(lowerName)) {
       denomination = '20¢';
     } else if (/\b8\s*real/i.test(lowerName)) {
       denomination = '8 Reales';
-    } else if (/half[\s-]?dime/i.test(lowerName)) {
-      denomination = '5¢'; // Half dime is 5 cents
-    } else if (/half[\s-]?dollar|\bhalf\b/i.test(lowerName)) {
-      denomination = '50¢';
-    } else if (/\bcent\b|\bpenny\b/i.test(lowerName)) {
-      denomination = '1¢';
-    } else if (/\bnickel\b/i.test(lowerName)) {
-      denomination = '5¢';
-    } else if (/\bdime\b/i.test(lowerName)) {
-      denomination = '10¢';
-    } else if (/\bquarter\b/i.test(lowerName)) {
-      denomination = '25¢';
     } else if (/double\s*eagle|\$20\b/i.test(lowerName)) {
       denomination = '$20';
     } else if (/\beagle\b|\$10\b/i.test(lowerName)) {
@@ -475,10 +573,66 @@ export class QuickenImportService {
       denomination = '$2.50';
     } else if (/\$1\b|\bdollar\b/i.test(lowerName)) {
       denomination = '$1';
+    } else if (/\bcent\b|\bpenny\b/i.test(lowerName)) {
+      denomination = '1¢';
+    } else if (/\bnickel\b/i.test(lowerName)) {
+      denomination = '5¢';
+    } else if (/\bdime\b/i.test(lowerName)) {
+      denomination = '10¢';
+    } else if (/\bquarter\b/i.test(lowerName)) {
+      denomination = '25¢';
+    } else if (/\bhalf\b/i.test(lowerName)) {
+      denomination = '50¢';
     } else {
-      denomination = ''; // Unknown denomination
+      denomination = '';
     }
 
+    // Infer coinType from explicit name keywords or denomination + year
+    coinType = this.inferCoinType(securityName, denomination, year);
+
     return { year, mintMark, grade, denomination, variety, coinType };
+  }
+
+  private inferCoinType(securityName: string, denomination: string, year: string): string {
+    const lowerName = securityName.toLowerCase();
+    const yearNum = parseInt(year, 10) || 0;
+
+    // Check for set-type coins (e.g., "Proof Set", "Maundy Set") — coinType IS the set name
+    if (/\bproof\s+set\b/i.test(lowerName)) return 'Proof Set';
+    if (/\bmint\s+set\b/i.test(lowerName)) return 'Mint Set';
+    if (/\bmaundy\s+set\b/i.test(lowerName)) return 'Maundy Set';
+
+    // Explicit coin type names in the security name
+    if (/\bmorgan\b/i.test(lowerName)) return 'Morgan';
+    if (/\bpeace\b/i.test(lowerName)) return 'Peace';
+    if (/\bwalking\s*liberty\b/i.test(lowerName)) return 'Walking Liberty';
+    if (/\bstanding\s*liberty\b/i.test(lowerName)) return 'Standing Liberty';
+    if (/\bseated\s*liberty\b|\bliberty\s*seated\b/i.test(lowerName)) return 'Liberty Seated';
+    if (/\bbarber\b/i.test(lowerName)) return 'Barber';
+    if (/\bmercury\b/i.test(lowerName)) return 'Mercury';
+    if (/\broosevelt\b/i.test(lowerName)) return 'Roosevelt';
+    if (/\bwashington\b/i.test(lowerName)) return 'Washington';
+    if (/\bfranklin\b/i.test(lowerName)) return 'Franklin';
+    if (/\bkennedy\b/i.test(lowerName)) return 'Kennedy';
+    if (/\blincoln\b/i.test(lowerName)) return 'Lincoln';
+    if (/\bindian\s*head\b/i.test(lowerName)) return 'Indian Head';
+    if (/\bflying\s*eagle\b/i.test(lowerName)) return 'Flying Eagle';
+    if (/\bbuffalo\b/i.test(lowerName)) return 'Buffalo';
+    if (/\bjefferson\b/i.test(lowerName)) return 'Jefferson';
+    if (/\bshield\b/i.test(lowerName)) return 'Shield';
+    if (/\bliberty\s*head\b/i.test(lowerName)) return 'Liberty Head';
+    if (/\bdraped\s*bust\b/i.test(lowerName)) return 'Draped Bust';
+    if (/\bflowing\s*hair\b/i.test(lowerName)) return 'Flowing Hair';
+    if (/\bcapped\s*bust\b/i.test(lowerName)) return 'Capped Bust';
+    if (/\bbraided\s*hair\b/i.test(lowerName)) return 'Braided Hair';
+    if (/\bclassic\s*head\b/i.test(lowerName)) return 'Classic Head';
+    if (/\bcoronet\b/i.test(lowerName)) return 'Coronet';
+    if (/\btrade\b/i.test(lowerName) && denomination === '$1') return 'Trade';
+    if (/\bst\.\s*gaudens\b|\bsaint[\s-]?gaudens\b/i.test(lowerName)) return 'Saint-Gaudens';
+
+    if (!yearNum) return '';
+
+    // Year-based inference by denomination
+    return inferCoinTypeByYear(denomination, yearNum);
   }
 }

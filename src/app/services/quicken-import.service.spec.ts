@@ -216,8 +216,8 @@ T2450.00
 
     const result = service.parse(qif);
 
-    // Field renamed from 'type' to 'coinType' in overhaul
-    expect(result.importedRecords[0].coinType).toBe('');
+    // coinType inferred from explicit name in security string
+    expect(result.importedRecords[0].coinType).toBe('Liberty Head');
   });
 
   // --- Net-quantity filtering tests ---
@@ -286,7 +286,7 @@ T25.00
     expect(coin.grade).toBe('XF');
   });
 
-  it('parses 3CS as 3¢ Silver with year and grade (1861 3CS - AU)', () => {
+  it('parses 3CS denomination with year and grade (1861 3CS - AU)', () => {
     const service = new QuickenImportService();
     const qif = `!Type:Invst
 D01/15/2024
@@ -301,7 +301,7 @@ T50.00
     expect(result.importedRecords).toHaveLength(1);
     const coin = result.importedRecords[0];
     expect(coin.year).toBe('1861');
-    expect(coin.denomination).toBe('3¢ Silver');
+    expect(coin.denomination).toBe('3CS');
     expect(coin.grade).toBe('AU');
   });
 
@@ -382,5 +382,135 @@ T10.00
     const coin = result.importedRecords[0];
     expect(coin.pmWeightGrams).toBeUndefined();
     expect(coin.pmPercent).toBeUndefined();
+  });
+
+  // --- Odd Type denomination + coinType enrichment tests ---
+
+  it('parses Half Cent with correct denomination and coinType (1809 Half Cent)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1809 Half Cent-VG
+T150.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.denomination).toBe('½¢');
+    expect(coin.coinType).toBe('Classic Head Half Cent');
+    expect(coin.year).toBe('1809');
+    expect(coin.grade).toBe('VG');
+  });
+
+  it('parses Two Cent with correct denomination and coinType (1864 Two Cent)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1864 Two Cent
+T12.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.denomination).toBe('2¢');
+    expect(coin.coinType).toBe('Two Cent');
+  });
+
+  it('parses Twenty Cent with correct denomination and coinType (1875S Twenty Cent)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1875S Twenty Cent-XF
+T300.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.denomination).toBe('20¢');
+    expect(coin.coinType).toBe('Twenty Cent');
+    expect(coin.mintMark).toBe('S');
+    expect(coin.grade).toBe('XF');
+  });
+
+  it('parses 3CS with coinType Three Cent Silver (1861 3CS)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1861 3CS-AU
+T50.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.denomination).toBe('3CS');
+    expect(coin.coinType).toBe('Three Cent Silver');
+  });
+
+  it('parses 3CN with coinType Three Cent Nickel (1865 3CN)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1865 3CN-VF
+T25.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.denomination).toBe('3CN');
+    expect(coin.coinType).toBe('Three Cent Nickel');
+  });
+
+  it('infers coinType from year when no explicit name (1964 Quarter → Washington)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1964 Quarter
+T5.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.coinType).toBe('Washington');
+  });
+
+  it('detects explicit coinType from security name (1921 Morgan Dollar)', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1921 Morgan Dollar MS63
+T50.00
+^
+`;
+    const result = service.parse(qif);
+    const coin = result.importedRecords[0];
+    expect(coin.coinType).toBe('Morgan');
+    expect(coin.denomination).toBe('$1');
+  });
+
+  it('does not confuse Half Cent with Half Dollar', () => {
+    const service = new QuickenImportService();
+    const qif = `!Type:Invst
+D01/15/2024
+NBuy
+Y1853 Half Cent
+T200.00
+^
+D01/16/2024
+NBuy
+Y1853 Half Dollar
+T100.00
+^
+`;
+    const result = service.parse(qif);
+    expect(result.importedRecords).toHaveLength(2);
+    expect(result.importedRecords[0].denomination).toBe('½¢');
+    expect(result.importedRecords[1].denomination).toBe('50¢');
   });
 });

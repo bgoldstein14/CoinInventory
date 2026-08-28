@@ -90,7 +90,7 @@ export class ImageImportModal {
     const coin = this.inv.inventory().find(c => c.id === coinId);
     this.updatePendingMatch(fileName, {
       status: 'confirmed', matchedCoinId: coinId, confidence: 1,
-      reason: coin ? `Manually assigned to ${coin.name}.` : 'Manually assigned.'
+      reason: coin ? `Manually assigned to ${this.coinNameById(coin.id)}.` : 'Manually assigned.'
     });
   }
 

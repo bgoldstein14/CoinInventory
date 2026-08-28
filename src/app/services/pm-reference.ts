@@ -123,7 +123,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     country: 'United States'
   },
   {
-    denomination: '3¢ Silver',
+    denomination: '3CS',
     yearRange: { min: 1851, max: 1873 },
     pmWeightGrams: 0.75,
     pmPercent: 90,

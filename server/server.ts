@@ -32,7 +32,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const angularDistPath = path.resolve(__dirname, '..', 'dist', 'coin-inventory-app', 'browser');
+const angularDistPath = path.resolve(__dirname, '..', 'dist', 'coin-inventory-app');
 app.use(express.static(angularDistPath));
 
 // Request logging middleware — logs every API request

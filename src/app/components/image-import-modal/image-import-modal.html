@@ -70,7 +70,7 @@
                     <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
                       <option value="">Assign to coin&hellip;</option>
                       @for (coin of inv.inventory(); track coin.id) {
-                        <option [value]="coin.id" [selected]="coin.id === match.matchedCoinId">{{ coin.name }}</option>
+                        <option [value]="coin.id" [selected]="coin.id === match.matchedCoinId">{{ coinNameById(coin.id) }}</option>
                       }
                     </select>
                   </div>
@@ -97,7 +97,7 @@
                     <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
                       <option value="">Assign to coin&hellip;</option>
                       @for (coin of inv.inventory(); track coin.id) {
-                        <option [value]="coin.id">{{ coin.name }}</option>
+                        <option [value]="coin.id">{{ coinNameById(coin.id) }}</option>
                       }
                     </select>
                   </div>

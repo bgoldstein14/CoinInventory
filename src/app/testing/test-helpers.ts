@@ -21,8 +21,6 @@ import { SpotPriceService } from '../services/spot-price.service';
  * These mocks satisfy the inject() calls without needing a real backend.
  */
 export function createMockDependencies() {
-  const storage = new StorageService();
-
   // Mock ApiService — all HTTP methods return empty observables
   const mockApiService = {
     getCoins: vi.fn(() => of([])),
@@ -65,13 +63,15 @@ export function createMockDependencies() {
     notifications: () => [],
   } as unknown as NotificationService;
 
+  const storage = new StorageService();
+
   return { storage, mockApiService, mockLogger, mockNotification };
 }
 
 /**
  * Creates an InventoryService inside a proper Angular injection context.
  *
- * InventoryService uses inject() for StorageService, ApiService, LoggingService,
+ * InventoryService uses inject() for ApiService, LoggingService,
  * and NotificationService. This function sets up an Injector with mock providers
  * so the inject() calls succeed during construction.
  *
@@ -82,7 +82,6 @@ export function createTestInventoryService() {
 
   const injector = Injector.create({
     providers: [
-      { provide: StorageService, useValue: deps.storage },
       { provide: ApiService, useValue: deps.mockApiService },
       { provide: LoggingService, useValue: deps.mockLogger },
       { provide: NotificationService, useValue: deps.mockNotification },

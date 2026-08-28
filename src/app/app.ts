@@ -231,21 +231,18 @@ export class App {
       coerced = value ? Number(value) : null;
     }
 
-    const next = this.inv.inventory().map(coin =>
-      ids.has(coin.id) ? { ...coin, [field]: coerced } : coin
-    );
-    this.inv.inventory.set(next);
-    this.inv.persistInventory();
+    for (const id of ids) {
+      this.inv.updateCoin(id, { [field]: coerced } as Partial<CoinRecord>);
+    }
   }
 
   protected bulkDeleteCoins(): void {
     const ids = this.selectedCoinIds();
     if (ids.size === 0) return;
-    const next = this.inv.inventory().filter(c => !ids.has(c.id));
-    this.inv.inventory.set(next);
+    for (const id of ids) {
+      this.inv.deleteCoin(id);
+    }
     this.selectedCoinIds.set(new Set());
-    this.inv.persistInventory();
-    this.inv.ensureSelectedCoin();
   }
 
   // ===================== Inventory CRUD =====================
@@ -451,7 +448,12 @@ export class App {
   }
 
   private async hydrateFromStorage(): Promise<void> {
-    await this.inv.hydrate();
+    try {
+      await this.inv.hydrate();
+    } catch {
+      // Database connection failed — connectionError signal is already set,
+      // UI will show the error state. App still loads with empty inventory.
+    }
     const storedColumns = await this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns);
     if (Array.isArray(storedColumns) && storedColumns.length > 0) {
       this.visibleInventoryColumns.set(storedColumns);
