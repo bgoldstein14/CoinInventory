@@ -47,3 +47,5 @@ server/.env
 # System files
 .DS_Store
 Thumbs.db
+server/logs/app.log
+server/logs/app.log

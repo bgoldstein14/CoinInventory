@@ -539,50 +539,54 @@ export class QuickenImportService {
 
     // Extract denomination (convert to symbolic format)
     const lowerName = securityName.toLowerCase();
+    const yearNum = parseInt(year, 10) || 0;
 
-    // Multi-word compound denominations first (order matters — must precede their components)
-    if (/half[\s-]?cent/i.test(lowerName)) {
-      denomination = '½¢';
-    } else if (/half[\s-]?dime/i.test(lowerName)) {
-      denomination = '5¢';
-    } else if (/half[\s-]?dollar/i.test(lowerName)) {
-      denomination = '50¢';
-    } else if (/twenty[\s-]?cent/i.test(lowerName)) {
-      denomination = '20¢';
-    } else if (/two[\s-]?cent/i.test(lowerName)) {
-      denomination = '2¢';
-    } else if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
+    // Explicit silver/nickel three-cent variants (words or abbreviations)
+    if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
       denomination = '3CS';
     } else if (/three[\s-]?cent[\s-]?nickel|3cn\b/i.test(lowerName)) {
       denomination = '3CN';
-    } else if (/\b2c\b/.test(lowerName)) {
-      denomination = '2¢';
-    } else if (/\b20c\b/.test(lowerName)) {
+    // 3¢ symbol or "three cent" without qualifier — disambiguate by year
+    } else if (/3¢/.test(securityName) || /three[\s-]?cent/i.test(lowerName) || /\b3c\b/.test(lowerName)) {
+      denomination = yearNum && yearNum >= 1865 ? '3CN' : '3CS';
+    // Symbol-based denominations (½¢, 1¢, 2¢, 5¢, 10¢, 20¢, 25¢, 50¢)
+    } else if (/½¢|1\/2¢/.test(securityName) || /half[\s-]?cent/i.test(lowerName)) {
+      denomination = '½¢';
+    } else if (/50¢/.test(securityName) || /half[\s-]?dollar/i.test(lowerName) || /\bhalf\b/i.test(lowerName)) {
+      denomination = '50¢';
+    } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName)) {
+      denomination = '25¢';
+    } else if (/20¢/.test(securityName) || /twenty[\s-]?cent/i.test(lowerName) || /\b20c\b/.test(lowerName)) {
       denomination = '20¢';
+    } else if (/10¢/.test(securityName) || /\bdime\b/i.test(lowerName)) {
+      denomination = '10¢';
+    } else if (/5¢/.test(securityName) || /half[\s-]?dime/i.test(lowerName) || /\bnickel\b/i.test(lowerName)) {
+      denomination = '5¢';
+    } else if (/2¢/.test(securityName) || /two[\s-]?cent/i.test(lowerName) || /\b2c\b/.test(lowerName)) {
+      denomination = '2¢';
+    } else if (/1¢/.test(securityName) || /\bcent\b|\bpenny\b/i.test(lowerName)) {
+      denomination = '1¢';
+    // Dollar-based denominations
     } else if (/\b8\s*real/i.test(lowerName)) {
       denomination = '8 Reales';
-    } else if (/double\s*eagle|\$20\b/i.test(lowerName)) {
+    } else if (/double\s*eagle|[\$£]20\b/i.test(securityName)) {
       denomination = '$20';
-    } else if (/\beagle\b|\$10\b/i.test(lowerName)) {
+    } else if (/\beagle\b|[\$£]10\b/i.test(securityName)) {
       denomination = '$10';
-    } else if (/\$5\b/i.test(lowerName)) {
+    } else if (/[\$£]5\b/.test(securityName)) {
       denomination = '$5';
-    } else if (/\$3\b/i.test(lowerName)) {
+    } else if (/[\$£]3\b/.test(securityName)) {
       denomination = '$3';
-    } else if (/\$2\.50\b/i.test(lowerName)) {
+    } else if (/[\$£]2\.50\b/.test(securityName)) {
       denomination = '$2.50';
-    } else if (/\$1\b|\bdollar\b/i.test(lowerName)) {
+    } else if (/[\$£]1\b|\bdollar\b|\bpound\b|\bsovereign\b/i.test(securityName)) {
       denomination = '$1';
-    } else if (/\bcent\b|\bpenny\b/i.test(lowerName)) {
-      denomination = '1¢';
-    } else if (/\bnickel\b/i.test(lowerName)) {
-      denomination = '5¢';
-    } else if (/\bdime\b/i.test(lowerName)) {
-      denomination = '10¢';
-    } else if (/\bquarter\b/i.test(lowerName)) {
-      denomination = '25¢';
-    } else if (/\bhalf\b/i.test(lowerName)) {
-      denomination = '50¢';
+    } else if (/\bcrown\b/i.test(lowerName)) {
+      denomination = '5s';
+    } else if (/\bshilling\b/i.test(lowerName)) {
+      denomination = '1s';
+    } else if (/\bpence\b|\bpenny\b.*\b(?:british|uk|gb)\b|\b(?:british|uk|gb)\b.*\bpenny\b/i.test(lowerName)) {
+      denomination = '1d';
     } else {
       denomination = '';
     }

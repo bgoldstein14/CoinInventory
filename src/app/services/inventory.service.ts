@@ -16,6 +16,7 @@ export class InventoryService {
   readonly transactions = signal<TransactionRecord[]>([]);
   readonly spotPrices = signal<SpotPrices>({ ...defaultSpotPrices });
 
+  readonly connecting = signal(false);
   readonly connected = signal(false);
   readonly connectionError = signal<string | null>(null);
 
@@ -70,6 +71,7 @@ export class InventoryService {
 
   async hydrate(): Promise<void> {
     this.logger.info('Starting inventory hydration');
+    this.connecting.set(true);
 
     try {
       const coins = await firstValueFrom(this.apiService.getCoins());
@@ -94,12 +96,14 @@ export class InventoryService {
       if (Array.isArray(denominations)) this.denominations.set(denominations);
       if (Array.isArray(mintMarks)) this.mintMarks.set(mintMarks);
 
+      this.connecting.set(false);
       this.notificationService.showInfo('Connected to database');
       this.logger.info('Database hydration complete');
 
     } catch (error) {
       const msg = error instanceof Error ? error.message : JSON.stringify(error);
       this.logger.error('Failed to connect to database', msg);
+      this.connecting.set(false);
       this.connected.set(false);
       this.connectionError.set(`Cannot connect to database: ${msg}`);
       this.notificationService.showError('Cannot connect to database — please check that the backend server is running');
@@ -185,20 +189,31 @@ export class InventoryService {
 
     const createPromises = coins.map(coin =>
       firstValueFrom(this.apiService.createCoin(coin))
+        .then(() => ({ ok: true as const, coin }))
         .catch((error) => {
-          this.logger.error(`Failed to create coin ${coin.id} in database`, JSON.stringify(error));
+          this.logger.error(`Failed to create coin "${coin.coinType} ${coin.year}" (${coin.id}) in database`, JSON.stringify(error));
+          return { ok: false as const, coin, error };
         })
     );
 
-    Promise.all(createPromises)
-      .then(() => {
-        this.logger.info(`Successfully added ${coins.length} coins to database`);
-        this.notificationService.showInfo(`Added ${coins.length} coins to database`);
-      })
-      .catch((error) => {
-        this.logger.error('Failed to add some coins to database', JSON.stringify(error));
-        this.notificationService.showError('Failed to add some coins to database');
-      });
+    Promise.allSettled(createPromises).then((results) => {
+      const outcomes = results.map(r => r.status === 'fulfilled' ? r.value : { ok: false as const, coin: null, error: r.reason });
+      const succeeded = outcomes.filter(o => o.ok).length;
+      const failed = outcomes.filter(o => !o.ok);
+
+      if (failed.length === 0) {
+        this.logger.info(`Successfully added ${succeeded} coins to database`);
+        this.notificationService.showInfo(`Added ${succeeded} coins to database`);
+      } else {
+        const failedNames = failed.map(f => f.coin ? `${f.coin.coinType || '?'} ${f.coin.year || ''}`.trim() : 'unknown').join(', ');
+        this.logger.error(`Failed to insert ${failed.length} of ${coins.length} coins: ${failedNames}`);
+        if (succeeded > 0) {
+          this.notificationService.showWarning(`Added ${succeeded} coins, but ${failed.length} failed to save to database`);
+        } else {
+          this.notificationService.showError(`Failed to save all ${failed.length} coins to database`);
+        }
+      }
+    });
   }
 
   importInventoryData(json: string): void {

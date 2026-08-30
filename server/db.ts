@@ -20,10 +20,19 @@ import { logInfo, logError } from './logger';
 function buildDbConfig(): sql.config {
   const user = process.env['DB_USER'];
   const useWindowsAuth = !user;
-  const port = parseInt(process.env['DB_PORT'] ?? '', 10);
+
+  let server = process.env['DB_SERVER'] ?? 'localhost';
+  let port = parseInt(process.env['DB_PORT'] ?? '', 10);
+
+  // Handle SSMS-style "server,port" syntax (e.g. "localhost,1433")
+  if (!port && server.includes(',')) {
+    const parts = server.split(',');
+    server = parts[0];
+    port = parseInt(parts[1], 10);
+  }
 
   const config: sql.config = {
-    server: process.env['DB_SERVER'] ?? 'localhost',
+    server,
     database: process.env['DB_NAME'] ?? 'CoinInventory',
     ...(port ? { port } : {}),
     options: {

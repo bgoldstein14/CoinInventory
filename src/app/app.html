@@ -28,10 +28,6 @@
         <span>Current value</span>
         <strong>${{ inv.totalValue() | number: '1.2-2' }}</strong>
       </div>
-      <div class="metric-card" [class.gain]="inv.totalProfit() >= 0" [class.loss]="inv.totalProfit() < 0">
-        <span>Gain / Loss</span>
-        <strong>{{ inv.totalProfit() >= 0 ? '+' : '' }}${{ inv.totalProfit() | number: '1.2-2' }}</strong>
-      </div>
     </div>
   </header>
 
@@ -194,8 +190,6 @@
                       }
                     } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
                       <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
-                    } @else if (column === 'profitLoss') {
-                      <span [class]="profitLossClass(coin)">{{ formatInventoryCell(coin, column) }}</span>
                     } @else {
                       {{ formatInventoryCell(coin, column) }}
                     }
@@ -558,3 +552,15 @@
     </div>
   }
 </main>
+
+<footer class="status-bar">
+  @if (inv.connecting()) {
+    <span class="status-dot status-dot--connecting"></span> Connecting to database...
+  } @else if (inv.connected()) {
+    <span class="status-dot status-dot--connected"></span> Connected &mdash; {{ inv.inventory().length }} coins
+  } @else if (inv.connectionError()) {
+    <span class="status-dot status-dot--error"></span> Database unavailable
+  } @else {
+    <span class="status-dot"></span> Idle
+  }
+</footer>

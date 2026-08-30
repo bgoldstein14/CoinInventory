@@ -382,26 +382,6 @@ describe('App', () => {
     expect(app['inv'].totalProfit()).toBe(30);
   });
 
-  it('formats profit/loss cell correctly', () => {
-    const app = createApp();
-    const coin = addTestCoin(app, { purchasePrice: 100, currentValue: 150 });
-    expect(app['formatInventoryCell'](coin, 'profitLoss')).toBe('+$50.00');
-
-    const lossCoin = addTestCoin(app, { purchasePrice: 200, currentValue: 180 });
-    expect(app['formatInventoryCell'](lossCoin, 'profitLoss')).toBe('-$20.00');
-  });
-
-  it('returns correct profit/loss CSS class', () => {
-    const app = createApp();
-    const gainCoin = addTestCoin(app, { purchasePrice: 100, currentValue: 150 });
-    expect(app['profitLossClass'](gainCoin)).toBe('gain');
-
-    const lossCoin = addTestCoin(app, { purchasePrice: 200, currentValue: 180 });
-    expect(app['profitLossClass'](lossCoin)).toBe('loss');
-
-    const evenCoin = addTestCoin(app, { purchasePrice: 100, currentValue: 100 });
-    expect(app['profitLossClass'](evenCoin)).toBe('');
-  });
 
   it('returns correct grade badge class', () => {
     const app = createApp();

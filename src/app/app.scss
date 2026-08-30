@@ -4,6 +4,42 @@
 @use 'styles/detail-panel' as *;
 @use 'styles/overlays' as *;
 
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  background: #1e1e1e;
+  color: #ccc;
+  font-size: 0.75rem;
+  z-index: 1000;
+  border-top: 1px solid #333;
+}
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+
+  &--connecting {
+    background: #f39c12;
+    animation: pulse 1s ease-in-out infinite;
+  }
+  &--connected { background: #27ae60; }
+  &--error { background: #c0392b; }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
 .db-error-banner {
   display: flex;
   align-items: center;

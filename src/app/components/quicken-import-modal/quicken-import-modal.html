@@ -4,8 +4,12 @@
       <h2>Import from Quicken (QIF)</h2>
       <div class="modal-header-actions">
         <button type="button" class="secondary small-button" (click)="previewImport()" [disabled]="!quickenText()">Preview</button>
-        <button type="button" class="small-button" (click)="importQuicken()" [disabled]="importedRecords().length === 0">
-          Import {{ importedRecords().length > 0 ? importedRecords().length + ' coins' : '' }}
+        <button type="button" class="small-button" (click)="importQuicken()" [disabled]="importedRecords().length === 0 || importing()">
+          @if (importing()) {
+            Importing...
+          } @else {
+            Import {{ importedRecords().length > 0 ? importedRecords().length + ' coins' : '' }}
+          }
         </button>
         <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
       </div>

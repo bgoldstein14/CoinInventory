@@ -14,7 +14,7 @@ import { StorageKeys, StorageService } from './services/storage.service';
 import { CoinRecord, TransactionRecord } from './types/coin.model';
 import {
   InventoryColumn, SortState, inventoryColumnOrder, inventoryColumnLabels,
-  defaultVisibleColumns, formatInventoryCell, profitLossClass, gradeBadgeClass,
+  defaultVisibleColumns, formatInventoryCell, gradeBadgeClass,
   certBadgeLabel, METAL_CONTENT_OPTIONS
 } from './types/inventory-columns';
 
@@ -119,11 +119,7 @@ export class App {
 
     return [...filtered].sort((left, right) => {
       let comparison: number;
-      if (column === 'profitLoss') {
-        comparison = (left.currentValue - left.purchasePrice) - (right.currentValue - right.purchasePrice);
-      } else {
-        comparison = this.compareColumnValues(left[column as keyof CoinRecord], right[column as keyof CoinRecord]);
-      }
+      comparison = this.compareColumnValues(left[column as keyof CoinRecord], right[column as keyof CoinRecord]);
       return direction === 'asc' ? comparison : -comparison;
     });
   });
@@ -387,7 +383,6 @@ export class App {
   // ===================== Table formatting =====================
 
   protected formatInventoryCell = formatInventoryCell;
-  protected profitLossClass = profitLossClass;
   protected gradeBadgeClass = gradeBadgeClass;
   protected certBadgeLabel = certBadgeLabel;
 
@@ -456,7 +451,8 @@ export class App {
     }
     const storedColumns = await this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns);
     if (Array.isArray(storedColumns) && storedColumns.length > 0) {
-      this.visibleInventoryColumns.set(storedColumns);
+      const valid = storedColumns.filter(c => inventoryColumnOrder.includes(c));
+      if (valid.length > 0) this.visibleInventoryColumns.set(valid);
     }
   }
 

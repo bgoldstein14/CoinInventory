@@ -32,6 +32,7 @@ export class QuickenImportModal {
   protected readonly qifPriceMin = signal<string>('');
   protected readonly qifPriceMax = signal<string>('');
   protected readonly qifDenominationFilter = signal<string>('');
+  protected readonly importing = signal(false);
 
   protected readonly groupedImportedRecords = computed(() => {
     return this.importedRecords().reduce<Record<string, QuickenImportRecord[]>>((acc, record) => {
@@ -83,7 +84,8 @@ export class QuickenImportModal {
     const file = input.files?.[0];
     if (!file) return;
 
-    const text = await file.text();
+    const buffer = await file.arrayBuffer();
+    const text = new TextDecoder('windows-1252').decode(buffer);
     this.quickenText.set(text);
     this.selectedAccounts.set([]);
     this.refreshQuickenAccounts();
@@ -96,24 +98,24 @@ export class QuickenImportModal {
   }
 
   protected importQuicken(): void {
+    this.importing.set(true);
     const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
     const filtered = this.applyQifFilters(result.importedRecords);
     this.importedRecords.set(filtered);
-    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
+    this.skippedRecords.set(result.skippedRecords);
     this.quickenWarnings.set(result.warnings);
 
-    // Map QuickenImportRecord to CoinRecord (note: no 'name' field, using coinType instead)
     const newCoins: CoinRecord[] = filtered.map((record): CoinRecord => ({
       id: record.id,
-      coinType: record.coinType, // Use coinType instead of name
+      coinType: record.coinType,
       denomination: record.denomination,
-      year: record.year, // Now a string (supports ranges)
+      year: record.year,
       category: this.categoryFromQuickenAccount(record.account),
       country: record.country,
-      grade: record.grade, // Parsed from Quicken data
+      grade: record.grade,
       certCompany: '', certNumber: '',
-      variety: record.variety, // Parsed variety
-      mintMark: record.mintMark, // Parsed mint mark
+      variety: record.variety,
+      mintMark: record.mintMark,
       composition: '',
       purchaseDate: record.purchaseDate ?? '',
       purchasePrice: record.purchasePrice,
@@ -127,7 +129,10 @@ export class QuickenImportModal {
     }));
 
     this.imported.emit(newCoins);
-    this.closed.emit();
+    setTimeout(() => {
+      this.importing.set(false);
+      this.closed.emit();
+    }, 500);
   }
 
   protected groupedAccountNames(): string[] {

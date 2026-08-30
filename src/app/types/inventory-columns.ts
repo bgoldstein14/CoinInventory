@@ -9,15 +9,14 @@ import { CoinRecord } from './coin.model';
  * - Added 'pmWeightGrams', 'pmPercent', 'meltValue' for precious metal tracking
  */
 export const inventoryColumnOrder = [
+  'year',
   'coinType', // Changed from 'name' - displays the coin type/variant
   'grade',
   'category',
   'denomination',
   'country',
-  'year',
   'purchasePrice',
   'currentValue',
-  'profitLoss',
   'meltValue', // New: computed melt value based on PM content and spot prices
   'soldPrice',
   'mintMark',
@@ -48,7 +47,6 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   year: 'Year',
   purchasePrice: 'Cost',
   currentValue: 'Value',
-  profitLoss: 'Gain/Loss',
   meltValue: 'Melt Value', // New: computed melt value
   soldPrice: 'Sold Price',
   mintMark: 'Mint Mark',
@@ -69,15 +67,14 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
  * Users can customize this via the column selector UI.
  */
 export const defaultVisibleColumns: InventoryColumn[] = [
+  'year',
   'coinType', // Changed from 'name'
   'grade',
   'category',
   'denomination',
   'country',
-  'year',
   'purchasePrice',
-  'currentValue',
-  'profitLoss'
+  'currentValue'
 ];
 
 export type SortDirection = 'asc' | 'desc';
@@ -120,12 +117,6 @@ export function formatInventoryCell(coin: CoinRecord, column: InventoryColumn): 
 
     case 'currentValue':
       return `$${coin.currentValue.toFixed(2)}`;
-
-    case 'profitLoss': {
-      const pl = coin.currentValue - coin.purchasePrice;
-      if (pl >= 0) return `+$${pl.toFixed(2)}`;
-      return `-$${Math.abs(pl).toFixed(2)}`;
-    }
 
     case 'meltValue': // New: computed column (requires spot prices for full calculation)
       // TODO: Compute melt value based on pmWeightGrams, pmPercent, and current spot prices
@@ -175,13 +166,6 @@ export function formatInventoryCell(coin: CoinRecord, column: InventoryColumn): 
     default:
       return '—';
   }
-}
-
-export function profitLossClass(coin: CoinRecord): string {
-  const pl = coin.currentValue - coin.purchasePrice;
-  if (pl > 0) return 'gain';
-  if (pl < 0) return 'loss';
-  return '';
 }
 
 export function gradeBadgeClass(grade: string): string {

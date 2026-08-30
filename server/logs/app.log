@@ -173,3 +173,708 @@ ConnectionError: Login failed for user ''.
 [2026-08-28T18:07:14.535Z] [INFO] GET /coins
 [2026-08-28T18:07:14.536Z] [INFO] Fetching all coins with images and tags
 [2026-08-28T18:07:14.541Z] [INFO] Retrieved 0 coins
+[2026-08-30T18:53:17.374Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T18:53:17.376Z] [INFO] Database: localhost,1433 / CoinInventory
+[2026-08-30T18:53:19.505Z] [INFO] POST /log
+[2026-08-30T18:53:19.505Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T18:53:19.507Z] [INFO] GET /coins
+[2026-08-30T18:53:19.507Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:53:19.507Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:53:19.517Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:53:19.517Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:53:19.531Z] [INFO] POST /log
+[2026-08-30T18:53:19.532Z] [ERROR] [frontend] Failed to connect to database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":500,"statusText":"Internal Server Error","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 500 Internal Server Error","error":{"error":"Failed to retrieve coins"}}
+[2026-08-30T18:53:33.751Z] [INFO] POST /log
+[2026-08-30T18:53:33.752Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T18:53:33.753Z] [INFO] GET /coins
+[2026-08-30T18:53:33.753Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:53:33.753Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:53:33.754Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:53:33.755Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:53:33.758Z] [INFO] POST /log
+[2026-08-30T18:53:33.758Z] [ERROR] [frontend] Unhandled error | NG04002: 'coins'
+[2026-08-30T18:53:33.771Z] [INFO] POST /log
+[2026-08-30T18:53:33.771Z] [ERROR] [frontend] Failed to connect to database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":500,"statusText":"Internal Server Error","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 500 Internal Server Error","error":{"error":"Failed to retrieve coins"}}
+[2026-08-30T18:54:42.695Z] [INFO] GET /coins
+[2026-08-30T18:54:42.696Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:54:42.696Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:54:42.697Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:54:42.697Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:07.633Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T18:55:07.634Z] [INFO] Database: localhost,1433 / CoinInventory
+[2026-08-30T18:55:14.702Z] [INFO] GET /coins
+[2026-08-30T18:55:14.703Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:14.703Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:14.715Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:14.716Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:16.297Z] [INFO] GET /coins
+[2026-08-30T18:55:16.298Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:16.298Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:16.300Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:16.300Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:16.735Z] [INFO] GET /coins
+[2026-08-30T18:55:16.736Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:16.736Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:16.737Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:16.737Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:38.136Z] [INFO] GET /coins
+[2026-08-30T18:55:38.137Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:38.137Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:38.138Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:38.139Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:38.829Z] [INFO] GET /coins
+[2026-08-30T18:55:38.829Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:38.830Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:38.831Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:38.831Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:39.033Z] [INFO] GET /coins
+[2026-08-30T18:55:39.034Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:39.034Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:39.035Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:39.035Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:39.236Z] [INFO] GET /coins
+[2026-08-30T18:55:39.237Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:55:39.237Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:55:39.238Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:55:39.238Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:14.151Z] [INFO] GET /coins
+[2026-08-30T18:57:14.152Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:14.152Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:14.153Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:14.153Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:14.523Z] [INFO] GET /coins
+[2026-08-30T18:57:14.523Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:14.523Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:14.524Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:14.525Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:30.392Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T18:57:30.393Z] [INFO] Database: localhost,1433 / CoinInventory
+[2026-08-30T18:57:36.246Z] [INFO] GET /coins
+[2026-08-30T18:57:36.247Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:36.247Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:36.258Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:36.259Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:37.517Z] [INFO] GET /coins
+[2026-08-30T18:57:37.517Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:37.518Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:37.519Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:37.519Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:37.934Z] [INFO] GET /coins
+[2026-08-30T18:57:37.935Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:37.935Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:37.936Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:37.936Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:38.291Z] [INFO] GET /coins
+[2026-08-30T18:57:38.292Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:57:38.292Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:57:38.293Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:57:38.294Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:58:54.251Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T18:58:54.252Z] [INFO] Database: localhost,1433 / CoinInventory
+[2026-08-30T18:59:03.514Z] [INFO] GET /coins
+[2026-08-30T18:59:03.515Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:59:03.515Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:59:03.527Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:03.528Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:04.936Z] [INFO] GET /coins
+[2026-08-30T18:59:04.936Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:59:04.937Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:59:04.938Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:04.938Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:05.313Z] [INFO] GET /coins
+[2026-08-30T18:59:05.313Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:59:05.314Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:59:05.315Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:05.315Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:10.097Z] [INFO] POST /log
+[2026-08-30T18:59:10.097Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T18:59:10.099Z] [INFO] GET /coins
+[2026-08-30T18:59:10.099Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T18:59:10.100Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T18:59:10.101Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:10.101Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T18:59:10.131Z] [INFO] POST /log
+[2026-08-30T18:59:10.132Z] [ERROR] [frontend] Failed to connect to database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":500,"statusText":"Internal Server Error","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 500 Internal Server Error","error":{"error":"Failed to retrieve coins"}}
+[2026-08-30T19:06:31.945Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T19:06:31.946Z] [INFO] Database: localhost,1433 / CoinInventory
+[2026-08-30T19:06:37.362Z] [INFO] POST /log
+[2026-08-30T19:06:37.363Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T19:06:37.364Z] [INFO] GET /coins
+[2026-08-30T19:06:37.365Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:06:37.365Z] [INFO] Connecting to SQL Server at localhost,1433/CoinInventory...
+[2026-08-30T19:06:37.374Z] [ERROR] Failed to connect to SQL Server | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T19:06:37.375Z] [ERROR] GET /api/coins error | Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+ConnectionError: Failed to connect to localhost,1433:1433 - getaddrinfo ENOTFOUND localhost,1433
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at Connection.socketError (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2334:12)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:2123:37)
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+[2026-08-30T19:06:37.394Z] [INFO] POST /log
+[2026-08-30T19:06:37.395Z] [ERROR] [frontend] Failed to connect to database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":500,"statusText":"Internal Server Error","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 500 Internal Server Error","error":{"error":"Failed to retrieve coins"}}
+[2026-08-30T19:19:26.630Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T19:19:26.631Z] [INFO] Database: localhost / CoinInventory
+[2026-08-30T19:19:30.049Z] [INFO] POST /log
+[2026-08-30T19:19:30.050Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T19:19:30.051Z] [INFO] GET /coins
+[2026-08-30T19:19:30.051Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:19:30.051Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-30T19:19:30.074Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-30T19:19:30.075Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-30T19:19:30.078Z] [INFO] POST /log
+[2026-08-30T19:19:30.078Z] [ERROR] [frontend] Failed to connect to database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":500,"statusText":"Internal Server Error","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 500 Internal Server Error","error":{"error":"Failed to retrieve coins"}}
+[2026-08-30T19:20:27.458Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T19:20:27.459Z] [INFO] Database: localhost / CoinInventory
+[2026-08-30T19:20:32.078Z] [INFO] GET /coins
+[2026-08-30T19:20:32.078Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:20:32.079Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-30T19:20:32.105Z] [ERROR] Failed to connect to SQL Server | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-30T19:20:32.106Z] [ERROR] GET /api/coins error | Login failed for user ''.
+ConnectionError: Login failed for user ''.
+    at D:\Documents\Development\Coin Inventory\server\node_modules\mssql\lib\tedious\connection-pool.js:85:17
+    at Connection.err (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1784:9)
+    at Object.onceWrapper (node:events:631:26)
+    at Connection.emit (node:events:509:28)
+    at Connection.emit (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:1927:18)
+    at <anonymous> (D:\Documents\Development\Coin Inventory\server\node_modules\tedious\src\connection.ts:3434:18)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[2026-08-30T19:26:31.977Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T19:26:31.978Z] [INFO] Database: localhost / CoinInventory
+[2026-08-30T19:26:38.628Z] [INFO] GET /coins
+[2026-08-30T19:26:38.629Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:26:38.630Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-30T19:26:38.710Z] [INFO] Connected to SQL Server successfully
+[2026-08-30T19:26:38.729Z] [INFO] Retrieved 0 coins
+[2026-08-30T19:29:44.855Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T19:29:44.856Z] [INFO] Database: localhost / CoinInventory
+[2026-08-30T19:29:46.940Z] [INFO] POST /log
+[2026-08-30T19:29:46.941Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T19:29:46.943Z] [INFO] GET /coins
+[2026-08-30T19:29:46.943Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:29:46.943Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-30T19:29:47.021Z] [INFO] Connected to SQL Server successfully
+[2026-08-30T19:29:47.040Z] [INFO] Retrieved 0 coins
+[2026-08-30T19:29:47.043Z] [INFO] POST /log
+[2026-08-30T19:29:47.044Z] [INFO] [frontend] Successfully loaded 0 coins from database
+[2026-08-30T19:29:47.045Z] [INFO] GET /categories
+[2026-08-30T19:29:47.046Z] [INFO] Fetching categories
+[2026-08-30T19:29:47.046Z] [INFO] GET /coin-sets
+[2026-08-30T19:29:47.046Z] [INFO] Fetching coin sets
+[2026-08-30T19:29:47.046Z] [INFO] GET /transactions
+[2026-08-30T19:29:47.047Z] [INFO] Fetching transactions
+[2026-08-30T19:29:47.048Z] [INFO] GET /denominations
+[2026-08-30T19:29:47.048Z] [INFO] Fetching active denominations
+[2026-08-30T19:29:47.049Z] [INFO] GET /mintmarks
+[2026-08-30T19:29:47.049Z] [INFO] Fetching active mint marks
+[2026-08-30T19:29:47.066Z] [INFO] POST /log
+[2026-08-30T19:29:47.066Z] [INFO] [frontend] Database hydration complete
+[2026-08-30T19:38:58.258Z] [INFO] POST /log
+[2026-08-30T19:38:58.258Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T19:38:58.259Z] [INFO] GET /coins
+[2026-08-30T19:38:58.259Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T19:38:58.318Z] [INFO] Retrieved 0 coins
+[2026-08-30T19:38:58.352Z] [INFO] POST /log
+[2026-08-30T19:38:58.353Z] [INFO] [frontend] Successfully loaded 0 coins from database
+[2026-08-30T19:38:58.354Z] [INFO] GET /categories
+[2026-08-30T19:38:58.354Z] [INFO] Fetching categories
+[2026-08-30T19:38:58.357Z] [INFO] GET /coin-sets
+[2026-08-30T19:38:58.357Z] [INFO] Fetching coin sets
+[2026-08-30T19:38:58.358Z] [INFO] GET /transactions
+[2026-08-30T19:38:58.358Z] [INFO] Fetching transactions
+[2026-08-30T19:38:58.361Z] [INFO] GET /denominations
+[2026-08-30T19:38:58.361Z] [INFO] Fetching active denominations
+[2026-08-30T19:38:58.362Z] [INFO] GET /mintmarks
+[2026-08-30T19:38:58.363Z] [INFO] Fetching active mint marks
+[2026-08-30T19:38:58.380Z] [INFO] POST /log
+[2026-08-30T19:38:58.381Z] [INFO] [frontend] Database hydration complete
+[2026-08-30T19:40:05.023Z] [INFO] POST /coins
+[2026-08-30T19:40:05.023Z] [INFO] Creating new coin 7529f720-bfcd-4e8e-bc24-d5623d933b49
+[2026-08-30T19:40:05.025Z] [INFO] POST /coins
+[2026-08-30T19:40:05.026Z] [INFO] POST /coins
+[2026-08-30T19:40:05.026Z] [INFO] POST /coins
+[2026-08-30T19:40:05.028Z] [INFO] POST /coins
+[2026-08-30T19:40:05.028Z] [INFO] Creating new coin 72003bbb-aa22-44b4-b599-612aa240564e
+[2026-08-30T19:40:05.048Z] [INFO] Coin 7529f720-bfcd-4e8e-bc24-d5623d933b49 created successfully
+[2026-08-30T19:40:05.051Z] [INFO] Coin 72003bbb-aa22-44b4-b599-612aa240564e created successfully
+[2026-08-30T19:40:05.188Z] [INFO] POST /log
+[2026-08-30T19:40:05.189Z] [ERROR] [frontend] Failed to create coin 04eded4b-e59a-45a0-8da1-1082b469f32d in database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":400,"statusText":"Bad Request","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 400 Bad Request","error":{"error":"denomination is required"}}
+[2026-08-30T19:40:05.189Z] [INFO] POST /log
+[2026-08-30T19:40:05.190Z] [ERROR] [frontend] Failed to create coin 0c31f2c5-1249-44a7-abd6-1ae3a7aaf03b in database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":400,"statusText":"Bad Request","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 400 Bad Request","error":{"error":"denomination is required"}}
+[2026-08-30T19:40:05.190Z] [INFO] POST /log
+[2026-08-30T19:40:05.191Z] [ERROR] [frontend] Failed to create coin 010cd8d1-09b1-49ad-a6b0-e4ab3b377928 in database | {"headers":{"headers":{},"normalizedNames":{},"lazyUpdate":null},"status":400,"statusText":"Bad Request","url":"http://localhost:3000/api/coins","ok":false,"redirected":false,"responseType":"basic","name":"HttpErrorResponse","message":"Http failure response for http://localhost:3000/api/coins: 400 Bad Request","error":{"error":"denomination is required"}}
+[2026-08-30T19:40:05.191Z] [INFO] POST /log
+[2026-08-30T19:40:05.191Z] [INFO] [frontend] Successfully added 5 coins to database
+[2026-08-30T20:04:14.839Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-08-30T20:04:14.840Z] [INFO] Database: localhost / CoinInventory
+[2026-08-30T20:04:23.619Z] [INFO] POST /log
+[2026-08-30T20:04:23.619Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T20:04:23.621Z] [INFO] GET /coins
+[2026-08-30T20:04:23.621Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T20:04:23.622Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-08-30T20:04:23.701Z] [INFO] Connected to SQL Server successfully
+[2026-08-30T20:04:23.716Z] [INFO] Retrieved 0 coins
+[2026-08-30T20:04:23.732Z] [INFO] POST /log
+[2026-08-30T20:04:23.733Z] [INFO] [frontend] Successfully loaded 0 coins from database
+[2026-08-30T20:04:23.734Z] [INFO] GET /categories
+[2026-08-30T20:04:23.735Z] [INFO] Fetching categories
+[2026-08-30T20:04:23.736Z] [INFO] GET /coin-sets
+[2026-08-30T20:04:23.736Z] [INFO] Fetching coin sets
+[2026-08-30T20:04:23.737Z] [INFO] GET /transactions
+[2026-08-30T20:04:23.737Z] [INFO] Fetching transactions
+[2026-08-30T20:04:23.740Z] [INFO] GET /mintmarks
+[2026-08-30T20:04:23.740Z] [INFO] Fetching active mint marks
+[2026-08-30T20:04:23.741Z] [INFO] GET /denominations
+[2026-08-30T20:04:23.742Z] [INFO] Fetching active denominations
+[2026-08-30T20:04:23.764Z] [INFO] POST /log
+[2026-08-30T20:04:23.764Z] [INFO] [frontend] Database hydration complete
+[2026-08-30T20:04:39.583Z] [INFO] POST /coins
+[2026-08-30T20:04:39.583Z] [INFO] Creating new coin 112663db-46b8-4378-95f1-5d93e06e88e2
+[2026-08-30T20:04:39.585Z] [INFO] POST /coins
+[2026-08-30T20:04:39.585Z] [INFO] Creating new coin ab21de46-1a62-413e-95d2-79c0b1ddcb0e
+[2026-08-30T20:04:39.586Z] [INFO] POST /coins
+[2026-08-30T20:04:39.586Z] [INFO] Creating new coin efef9803-3eea-459e-bae0-d574f0da7618
+[2026-08-30T20:04:39.586Z] [INFO] POST /coins
+[2026-08-30T20:04:39.586Z] [INFO] Creating new coin 908b1b15-df16-4d78-8141-9aa41e3cf8ae
+[2026-08-30T20:04:39.587Z] [INFO] POST /coins
+[2026-08-30T20:04:39.587Z] [INFO] Creating new coin ecc785ec-4476-4d38-9f60-8011aa6a23b5
+[2026-08-30T20:04:39.646Z] [INFO] Coin 112663db-46b8-4378-95f1-5d93e06e88e2 created successfully
+[2026-08-30T20:04:39.647Z] [INFO] Coin 908b1b15-df16-4d78-8141-9aa41e3cf8ae created successfully
+[2026-08-30T20:04:39.648Z] [INFO] Coin efef9803-3eea-459e-bae0-d574f0da7618 created successfully
+[2026-08-30T20:04:39.648Z] [INFO] Coin ab21de46-1a62-413e-95d2-79c0b1ddcb0e created successfully
+[2026-08-30T20:04:39.649Z] [INFO] Coin ecc785ec-4476-4d38-9f60-8011aa6a23b5 created successfully
+[2026-08-30T20:04:39.924Z] [INFO] POST /log
+[2026-08-30T20:04:39.925Z] [INFO] [frontend] Successfully added 5 coins to database
+[2026-08-30T20:06:54.293Z] [INFO] POST /log
+[2026-08-30T20:06:54.294Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T20:06:54.294Z] [INFO] GET /coins
+[2026-08-30T20:06:54.294Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T20:06:54.302Z] [INFO] Retrieved 5 coins
+[2026-08-30T20:06:54.333Z] [INFO] POST /log
+[2026-08-30T20:06:54.333Z] [INFO] [frontend] Successfully loaded 5 coins from database
+[2026-08-30T20:06:54.335Z] [INFO] GET /categories
+[2026-08-30T20:06:54.336Z] [INFO] Fetching categories
+[2026-08-30T20:06:54.337Z] [INFO] GET /coin-sets
+[2026-08-30T20:06:54.337Z] [INFO] Fetching coin sets
+[2026-08-30T20:06:54.340Z] [INFO] GET /transactions
+[2026-08-30T20:06:54.341Z] [INFO] Fetching transactions
+[2026-08-30T20:06:54.342Z] [INFO] GET /denominations
+[2026-08-30T20:06:54.342Z] [INFO] Fetching active denominations
+[2026-08-30T20:06:54.343Z] [INFO] GET /mintmarks
+[2026-08-30T20:06:54.343Z] [INFO] Fetching active mint marks
+[2026-08-30T20:06:54.363Z] [INFO] POST /log
+[2026-08-30T20:06:54.364Z] [INFO] [frontend] Database hydration complete
+[2026-08-30T20:07:08.238Z] [INFO] POST /log
+[2026-08-30T20:07:08.238Z] [INFO] [frontend] Starting inventory hydration
+[2026-08-30T20:07:08.239Z] [INFO] GET /coins
+[2026-08-30T20:07:08.239Z] [INFO] Fetching all coins with images and tags
+[2026-08-30T20:07:08.243Z] [INFO] Retrieved 5 coins
+[2026-08-30T20:07:08.362Z] [INFO] POST /log
+[2026-08-30T20:07:08.408Z] [INFO] [frontend] Successfully loaded 5 coins from database
+[2026-08-30T20:07:08.410Z] [INFO] GET /categories
+[2026-08-30T20:07:08.410Z] [INFO] Fetching categories
+[2026-08-30T20:07:08.411Z] [INFO] GET /coin-sets
+[2026-08-30T20:07:08.411Z] [INFO] Fetching coin sets
+[2026-08-30T20:07:08.411Z] [INFO] GET /transactions
+[2026-08-30T20:07:08.411Z] [INFO] Fetching transactions
+[2026-08-30T20:07:08.412Z] [INFO] GET /denominations
+[2026-08-30T20:07:08.412Z] [INFO] Fetching active denominations
+[2026-08-30T20:07:08.414Z] [INFO] GET /mintmarks
+[2026-08-30T20:07:08.414Z] [INFO] Fetching active mint marks
+[2026-08-30T20:07:08.445Z] [INFO] POST /log
+[2026-08-30T20:07:08.446Z] [INFO] [frontend] Database hydration complete
