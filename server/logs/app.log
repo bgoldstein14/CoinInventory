@@ -2878,3 +2878,252 @@ ConnectionError: Login failed for user ''.
 [2026-09-19T17:18:40.602Z] [INFO] Fetching metal contents
 [2026-09-19T17:18:43.377Z] [INFO] Coin Inventory server listening on http://localhost:3000
 [2026-09-19T17:18:43.377Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T17:23:17.283Z] [INFO] GET /coins
+[2026-09-19T17:23:17.284Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:17.285Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T17:23:17.285Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T17:23:17.285Z] [INFO] Retrieved 0 coins
+[2026-09-19T17:23:17.292Z] [INFO] GET /coins
+[2026-09-19T17:23:17.292Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:17.293Z] [INFO] Retrieved 1 coins
+[2026-09-19T17:23:17.297Z] [INFO] GET /coins/nonexistent
+[2026-09-19T17:23:17.298Z] [INFO] Fetching coin nonexistent
+[2026-09-19T17:23:17.298Z] [WARN] Coin not found: nonexistent
+[2026-09-19T17:23:17.302Z] [INFO] GET /coins/xyz-789
+[2026-09-19T17:23:17.302Z] [INFO] Fetching coin xyz-789
+[2026-09-19T17:23:17.312Z] [INFO] POST /coins
+[2026-09-19T17:23:17.316Z] [INFO] POST /coins
+[2026-09-19T17:23:17.316Z] [INFO] Creating new coin test-id
+[2026-09-19T17:23:17.317Z] [INFO] Coin test-id created successfully
+[2026-09-19T17:23:17.320Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T17:23:17.320Z] [INFO] Updating coin nonexistent
+[2026-09-19T17:23:17.320Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T17:23:17.323Z] [INFO] PUT /coins/abc-123
+[2026-09-19T17:23:17.323Z] [INFO] Updating coin abc-123
+[2026-09-19T17:23:17.323Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T17:23:17.326Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T17:23:17.326Z] [INFO] Deleting coin nonexistent
+[2026-09-19T17:23:17.326Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T17:23:17.330Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T17:23:17.330Z] [INFO] Deleting coin abc-123
+[2026-09-19T17:23:17.330Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T17:23:17.333Z] [INFO] GET /categories
+[2026-09-19T17:23:17.334Z] [INFO] Fetching categories
+[2026-09-19T17:23:17.336Z] [INFO] GET /metalcontents
+[2026-09-19T17:23:17.336Z] [INFO] Fetching metal contents
+[2026-09-19T17:23:17.338Z] [INFO] GET /denominations
+[2026-09-19T17:23:17.339Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:17.342Z] [INFO] GET /denominations
+[2026-09-19T17:23:17.342Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:17.345Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:17.345Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:17.350Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:17.350Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:17.354Z] [INFO] POST /categories
+[2026-09-19T17:23:17.354Z] [INFO] Adding category: undefined
+[2026-09-19T17:23:17.358Z] [INFO] POST /categories
+[2026-09-19T17:23:17.358Z] [INFO] Adding category: Platinum
+[2026-09-19T17:23:17.361Z] [INFO] POST /categories
+[2026-09-19T17:23:17.361Z] [INFO] Adding category:   silver  
+[2026-09-19T17:23:17.365Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T17:23:17.365Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T17:23:17.365Z] [WARN] Category not found: Nonexistent
+[2026-09-19T17:23:17.369Z] [INFO] GET /coin-sets
+[2026-09-19T17:23:17.369Z] [INFO] Fetching coin sets
+[2026-09-19T17:23:17.372Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:17.372Z] [INFO] Adding coin set: undefined
+[2026-09-19T17:23:17.375Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:17.375Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T17:23:17.377Z] [INFO] GET /transactions
+[2026-09-19T17:23:17.378Z] [INFO] Fetching transactions
+[2026-09-19T17:23:17.382Z] [INFO] GET /transactions
+[2026-09-19T17:23:17.382Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T17:23:17.385Z] [INFO] POST /transactions
+[2026-09-19T17:23:17.385Z] [INFO] Creating transaction 22d28d89-0640-4ae9-ac7c-0c4c7539063c for coin undefined
+[2026-09-19T17:23:17.388Z] [INFO] POST /transactions
+[2026-09-19T17:23:17.388Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T17:23:17.388Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T17:23:17.390Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T17:23:17.391Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T17:23:17.391Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T17:23:17.393Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:17.394Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:17.397Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:17.397Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:17.399Z] [INFO] POST /spot-prices
+[2026-09-19T17:23:17.400Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T17:23:17.402Z] [INFO] GET /settings/nonexistent
+[2026-09-19T17:23:17.403Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T17:23:17.403Z] [WARN] Setting not found: nonexistent
+[2026-09-19T17:23:17.405Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T17:23:17.405Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T17:23:17.408Z] [INFO] GET /settings/theme
+[2026-09-19T17:23:17.408Z] [INFO] Fetching setting: theme
+[2026-09-19T17:23:17.410Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T17:23:17.410Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T17:23:28.056Z] [INFO] GET /coins
+[2026-09-19T17:23:28.058Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:28.058Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T17:23:28.058Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T17:23:28.059Z] [INFO] Retrieved 0 coins
+[2026-09-19T17:23:28.066Z] [INFO] GET /coins
+[2026-09-19T17:23:28.067Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:28.067Z] [INFO] Retrieved 1 coins
+[2026-09-19T17:23:28.071Z] [INFO] GET /coins/nonexistent
+[2026-09-19T17:23:28.071Z] [INFO] Fetching coin nonexistent
+[2026-09-19T17:23:28.071Z] [WARN] Coin not found: nonexistent
+[2026-09-19T17:23:28.075Z] [INFO] GET /coins/xyz-789
+[2026-09-19T17:23:28.075Z] [INFO] Fetching coin xyz-789
+[2026-09-19T17:23:28.085Z] [INFO] POST /coins
+[2026-09-19T17:23:28.089Z] [INFO] POST /coins
+[2026-09-19T17:23:28.089Z] [INFO] Creating new coin test-id
+[2026-09-19T17:23:28.089Z] [INFO] Coin test-id created successfully
+[2026-09-19T17:23:28.092Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T17:23:28.093Z] [INFO] Updating coin nonexistent
+[2026-09-19T17:23:28.093Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T17:23:28.096Z] [INFO] PUT /coins/abc-123
+[2026-09-19T17:23:28.096Z] [INFO] Updating coin abc-123
+[2026-09-19T17:23:28.097Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T17:23:28.100Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T17:23:28.101Z] [INFO] Deleting coin nonexistent
+[2026-09-19T17:23:28.101Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T17:23:28.104Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T17:23:28.104Z] [INFO] Deleting coin abc-123
+[2026-09-19T17:23:28.104Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T17:23:28.107Z] [INFO] GET /categories
+[2026-09-19T17:23:28.107Z] [INFO] Fetching categories
+[2026-09-19T17:23:28.110Z] [INFO] GET /metalcontents
+[2026-09-19T17:23:28.110Z] [INFO] Fetching metal contents
+[2026-09-19T17:23:28.113Z] [INFO] GET /denominations
+[2026-09-19T17:23:28.114Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:28.117Z] [INFO] GET /denominations
+[2026-09-19T17:23:28.117Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:28.119Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:28.120Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:28.123Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:28.123Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:28.125Z] [INFO] POST /categories
+[2026-09-19T17:23:28.126Z] [INFO] Adding category: undefined
+[2026-09-19T17:23:28.128Z] [INFO] POST /categories
+[2026-09-19T17:23:28.129Z] [INFO] Adding category: Platinum
+[2026-09-19T17:23:28.131Z] [INFO] POST /categories
+[2026-09-19T17:23:28.131Z] [INFO] Adding category:   silver  
+[2026-09-19T17:23:28.134Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T17:23:28.134Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T17:23:28.134Z] [WARN] Category not found: Nonexistent
+[2026-09-19T17:23:28.137Z] [INFO] GET /coin-sets
+[2026-09-19T17:23:28.137Z] [INFO] Fetching coin sets
+[2026-09-19T17:23:28.140Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:28.141Z] [INFO] Adding coin set: undefined
+[2026-09-19T17:23:28.143Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:28.144Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T17:23:28.147Z] [INFO] GET /transactions
+[2026-09-19T17:23:28.147Z] [INFO] Fetching transactions
+[2026-09-19T17:23:28.151Z] [INFO] GET /transactions
+[2026-09-19T17:23:28.151Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T17:23:28.153Z] [INFO] POST /transactions
+[2026-09-19T17:23:28.154Z] [INFO] Creating transaction 3a3f6e26-efde-427b-9eb6-d533786cafcd for coin undefined
+[2026-09-19T17:23:28.156Z] [INFO] POST /transactions
+[2026-09-19T17:23:28.156Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T17:23:28.157Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T17:23:28.159Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T17:23:28.159Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T17:23:28.159Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T17:23:28.161Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:28.162Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:28.165Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:28.165Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:28.167Z] [INFO] POST /spot-prices
+[2026-09-19T17:23:28.168Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T17:23:28.170Z] [INFO] GET /settings/nonexistent
+[2026-09-19T17:23:28.170Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T17:23:28.170Z] [WARN] Setting not found: nonexistent
+[2026-09-19T17:23:28.173Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T17:23:28.173Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T17:23:28.175Z] [INFO] GET /settings/theme
+[2026-09-19T17:23:28.175Z] [INFO] Fetching setting: theme
+[2026-09-19T17:23:28.177Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T17:23:28.178Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T17:23:45.818Z] [INFO] GET /coins
+[2026-09-19T17:23:45.820Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:45.820Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T17:23:45.820Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T17:23:45.821Z] [INFO] Retrieved 0 coins
+[2026-09-19T17:23:45.827Z] [INFO] GET /coins
+[2026-09-19T17:23:45.827Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T17:23:45.828Z] [INFO] Retrieved 1 coins
+[2026-09-19T17:23:45.832Z] [INFO] GET /coins/nonexistent
+[2026-09-19T17:23:45.833Z] [INFO] Fetching coin nonexistent
+[2026-09-19T17:23:45.833Z] [WARN] Coin not found: nonexistent
+[2026-09-19T17:23:45.836Z] [INFO] GET /coins/xyz-789
+[2026-09-19T17:23:45.836Z] [INFO] Fetching coin xyz-789
+[2026-09-19T17:23:45.845Z] [INFO] POST /coins
+[2026-09-19T17:23:45.849Z] [INFO] POST /coins
+[2026-09-19T17:23:45.849Z] [INFO] Creating new coin test-id
+[2026-09-19T17:23:45.850Z] [INFO] Coin test-id created successfully
+[2026-09-19T17:23:45.852Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T17:23:45.853Z] [INFO] Updating coin nonexistent
+[2026-09-19T17:23:45.853Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T17:23:45.855Z] [INFO] PUT /coins/abc-123
+[2026-09-19T17:23:45.856Z] [INFO] Updating coin abc-123
+[2026-09-19T17:23:45.856Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T17:23:45.858Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T17:23:45.859Z] [INFO] Deleting coin nonexistent
+[2026-09-19T17:23:45.859Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T17:23:45.861Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T17:23:45.862Z] [INFO] Deleting coin abc-123
+[2026-09-19T17:23:45.862Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T17:23:45.866Z] [INFO] GET /categories
+[2026-09-19T17:23:45.866Z] [INFO] Fetching categories
+[2026-09-19T17:23:45.869Z] [INFO] GET /metalcontents
+[2026-09-19T17:23:45.869Z] [INFO] Fetching metal contents
+[2026-09-19T17:23:45.871Z] [INFO] GET /denominations
+[2026-09-19T17:23:45.872Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:45.874Z] [INFO] GET /denominations
+[2026-09-19T17:23:45.875Z] [INFO] Fetching active denominations
+[2026-09-19T17:23:45.877Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:45.878Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:45.881Z] [INFO] GET /mintmarks
+[2026-09-19T17:23:45.881Z] [INFO] Fetching active mint marks
+[2026-09-19T17:23:45.884Z] [INFO] POST /categories
+[2026-09-19T17:23:45.884Z] [INFO] Adding category: undefined
+[2026-09-19T17:23:45.886Z] [INFO] POST /categories
+[2026-09-19T17:23:45.887Z] [INFO] Adding category: Platinum
+[2026-09-19T17:23:45.889Z] [INFO] POST /categories
+[2026-09-19T17:23:45.890Z] [INFO] Adding category:   silver  
+[2026-09-19T17:23:45.892Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T17:23:45.893Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T17:23:45.893Z] [WARN] Category not found: Nonexistent
+[2026-09-19T17:23:45.896Z] [INFO] GET /coin-sets
+[2026-09-19T17:23:45.896Z] [INFO] Fetching coin sets
+[2026-09-19T17:23:45.899Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:45.899Z] [INFO] Adding coin set: undefined
+[2026-09-19T17:23:45.902Z] [INFO] POST /coin-sets
+[2026-09-19T17:23:45.902Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T17:23:45.904Z] [INFO] GET /transactions
+[2026-09-19T17:23:45.905Z] [INFO] Fetching transactions
+[2026-09-19T17:23:45.908Z] [INFO] GET /transactions
+[2026-09-19T17:23:45.908Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T17:23:45.910Z] [INFO] POST /transactions
+[2026-09-19T17:23:45.911Z] [INFO] Creating transaction 698d05f7-8f51-4754-aec5-b58357a53133 for coin undefined
+[2026-09-19T17:23:45.913Z] [INFO] POST /transactions
+[2026-09-19T17:23:45.913Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T17:23:45.913Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T17:23:45.916Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T17:23:45.916Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T17:23:45.916Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T17:23:45.919Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:45.919Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:45.921Z] [INFO] GET /spot-prices/latest
+[2026-09-19T17:23:45.921Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T17:23:45.923Z] [INFO] POST /spot-prices
+[2026-09-19T17:23:45.924Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T17:23:45.926Z] [INFO] GET /settings/nonexistent
+[2026-09-19T17:23:45.926Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T17:23:45.926Z] [WARN] Setting not found: nonexistent
+[2026-09-19T17:23:45.929Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T17:23:45.929Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T17:23:45.932Z] [INFO] GET /settings/theme
+[2026-09-19T17:23:45.932Z] [INFO] Fetching setting: theme
+[2026-09-19T17:23:45.935Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T17:23:45.935Z] [INFO] Saving setting: visibleColumns

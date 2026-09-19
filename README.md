@@ -4,9 +4,11 @@ A polished Angular coin inventory and valuation application built for coin colle
 
 This README doubles as the project's living plan. Keep it current as features land so a future session (human or AI) can resume work from an accurate picture of what exists, why it's built the way it is, and what's next — rather than re-discovering the codebase from scratch.
 
-## Current state (as of 2026-08-22)
+## Current state (as of 2026-09-19)
 
-The application is functional end-to-end: inventory CRUD, category administration, Quicken import with QIF filtering, CSV import, directory-based image import with matching, spot price tracking, melt value calculations, multi-select with bulk edit/delete, transactions, report generation, search/filter/sort, and persistence all work. 82 passing unit tests across 11 test files cover the main component and all 6 child components. Server API tests are written (pending dependency install).
+The application is functioning end-to-end with the fixes from the latest round of work: startup is more reliable on Windows, the SQL Server connection logic is hardened, the app can launch from the root project folder or via the PowerShell launcher, and the database-backed lookup data is now sourced from SQL instead of hard-coded runtime state. Recent work also fixed the default selection behavior, category persistence, delete confirmations, QIF busy-state feedback, and the mint-mark ordering problem on the main list.
+
+The current regression suite is passing: the app, server, and image-matching tests all pass together after the database-first reference data and smart filename parsing updates.
 
 ## Architecture
 
@@ -59,7 +61,7 @@ App styles are split into partials under `src/app/styles/`:
 | `StorageService` | IndexedDB persistence (async get/set keyed by `StorageKeys`) |
 | `QuickenImportService` | QIF parser — handles accounts, transactions, denomination inference |
 | `CsvService` | CSV parsing, auto-mapping headers, export to CSV/insurance CSV |
-| `ImageMatchingService` | Jaccard token similarity matching of filenames to coin names |
+| `ImageMatchingService` | Semantic filename parsing using year, denomination, mint mark, and type signals with confidence thresholds |
 | `SpotPriceService` | Fetches COMEX spot prices from `metals.live` API |
 
 ## Features
@@ -138,13 +140,14 @@ Parses real Quicken Interchange Format investment-transaction exports with:
 
 Supports selecting an entire folder (`webkitdirectory`) or individual image files:
 
-1. Images are matched against inventory coin names using Jaccard token similarity
+1. Image filenames are parsed semantically using coin metadata cues such as year, denomination, mint mark, and coin type instead of a plain token-overlap comparison.
 2. Results are classified into three tiers:
-   - **Auto-matched** (confidence >= 60%): shown with Confirm/Reject buttons
-   - **Needs review** (confidence > 0 but < 60%): shown with a reassignment dropdown
-   - **Unmatched** (no match): shown with a manual assignment dropdown
-3. Users can confirm, reject, or reassign any match before applying
-4. "Apply" reads confirmed files as base64 data URLs and attaches them to the matched coins
+   - **Auto-matched** (confidence >= 0.8): assigned automatically when the filename strongly matches the coin record
+   - **Needs review** (0.55 <= confidence < 0.8): held for manual confirmation or reassignment
+   - **Unmatched** (confidence < 0.55 or no meaningful match): requires manual assignment or rejection
+3. Users can confirm, reject, or reassign any match before applying.
+4. "Apply" reads confirmed files as base64 data URLs and attaches them to the matched coins.
+5. Ambiguous names like "liberty_half.jpg" are intentionally not auto-attached.
 
 ### Per-coin image management
 
@@ -158,9 +161,9 @@ Supports selecting an entire folder (`webkitdirectory`) or individual image file
 
 All inventory data, column visibility, and category list persist to IndexedDB (not `localStorage`, which caps at ~5-10MB — too small for base64 coin photos). The service exposes a small async `get`/`set` API keyed by `StorageKeys`.
 
-#### SQL Server (optional: `server/`)
+#### SQL Server backend (`server/`)
 
-A separate Express/TypeScript backend provides a REST API backed by a local SQL Server database. The schema (`server/schema.sql`) includes tables for coins, images, tags, categories, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
+A separate Express/TypeScript backend provides a REST API backed by a local SQL Server database. The schema is created and seeded from `server/setup-database.sql`, which defines the canonical tables for coins, images, tags, categories, denominations, mint marks, metal contents, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
 
 API endpoints: `GET/POST/PUT/DELETE /api/coins`, `/api/categories`, `/api/coinsets`, `/api/transactions`, `/api/spot-prices`, `/api/settings`.
 
@@ -177,9 +180,26 @@ API endpoints: `GET/POST/PUT/DELETE /api/coins`, `/api/categories`, `/api/coinse
 
 - Node.js 22.22+ recommended (required for Angular CLI `ng` commands)
 - npm 10+
-- SQL Server Express (optional, for the `server/` backend — host at 192.168.0.10 or configure in `server/server.ts`)
+- SQL Server Express (required for the `server/` backend; use the local instance or configure `DB_SERVER` in the server `.env` file)
 
 ## Run locally
+
+Preferred startup on Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\setup\start-coin-inventory.ps1
+```
+
+This launcher handles the project root, installs dependencies if needed, starts the server, and opens the app in Edge.
+
+If you need to run the server directly in the terminal:
+
+```powershell
+cd server
+npx tsx server.ts
+```
+
+For the frontend alone:
 
 ```powershell
 npm install
@@ -188,7 +208,12 @@ npm start -- --host 0.0.0.0
 
 Then open the local URL shown in the Angular CLI output (commonly `http://localhost:4200`).
 
-**Known issue:** `ng build` / `ng serve` may fail on Windows due to esbuild-wasm's Go WASM binary using POSIX path semantics. A patch that strips the drive letter and converts backslashes has been prototyped but not yet verified. See the esbuild-wasm workaround notes in the project for details.
+## Current database and startup notes
+
+- The SQL Server configuration is now read more defensively, with better handling of named instances and reboot-time drift.
+- Category, denomination, mint-mark, and metal-content reference data are database-backed and seeded via the SQL setup script rather than hard-coded runtime seed logic.
+- Metal content values are repaired and persisted in the database, and `Other` is avoided unless the data truly does not fit a known value.
+- The launcher script is the most reliable local startup path on Windows; use the `setup` scripts rather than the older ad-hoc commands.
 
 ## Build for production
 

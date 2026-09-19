@@ -1,7 +1,7 @@
 # Coin Inventory Application Overhaul — Design Spec
 
 **Date:** 2026-08-28
-**Status:** Approved
+**Status:** Approved and implemented in practice for the completed work through 2026-09-19
 
 ## Overview
 

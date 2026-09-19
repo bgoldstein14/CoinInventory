@@ -59,8 +59,8 @@ export class ImageImportModal {
       }
 
       let status: PendingImageMatch['status'];
-      if (!match.matchedRecordId) status = 'unmatched';
-      else if (match.confidence >= 0.6) status = 'auto-matched';
+      if (!match.matchedRecordId || match.confidence < 0.55) status = 'unmatched';
+      else if (match.confidence >= 0.8) status = 'auto-matched';
       else status = 'pending';
 
       pending.push({

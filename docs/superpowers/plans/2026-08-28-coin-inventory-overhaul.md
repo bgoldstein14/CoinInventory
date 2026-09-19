@@ -1,5 +1,7 @@
 # Coin Inventory Overhaul Implementation Plan
 
+> **Status update (2026-09-19):** The major implementation items in this plan have been completed or validated: database-first reference data, category persistence, metal-content repair, Windows launcher stabilization, and higher-confidence filename parsing for image matching. This document remains the implementation roadmap, but the current app state now reflects the completed work above.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Overhaul the coin inventory app — rewrite database schema, improve QIF import with net-quantity filtering and attribute parsing, add denomination/mintmark dropdowns, COMEX proxy, logging, exception handling, and database-first storage with IndexedDB fallback.
