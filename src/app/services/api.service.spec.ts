@@ -152,6 +152,11 @@ describe('ApiService', () => {
     expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/mintmarks`);
   });
 
+  it('getMetalContents calls GET /api/metalcontents', () => {
+    service.getMetalContents();
+    expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/metalcontents`);
+  });
+
   // --- Spot Prices ---
 
   it('fetchSpotPrices calls GET /api/spot-prices/fetch', () => {

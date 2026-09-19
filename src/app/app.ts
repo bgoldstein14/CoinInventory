@@ -15,7 +15,7 @@ import { CoinRecord, TransactionRecord } from './types/coin.model';
 import {
   InventoryColumn, SortState, inventoryColumnOrder, inventoryColumnLabels,
   defaultVisibleColumns, formatInventoryCell, gradeBadgeClass,
-  certBadgeLabel, METAL_CONTENT_OPTIONS
+  certBadgeLabel
 } from './types/inventory-columns';
 
 export const cacGreenBeanIconPath = 'CACGreenBean-trimmed.png';
@@ -80,7 +80,7 @@ export class App {
 
   // --- Constants ---
   protected readonly cacGreenBeanIconPath = cacGreenBeanIconPath;
-  protected readonly metalContentOptions = METAL_CONTENT_OPTIONS;
+  protected readonly metalContentOptions = signal<string[]>([]);
   protected readonly Number = Number;
 
   // --- Computed ---
@@ -150,6 +150,7 @@ export class App {
     protected readonly inventoryService: InventoryService,
     private readonly csvService: CsvService
   ) {
+    this.metalContentOptions = this.inventoryService.metalContents;
     this.ready = this.hydrateFromStorage();
   }
 

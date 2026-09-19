@@ -297,6 +297,18 @@ describe('GET /api/categories', () => {
   });
 });
 
+describe('GET /api/metalcontents', () => {
+  it('returns canonical metal-content names', async () => {
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ MetalContentName: 'Gold' }, { MetalContentName: 'Silver' }, { MetalContentName: 'Copper-Nickel' }],
+    });
+
+    const res = await request(app).get('/api/metalcontents');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(['Gold', 'Silver', 'Copper-Nickel']);
+  });
+});
+
 describe('GET /api/denominations', () => {
   it('returns the frontend-compatible denomination shape', async () => {
     mockRequest.query.mockResolvedValueOnce({
@@ -313,15 +325,14 @@ describe('GET /api/denominations', () => {
     });
   });
 
-  it('falls back to the known US/GB denomination list when the table is empty', async () => {
-    mockRequest.query.mockResolvedValueOnce({ recordset: [] });
+  it('returns the database denomination rows without injecting a duplicate static catalog', async () => {
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ DenominationId: 9, Label: '25¢', Country: 'US', SortOrder: 9 }],
+    });
 
     const res = await request(app).get('/api/denominations');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: '25¢', country: 'US' }),
-      expect.objectContaining({ label: 'Sovereign', country: 'GB' }),
-    ]));
+    expect(res.body).toEqual([{ denominationId: 9, label: '25¢', country: 'US', sortOrder: 9, isActive: true }]);
   });
 });
 
@@ -341,16 +352,14 @@ describe('GET /api/mintmarks', () => {
     });
   });
 
-  it('falls back to the known US/GB mint marks when the table is empty', async () => {
-    mockRequest.query.mockResolvedValueOnce({ recordset: [] });
+  it('returns the database mint-mark rows without injecting a duplicate static catalog', async () => {
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ MintMarkId: 3, Label: 'D', Description: 'Denver / Dahlonega' }],
+    });
 
     const res = await request(app).get('/api/mintmarks');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'P', description: 'Philadelphia' }),
-      expect.objectContaining({ label: 'D', description: 'Denver / Dahlonega' }),
-      expect.objectContaining({ label: 'M', description: 'Royal Mint / GB mintmark' }),
-    ]));
+    expect(res.body).toEqual([{ mintMarkId: 3, label: 'D', description: 'Denver / Dahlonega', isActive: true }]);
   });
 });
 
@@ -368,6 +377,18 @@ describe('POST /api/categories', () => {
       .send({ name: 'Platinum' });
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('Platinum');
+  });
+
+  it('normalizes whitespace and uses a duplicate-safe query', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/categories')
+      .send({ name: '  silver  ' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe('silver');
+    expect(String(mockRequest.query.mock.calls[0][0])).toContain('LOWER(LTRIM(RTRIM(CategoryName)))');
   });
 });
 

@@ -91,6 +91,17 @@ describe('App', () => {
     expect(app['inv'].categoryOptions()).toContain('Imported Category');
   });
 
+  it('persists newly imported categories to the database', () => {
+    const { inv, mockApiService } = createTestInventoryService();
+    const createSpy = vi.spyOn(mockApiService, 'createCategory');
+
+    inv.mergeCategoryOptions(['Gold', 'Silver']);
+
+    expect(createSpy).toHaveBeenCalledTimes(2);
+    expect(createSpy).toHaveBeenCalledWith('Gold');
+    expect(createSpy).toHaveBeenCalledWith('Silver');
+  });
+
   it('filters the inventory table by search text', () => {
     const app = createApp();
     addTestCoin(app, { denomination: 'Dime', coinType: 'Mercury' });
@@ -148,6 +159,17 @@ describe('App', () => {
     await app['hydrateFromStorage']();
 
     expect(inv.categoryOptions()).toContain('Silver');
+  });
+
+  it('loads metal content options from the database-backed lookup list', async () => {
+    const { inv, storage, mockApiService } = createTestInventoryService();
+    mockApiService.getMetalContents = vi.fn(() => of(['Gold', 'Silver', 'Copper-Nickel']));
+
+    const app = new App(storage, inv, new CsvService());
+    await app['hydrateFromStorage']();
+
+    expect(inv.metalContents()).toEqual(['Copper-Nickel', 'Gold', 'Silver']);
+    expect(app['metalContentOptions']()).toContain('Gold');
   });
 
   it('sorts the inventory table and flips direction on repeat clicks', () => {
@@ -361,9 +383,11 @@ describe('App', () => {
     expect(visible.indexOf('mintMark')).toBe(visible.indexOf('year') + 1);
   });
 
-  it('includes the full known metal-content options', () => {
+  it('includes the full known metal-content options', async () => {
     const app = createApp();
-    expect(app['metalContentOptions']).toEqual(expect.arrayContaining([
+    await app.ready;
+
+    expect(app['metalContentOptions']()).toEqual(expect.arrayContaining([
       'Gold', 'Silver', 'Platinum', 'Copper', 'Nickel', 'Bronze', 'Steel', 'Clad', 'Other'
     ]));
   });

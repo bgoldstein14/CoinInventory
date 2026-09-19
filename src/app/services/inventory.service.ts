@@ -4,9 +4,7 @@ import {
   SpotPrices,
   TransactionRecord,
   Denomination,
-  MintMarkOption,
-  DEFAULT_DENOMINATION_OPTIONS,
-  DEFAULT_MINT_MARK_OPTIONS
+  MintMarkOption
 } from '../types/coin.model';
 import { ApiService } from './api.service';
 import { LoggingService } from './logging.service';
@@ -30,6 +28,7 @@ export class InventoryService {
 
   readonly denominations = signal<Denomination[]>([]);
   readonly mintMarks = signal<MintMarkOption[]>([]);
+  readonly metalContents = signal<string[]>([]);
 
   readonly selectedCoin = computed(() =>
     this.inventory().find(c => c.id === this.selectedCoinId()) ?? null
@@ -90,12 +89,13 @@ export class InventoryService {
       this.inventory.set(coins);
       this.ensureSelectedCoin();
 
-      const [categories, coinSets, transactions, denominations, mintMarks] = await Promise.all([
+      const [categories, coinSets, transactions, denominations, mintMarks, metalContents] = await Promise.all([
         firstValueFrom(this.apiService.getCategories()),
         firstValueFrom(this.apiService.getCoinSets()),
         firstValueFrom(this.apiService.getTransactions()),
         firstValueFrom(this.apiService.getDenominations()),
-        firstValueFrom(this.apiService.getMintMarks())
+        firstValueFrom(this.apiService.getMintMarks()),
+        firstValueFrom(this.apiService.getMetalContents())
       ]);
 
       const inventoryCategories = [...new Set(coins.map((coin) => coin.category).filter(Boolean))];
@@ -106,16 +106,9 @@ export class InventoryService {
       if (Array.isArray(resolvedCategories)) this.categoryOptions.set([...new Set(resolvedCategories)].sort());
       if (Array.isArray(resolvedCoinSets)) this.coinSets.set([...new Set(resolvedCoinSets)].sort());
       if (Array.isArray(transactions)) this.transactions.set(transactions);
-      if (Array.isArray(denominations) && denominations.length > 0) {
-        this.denominations.set(denominations);
-      } else {
-        this.denominations.set(DEFAULT_DENOMINATION_OPTIONS);
-      }
-      if (Array.isArray(mintMarks) && mintMarks.length > 0) {
-        this.mintMarks.set(mintMarks);
-      } else {
-        this.mintMarks.set(DEFAULT_MINT_MARK_OPTIONS);
-      }
+      this.denominations.set(Array.isArray(denominations) ? denominations : []);
+      this.mintMarks.set(Array.isArray(mintMarks) ? mintMarks : []);
+      this.metalContents.set(Array.isArray(metalContents) ? [...new Set(metalContents)].sort() : []);
 
       this.connecting.set(false);
       this.notificationService.showInfo('Connected to database');
@@ -308,13 +301,28 @@ export class InventoryService {
 
   mergeCategoryOptions(names: string[]): void {
     const current = new Set(this.categoryOptions());
-    let changed = false;
+    const missing: string[] = [];
+
     for (const name of names) {
       const trimmed = name.trim();
-      if (trimmed && !current.has(trimmed)) { current.add(trimmed); changed = true; }
+      if (trimmed && !current.has(trimmed)) {
+        current.add(trimmed);
+        missing.push(trimmed);
+      }
     }
-    if (!changed) return;
+
+    if (missing.length === 0) return;
+
     this.categoryOptions.set([...current].sort());
+
+    for (const name of missing) {
+      firstValueFrom(this.apiService.createCategory(name))
+        .then(() => this.logger.info(`Persisted category to database: ${name}`))
+        .catch((error) => {
+          this.logger.error(`Failed to persist category "${name}" to database`, JSON.stringify(error));
+          this.notificationService.showError(`Failed to save category "${name}" to database`);
+        });
+    }
   }
 
   removeCategoryOption(category: string): void {

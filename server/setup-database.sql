@@ -101,10 +101,15 @@ CREATE TABLE CoinTags (
 
 -- ----- Categories --------------------------------------------
 -- Lookup table for valid category names
--- Pre-populated by user or import processes
+-- Seeded with the two default categories currently used by the app
 CREATE TABLE Categories (
     CategoryName        NVARCHAR(100)       NOT NULL PRIMARY KEY
 );
+
+INSERT INTO Categories (CategoryName)
+SELECT CategoryName
+FROM (VALUES ('20th Cent. Type'), ('Odd Type Set')) AS Seed(CategoryName)
+WHERE NOT EXISTS (SELECT 1 FROM Categories WHERE CategoryName = Seed.CategoryName);
 
 -- ----- CoinSets ----------------------------------------------
 -- Lookup table for coin sets
@@ -169,6 +174,32 @@ CREATE TABLE MintMarks (
     Description         NVARCHAR(200)       NULL,           -- Human-readable description
     IsActive            BIT                 NOT NULL DEFAULT 1
 );
+
+-- ----- MetalContents -----------------------------------------
+-- Canonical metal-content values used by the app and imported data
+CREATE TABLE MetalContents (
+    MetalContentId      INT                 IDENTITY(1,1) PRIMARY KEY,
+    MetalContentName    NVARCHAR(50)        NOT NULL UNIQUE,
+    SortOrder           INT                 NOT NULL DEFAULT 999,
+    IsActive            BIT                 NOT NULL DEFAULT 1
+);
+
+INSERT INTO MetalContents (MetalContentName, SortOrder, IsActive) VALUES
+('Gold', 1, 1),
+('Silver', 2, 1),
+('Platinum', 3, 1),
+('Palladium', 4, 1),
+('Copper', 5, 1),
+('Nickel', 6, 1),
+('Copper-Nickel', 7, 1),
+('Bronze', 8, 1),
+('Brass', 9, 1),
+('Zinc', 10, 1),
+('Steel', 11, 1),
+('Aluminum', 12, 1),
+('Nickel-Brass', 13, 1),
+('Clad', 14, 1),
+('Other', 15, 1);
 
 GO
 
@@ -267,6 +298,39 @@ INSERT INTO MintMarks (MintMarkId, Label, Description, IsActive) VALUES
 (9, 'Other', 'Catch-all for oddities like O/S',    1);
 
 SET IDENTITY_INSERT MintMarks OFF;
+
+GO
+
+-- ============================================================
+-- BACKFILL METAL CONTENT VALUES
+-- ============================================================
+-- Use denomination/year rules for the known US and GB coinage in this database.
+-- Composition is not reliable enough to be the source of truth for legacy rows.
+
+UPDATE Coins
+SET MetalContent = CASE
+    WHEN MetalContent IS NOT NULL THEN MetalContent
+
+    -- U.S. copper and bronze type coins
+    WHEN Denomination IN ('½¢', '1¢') THEN 'Copper'
+    WHEN Denomination = '2¢' THEN 'Bronze'
+
+    -- U.S. nickel and copper-nickel series
+    WHEN Denomination = '3CN' THEN 'Nickel'
+    WHEN Denomination = '5¢' AND CAST(COALESCE(Year, '0') AS INT) = 1943 THEN 'Silver'
+    WHEN Denomination = '5¢' THEN 'Copper-Nickel'
+
+    -- U.S. silver series
+    WHEN Denomination IN ('3CS', '10¢', '20¢', '25¢', '50¢', '$1') THEN 'Silver'
+    WHEN Denomination IN ('$2.50', '$3', '$5', '$10', '$20') THEN 'Gold'
+
+    -- GB coins
+    WHEN Denomination IN ('Farthing', '½d', '1d', '3d', '6d', '1/-', '2/- (Florin)', '2/6 (Half Crown)', '5/- (Crown)', '½p', '1p', '2p', '5p', '10p', '20p', '50p', '£1', '£2', '£5') THEN 'Other'
+    WHEN Denomination IN ('½ Sovereign', 'Sovereign', 'Guinea') THEN 'Gold'
+
+    ELSE 'Other'
+END
+WHERE MetalContent = 'Other';
 
 GO
 

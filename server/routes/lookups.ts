@@ -13,64 +13,6 @@ import { getPool } from '../db';
 
 const router = Router();
 
-const defaultDenominations = [
-  { denominationId: 1, label: '½¢', country: 'US', sortOrder: 1, isActive: true },
-  { denominationId: 2, label: '1¢', country: 'US', sortOrder: 2, isActive: true },
-  { denominationId: 3, label: '2¢', country: 'US', sortOrder: 3, isActive: true },
-  { denominationId: 4, label: '3CS', country: 'US', sortOrder: 4, isActive: true },
-  { denominationId: 5, label: '3CN', country: 'US', sortOrder: 5, isActive: true },
-  { denominationId: 6, label: '5¢', country: 'US', sortOrder: 6, isActive: true },
-  { denominationId: 7, label: '10¢', country: 'US', sortOrder: 7, isActive: true },
-  { denominationId: 8, label: '20¢', country: 'US', sortOrder: 8, isActive: true },
-  { denominationId: 9, label: '25¢', country: 'US', sortOrder: 9, isActive: true },
-  { denominationId: 10, label: '50¢', country: 'US', sortOrder: 10, isActive: true },
-  { denominationId: 11, label: '$1', country: 'US', sortOrder: 11, isActive: true },
-  { denominationId: 12, label: '$2.50', country: 'US', sortOrder: 12, isActive: true },
-  { denominationId: 13, label: '$3', country: 'US', sortOrder: 13, isActive: true },
-  { denominationId: 14, label: '$5', country: 'US', sortOrder: 14, isActive: true },
-  { denominationId: 15, label: '$10', country: 'US', sortOrder: 15, isActive: true },
-  { denominationId: 16, label: '$20', country: 'US', sortOrder: 16, isActive: true },
-  { denominationId: 17, label: 'Farthing', country: 'GB', sortOrder: 17, isActive: true },
-  { denominationId: 18, label: '½d', country: 'GB', sortOrder: 18, isActive: true },
-  { denominationId: 19, label: '1d', country: 'GB', sortOrder: 19, isActive: true },
-  { denominationId: 20, label: '3d', country: 'GB', sortOrder: 20, isActive: true },
-  { denominationId: 21, label: '6d', country: 'GB', sortOrder: 21, isActive: true },
-  { denominationId: 22, label: '1/-', country: 'GB', sortOrder: 22, isActive: true },
-  { denominationId: 23, label: '2/- (Florin)', country: 'GB', sortOrder: 23, isActive: true },
-  { denominationId: 24, label: '2/6 (Half Crown)', country: 'GB', sortOrder: 24, isActive: true },
-  { denominationId: 25, label: '5/- (Crown)', country: 'GB', sortOrder: 25, isActive: true },
-  { denominationId: 26, label: '½ Sovereign', country: 'GB', sortOrder: 26, isActive: true },
-  { denominationId: 27, label: 'Sovereign', country: 'GB', sortOrder: 27, isActive: true },
-  { denominationId: 28, label: 'Guinea', country: 'GB', sortOrder: 28, isActive: true },
-  { denominationId: 29, label: '½p', country: 'GB', sortOrder: 29, isActive: true },
-  { denominationId: 30, label: '1p', country: 'GB', sortOrder: 30, isActive: true },
-  { denominationId: 31, label: '2p', country: 'GB', sortOrder: 31, isActive: true },
-  { denominationId: 32, label: '5p', country: 'GB', sortOrder: 32, isActive: true },
-  { denominationId: 33, label: '10p', country: 'GB', sortOrder: 33, isActive: true },
-  { denominationId: 34, label: '20p', country: 'GB', sortOrder: 34, isActive: true },
-  { denominationId: 35, label: '50p', country: 'GB', sortOrder: 35, isActive: true },
-  { denominationId: 36, label: '£1', country: 'GB', sortOrder: 36, isActive: true },
-  { denominationId: 37, label: '£2', country: 'GB', sortOrder: 37, isActive: true },
-  { denominationId: 38, label: '£5', country: 'GB', sortOrder: 38, isActive: true },
-];
-
-const defaultMintMarks = [
-  { mintMarkId: 1, label: '', description: 'No mint mark / Philadelphia pre-1980', isActive: true },
-  { mintMarkId: 2, label: 'P', description: 'Philadelphia', isActive: true },
-  { mintMarkId: 3, label: 'D', description: 'Denver / Dahlonega', isActive: true },
-  { mintMarkId: 4, label: 'S', description: 'San Francisco', isActive: true },
-  { mintMarkId: 5, label: 'W', description: 'West Point', isActive: true },
-  { mintMarkId: 6, label: 'O', description: 'New Orleans', isActive: true },
-  { mintMarkId: 7, label: 'CC', description: 'Carson City', isActive: true },
-  { mintMarkId: 8, label: 'C', description: 'Charlotte', isActive: true },
-  { mintMarkId: 9, label: 'M', description: 'Royal Mint / GB mintmark', isActive: true },
-  { mintMarkId: 10, label: 'F', description: 'Birmingham / GB mintmark', isActive: true },
-  { mintMarkId: 11, label: 'R', description: 'UK mint mark / rare issue', isActive: true },
-  { mintMarkId: 12, label: 'H', description: 'Heaton / GB mintmark', isActive: true },
-  { mintMarkId: 13, label: 'A', description: 'Additional / alternate mintmark', isActive: true },
-  { mintMarkId: 14, label: 'Other', description: 'Catch-all for nonstandard marks', isActive: true },
-];
-
 // ============================================================
 // Categories — /api/categories
 // ============================================================
@@ -87,6 +29,18 @@ router.get('/categories', async (_req: Request, res: Response) => {
   }
 });
 
+router.get('/metalcontents', async (_req: Request, res: Response) => {
+  try {
+    logInfo('Fetching metal contents');
+    const db = await getPool();
+    const result = await db.request().query('SELECT MetalContentName FROM MetalContents ORDER BY SortOrder, MetalContentName');
+    res.json(result.recordset.map((r) => r['MetalContentName'] as string));
+  } catch (err) {
+    logError('GET /api/metalcontents error', err);
+    res.status(500).json({ error: 'Failed to retrieve metal contents' });
+  }
+});
+
 router.post('/categories', async (req: Request, res: Response) => {
   try {
     const db = await getPool();
@@ -98,14 +52,20 @@ router.post('/categories', async (req: Request, res: Response) => {
       return;
     }
 
+    const trimmedName = name.trim();
+
     await db.request()
-      .input('name', sql.NVarChar(100), name.trim())
+      .input('name', sql.NVarChar(100), trimmedName)
       .query(`
-        IF NOT EXISTS (SELECT 1 FROM Categories WHERE CategoryName = @name)
+        IF NOT EXISTS (
+          SELECT 1
+          FROM Categories
+          WHERE LOWER(LTRIM(RTRIM(CategoryName))) = LOWER(LTRIM(RTRIM(@name)))
+        )
           INSERT INTO Categories (CategoryName) VALUES (@name)
       `);
 
-    res.status(201).json({ name: name.trim() });
+    res.status(201).json({ name: trimmedName });
   } catch (err) {
     logError('POST /api/categories error', err);
     res.status(500).json({ error: 'Failed to add category' });
@@ -220,7 +180,7 @@ router.get('/denominations', async (_req: Request, res: Response) => {
       isActive: true,
     }));
 
-    res.json(denominations.length > 0 ? denominations : defaultDenominations);
+    res.json(denominations);
   } catch (err) {
     logError('GET /api/denominations error', err);
     res.status(500).json({ error: 'Failed to retrieve denominations' });
@@ -348,7 +308,7 @@ router.get('/mintmarks', async (_req: Request, res: Response) => {
       isActive: true,
     }));
 
-    res.json(mintmarks.length > 0 ? mintmarks : defaultMintMarks);
+    res.json(mintmarks);
   } catch (err) {
     logError('GET /api/mintmarks error', err);
     res.status(500).json({ error: 'Failed to retrieve mint marks' });

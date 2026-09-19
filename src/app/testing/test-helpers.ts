@@ -29,6 +29,10 @@ export function createMockDependencies() {
     getTransactions: vi.fn(() => of([])),
     getDenominations: vi.fn(() => of([])),
     getMintMarks: vi.fn(() => of([])),
+    getMetalContents: vi.fn(() => of([
+      'Gold', 'Silver', 'Platinum', 'Palladium', 'Copper', 'Nickel', 'Copper-Nickel',
+      'Bronze', 'Brass', 'Zinc', 'Steel', 'Aluminum', 'Nickel-Brass', 'Clad', 'Other'
+    ])),
     createCoin: vi.fn(() => of({})),
     updateCoin: vi.fn(() => of({})),
     deleteCoin: vi.fn(() => of({})),

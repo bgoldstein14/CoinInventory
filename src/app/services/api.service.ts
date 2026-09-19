@@ -179,6 +179,14 @@ export class ApiService {
   }
 
   /**
+   * Fetch all canonical metal content values from the database.
+   * @returns Observable of metal content name array
+   */
+  getMetalContents(): Observable<string[]> {
+    return this.http.get<string[]>(`${this.baseUrl}/api/metalcontents`);
+  }
+
+  /**
    * Create a new category.
    * @param name - Category name
    * @returns Observable that completes when creation is done
