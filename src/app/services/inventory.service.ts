@@ -1,5 +1,13 @@
 import { Injectable, computed, signal, inject } from '@angular/core';
-import { CoinRecord, SpotPrices, TransactionRecord, Denomination, MintMarkOption } from '../types/coin.model';
+import {
+  CoinRecord,
+  SpotPrices,
+  TransactionRecord,
+  Denomination,
+  MintMarkOption,
+  DEFAULT_DENOMINATION_OPTIONS,
+  DEFAULT_MINT_MARK_OPTIONS
+} from '../types/coin.model';
 import { ApiService } from './api.service';
 import { LoggingService } from './logging.service';
 import { NotificationService } from './notification.service';
@@ -90,11 +98,24 @@ export class InventoryService {
         firstValueFrom(this.apiService.getMintMarks())
       ]);
 
-      if (Array.isArray(categories)) this.categoryOptions.set(categories);
-      if (Array.isArray(coinSets)) this.coinSets.set(coinSets);
+      const inventoryCategories = [...new Set(coins.map((coin) => coin.category).filter(Boolean))];
+      const inventoryCoinSets = [...new Set(coins.map((coin) => coin.coinSet ?? '').filter(Boolean))];
+      const resolvedCategories = Array.isArray(categories) && categories.length > 0 ? categories : inventoryCategories;
+      const resolvedCoinSets = Array.isArray(coinSets) && coinSets.length > 0 ? coinSets : inventoryCoinSets;
+
+      if (Array.isArray(resolvedCategories)) this.categoryOptions.set([...new Set(resolvedCategories)].sort());
+      if (Array.isArray(resolvedCoinSets)) this.coinSets.set([...new Set(resolvedCoinSets)].sort());
       if (Array.isArray(transactions)) this.transactions.set(transactions);
-      if (Array.isArray(denominations)) this.denominations.set(denominations);
-      if (Array.isArray(mintMarks)) this.mintMarks.set(mintMarks);
+      if (Array.isArray(denominations) && denominations.length > 0) {
+        this.denominations.set(denominations);
+      } else {
+        this.denominations.set(DEFAULT_DENOMINATION_OPTIONS);
+      }
+      if (Array.isArray(mintMarks) && mintMarks.length > 0) {
+        this.mintMarks.set(mintMarks);
+      } else {
+        this.mintMarks.set(DEFAULT_MINT_MARK_OPTIONS);
+      }
 
       this.connecting.set(false);
       this.notificationService.showInfo('Connected to database');

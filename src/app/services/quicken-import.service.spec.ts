@@ -326,6 +326,23 @@ T150.00
     expect(coin.grade).toBe('MS63');
   });
 
+  it('parses BU grade for Buffalo, Franklin, Lincoln, and D-mint coins', () => {
+    const service = new QuickenImportService();
+
+    const checks = [
+      { qif: `!Type:Invst\nD01/15/2024\nNBuy\nY1936 Buffalo 5C BU\nT20.00\n^`, expected: 'BU' },
+      { qif: `!Type:Invst\nD01/15/2024\nNBuy\nY1956 Franklin Half Dollar BU\nT25.00\n^`, expected: 'BU' },
+      { qif: `!Type:Invst\nD01/15/2024\nNBuy\nY1945 Lincoln Cent BU\nT5.00\n^`, expected: 'BU' },
+      { qif: `!Type:Invst\nD01/15/2024\nNBuy\nY1959D Lincoln Cent BU\nT5.00\n^`, expected: 'BU' }
+    ];
+
+    for (const check of checks) {
+      const result = service.parse(check.qif);
+      expect(result.importedRecords).toHaveLength(1);
+      expect(result.importedRecords[0].grade).toBe(check.expected);
+    }
+  });
+
   // --- PM pre-fill tests ---
 
   it('pre-fills pmWeightGrams and pmPercent for known US silver coins (1960 Quarter)', () => {

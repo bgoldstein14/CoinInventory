@@ -520,7 +520,7 @@ export class QuickenImportService {
     // Match patterns: VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F
     // with optional modifiers: AU58, MS63, CH+AU, VF/EF, VF/XF, etc.
     const gradeMatch = securityName.match(
-      /[-\s]((?:CH\+)?(?:VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G)(?:\/(?:VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G))?(?:\d{1,2})?)\b/i
+      /[-\s]((?:CH\+)?(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G)(?:\/(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G))?(?:\d{1,2})?)\b/i
     );
     if (gradeMatch) {
       grade = gradeMatch[1].toUpperCase();
@@ -552,16 +552,16 @@ export class QuickenImportService {
     // Symbol-based denominations (½¢, 1¢, 2¢, 5¢, 10¢, 20¢, 25¢, 50¢)
     } else if (/½¢|1\/2¢/.test(securityName) || /half[\s-]?cent/i.test(lowerName)) {
       denomination = '½¢';
-    } else if (/50¢/.test(securityName) || /half[\s-]?dollar/i.test(lowerName) || /\bhalf\b/i.test(lowerName)) {
-      denomination = '50¢';
-    } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName)) {
-      denomination = '25¢';
-    } else if (/20¢/.test(securityName) || /twenty[\s-]?cent/i.test(lowerName) || /\b20c\b/.test(lowerName)) {
-      denomination = '20¢';
-    } else if (/10¢/.test(securityName) || /\bdime\b/i.test(lowerName)) {
-      denomination = '10¢';
     } else if (/5¢/.test(securityName) || /half[\s-]?dime/i.test(lowerName) || /\bnickel\b/i.test(lowerName)) {
       denomination = '5¢';
+    } else if (/10¢/.test(securityName) || /\bdime\b/i.test(lowerName)) {
+      denomination = '10¢';
+    } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName)) {
+      denomination = '25¢';
+    } else if (/50¢/.test(securityName) || /half[\s-]?dollar/i.test(lowerName)) {
+      denomination = '50¢';
+    } else if (/20¢/.test(securityName) || /twenty[\s-]?cent/i.test(lowerName) || /\b20c\b/.test(lowerName)) {
+      denomination = '20¢';
     } else if (/2¢/.test(securityName) || /two[\s-]?cent/i.test(lowerName) || /\b2c\b/.test(lowerName)) {
       denomination = '2¢';
     } else if (/1¢/.test(securityName) || /\bcent\b|\bpenny\b/i.test(lowerName)) {

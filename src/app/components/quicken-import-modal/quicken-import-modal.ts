@@ -33,6 +33,7 @@ export class QuickenImportModal {
   protected readonly qifPriceMax = signal<string>('');
   protected readonly qifDenominationFilter = signal<string>('');
   protected readonly importing = signal(false);
+  protected readonly parsing = signal(false);
 
   protected readonly groupedImportedRecords = computed(() => {
     return this.importedRecords().reduce<Record<string, QuickenImportRecord[]>>((acc, record) => {
@@ -84,17 +85,22 @@ export class QuickenImportModal {
     const file = input.files?.[0];
     if (!file) return;
 
-    const buffer = await file.arrayBuffer();
-    const text = new TextDecoder('windows-1252').decode(buffer);
-    this.quickenText.set(text);
-    this.selectedAccounts.set([]);
-    this.refreshQuickenAccounts();
+    this.parsing.set(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const text = new TextDecoder('windows-1252').decode(buffer);
+      this.quickenText.set(text);
+      this.selectedAccounts.set([]);
+      this.refreshQuickenAccounts();
 
-    const result = this.quickenImportService.parse(text, this.selectedAccounts());
-    const filtered = this.applyQifFilters(result.importedRecords);
-    this.importedRecords.set(filtered);
-    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
-    this.quickenWarnings.set(result.warnings);
+      const result = this.quickenImportService.parse(text, this.selectedAccounts());
+      const filtered = this.applyQifFilters(result.importedRecords);
+      this.importedRecords.set(filtered);
+      this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
+      this.quickenWarnings.set(result.warnings);
+    } finally {
+      this.parsing.set(false);
+    }
   }
 
   protected importQuicken(): void {

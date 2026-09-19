@@ -10,6 +10,7 @@ import { CoinRecord } from './coin.model';
  */
 export const inventoryColumnOrder = [
   'year',
+  'mintMark',
   'coinType', // Changed from 'name' - displays the coin type/variant
   'grade',
   'category',
@@ -19,7 +20,6 @@ export const inventoryColumnOrder = [
   'currentValue',
   'meltValue', // New: computed melt value based on PM content and spot prices
   'soldPrice',
-  'mintMark',
   'variety',
   'certNumber',
   'dealer',
@@ -68,7 +68,8 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
  */
 export const defaultVisibleColumns: InventoryColumn[] = [
   'year',
-  'coinType', // Changed from 'name'
+  'mintMark',
+  'coinType',
   'grade',
   'category',
   'denomination',
@@ -182,4 +183,19 @@ export function certBadgeLabel(coin: CoinRecord): string | null {
   return coin.certNumber ? `${company} #${coin.certNumber}` : company;
 }
 
-export const METAL_CONTENT_OPTIONS = ['Gold', 'Silver', 'Platinum', 'Copper', 'Nickel', 'Zinc', 'Clad', 'Other'] as const;
+export const METAL_CONTENT_OPTIONS = [
+  'Gold',
+  'Silver',
+  'Platinum',
+  'Copper',
+  'Copper-Nickel',
+  'Nickel',
+  'Zinc',
+  'Brass',
+  'Bronze',
+  'Steel',
+  'Aluminum',
+  'Nickel-Brass',
+  'Clad',
+  'Other'
+] as const;

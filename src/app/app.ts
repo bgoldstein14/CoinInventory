@@ -51,6 +51,7 @@ export class App {
   // --- Multi-select ---
   protected readonly selectedCoinIds = signal<Set<string>>(new Set());
   private lastClickedIndex = -1;
+  private defaultSelectionInitialized = false;
 
   // --- Search & filter ---
   protected readonly searchQuery = signal<string>('');
@@ -235,6 +236,11 @@ export class App {
   protected bulkDeleteCoins(): void {
     const ids = this.selectedCoinIds();
     if (ids.size === 0) return;
+    const itemCount = ids.size;
+    const confirmed = this.confirmAction(`Delete ${itemCount} selected coin${itemCount === 1 ? '' : 's'}?`);
+
+    if (!confirmed) return;
+
     for (const id of ids) {
       this.inv.deleteCoin(id);
     }
@@ -253,6 +259,7 @@ export class App {
   }
 
   protected selectCoin(coinId: string): void {
+    this.defaultSelectionInitialized = true;
     this.inv.selectCoin(coinId);
     this.showImageGallery.set(false);
   }
@@ -270,6 +277,10 @@ export class App {
   protected deleteSelectedCoin(): void {
     const coin = this.selectedCoin;
     if (!coin) return;
+
+    const confirmed = this.confirmAction(`Delete ${coin.coinType || 'this coin'}${coin.year ? ` (${coin.year})` : ''}?`);
+
+    if (!confirmed) return;
     this.inv.deleteCoin(coin.id);
   }
 
@@ -404,8 +415,15 @@ export class App {
     return current.column !== column ? '' : current.direction === 'asc' ? '▲' : '▼';
   }
 
-  protected onSearchQueryChange(value: string): void { this.searchQuery.set(value); }
-  protected onCategoryFilterChange(value: string): void { this.categoryFilter.set(value); }
+  protected onSearchQueryChange(value: string): void {
+    this.searchQuery.set(value);
+    this.syncDefaultSelection();
+  }
+
+  protected onCategoryFilterChange(value: string): void {
+    this.categoryFilter.set(value);
+    this.syncDefaultSelection();
+  }
 
   // ===================== Private helpers =====================
 
@@ -414,6 +432,17 @@ export class App {
     const leftText = (left ?? '').toString().toLowerCase();
     const rightText = (right ?? '').toString().toLowerCase();
     return leftText.localeCompare(rightText);
+  }
+
+  private confirmAction(message: string): boolean {
+    const confirmFn = typeof globalThis !== 'undefined' && 'confirm' in globalThis
+      ? globalThis.confirm.bind(globalThis)
+      : typeof window !== 'undefined' && 'confirm' in window
+        ? window.confirm.bind(window)
+        : null;
+
+    if (!confirmFn) return true;
+    return confirmFn(message);
   }
 
   private async readFileAsDataUrl(file: File): Promise<string> {
@@ -442,6 +471,22 @@ export class App {
     this.showImageGallery.set(true);
   }
 
+  private syncDefaultSelection(): void {
+    const visible = this.filteredInventory();
+    if (visible.length === 0) return;
+
+    const selectedId = this.inv.selectedCoinId();
+    if (!this.defaultSelectionInitialized) {
+      this.inv.selectCoin(visible[0].id);
+      this.defaultSelectionInitialized = true;
+      return;
+    }
+
+    if (!selectedId || !visible.some(coin => coin.id === selectedId)) {
+      this.inv.selectCoin(visible[0].id);
+    }
+  }
+
   private async hydrateFromStorage(): Promise<void> {
     try {
       await this.inv.hydrate();
@@ -449,11 +494,40 @@ export class App {
       // Database connection failed — connectionError signal is already set,
       // UI will show the error state. App still loads with empty inventory.
     }
+    this.syncDefaultSelection();
     const storedColumns = await this.storageService.get<InventoryColumn[]>(StorageKeys.VisibleColumns);
     if (Array.isArray(storedColumns) && storedColumns.length > 0) {
-      const valid = storedColumns.filter(c => inventoryColumnOrder.includes(c));
-      if (valid.length > 0) this.visibleInventoryColumns.set(valid);
+      const normalized = this.normalizeVisibleColumns(storedColumns);
+      this.visibleInventoryColumns.set(normalized);
     }
+  }
+
+  private normalizeVisibleColumns(columns: InventoryColumn[]): InventoryColumn[] {
+    const order = new Map(inventoryColumnOrder.map((column, index) => [column, index]));
+    const valid = [...new Set(columns.filter((column): column is InventoryColumn => inventoryColumnOrder.includes(column)))];
+
+    if (valid.length === 0) return [...defaultVisibleColumns];
+
+    const preferred = [...new Set([...defaultVisibleColumns, ...valid])];
+    preferred.sort((left, right) => {
+      const leftIndex = order.get(left) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = order.get(right) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+
+    const withYear = preferred.includes('year') ? preferred : ['year', ...preferred];
+    const withMintMark = withYear.includes('mintMark') ? withYear : [...withYear];
+    const yearIndex = withMintMark.indexOf('year');
+    const mintMarkIndex = withMintMark.indexOf('mintMark');
+
+    if (yearIndex >= 0 && mintMarkIndex === -1) {
+      withMintMark.splice(yearIndex + 1, 0, 'mintMark');
+    } else if (yearIndex >= 0 && mintMarkIndex >= 0 && mintMarkIndex !== yearIndex + 1) {
+      withMintMark.splice(mintMarkIndex, 1);
+      withMintMark.splice(yearIndex + 1, 0, 'mintMark');
+    }
+
+    return [...new Set(withMintMark)] as InventoryColumn[];
   }
 
   private persistVisibleColumns(columns: InventoryColumn[]): void {

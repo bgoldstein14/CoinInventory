@@ -2,9 +2,12 @@ import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { of } from 'rxjs';
 import { App } from './app';
 import { CsvService } from './services/csv.service';
 import { CoinRecord } from './types/coin.model';
+import { defaultVisibleColumns } from './types/inventory-columns';
+import { StorageKeys } from './services/storage.service';
 import { createTestInventoryService } from './testing/test-helpers';
 
 /**
@@ -108,6 +111,43 @@ describe('App', () => {
     const results = app['filteredInventory']();
     expect(results).toHaveLength(1);
     expect(results[0].category).toBe('Gold');
+  });
+
+  it('starts with the first visible item selected', () => {
+    const app = createApp();
+    const coin1 = addTestCoin(app, { denomination: 'Quarter', coinType: 'Zebra' });
+    const coin2 = addTestCoin(app, { denomination: 'Dime', coinType: 'Alpha' });
+
+    expect(app['inv'].selectedCoinId()).toBe(coin2.id);
+    expect(app.selectedCoin?.id).toBe(coin2.id);
+    expect(app['filteredInventory']()[0].id).toBe(coin2.id);
+  });
+
+  it('stabilizes the year and mint-mark ordering even when stored columns are stale', async () => {
+    const { inv, storage } = createTestInventoryService();
+    const app = new App(storage, inv, new CsvService());
+    await storage.set(StorageKeys.VisibleColumns, ['coinType', 'year', 'category']);
+    await app['hydrateFromStorage']();
+
+    const visible = app['visibleInventoryColumns']();
+    expect(visible.indexOf('year')).toBeLessThan(visible.indexOf('mintMark'));
+    expect(visible.indexOf('mintMark')).toBe(visible.indexOf('year') + 1);
+  });
+
+  it('falls back to inventory-derived categories when the API returns no category list', async () => {
+    const { inv, storage, mockApiService } = createTestInventoryService();
+    mockApiService.getCoins = vi.fn(() => of([{
+      id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver',
+      country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P',
+      composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: '',
+      imagePaths: [], tags: [], source: 'manual', hasCacSticker: false
+    }]));
+    mockApiService.getCategories = vi.fn(() => of([]));
+
+    const app = new App(storage, inv, new CsvService());
+    await app['hydrateFromStorage']();
+
+    expect(inv.categoryOptions()).toContain('Silver');
   });
 
   it('sorts the inventory table and flips direction on repeat clicks', () => {
@@ -292,18 +332,40 @@ describe('App', () => {
     expect(app['inv'].inventory()[2].category).toBe('');
   });
 
-  it('bulk deletes selected coins', () => {
+  it('requires confirmation before bulk deleting selected coins', () => {
     const app = createApp();
     const coin1 = addTestCoin(app, { denomination: 'Keep' });
     const coin2 = addTestCoin(app, { denomination: 'Delete Me' });
     const coin3 = addTestCoin(app, { denomination: 'Also Delete' });
 
+    vi.stubGlobal('confirm', vi.fn(() => false));
     app['selectedCoinIds'].set(new Set([coin2.id, coin3.id]));
     app['bulkDeleteCoins']();
 
+    expect(app['inv'].inventory()).toHaveLength(3);
+    expect(app['inv'].inventory().map(c => c.id)).toContain(coin1.id);
+    expect(app['inv'].inventory().map(c => c.id)).toContain(coin2.id);
+    expect(app['inv'].inventory().map(c => c.id)).toContain(coin3.id);
+    expect(app['selectionCount']()).toBe(2);
+
+    vi.stubGlobal('confirm', vi.fn(() => true));
+    app['bulkDeleteCoins']();
     expect(app['inv'].inventory()).toHaveLength(1);
     expect(app['inv'].inventory()[0].denomination).toBe('Keep');
     expect(app['selectionCount']()).toBe(0);
+  });
+
+  it('keeps the mint mark column immediately after year by default', () => {
+    const visible = defaultVisibleColumns;
+    expect(visible.indexOf('year')).toBeLessThan(visible.indexOf('mintMark'));
+    expect(visible.indexOf('mintMark')).toBe(visible.indexOf('year') + 1);
+  });
+
+  it('includes the full known metal-content options', () => {
+    const app = createApp();
+    expect(app['metalContentOptions']).toEqual(expect.arrayContaining([
+      'Gold', 'Silver', 'Platinum', 'Copper', 'Nickel', 'Bronze', 'Steel', 'Clad', 'Other'
+    ]));
   });
 
   // --- Advanced filters ---

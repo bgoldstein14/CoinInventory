@@ -17,18 +17,22 @@ import { logInfo, logError } from './logger';
  * Uses Windows Authentication if DB_USER is not set.
  * For named instances (e.g., BRUCE_PC\SQLEXPRESS), port is omitted — SQL Browser handles resolution.
  */
-function buildDbConfig(): sql.config {
+export function buildDbConfig(): sql.config {
   const user = process.env['DB_USER'];
   const useWindowsAuth = !user;
 
-  let server = process.env['DB_SERVER'] ?? 'localhost';
+  let server = (process.env['DB_SERVER'] ?? 'localhost').trim();
   let port = parseInt(process.env['DB_PORT'] ?? '', 10);
 
-  // Handle SSMS-style "server,port" syntax (e.g. "localhost,1433")
-  if (!port && server.includes(',')) {
-    const parts = server.split(',');
-    server = parts[0];
-    port = parseInt(parts[1], 10);
+  // Handle SSMS-style "server,port" syntax (e.g. "localhost,1433") even when
+  // DB_PORT is already set, because some environments persist a comma-suffixed server value.
+  if (server.includes(',')) {
+    const [serverPart, portPart] = server.split(',');
+    server = serverPart.trim();
+    const parsedPort = parseInt(portPart.trim(), 10);
+    if (!Number.isNaN(parsedPort)) {
+      port = parsedPort;
+    }
   }
 
   const config: sql.config = {

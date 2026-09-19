@@ -16,9 +16,13 @@
     </div>
     <div class="modal-body">
       <label class="file-picker">
-        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" />
+        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" [disabled]="parsing() || importing()" />
         Load QIF file
       </label>
+
+      @if (parsing() || importing()) {
+        <div class="hint-text" aria-live="polite"><strong>Working...</strong> Loading Quicken data…</div>
+      }
 
       <textarea
         [ngModel]="quickenText()"

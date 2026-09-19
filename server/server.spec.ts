@@ -51,12 +51,40 @@ vi.mock('mssql', () => {
 
 // Now import the app
 import { app } from './server';
+import { buildDbConfig } from './db';
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockRecordset.length = 0;
   mockRowsAffected[0] = 1;
   mockRequest.query.mockResolvedValue({ recordset: mockRecordset, rowsAffected: mockRowsAffected });
+});
+
+describe('buildDbConfig', () => {
+  it('normalizes SQL Server host/port values when server includes a comma', () => {
+    const previousServer = process.env.DB_SERVER;
+    const previousPort = process.env.DB_PORT;
+    const previousUser = process.env.DB_USER;
+
+    try {
+      process.env.DB_SERVER = 'localhost,1433';
+      process.env.DB_PORT = '1433';
+      delete process.env.DB_USER;
+
+      const config = buildDbConfig();
+      expect(config.server).toBe('localhost');
+      expect(config.port).toBe(1433);
+    } finally {
+      if (previousServer === undefined) delete process.env.DB_SERVER;
+      else process.env.DB_SERVER = previousServer;
+
+      if (previousPort === undefined) delete process.env.DB_PORT;
+      else process.env.DB_PORT = previousPort;
+
+      if (previousUser === undefined) delete process.env.DB_USER;
+      else process.env.DB_USER = previousUser;
+    }
+  });
 });
 
 // ============================================================
@@ -266,6 +294,63 @@ describe('GET /api/categories', () => {
     const res = await request(app).get('/api/categories');
     expect(res.status).toBe(200);
     expect(res.body).toEqual(['Gold', 'Silver']);
+  });
+});
+
+describe('GET /api/denominations', () => {
+  it('returns the frontend-compatible denomination shape', async () => {
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ DenominationId: 1, Label: 'Quarter', Country: 'United States', SortOrder: 1 }],
+    });
+
+    const res = await request(app).get('/api/denominations');
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      denominationId: 1,
+      label: 'Quarter',
+      country: 'United States',
+      isActive: true,
+    });
+  });
+
+  it('falls back to the known US/GB denomination list when the table is empty', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [] });
+
+    const res = await request(app).get('/api/denominations');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '25¢', country: 'US' }),
+      expect.objectContaining({ label: 'Sovereign', country: 'GB' }),
+    ]));
+  });
+});
+
+describe('GET /api/mintmarks', () => {
+  it('returns the frontend-compatible mint mark shape', async () => {
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ MintMarkId: 2, Label: 'D', Description: 'Denver Mint' }],
+    });
+
+    const res = await request(app).get('/api/mintmarks');
+    expect(res.status).toBe(200);
+    expect(res.body[0]).toMatchObject({
+      mintMarkId: 2,
+      label: 'D',
+      description: 'Denver Mint',
+      isActive: true,
+    });
+  });
+
+  it('falls back to the known US/GB mint marks when the table is empty', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [] });
+
+    const res = await request(app).get('/api/mintmarks');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'P', description: 'Philadelphia' }),
+      expect.objectContaining({ label: 'D', description: 'Denver / Dahlonega' }),
+      expect.objectContaining({ label: 'M', description: 'Royal Mint / GB mintmark' }),
+    ]));
   });
 });
 

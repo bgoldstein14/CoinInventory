@@ -13,6 +13,64 @@ import { getPool } from '../db';
 
 const router = Router();
 
+const defaultDenominations = [
+  { denominationId: 1, label: '½¢', country: 'US', sortOrder: 1, isActive: true },
+  { denominationId: 2, label: '1¢', country: 'US', sortOrder: 2, isActive: true },
+  { denominationId: 3, label: '2¢', country: 'US', sortOrder: 3, isActive: true },
+  { denominationId: 4, label: '3CS', country: 'US', sortOrder: 4, isActive: true },
+  { denominationId: 5, label: '3CN', country: 'US', sortOrder: 5, isActive: true },
+  { denominationId: 6, label: '5¢', country: 'US', sortOrder: 6, isActive: true },
+  { denominationId: 7, label: '10¢', country: 'US', sortOrder: 7, isActive: true },
+  { denominationId: 8, label: '20¢', country: 'US', sortOrder: 8, isActive: true },
+  { denominationId: 9, label: '25¢', country: 'US', sortOrder: 9, isActive: true },
+  { denominationId: 10, label: '50¢', country: 'US', sortOrder: 10, isActive: true },
+  { denominationId: 11, label: '$1', country: 'US', sortOrder: 11, isActive: true },
+  { denominationId: 12, label: '$2.50', country: 'US', sortOrder: 12, isActive: true },
+  { denominationId: 13, label: '$3', country: 'US', sortOrder: 13, isActive: true },
+  { denominationId: 14, label: '$5', country: 'US', sortOrder: 14, isActive: true },
+  { denominationId: 15, label: '$10', country: 'US', sortOrder: 15, isActive: true },
+  { denominationId: 16, label: '$20', country: 'US', sortOrder: 16, isActive: true },
+  { denominationId: 17, label: 'Farthing', country: 'GB', sortOrder: 17, isActive: true },
+  { denominationId: 18, label: '½d', country: 'GB', sortOrder: 18, isActive: true },
+  { denominationId: 19, label: '1d', country: 'GB', sortOrder: 19, isActive: true },
+  { denominationId: 20, label: '3d', country: 'GB', sortOrder: 20, isActive: true },
+  { denominationId: 21, label: '6d', country: 'GB', sortOrder: 21, isActive: true },
+  { denominationId: 22, label: '1/-', country: 'GB', sortOrder: 22, isActive: true },
+  { denominationId: 23, label: '2/- (Florin)', country: 'GB', sortOrder: 23, isActive: true },
+  { denominationId: 24, label: '2/6 (Half Crown)', country: 'GB', sortOrder: 24, isActive: true },
+  { denominationId: 25, label: '5/- (Crown)', country: 'GB', sortOrder: 25, isActive: true },
+  { denominationId: 26, label: '½ Sovereign', country: 'GB', sortOrder: 26, isActive: true },
+  { denominationId: 27, label: 'Sovereign', country: 'GB', sortOrder: 27, isActive: true },
+  { denominationId: 28, label: 'Guinea', country: 'GB', sortOrder: 28, isActive: true },
+  { denominationId: 29, label: '½p', country: 'GB', sortOrder: 29, isActive: true },
+  { denominationId: 30, label: '1p', country: 'GB', sortOrder: 30, isActive: true },
+  { denominationId: 31, label: '2p', country: 'GB', sortOrder: 31, isActive: true },
+  { denominationId: 32, label: '5p', country: 'GB', sortOrder: 32, isActive: true },
+  { denominationId: 33, label: '10p', country: 'GB', sortOrder: 33, isActive: true },
+  { denominationId: 34, label: '20p', country: 'GB', sortOrder: 34, isActive: true },
+  { denominationId: 35, label: '50p', country: 'GB', sortOrder: 35, isActive: true },
+  { denominationId: 36, label: '£1', country: 'GB', sortOrder: 36, isActive: true },
+  { denominationId: 37, label: '£2', country: 'GB', sortOrder: 37, isActive: true },
+  { denominationId: 38, label: '£5', country: 'GB', sortOrder: 38, isActive: true },
+];
+
+const defaultMintMarks = [
+  { mintMarkId: 1, label: '', description: 'No mint mark / Philadelphia pre-1980', isActive: true },
+  { mintMarkId: 2, label: 'P', description: 'Philadelphia', isActive: true },
+  { mintMarkId: 3, label: 'D', description: 'Denver / Dahlonega', isActive: true },
+  { mintMarkId: 4, label: 'S', description: 'San Francisco', isActive: true },
+  { mintMarkId: 5, label: 'W', description: 'West Point', isActive: true },
+  { mintMarkId: 6, label: 'O', description: 'New Orleans', isActive: true },
+  { mintMarkId: 7, label: 'CC', description: 'Carson City', isActive: true },
+  { mintMarkId: 8, label: 'C', description: 'Charlotte', isActive: true },
+  { mintMarkId: 9, label: 'M', description: 'Royal Mint / GB mintmark', isActive: true },
+  { mintMarkId: 10, label: 'F', description: 'Birmingham / GB mintmark', isActive: true },
+  { mintMarkId: 11, label: 'R', description: 'UK mint mark / rare issue', isActive: true },
+  { mintMarkId: 12, label: 'H', description: 'Heaton / GB mintmark', isActive: true },
+  { mintMarkId: 13, label: 'A', description: 'Additional / alternate mintmark', isActive: true },
+  { mintMarkId: 14, label: 'Other', description: 'Catch-all for nonstandard marks', isActive: true },
+];
+
 // ============================================================
 // Categories — /api/categories
 // ============================================================
@@ -155,13 +213,14 @@ router.get('/denominations', async (_req: Request, res: Response) => {
       .query('SELECT DenominationId, Label, Country, SortOrder FROM Denominations WHERE IsActive = 1 ORDER BY Country, SortOrder');
 
     const denominations = result.recordset.map((row) => ({
-      id: row['DenominationId'],
+      denominationId: row['DenominationId'],
       label: row['Label'],
       country: row['Country'],
       sortOrder: row['SortOrder'],
+      isActive: true,
     }));
 
-    res.json(denominations);
+    res.json(denominations.length > 0 ? denominations : defaultDenominations);
   } catch (err) {
     logError('GET /api/denominations error', err);
     res.status(500).json({ error: 'Failed to retrieve denominations' });
@@ -191,7 +250,13 @@ router.post('/denominations', async (req: Request, res: Response) => {
 
     const id = result.recordset[0]['DenominationId'];
     logInfo(`Denomination created with ID: ${id}`);
-    res.status(201).json({ id, label: label.trim(), country, sortOrder: sortOrder ?? 0 });
+    res.status(201).json({
+      denominationId: id,
+      label: label.trim(),
+      country,
+      sortOrder: sortOrder ?? 0,
+      isActive: true,
+    });
   } catch (err) {
     logError('POST /api/denominations error', err);
     res.status(500).json({ error: 'Failed to create denomination' });
@@ -228,7 +293,13 @@ router.put('/denominations/:id', async (req: Request, res: Response) => {
     }
 
     logInfo(`Denomination ${id} updated successfully`);
-    res.json({ id, label: label.trim(), country, sortOrder: sortOrder ?? 0 });
+    res.json({
+      denominationId: parseInt(id, 10),
+      label: label.trim(),
+      country,
+      sortOrder: sortOrder ?? 0,
+      isActive: true,
+    });
   } catch (err) {
     logError('PUT /api/denominations/:id error', err);
     res.status(500).json({ error: 'Failed to update denomination' });
@@ -271,12 +342,13 @@ router.get('/mintmarks', async (_req: Request, res: Response) => {
       .query('SELECT MintMarkId, Label, Description FROM MintMarks WHERE IsActive = 1 ORDER BY Label');
 
     const mintmarks = result.recordset.map((row) => ({
-      id: row['MintMarkId'],
+      mintMarkId: row['MintMarkId'],
       label: row['Label'],
       description: row['Description'] ?? '',
+      isActive: true,
     }));
 
-    res.json(mintmarks);
+    res.json(mintmarks.length > 0 ? mintmarks : defaultMintMarks);
   } catch (err) {
     logError('GET /api/mintmarks error', err);
     res.status(500).json({ error: 'Failed to retrieve mint marks' });
@@ -305,7 +377,12 @@ router.post('/mintmarks', async (req: Request, res: Response) => {
 
     const id = result.recordset[0]['MintMarkId'];
     logInfo(`Mint mark created with ID: ${id}`);
-    res.status(201).json({ id, label: label.trim(), description });
+    res.status(201).json({
+      mintMarkId: id,
+      label: label.trim(),
+      description,
+      isActive: true,
+    });
   } catch (err) {
     logError('POST /api/mintmarks error', err);
     res.status(500).json({ error: 'Failed to create mint mark' });
@@ -341,7 +418,12 @@ router.put('/mintmarks/:id', async (req: Request, res: Response) => {
     }
 
     logInfo(`Mint mark ${id} updated successfully`);
-    res.json({ id, label: label.trim(), description });
+    res.json({
+      mintMarkId: parseInt(id, 10),
+      label: label.trim(),
+      description,
+      isActive: true,
+    });
   } catch (err) {
     logError('PUT /api/mintmarks/:id error', err);
     res.status(500).json({ error: 'Failed to update mint mark' });

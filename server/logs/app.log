@@ -878,3 +878,944 @@ ConnectionError: Login failed for user ''.
 [2026-08-30T20:07:08.414Z] [INFO] Fetching active mint marks
 [2026-08-30T20:07:08.445Z] [INFO] POST /log
 [2026-08-30T20:07:08.446Z] [INFO] [frontend] Database hydration complete
+[2026-09-19T15:49:30.513Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T15:49:30.514Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T15:49:33.659Z] [INFO] POST /log
+[2026-09-19T15:49:33.660Z] [INFO] [frontend] Starting inventory hydration
+[2026-09-19T15:49:33.661Z] [INFO] GET /coins
+[2026-09-19T15:49:33.661Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T15:49:33.662Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T15:49:33.738Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T15:49:33.779Z] [INFO] Retrieved 5 coins
+[2026-09-19T15:49:33.783Z] [INFO] POST /log
+[2026-09-19T15:49:33.783Z] [INFO] [frontend] Successfully loaded 5 coins from database
+[2026-09-19T15:49:33.785Z] [INFO] GET /categories
+[2026-09-19T15:49:33.785Z] [INFO] Fetching categories
+[2026-09-19T15:49:33.785Z] [INFO] GET /coin-sets
+[2026-09-19T15:49:33.786Z] [INFO] Fetching coin sets
+[2026-09-19T15:49:33.786Z] [INFO] GET /denominations
+[2026-09-19T15:49:33.786Z] [INFO] Fetching active denominations
+[2026-09-19T15:49:33.788Z] [INFO] GET /transactions
+[2026-09-19T15:49:33.788Z] [INFO] Fetching transactions
+[2026-09-19T15:49:33.788Z] [INFO] GET /mintmarks
+[2026-09-19T15:49:33.789Z] [INFO] Fetching active mint marks
+[2026-09-19T15:49:33.818Z] [INFO] POST /log
+[2026-09-19T15:49:33.818Z] [INFO] [frontend] Database hydration complete
+[2026-09-19T15:57:01.897Z] [INFO] GET /coins
+[2026-09-19T15:57:01.898Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T15:57:01.899Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T15:57:01.899Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T15:57:01.900Z] [INFO] Retrieved 0 coins
+[2026-09-19T15:57:01.906Z] [INFO] GET /coins
+[2026-09-19T15:57:01.906Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T15:57:01.907Z] [INFO] Retrieved 1 coins
+[2026-09-19T15:57:01.910Z] [INFO] GET /coins/nonexistent
+[2026-09-19T15:57:01.910Z] [INFO] Fetching coin nonexistent
+[2026-09-19T15:57:01.911Z] [WARN] Coin not found: nonexistent
+[2026-09-19T15:57:01.913Z] [INFO] GET /coins/xyz-789
+[2026-09-19T15:57:01.914Z] [INFO] Fetching coin xyz-789
+[2026-09-19T15:57:01.923Z] [INFO] POST /coins
+[2026-09-19T15:57:01.927Z] [INFO] POST /coins
+[2026-09-19T15:57:01.927Z] [INFO] Creating new coin test-id
+[2026-09-19T15:57:01.927Z] [INFO] Coin test-id created successfully
+[2026-09-19T15:57:01.930Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T15:57:01.930Z] [INFO] Updating coin nonexistent
+[2026-09-19T15:57:01.930Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T15:57:01.933Z] [INFO] PUT /coins/abc-123
+[2026-09-19T15:57:01.933Z] [INFO] Updating coin abc-123
+[2026-09-19T15:57:01.933Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T15:57:01.936Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T15:57:01.936Z] [INFO] Deleting coin nonexistent
+[2026-09-19T15:57:01.936Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T15:57:01.939Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T15:57:01.940Z] [INFO] Deleting coin abc-123
+[2026-09-19T15:57:01.940Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T15:57:01.942Z] [INFO] GET /categories
+[2026-09-19T15:57:01.943Z] [INFO] Fetching categories
+[2026-09-19T15:57:01.945Z] [INFO] POST /categories
+[2026-09-19T15:57:01.945Z] [INFO] Adding category: undefined
+[2026-09-19T15:57:01.948Z] [INFO] POST /categories
+[2026-09-19T15:57:01.948Z] [INFO] Adding category: Platinum
+[2026-09-19T15:57:01.950Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T15:57:01.950Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T15:57:01.951Z] [WARN] Category not found: Nonexistent
+[2026-09-19T15:57:01.953Z] [INFO] GET /coin-sets
+[2026-09-19T15:57:01.953Z] [INFO] Fetching coin sets
+[2026-09-19T15:57:01.957Z] [INFO] POST /coin-sets
+[2026-09-19T15:57:01.958Z] [INFO] Adding coin set: undefined
+[2026-09-19T15:57:01.960Z] [INFO] POST /coin-sets
+[2026-09-19T15:57:01.960Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T15:57:01.963Z] [INFO] GET /transactions
+[2026-09-19T15:57:01.963Z] [INFO] Fetching transactions
+[2026-09-19T15:57:01.966Z] [INFO] GET /transactions
+[2026-09-19T15:57:01.966Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T15:57:01.968Z] [INFO] POST /transactions
+[2026-09-19T15:57:01.969Z] [INFO] Creating transaction 2e2fb524-1a3c-4dc8-886e-c472bcd2cefa for coin undefined
+[2026-09-19T15:57:01.972Z] [INFO] POST /transactions
+[2026-09-19T15:57:01.972Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T15:57:01.972Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T15:57:01.974Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T15:57:01.975Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T15:57:01.975Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T15:57:01.977Z] [INFO] GET /spot-prices/latest
+[2026-09-19T15:57:01.978Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T15:57:01.980Z] [INFO] GET /spot-prices/latest
+[2026-09-19T15:57:01.980Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T15:57:01.982Z] [INFO] POST /spot-prices
+[2026-09-19T15:57:01.982Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T15:57:01.984Z] [INFO] GET /settings/nonexistent
+[2026-09-19T15:57:01.984Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T15:57:01.985Z] [WARN] Setting not found: nonexistent
+[2026-09-19T15:57:01.988Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T15:57:01.988Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T15:57:01.991Z] [INFO] GET /settings/theme
+[2026-09-19T15:57:01.991Z] [INFO] Fetching setting: theme
+[2026-09-19T15:57:01.993Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T15:57:01.993Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T15:58:20.700Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T15:58:20.701Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T15:58:46.093Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T15:58:46.094Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:00:17.783Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:00:17.784Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:00:26.072Z] [INFO] GET /coins
+[2026-09-19T16:00:26.072Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:00:26.073Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:00:26.206Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:00:26.226Z] [INFO] Retrieved 5 coins
+[2026-09-19T16:00:26.231Z] [INFO] GET /categories
+[2026-09-19T16:00:26.231Z] [INFO] Fetching categories
+[2026-09-19T16:00:26.234Z] [INFO] GET /coin-sets
+[2026-09-19T16:00:26.234Z] [INFO] Fetching coin sets
+[2026-09-19T16:00:26.235Z] [INFO] GET /transactions
+[2026-09-19T16:00:26.235Z] [INFO] Fetching transactions
+[2026-09-19T16:00:26.235Z] [INFO] GET /denominations
+[2026-09-19T16:00:26.236Z] [INFO] Fetching active denominations
+[2026-09-19T16:00:26.237Z] [INFO] GET /mintmarks
+[2026-09-19T16:00:26.238Z] [INFO] Fetching active mint marks
+[2026-09-19T16:02:41.565Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:02:41.565Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:03:47.492Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:03:47.493Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:04:40.047Z] [INFO] GET /coins
+[2026-09-19T16:04:40.048Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:04:40.048Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:04:40.144Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:04:40.174Z] [INFO] Retrieved 5 coins
+[2026-09-19T16:04:40.214Z] [INFO] GET /categories
+[2026-09-19T16:04:40.214Z] [INFO] Fetching categories
+[2026-09-19T16:04:40.217Z] [INFO] GET /coin-sets
+[2026-09-19T16:04:40.217Z] [INFO] Fetching coin sets
+[2026-09-19T16:04:40.218Z] [INFO] GET /transactions
+[2026-09-19T16:04:40.218Z] [INFO] Fetching transactions
+[2026-09-19T16:04:40.221Z] [INFO] GET /denominations
+[2026-09-19T16:04:40.221Z] [INFO] Fetching active denominations
+[2026-09-19T16:04:40.224Z] [INFO] GET /mintmarks
+[2026-09-19T16:04:40.225Z] [INFO] Fetching active mint marks
+[2026-09-19T16:04:54.051Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:04:54.052Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:05:19.255Z] [INFO] GET /coins
+[2026-09-19T16:05:19.256Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:05:19.257Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:05:19.350Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:05:19.376Z] [INFO] Retrieved 5 coins
+[2026-09-19T16:05:19.436Z] [INFO] GET /categories
+[2026-09-19T16:05:19.437Z] [INFO] Fetching categories
+[2026-09-19T16:05:19.438Z] [INFO] GET /coin-sets
+[2026-09-19T16:05:19.439Z] [INFO] Fetching coin sets
+[2026-09-19T16:05:19.439Z] [INFO] GET /transactions
+[2026-09-19T16:05:19.439Z] [INFO] Fetching transactions
+[2026-09-19T16:05:19.442Z] [INFO] GET /denominations
+[2026-09-19T16:05:19.442Z] [INFO] Fetching active denominations
+[2026-09-19T16:05:19.442Z] [INFO] GET /mintmarks
+[2026-09-19T16:05:19.442Z] [INFO] Fetching active mint marks
+[2026-09-19T16:05:23.084Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:05:23.085Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:05:47.501Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:05:47.501Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:05:50.087Z] [INFO] GET /coins
+[2026-09-19T16:05:50.088Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:05:50.088Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:05:50.177Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:05:50.200Z] [INFO] Retrieved 5 coins
+[2026-09-19T16:05:50.216Z] [INFO] GET /categories
+[2026-09-19T16:05:50.216Z] [INFO] Fetching categories
+[2026-09-19T16:05:50.218Z] [INFO] GET /coin-sets
+[2026-09-19T16:05:50.219Z] [INFO] Fetching coin sets
+[2026-09-19T16:05:50.221Z] [INFO] GET /transactions
+[2026-09-19T16:05:50.221Z] [INFO] Fetching transactions
+[2026-09-19T16:05:50.223Z] [INFO] GET /denominations
+[2026-09-19T16:05:50.224Z] [INFO] Fetching active denominations
+[2026-09-19T16:05:50.224Z] [INFO] GET /mintmarks
+[2026-09-19T16:05:50.224Z] [INFO] Fetching active mint marks
+[2026-09-19T16:06:56.208Z] [INFO] POST /coins
+[2026-09-19T16:06:56.209Z] [INFO] Creating new coin f1c1ea70-ed51-498e-ad9f-71d21272ae2d
+[2026-09-19T16:06:56.210Z] [INFO] POST /coins
+[2026-09-19T16:06:56.210Z] [INFO] Creating new coin 9e75960f-5a40-408c-8bfd-d071cd7da489
+[2026-09-19T16:06:56.211Z] [INFO] POST /coins
+[2026-09-19T16:06:56.211Z] [INFO] Creating new coin 0a847316-a831-4fdc-94f9-a42dc6df155b
+[2026-09-19T16:06:56.211Z] [INFO] POST /coins
+[2026-09-19T16:06:56.211Z] [INFO] Creating new coin bb6c293b-56d8-458e-ac56-3417db3d3fc4
+[2026-09-19T16:06:56.212Z] [INFO] POST /coins
+[2026-09-19T16:06:56.212Z] [INFO] Creating new coin 3556c1f5-6a11-4fbc-a6c4-02093a6020fd
+[2026-09-19T16:06:56.213Z] [INFO] POST /coins
+[2026-09-19T16:06:56.213Z] [INFO] Creating new coin 0abd8254-bf06-41c4-8611-dcabbb6405b4
+[2026-09-19T16:06:56.316Z] [INFO] Coin 0abd8254-bf06-41c4-8611-dcabbb6405b4 created successfully
+[2026-09-19T16:06:56.317Z] [INFO] Coin 9e75960f-5a40-408c-8bfd-d071cd7da489 created successfully
+[2026-09-19T16:06:56.318Z] [INFO] Coin f1c1ea70-ed51-498e-ad9f-71d21272ae2d created successfully
+[2026-09-19T16:06:56.319Z] [INFO] Coin 3556c1f5-6a11-4fbc-a6c4-02093a6020fd created successfully
+[2026-09-19T16:06:56.319Z] [INFO] Coin 0a847316-a831-4fdc-94f9-a42dc6df155b created successfully
+[2026-09-19T16:06:56.320Z] [INFO] Coin bb6c293b-56d8-458e-ac56-3417db3d3fc4 created successfully
+[2026-09-19T16:06:56.321Z] [INFO] POST /coins
+[2026-09-19T16:06:56.321Z] [INFO] Creating new coin 50fc511d-152c-4512-be9a-987200d506eb
+[2026-09-19T16:06:56.321Z] [INFO] POST /coins
+[2026-09-19T16:06:56.321Z] [INFO] Creating new coin 35a51ceb-4b53-464d-bf50-facea30f7955
+[2026-09-19T16:06:56.322Z] [INFO] POST /coins
+[2026-09-19T16:06:56.322Z] [INFO] Creating new coin efc7011f-b11e-41ae-93d1-7787afe1b4a1
+[2026-09-19T16:06:56.323Z] [INFO] POST /coins
+[2026-09-19T16:06:56.323Z] [INFO] Creating new coin 75a0b0e3-f0af-484d-9b56-6b7686da8c97
+[2026-09-19T16:06:56.323Z] [INFO] POST /coins
+[2026-09-19T16:06:56.324Z] [INFO] Creating new coin 03fd785c-52b1-42a6-872b-be1a21835135
+[2026-09-19T16:06:56.324Z] [INFO] POST /coins
+[2026-09-19T16:06:56.324Z] [INFO] Creating new coin 561367b7-836f-4607-9fca-2aa48f9b4a8e
+[2026-09-19T16:06:56.332Z] [INFO] Coin 50fc511d-152c-4512-be9a-987200d506eb created successfully
+[2026-09-19T16:06:56.333Z] [INFO] Coin efc7011f-b11e-41ae-93d1-7787afe1b4a1 created successfully
+[2026-09-19T16:06:56.333Z] [INFO] Coin 35a51ceb-4b53-464d-bf50-facea30f7955 created successfully
+[2026-09-19T16:06:56.334Z] [INFO] Coin 03fd785c-52b1-42a6-872b-be1a21835135 created successfully
+[2026-09-19T16:06:56.334Z] [INFO] Coin 75a0b0e3-f0af-484d-9b56-6b7686da8c97 created successfully
+[2026-09-19T16:06:56.335Z] [INFO] Coin 561367b7-836f-4607-9fca-2aa48f9b4a8e created successfully
+[2026-09-19T16:06:56.335Z] [INFO] POST /coins
+[2026-09-19T16:06:56.335Z] [INFO] Creating new coin 1d0da4e1-86e6-4d4d-8480-85fd4aa29a67
+[2026-09-19T16:06:56.336Z] [INFO] POST /coins
+[2026-09-19T16:06:56.336Z] [INFO] Creating new coin 8a568eac-4ef1-4bdc-8401-846c78487b9c
+[2026-09-19T16:06:56.336Z] [INFO] POST /coins
+[2026-09-19T16:06:56.337Z] [INFO] Creating new coin df09e93f-865a-45c0-9486-f7ae351b2a63
+[2026-09-19T16:06:56.338Z] [INFO] POST /coins
+[2026-09-19T16:06:56.338Z] [INFO] Creating new coin 110946ca-fc67-452e-8613-1f19dcdd8903
+[2026-09-19T16:06:56.342Z] [INFO] Coin 1d0da4e1-86e6-4d4d-8480-85fd4aa29a67 created successfully
+[2026-09-19T16:06:56.343Z] [INFO] Coin 8a568eac-4ef1-4bdc-8401-846c78487b9c created successfully
+[2026-09-19T16:06:56.344Z] [INFO] Coin df09e93f-865a-45c0-9486-f7ae351b2a63 created successfully
+[2026-09-19T16:06:56.344Z] [INFO] Coin 110946ca-fc67-452e-8613-1f19dcdd8903 created successfully
+[2026-09-19T16:07:52.159Z] [INFO] GET /coins
+[2026-09-19T16:07:52.160Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:07:52.245Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:07:52.297Z] [INFO] GET /categories
+[2026-09-19T16:07:52.297Z] [INFO] Fetching categories
+[2026-09-19T16:07:52.299Z] [INFO] GET /coin-sets
+[2026-09-19T16:07:52.300Z] [INFO] Fetching coin sets
+[2026-09-19T16:07:52.301Z] [INFO] GET /denominations
+[2026-09-19T16:07:52.301Z] [INFO] Fetching active denominations
+[2026-09-19T16:07:52.304Z] [INFO] GET /transactions
+[2026-09-19T16:07:52.304Z] [INFO] Fetching transactions
+[2026-09-19T16:07:52.306Z] [INFO] GET /mintmarks
+[2026-09-19T16:07:52.306Z] [INFO] Fetching active mint marks
+[2026-09-19T16:07:52.320Z] [INFO] GET /coins
+[2026-09-19T16:07:52.321Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:07:52.328Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:07:52.436Z] [INFO] GET /categories
+[2026-09-19T16:07:52.436Z] [INFO] Fetching categories
+[2026-09-19T16:07:52.438Z] [INFO] GET /coin-sets
+[2026-09-19T16:07:52.438Z] [INFO] Fetching coin sets
+[2026-09-19T16:07:52.439Z] [INFO] GET /transactions
+[2026-09-19T16:07:52.439Z] [INFO] Fetching transactions
+[2026-09-19T16:07:52.439Z] [INFO] GET /denominations
+[2026-09-19T16:07:52.440Z] [INFO] Fetching active denominations
+[2026-09-19T16:07:52.441Z] [INFO] GET /mintmarks
+[2026-09-19T16:07:52.441Z] [INFO] Fetching active mint marks
+[2026-09-19T16:08:01.484Z] [INFO] GET /coins
+[2026-09-19T16:08:01.484Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:08:01.488Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:08:01.602Z] [INFO] GET /categories
+[2026-09-19T16:08:01.602Z] [INFO] Fetching categories
+[2026-09-19T16:08:01.604Z] [INFO] GET /coin-sets
+[2026-09-19T16:08:01.605Z] [INFO] Fetching coin sets
+[2026-09-19T16:08:01.607Z] [INFO] GET /transactions
+[2026-09-19T16:08:01.607Z] [INFO] Fetching transactions
+[2026-09-19T16:08:01.609Z] [INFO] GET /denominations
+[2026-09-19T16:08:01.609Z] [INFO] Fetching active denominations
+[2026-09-19T16:08:01.609Z] [INFO] GET /mintmarks
+[2026-09-19T16:08:01.610Z] [INFO] Fetching active mint marks
+[2026-09-19T16:08:04.561Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:08:04.561Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:08:16.811Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:08:16.812Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:08:21.697Z] [INFO] GET /coins
+[2026-09-19T16:08:21.697Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:08:21.698Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:08:21.742Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:08:21.763Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:08:21.796Z] [INFO] GET /categories
+[2026-09-19T16:08:21.796Z] [INFO] Fetching categories
+[2026-09-19T16:08:21.800Z] [INFO] GET /coin-sets
+[2026-09-19T16:08:21.800Z] [INFO] Fetching coin sets
+[2026-09-19T16:08:21.800Z] [INFO] GET /transactions
+[2026-09-19T16:08:21.801Z] [INFO] Fetching transactions
+[2026-09-19T16:08:21.802Z] [INFO] GET /denominations
+[2026-09-19T16:08:21.802Z] [INFO] Fetching active denominations
+[2026-09-19T16:08:21.803Z] [INFO] GET /mintmarks
+[2026-09-19T16:08:21.803Z] [INFO] Fetching active mint marks
+[2026-09-19T16:08:55.839Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:08:55.839Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:09:58.126Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:09:58.127Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:12:21.733Z] [INFO] GET /coins
+[2026-09-19T16:12:21.734Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:12:21.734Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:12:21.783Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:12:21.806Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:12:21.847Z] [INFO] GET /categories
+[2026-09-19T16:12:21.848Z] [INFO] Fetching categories
+[2026-09-19T16:12:21.851Z] [INFO] GET /coin-sets
+[2026-09-19T16:12:21.852Z] [INFO] Fetching coin sets
+[2026-09-19T16:12:21.852Z] [INFO] GET /transactions
+[2026-09-19T16:12:21.853Z] [INFO] Fetching transactions
+[2026-09-19T16:12:21.856Z] [INFO] GET /denominations
+[2026-09-19T16:12:21.856Z] [INFO] Fetching active denominations
+[2026-09-19T16:12:21.856Z] [INFO] GET /mintmarks
+[2026-09-19T16:12:21.857Z] [INFO] Fetching active mint marks
+[2026-09-19T16:12:45.043Z] [INFO] GET /coins
+[2026-09-19T16:12:45.043Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:12:45.049Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:12:45.141Z] [INFO] GET /categories
+[2026-09-19T16:12:45.141Z] [INFO] Fetching categories
+[2026-09-19T16:12:45.143Z] [INFO] GET /coin-sets
+[2026-09-19T16:12:45.144Z] [INFO] Fetching coin sets
+[2026-09-19T16:12:45.145Z] [INFO] GET /transactions
+[2026-09-19T16:12:45.146Z] [INFO] Fetching transactions
+[2026-09-19T16:12:45.148Z] [INFO] GET /denominations
+[2026-09-19T16:12:45.148Z] [INFO] Fetching active denominations
+[2026-09-19T16:12:45.148Z] [INFO] GET /mintmarks
+[2026-09-19T16:12:45.149Z] [INFO] Fetching active mint marks
+[2026-09-19T16:12:59.394Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:12:59.394Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:13:23.961Z] [INFO] GET /coins
+[2026-09-19T16:13:23.962Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:13:23.962Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:13:24.015Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:13:24.041Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:13:24.077Z] [INFO] GET /categories
+[2026-09-19T16:13:24.078Z] [INFO] Fetching categories
+[2026-09-19T16:13:24.083Z] [INFO] GET /coin-sets
+[2026-09-19T16:13:24.084Z] [INFO] Fetching coin sets
+[2026-09-19T16:13:24.084Z] [INFO] GET /transactions
+[2026-09-19T16:13:24.085Z] [INFO] Fetching transactions
+[2026-09-19T16:13:24.088Z] [INFO] GET /denominations
+[2026-09-19T16:13:24.088Z] [INFO] Fetching active denominations
+[2026-09-19T16:13:24.089Z] [INFO] GET /mintmarks
+[2026-09-19T16:13:24.089Z] [INFO] Fetching active mint marks
+[2026-09-19T16:14:26.652Z] [INFO] GET /coins
+[2026-09-19T16:14:26.653Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:14:26.691Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:14:26.771Z] [INFO] GET /categories
+[2026-09-19T16:14:26.772Z] [INFO] Fetching categories
+[2026-09-19T16:14:26.774Z] [INFO] GET /coin-sets
+[2026-09-19T16:14:26.774Z] [INFO] Fetching coin sets
+[2026-09-19T16:14:26.775Z] [INFO] GET /transactions
+[2026-09-19T16:14:26.775Z] [INFO] Fetching transactions
+[2026-09-19T16:14:26.778Z] [INFO] GET /denominations
+[2026-09-19T16:14:26.778Z] [INFO] Fetching active denominations
+[2026-09-19T16:14:26.779Z] [INFO] GET /mintmarks
+[2026-09-19T16:14:26.779Z] [INFO] Fetching active mint marks
+[2026-09-19T16:16:49.865Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:16:49.866Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:22:46.690Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:22:46.691Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:22:54.907Z] [INFO] GET /coins
+[2026-09-19T16:22:54.908Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:22:54.908Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:22:55.036Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:22:55.057Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:22:55.061Z] [INFO] GET /categories
+[2026-09-19T16:22:55.062Z] [INFO] Fetching categories
+[2026-09-19T16:22:55.063Z] [INFO] GET /coin-sets
+[2026-09-19T16:22:55.063Z] [INFO] Fetching coin sets
+[2026-09-19T16:22:55.064Z] [INFO] GET /transactions
+[2026-09-19T16:22:55.065Z] [INFO] Fetching transactions
+[2026-09-19T16:22:55.065Z] [INFO] GET /denominations
+[2026-09-19T16:22:55.065Z] [INFO] Fetching active denominations
+[2026-09-19T16:22:55.068Z] [INFO] GET /mintmarks
+[2026-09-19T16:22:55.068Z] [INFO] Fetching active mint marks
+[2026-09-19T16:23:12.592Z] [INFO] GET /coins
+[2026-09-19T16:23:12.593Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:23:12.602Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:23:12.690Z] [INFO] GET /categories
+[2026-09-19T16:23:12.691Z] [INFO] Fetching categories
+[2026-09-19T16:23:12.692Z] [INFO] GET /coin-sets
+[2026-09-19T16:23:12.693Z] [INFO] Fetching coin sets
+[2026-09-19T16:23:12.696Z] [INFO] GET /transactions
+[2026-09-19T16:23:12.696Z] [INFO] Fetching transactions
+[2026-09-19T16:23:12.696Z] [INFO] GET /denominations
+[2026-09-19T16:23:12.697Z] [INFO] Fetching active denominations
+[2026-09-19T16:23:12.699Z] [INFO] GET /mintmarks
+[2026-09-19T16:23:12.699Z] [INFO] Fetching active mint marks
+[2026-09-19T16:23:47.923Z] [INFO] DELETE /coins/0A847316-A831-4FDC-94F9-A42DC6DF155B
+[2026-09-19T16:23:47.924Z] [INFO] Deleting coin 0A847316-A831-4FDC-94F9-A42DC6DF155B
+[2026-09-19T16:23:47.925Z] [INFO] DELETE /coins/EFC7011F-B11E-41AE-93D1-7787AFE1B4A1
+[2026-09-19T16:23:47.925Z] [INFO] Deleting coin EFC7011F-B11E-41AE-93D1-7787AFE1B4A1
+[2026-09-19T16:23:47.926Z] [INFO] DELETE /coins/BB6C293B-56D8-458E-AC56-3417DB3D3FC4
+[2026-09-19T16:23:47.927Z] [INFO] Deleting coin BB6C293B-56D8-458E-AC56-3417DB3D3FC4
+[2026-09-19T16:23:47.927Z] [INFO] DELETE /coins/35A51CEB-4B53-464D-BF50-FACEA30F7955
+[2026-09-19T16:23:47.927Z] [INFO] Deleting coin 35A51CEB-4B53-464D-BF50-FACEA30F7955
+[2026-09-19T16:23:47.928Z] [INFO] DELETE /coins/03FD785C-52B1-42A6-872B-BE1A21835135
+[2026-09-19T16:23:47.928Z] [INFO] Deleting coin 03FD785C-52B1-42A6-872B-BE1A21835135
+[2026-09-19T16:23:47.930Z] [INFO] DELETE /coins/561367B7-836F-4607-9FCA-2AA48F9B4A8E
+[2026-09-19T16:23:47.930Z] [INFO] Deleting coin 561367B7-836F-4607-9FCA-2AA48F9B4A8E
+[2026-09-19T16:23:48.022Z] [INFO] Coin BB6C293B-56D8-458E-AC56-3417DB3D3FC4 deleted successfully
+[2026-09-19T16:23:48.023Z] [INFO] Coin 35A51CEB-4B53-464D-BF50-FACEA30F7955 deleted successfully
+[2026-09-19T16:23:48.024Z] [INFO] Coin 0A847316-A831-4FDC-94F9-A42DC6DF155B deleted successfully
+[2026-09-19T16:23:48.025Z] [INFO] Coin 03FD785C-52B1-42A6-872B-BE1A21835135 deleted successfully
+[2026-09-19T16:23:48.025Z] [INFO] DELETE /coins/3556C1F5-6A11-4FBC-A6C4-02093A6020FD
+[2026-09-19T16:23:48.026Z] [INFO] Deleting coin 3556C1F5-6A11-4FBC-A6C4-02093A6020FD
+[2026-09-19T16:23:48.026Z] [INFO] Coin 561367B7-836F-4607-9FCA-2AA48F9B4A8E deleted successfully
+[2026-09-19T16:23:48.027Z] [INFO] Coin EFC7011F-B11E-41AE-93D1-7787AFE1B4A1 deleted successfully
+[2026-09-19T16:23:48.028Z] [INFO] DELETE /coins/0ABD8254-BF06-41C4-8611-DCABBB6405B4
+[2026-09-19T16:23:48.028Z] [INFO] Deleting coin 0ABD8254-BF06-41C4-8611-DCABBB6405B4
+[2026-09-19T16:23:48.028Z] [INFO] DELETE /coins/9E75960F-5A40-408C-8BFD-D071CD7DA489
+[2026-09-19T16:23:48.029Z] [INFO] Deleting coin 9E75960F-5A40-408C-8BFD-D071CD7DA489
+[2026-09-19T16:23:48.029Z] [INFO] DELETE /coins/8A568EAC-4EF1-4BDC-8401-846C78487B9C
+[2026-09-19T16:23:48.029Z] [INFO] Deleting coin 8A568EAC-4EF1-4BDC-8401-846C78487B9C
+[2026-09-19T16:23:48.029Z] [INFO] DELETE /coins/110946CA-FC67-452E-8613-1F19DCDD8903
+[2026-09-19T16:23:48.030Z] [INFO] Deleting coin 110946CA-FC67-452E-8613-1F19DCDD8903
+[2026-09-19T16:23:48.031Z] [INFO] DELETE /coins/DF09E93F-865A-45C0-9486-F7AE351B2A63
+[2026-09-19T16:23:48.031Z] [INFO] Deleting coin DF09E93F-865A-45C0-9486-F7AE351B2A63
+[2026-09-19T16:23:48.033Z] [INFO] Coin 3556C1F5-6A11-4FBC-A6C4-02093A6020FD deleted successfully
+[2026-09-19T16:23:48.034Z] [INFO] Coin 0ABD8254-BF06-41C4-8611-DCABBB6405B4 deleted successfully
+[2026-09-19T16:23:48.034Z] [INFO] Coin 9E75960F-5A40-408C-8BFD-D071CD7DA489 deleted successfully
+[2026-09-19T16:23:48.035Z] [INFO] Coin 8A568EAC-4EF1-4BDC-8401-846C78487B9C deleted successfully
+[2026-09-19T16:23:48.036Z] [INFO] Coin 110946CA-FC67-452E-8613-1F19DCDD8903 deleted successfully
+[2026-09-19T16:23:48.036Z] [INFO] DELETE /coins/1D0DA4E1-86E6-4D4D-8480-85FD4AA29A67
+[2026-09-19T16:23:48.037Z] [INFO] Deleting coin 1D0DA4E1-86E6-4D4D-8480-85FD4AA29A67
+[2026-09-19T16:23:48.037Z] [INFO] DELETE /coins/75A0B0E3-F0AF-484D-9B56-6B7686DA8C97
+[2026-09-19T16:23:48.037Z] [INFO] Deleting coin 75A0B0E3-F0AF-484D-9B56-6B7686DA8C97
+[2026-09-19T16:23:48.037Z] [INFO] DELETE /coins/F1C1EA70-ED51-498E-AD9F-71D21272AE2D
+[2026-09-19T16:23:48.038Z] [INFO] Deleting coin F1C1EA70-ED51-498E-AD9F-71D21272AE2D
+[2026-09-19T16:23:48.038Z] [INFO] Coin DF09E93F-865A-45C0-9486-F7AE351B2A63 deleted successfully
+[2026-09-19T16:23:48.039Z] [INFO] DELETE /coins/50FC511D-152C-4512-BE9A-987200D506EB
+[2026-09-19T16:23:48.039Z] [INFO] Deleting coin 50FC511D-152C-4512-BE9A-987200D506EB
+[2026-09-19T16:23:48.041Z] [INFO] Coin 1D0DA4E1-86E6-4D4D-8480-85FD4AA29A67 deleted successfully
+[2026-09-19T16:23:48.042Z] [INFO] Coin 75A0B0E3-F0AF-484D-9B56-6B7686DA8C97 deleted successfully
+[2026-09-19T16:23:48.043Z] [INFO] Coin 50FC511D-152C-4512-BE9A-987200D506EB deleted successfully
+[2026-09-19T16:23:48.043Z] [INFO] Coin F1C1EA70-ED51-498E-AD9F-71D21272AE2D deleted successfully
+[2026-09-19T16:24:07.600Z] [INFO] POST /coins
+[2026-09-19T16:24:07.601Z] [INFO] Creating new coin fa512c8a-1d0e-4bc3-bae2-9b7a228d17fd
+[2026-09-19T16:24:07.603Z] [INFO] POST /coins
+[2026-09-19T16:24:07.603Z] [INFO] Creating new coin 48608161-9add-4832-a7cc-b58b7737b4d0
+[2026-09-19T16:24:07.603Z] [INFO] POST /coins
+[2026-09-19T16:24:07.604Z] [INFO] Creating new coin 027a55fa-c311-48e6-a193-e5b57ff724f0
+[2026-09-19T16:24:07.604Z] [INFO] POST /coins
+[2026-09-19T16:24:07.604Z] [INFO] Creating new coin 803f1aaf-1fbd-42c7-b86d-660b1cc45028
+[2026-09-19T16:24:07.605Z] [INFO] POST /coins
+[2026-09-19T16:24:07.605Z] [INFO] Creating new coin 054e0d6a-9588-4f35-b851-057b6aaec778
+[2026-09-19T16:24:07.605Z] [INFO] POST /coins
+[2026-09-19T16:24:07.606Z] [INFO] Creating new coin 75eda460-6247-4305-b757-b4641c452577
+[2026-09-19T16:24:07.626Z] [INFO] Coin 027a55fa-c311-48e6-a193-e5b57ff724f0 created successfully
+[2026-09-19T16:24:07.627Z] [INFO] Coin 75eda460-6247-4305-b757-b4641c452577 created successfully
+[2026-09-19T16:24:07.628Z] [INFO] Coin 48608161-9add-4832-a7cc-b58b7737b4d0 created successfully
+[2026-09-19T16:24:07.629Z] [INFO] Coin fa512c8a-1d0e-4bc3-bae2-9b7a228d17fd created successfully
+[2026-09-19T16:24:07.629Z] [INFO] Coin 803f1aaf-1fbd-42c7-b86d-660b1cc45028 created successfully
+[2026-09-19T16:24:07.630Z] [INFO] Coin 054e0d6a-9588-4f35-b851-057b6aaec778 created successfully
+[2026-09-19T16:24:07.630Z] [INFO] POST /coins
+[2026-09-19T16:24:07.631Z] [INFO] Creating new coin b6250673-6026-4bad-8e98-9059904a9acd
+[2026-09-19T16:24:07.631Z] [INFO] POST /coins
+[2026-09-19T16:24:07.631Z] [INFO] Creating new coin 60a91ec3-62fa-497b-a8cb-9627234fe948
+[2026-09-19T16:24:07.632Z] [INFO] POST /coins
+[2026-09-19T16:24:07.633Z] [INFO] Creating new coin b325641f-8126-4af6-ab3a-c67f2b7901ad
+[2026-09-19T16:24:07.633Z] [INFO] POST /coins
+[2026-09-19T16:24:07.633Z] [INFO] Creating new coin 9ffed079-b310-42ae-bebd-335bc4d32268
+[2026-09-19T16:24:07.634Z] [INFO] POST /coins
+[2026-09-19T16:24:07.634Z] [INFO] Creating new coin 2e7b1006-7199-4212-99a8-6fe68b5d561b
+[2026-09-19T16:24:07.635Z] [INFO] POST /coins
+[2026-09-19T16:24:07.635Z] [INFO] Creating new coin 186f8637-f871-4fcd-8f96-613a8db8714b
+[2026-09-19T16:24:07.645Z] [INFO] Coin b6250673-6026-4bad-8e98-9059904a9acd created successfully
+[2026-09-19T16:24:07.646Z] [INFO] Coin 60a91ec3-62fa-497b-a8cb-9627234fe948 created successfully
+[2026-09-19T16:24:07.646Z] [INFO] Coin b325641f-8126-4af6-ab3a-c67f2b7901ad created successfully
+[2026-09-19T16:24:07.647Z] [INFO] Coin 9ffed079-b310-42ae-bebd-335bc4d32268 created successfully
+[2026-09-19T16:24:07.647Z] [INFO] Coin 2e7b1006-7199-4212-99a8-6fe68b5d561b created successfully
+[2026-09-19T16:24:07.648Z] [INFO] Coin 186f8637-f871-4fcd-8f96-613a8db8714b created successfully
+[2026-09-19T16:24:07.648Z] [INFO] POST /coins
+[2026-09-19T16:24:07.649Z] [INFO] Creating new coin f700ffaa-62aa-4971-91e9-45a481b9648e
+[2026-09-19T16:24:07.649Z] [INFO] POST /coins
+[2026-09-19T16:24:07.650Z] [INFO] Creating new coin e910e293-f7b7-4682-b376-d0424a84bc18
+[2026-09-19T16:24:07.650Z] [INFO] POST /coins
+[2026-09-19T16:24:07.650Z] [INFO] Creating new coin ecbdbce7-988a-4715-8caa-83cdb1890d11
+[2026-09-19T16:24:07.651Z] [INFO] POST /coins
+[2026-09-19T16:24:07.651Z] [INFO] Creating new coin 8897b2ca-bac4-41f4-9425-fa64f2d34373
+[2026-09-19T16:24:07.658Z] [INFO] Coin 8897b2ca-bac4-41f4-9425-fa64f2d34373 created successfully
+[2026-09-19T16:24:07.658Z] [INFO] Coin f700ffaa-62aa-4971-91e9-45a481b9648e created successfully
+[2026-09-19T16:24:07.659Z] [INFO] Coin e910e293-f7b7-4682-b376-d0424a84bc18 created successfully
+[2026-09-19T16:24:07.660Z] [INFO] Coin ecbdbce7-988a-4715-8caa-83cdb1890d11 created successfully
+[2026-09-19T16:30:55.173Z] [INFO] GET /coins
+[2026-09-19T16:30:55.174Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:30:55.260Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:30:55.266Z] [INFO] GET /categories
+[2026-09-19T16:30:55.267Z] [INFO] Fetching categories
+[2026-09-19T16:30:55.268Z] [INFO] GET /coin-sets
+[2026-09-19T16:30:55.269Z] [INFO] Fetching coin sets
+[2026-09-19T16:30:55.270Z] [INFO] GET /transactions
+[2026-09-19T16:30:55.270Z] [INFO] Fetching transactions
+[2026-09-19T16:30:55.274Z] [INFO] GET /denominations
+[2026-09-19T16:30:55.274Z] [INFO] Fetching active denominations
+[2026-09-19T16:30:55.276Z] [INFO] GET /mintmarks
+[2026-09-19T16:30:55.276Z] [INFO] Fetching active mint marks
+[2026-09-19T16:31:12.310Z] [INFO] GET /coins
+[2026-09-19T16:31:12.311Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:31:12.314Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:31:12.344Z] [INFO] GET /categories
+[2026-09-19T16:31:12.344Z] [INFO] Fetching categories
+[2026-09-19T16:31:12.345Z] [INFO] GET /coin-sets
+[2026-09-19T16:31:12.345Z] [INFO] Fetching coin sets
+[2026-09-19T16:31:12.347Z] [INFO] GET /transactions
+[2026-09-19T16:31:12.348Z] [INFO] Fetching transactions
+[2026-09-19T16:31:12.349Z] [INFO] GET /denominations
+[2026-09-19T16:31:12.349Z] [INFO] Fetching active denominations
+[2026-09-19T16:31:12.350Z] [INFO] GET /mintmarks
+[2026-09-19T16:31:12.351Z] [INFO] Fetching active mint marks
+[2026-09-19T16:33:47.985Z] [INFO] GET /coins
+[2026-09-19T16:33:47.986Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:33:48.114Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:33:48.119Z] [INFO] GET /categories
+[2026-09-19T16:33:48.120Z] [INFO] Fetching categories
+[2026-09-19T16:33:48.121Z] [INFO] GET /coin-sets
+[2026-09-19T16:33:48.121Z] [INFO] Fetching coin sets
+[2026-09-19T16:33:48.123Z] [INFO] GET /transactions
+[2026-09-19T16:33:48.123Z] [INFO] Fetching transactions
+[2026-09-19T16:33:48.125Z] [INFO] GET /denominations
+[2026-09-19T16:33:48.125Z] [INFO] Fetching active denominations
+[2026-09-19T16:33:48.126Z] [INFO] GET /mintmarks
+[2026-09-19T16:33:48.126Z] [INFO] Fetching active mint marks
+[2026-09-19T16:34:06.003Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:34:06.004Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:34:24.185Z] [INFO] GET /coins
+[2026-09-19T16:34:24.186Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:34:24.186Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:34:24.316Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:34:24.340Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:34:24.346Z] [INFO] GET /categories
+[2026-09-19T16:34:24.347Z] [INFO] Fetching categories
+[2026-09-19T16:34:24.350Z] [INFO] GET /coin-sets
+[2026-09-19T16:34:24.350Z] [INFO] Fetching coin sets
+[2026-09-19T16:34:24.351Z] [INFO] GET /denominations
+[2026-09-19T16:34:24.352Z] [INFO] Fetching active denominations
+[2026-09-19T16:34:24.352Z] [INFO] GET /transactions
+[2026-09-19T16:34:24.353Z] [INFO] Fetching transactions
+[2026-09-19T16:34:24.353Z] [INFO] GET /mintmarks
+[2026-09-19T16:34:24.354Z] [INFO] Fetching active mint marks
+[2026-09-19T16:34:43.337Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:34:43.338Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:34:49.504Z] [INFO] GET /coins
+[2026-09-19T16:34:49.505Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:34:49.505Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:34:49.629Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:34:49.652Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:34:49.656Z] [INFO] GET /categories
+[2026-09-19T16:34:49.657Z] [INFO] Fetching categories
+[2026-09-19T16:34:49.659Z] [INFO] GET /coin-sets
+[2026-09-19T16:34:49.659Z] [INFO] Fetching coin sets
+[2026-09-19T16:34:49.660Z] [INFO] GET /transactions
+[2026-09-19T16:34:49.660Z] [INFO] Fetching transactions
+[2026-09-19T16:34:49.663Z] [INFO] GET /denominations
+[2026-09-19T16:34:49.663Z] [INFO] Fetching active denominations
+[2026-09-19T16:34:49.663Z] [INFO] GET /mintmarks
+[2026-09-19T16:34:49.664Z] [INFO] Fetching active mint marks
+[2026-09-19T16:37:34.759Z] [INFO] GET /coins
+[2026-09-19T16:37:34.760Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:37:34.761Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:37:34.761Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:37:34.762Z] [INFO] Retrieved 0 coins
+[2026-09-19T16:37:34.768Z] [INFO] GET /coins
+[2026-09-19T16:37:34.768Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:37:34.768Z] [INFO] Retrieved 1 coins
+[2026-09-19T16:37:34.772Z] [INFO] GET /coins/nonexistent
+[2026-09-19T16:37:34.772Z] [INFO] Fetching coin nonexistent
+[2026-09-19T16:37:34.773Z] [WARN] Coin not found: nonexistent
+[2026-09-19T16:37:34.776Z] [INFO] GET /coins/xyz-789
+[2026-09-19T16:37:34.776Z] [INFO] Fetching coin xyz-789
+[2026-09-19T16:37:34.785Z] [INFO] POST /coins
+[2026-09-19T16:37:34.788Z] [INFO] POST /coins
+[2026-09-19T16:37:34.789Z] [INFO] Creating new coin test-id
+[2026-09-19T16:37:34.789Z] [INFO] Coin test-id created successfully
+[2026-09-19T16:37:34.792Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T16:37:34.792Z] [INFO] Updating coin nonexistent
+[2026-09-19T16:37:34.792Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T16:37:34.795Z] [INFO] PUT /coins/abc-123
+[2026-09-19T16:37:34.795Z] [INFO] Updating coin abc-123
+[2026-09-19T16:37:34.796Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T16:37:34.798Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T16:37:34.798Z] [INFO] Deleting coin nonexistent
+[2026-09-19T16:37:34.799Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T16:37:34.801Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T16:37:34.801Z] [INFO] Deleting coin abc-123
+[2026-09-19T16:37:34.802Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T16:37:34.804Z] [INFO] GET /categories
+[2026-09-19T16:37:34.804Z] [INFO] Fetching categories
+[2026-09-19T16:37:34.807Z] [INFO] GET /denominations
+[2026-09-19T16:37:34.807Z] [INFO] Fetching active denominations
+[2026-09-19T16:37:34.810Z] [INFO] GET /mintmarks
+[2026-09-19T16:37:34.811Z] [INFO] Fetching active mint marks
+[2026-09-19T16:37:34.813Z] [INFO] POST /categories
+[2026-09-19T16:37:34.814Z] [INFO] Adding category: undefined
+[2026-09-19T16:37:34.816Z] [INFO] POST /categories
+[2026-09-19T16:37:34.816Z] [INFO] Adding category: Platinum
+[2026-09-19T16:37:34.819Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T16:37:34.819Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T16:37:34.820Z] [WARN] Category not found: Nonexistent
+[2026-09-19T16:37:34.822Z] [INFO] GET /coin-sets
+[2026-09-19T16:37:34.822Z] [INFO] Fetching coin sets
+[2026-09-19T16:37:34.825Z] [INFO] POST /coin-sets
+[2026-09-19T16:37:34.826Z] [INFO] Adding coin set: undefined
+[2026-09-19T16:37:34.828Z] [INFO] POST /coin-sets
+[2026-09-19T16:37:34.828Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T16:37:34.830Z] [INFO] GET /transactions
+[2026-09-19T16:37:34.831Z] [INFO] Fetching transactions
+[2026-09-19T16:37:34.833Z] [INFO] GET /transactions
+[2026-09-19T16:37:34.834Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T16:37:34.836Z] [INFO] POST /transactions
+[2026-09-19T16:37:34.836Z] [INFO] Creating transaction f7b6d89d-0496-4e87-9552-b186922fda38 for coin undefined
+[2026-09-19T16:37:34.839Z] [INFO] POST /transactions
+[2026-09-19T16:37:34.840Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T16:37:34.840Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T16:37:34.843Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T16:37:34.843Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T16:37:34.844Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T16:37:34.846Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:37:34.846Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:37:34.849Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:37:34.849Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:37:34.851Z] [INFO] POST /spot-prices
+[2026-09-19T16:37:34.852Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T16:37:34.854Z] [INFO] GET /settings/nonexistent
+[2026-09-19T16:37:34.854Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T16:37:34.854Z] [WARN] Setting not found: nonexistent
+[2026-09-19T16:37:34.857Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T16:37:34.870Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T16:37:34.873Z] [INFO] GET /settings/theme
+[2026-09-19T16:37:34.873Z] [INFO] Fetching setting: theme
+[2026-09-19T16:37:34.876Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T16:37:34.877Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T16:40:14.304Z] [INFO] GET /coins
+[2026-09-19T16:40:14.305Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:40:14.306Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:40:14.306Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:40:14.306Z] [INFO] Retrieved 0 coins
+[2026-09-19T16:40:14.313Z] [INFO] GET /coins
+[2026-09-19T16:40:14.314Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:40:14.314Z] [INFO] Retrieved 1 coins
+[2026-09-19T16:40:14.318Z] [INFO] GET /coins/nonexistent
+[2026-09-19T16:40:14.318Z] [INFO] Fetching coin nonexistent
+[2026-09-19T16:40:14.319Z] [WARN] Coin not found: nonexistent
+[2026-09-19T16:40:14.321Z] [INFO] GET /coins/xyz-789
+[2026-09-19T16:40:14.322Z] [INFO] Fetching coin xyz-789
+[2026-09-19T16:40:14.331Z] [INFO] POST /coins
+[2026-09-19T16:40:14.334Z] [INFO] POST /coins
+[2026-09-19T16:40:14.335Z] [INFO] Creating new coin test-id
+[2026-09-19T16:40:14.335Z] [INFO] Coin test-id created successfully
+[2026-09-19T16:40:14.338Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T16:40:14.338Z] [INFO] Updating coin nonexistent
+[2026-09-19T16:40:14.338Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T16:40:14.341Z] [INFO] PUT /coins/abc-123
+[2026-09-19T16:40:14.341Z] [INFO] Updating coin abc-123
+[2026-09-19T16:40:14.341Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T16:40:14.344Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T16:40:14.344Z] [INFO] Deleting coin nonexistent
+[2026-09-19T16:40:14.344Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T16:40:14.347Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T16:40:14.348Z] [INFO] Deleting coin abc-123
+[2026-09-19T16:40:14.348Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T16:40:14.351Z] [INFO] GET /categories
+[2026-09-19T16:40:14.351Z] [INFO] Fetching categories
+[2026-09-19T16:40:14.354Z] [INFO] GET /denominations
+[2026-09-19T16:40:14.354Z] [INFO] Fetching active denominations
+[2026-09-19T16:40:14.357Z] [INFO] GET /denominations
+[2026-09-19T16:40:14.357Z] [INFO] Fetching active denominations
+[2026-09-19T16:40:14.359Z] [INFO] GET /mintmarks
+[2026-09-19T16:40:14.360Z] [INFO] Fetching active mint marks
+[2026-09-19T16:40:14.363Z] [INFO] GET /mintmarks
+[2026-09-19T16:40:14.364Z] [INFO] Fetching active mint marks
+[2026-09-19T16:40:14.366Z] [INFO] POST /categories
+[2026-09-19T16:40:14.367Z] [INFO] Adding category: undefined
+[2026-09-19T16:40:14.369Z] [INFO] POST /categories
+[2026-09-19T16:40:14.370Z] [INFO] Adding category: Platinum
+[2026-09-19T16:40:14.372Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T16:40:14.372Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T16:40:14.372Z] [WARN] Category not found: Nonexistent
+[2026-09-19T16:40:14.375Z] [INFO] GET /coin-sets
+[2026-09-19T16:40:14.375Z] [INFO] Fetching coin sets
+[2026-09-19T16:40:14.377Z] [INFO] POST /coin-sets
+[2026-09-19T16:40:14.378Z] [INFO] Adding coin set: undefined
+[2026-09-19T16:40:14.381Z] [INFO] POST /coin-sets
+[2026-09-19T16:40:14.394Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T16:40:14.398Z] [INFO] GET /transactions
+[2026-09-19T16:40:14.399Z] [INFO] Fetching transactions
+[2026-09-19T16:40:14.402Z] [INFO] GET /transactions
+[2026-09-19T16:40:14.402Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T16:40:14.404Z] [INFO] POST /transactions
+[2026-09-19T16:40:14.405Z] [INFO] Creating transaction 7da01ca3-b0b7-4595-ad20-a17a34d44795 for coin undefined
+[2026-09-19T16:40:14.407Z] [INFO] POST /transactions
+[2026-09-19T16:40:14.408Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T16:40:14.408Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T16:40:14.410Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T16:40:14.410Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T16:40:14.410Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T16:40:14.413Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:40:14.413Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:40:14.416Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:40:14.416Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:40:14.419Z] [INFO] POST /spot-prices
+[2026-09-19T16:40:14.419Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T16:40:14.421Z] [INFO] GET /settings/nonexistent
+[2026-09-19T16:40:14.422Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T16:40:14.422Z] [WARN] Setting not found: nonexistent
+[2026-09-19T16:40:14.424Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T16:40:14.424Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T16:40:14.427Z] [INFO] GET /settings/theme
+[2026-09-19T16:40:14.427Z] [INFO] Fetching setting: theme
+[2026-09-19T16:40:14.430Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T16:40:14.430Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T16:44:39.639Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:44:39.640Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:45:37.222Z] [INFO] GET /coins
+[2026-09-19T16:45:37.223Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:45:37.223Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:45:37.320Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:45:37.347Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:45:37.366Z] [INFO] GET /categories
+[2026-09-19T16:45:37.367Z] [INFO] Fetching categories
+[2026-09-19T16:45:37.370Z] [INFO] GET /coin-sets
+[2026-09-19T16:45:37.370Z] [INFO] Fetching coin sets
+[2026-09-19T16:45:37.370Z] [INFO] GET /transactions
+[2026-09-19T16:45:37.371Z] [INFO] Fetching transactions
+[2026-09-19T16:45:37.375Z] [INFO] GET /denominations
+[2026-09-19T16:45:37.375Z] [INFO] Fetching active denominations
+[2026-09-19T16:45:37.376Z] [INFO] GET /mintmarks
+[2026-09-19T16:45:37.376Z] [INFO] Fetching active mint marks
+[2026-09-19T16:45:40.823Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:45:40.823Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:49:17.759Z] [INFO] GET /coins
+[2026-09-19T16:49:17.760Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:49:17.760Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:49:17.852Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:49:17.877Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:49:17.885Z] [INFO] GET /categories
+[2026-09-19T16:49:17.886Z] [INFO] Fetching categories
+[2026-09-19T16:49:17.890Z] [INFO] GET /coin-sets
+[2026-09-19T16:49:17.890Z] [INFO] Fetching coin sets
+[2026-09-19T16:49:17.891Z] [INFO] GET /denominations
+[2026-09-19T16:49:17.891Z] [INFO] Fetching active denominations
+[2026-09-19T16:49:17.892Z] [INFO] GET /mintmarks
+[2026-09-19T16:49:17.893Z] [INFO] Fetching active mint marks
+[2026-09-19T16:49:17.893Z] [INFO] GET /transactions
+[2026-09-19T16:49:17.893Z] [INFO] Fetching transactions
+[2026-09-19T16:49:23.123Z] [INFO] GET /coins
+[2026-09-19T16:49:23.125Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:49:23.125Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:49:23.125Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:49:23.126Z] [INFO] Retrieved 0 coins
+[2026-09-19T16:49:23.132Z] [INFO] GET /coins
+[2026-09-19T16:49:23.132Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:49:23.132Z] [INFO] Retrieved 1 coins
+[2026-09-19T16:49:23.136Z] [INFO] GET /coins/nonexistent
+[2026-09-19T16:49:23.137Z] [INFO] Fetching coin nonexistent
+[2026-09-19T16:49:23.137Z] [WARN] Coin not found: nonexistent
+[2026-09-19T16:49:23.140Z] [INFO] GET /coins/xyz-789
+[2026-09-19T16:49:23.141Z] [INFO] Fetching coin xyz-789
+[2026-09-19T16:49:23.150Z] [INFO] POST /coins
+[2026-09-19T16:49:23.153Z] [INFO] POST /coins
+[2026-09-19T16:49:23.154Z] [INFO] Creating new coin test-id
+[2026-09-19T16:49:23.154Z] [INFO] Coin test-id created successfully
+[2026-09-19T16:49:23.157Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T16:49:23.157Z] [INFO] Updating coin nonexistent
+[2026-09-19T16:49:23.157Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T16:49:23.160Z] [INFO] PUT /coins/abc-123
+[2026-09-19T16:49:23.160Z] [INFO] Updating coin abc-123
+[2026-09-19T16:49:23.160Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T16:49:23.163Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T16:49:23.163Z] [INFO] Deleting coin nonexistent
+[2026-09-19T16:49:23.163Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T16:49:23.166Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T16:49:23.166Z] [INFO] Deleting coin abc-123
+[2026-09-19T16:49:23.166Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T16:49:23.169Z] [INFO] GET /categories
+[2026-09-19T16:49:23.170Z] [INFO] Fetching categories
+[2026-09-19T16:49:23.172Z] [INFO] GET /denominations
+[2026-09-19T16:49:23.173Z] [INFO] Fetching active denominations
+[2026-09-19T16:49:23.175Z] [INFO] GET /denominations
+[2026-09-19T16:49:23.176Z] [INFO] Fetching active denominations
+[2026-09-19T16:49:23.178Z] [INFO] GET /mintmarks
+[2026-09-19T16:49:23.179Z] [INFO] Fetching active mint marks
+[2026-09-19T16:49:23.182Z] [INFO] GET /mintmarks
+[2026-09-19T16:49:23.182Z] [INFO] Fetching active mint marks
+[2026-09-19T16:49:23.184Z] [INFO] POST /categories
+[2026-09-19T16:49:23.184Z] [INFO] Adding category: undefined
+[2026-09-19T16:49:23.187Z] [INFO] POST /categories
+[2026-09-19T16:49:23.188Z] [INFO] Adding category: Platinum
+[2026-09-19T16:49:23.190Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T16:49:23.190Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T16:49:23.190Z] [WARN] Category not found: Nonexistent
+[2026-09-19T16:49:23.193Z] [INFO] GET /coin-sets
+[2026-09-19T16:49:23.193Z] [INFO] Fetching coin sets
+[2026-09-19T16:49:23.195Z] [INFO] POST /coin-sets
+[2026-09-19T16:49:23.196Z] [INFO] Adding coin set: undefined
+[2026-09-19T16:49:23.198Z] [INFO] POST /coin-sets
+[2026-09-19T16:49:23.198Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T16:49:23.200Z] [INFO] GET /transactions
+[2026-09-19T16:49:23.201Z] [INFO] Fetching transactions
+[2026-09-19T16:49:23.205Z] [INFO] GET /transactions
+[2026-09-19T16:49:23.205Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T16:49:23.207Z] [INFO] POST /transactions
+[2026-09-19T16:49:23.208Z] [INFO] Creating transaction a557455b-bc6c-4a30-88e9-2942cc3aef4c for coin undefined
+[2026-09-19T16:49:23.210Z] [INFO] POST /transactions
+[2026-09-19T16:49:23.210Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T16:49:23.210Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T16:49:23.212Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T16:49:23.213Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T16:49:23.213Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T16:49:23.215Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:49:23.215Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:49:23.217Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:49:23.218Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:49:23.220Z] [INFO] POST /spot-prices
+[2026-09-19T16:49:23.221Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T16:49:23.223Z] [INFO] GET /settings/nonexistent
+[2026-09-19T16:49:23.224Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T16:49:23.224Z] [WARN] Setting not found: nonexistent
+[2026-09-19T16:49:23.226Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T16:49:23.226Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T16:49:23.229Z] [INFO] GET /settings/theme
+[2026-09-19T16:49:23.229Z] [INFO] Fetching setting: theme
+[2026-09-19T16:49:23.231Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T16:49:23.231Z] [INFO] Saving setting: visibleColumns
+[2026-09-19T16:49:39.927Z] [INFO] GET /coins
+[2026-09-19T16:49:39.927Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:49:39.935Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:49:39.969Z] [INFO] GET /categories
+[2026-09-19T16:49:39.970Z] [INFO] Fetching categories
+[2026-09-19T16:49:39.973Z] [INFO] GET /coin-sets
+[2026-09-19T16:49:39.973Z] [INFO] Fetching coin sets
+[2026-09-19T16:49:39.974Z] [INFO] GET /transactions
+[2026-09-19T16:49:39.975Z] [INFO] Fetching transactions
+[2026-09-19T16:49:39.975Z] [INFO] GET /denominations
+[2026-09-19T16:49:39.975Z] [INFO] Fetching active denominations
+[2026-09-19T16:49:39.975Z] [INFO] GET /mintmarks
+[2026-09-19T16:49:39.976Z] [INFO] Fetching active mint marks
+[2026-09-19T16:49:47.991Z] [INFO] GET /coins
+[2026-09-19T16:49:47.992Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:49:47.996Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:49:48.090Z] [INFO] GET /categories
+[2026-09-19T16:49:48.090Z] [INFO] Fetching categories
+[2026-09-19T16:49:48.092Z] [INFO] GET /coin-sets
+[2026-09-19T16:49:48.093Z] [INFO] Fetching coin sets
+[2026-09-19T16:49:48.095Z] [INFO] GET /transactions
+[2026-09-19T16:49:48.095Z] [INFO] Fetching transactions
+[2026-09-19T16:49:48.097Z] [INFO] GET /mintmarks
+[2026-09-19T16:49:48.097Z] [INFO] Fetching active mint marks
+[2026-09-19T16:49:48.097Z] [INFO] GET /denominations
+[2026-09-19T16:49:48.097Z] [INFO] Fetching active denominations
+[2026-09-19T16:49:51.571Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-09-19T16:49:51.572Z] [INFO] Database: localhost / CoinInventory
+[2026-09-19T16:50:32.617Z] [INFO] GET /coins
+[2026-09-19T16:50:32.618Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:50:32.618Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:50:32.694Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:50:32.720Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:50:32.723Z] [INFO] GET /coins
+[2026-09-19T16:50:32.724Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:50:32.729Z] [INFO] GET /categories
+[2026-09-19T16:50:32.730Z] [INFO] Fetching categories
+[2026-09-19T16:50:32.731Z] [INFO] Retrieved 21 coins
+[2026-09-19T16:50:32.734Z] [INFO] GET /transactions
+[2026-09-19T16:50:32.734Z] [INFO] Fetching transactions
+[2026-09-19T16:50:32.735Z] [INFO] GET /denominations
+[2026-09-19T16:50:32.735Z] [INFO] Fetching active denominations
+[2026-09-19T16:50:32.738Z] [INFO] GET /coin-sets
+[2026-09-19T16:50:32.738Z] [INFO] Fetching coin sets
+[2026-09-19T16:50:32.739Z] [INFO] GET /mintmarks
+[2026-09-19T16:50:32.739Z] [INFO] Fetching active mint marks
+[2026-09-19T16:50:32.742Z] [INFO] GET /categories
+[2026-09-19T16:50:32.742Z] [INFO] Fetching categories
+[2026-09-19T16:50:32.750Z] [INFO] GET /transactions
+[2026-09-19T16:50:32.751Z] [INFO] Fetching transactions
+[2026-09-19T16:50:32.758Z] [INFO] GET /denominations
+[2026-09-19T16:50:32.758Z] [INFO] Fetching active denominations
+[2026-09-19T16:50:32.760Z] [INFO] GET /coin-sets
+[2026-09-19T16:50:32.760Z] [INFO] Fetching coin sets
+[2026-09-19T16:50:32.761Z] [INFO] GET /mintmarks
+[2026-09-19T16:50:32.762Z] [INFO] Fetching active mint marks
+[2026-09-19T16:50:34.874Z] [INFO] GET /coins
+[2026-09-19T16:50:34.876Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:50:34.876Z] [INFO] Connecting to SQL Server at localhost/CoinInventory...
+[2026-09-19T16:50:34.877Z] [INFO] Connected to SQL Server successfully
+[2026-09-19T16:50:34.877Z] [INFO] Retrieved 0 coins
+[2026-09-19T16:50:34.884Z] [INFO] GET /coins
+[2026-09-19T16:50:34.884Z] [INFO] Fetching all coins with images and tags
+[2026-09-19T16:50:34.885Z] [INFO] Retrieved 1 coins
+[2026-09-19T16:50:34.888Z] [INFO] GET /coins/nonexistent
+[2026-09-19T16:50:34.889Z] [INFO] Fetching coin nonexistent
+[2026-09-19T16:50:34.889Z] [WARN] Coin not found: nonexistent
+[2026-09-19T16:50:34.892Z] [INFO] GET /coins/xyz-789
+[2026-09-19T16:50:34.893Z] [INFO] Fetching coin xyz-789
+[2026-09-19T16:50:34.902Z] [INFO] POST /coins
+[2026-09-19T16:50:34.905Z] [INFO] POST /coins
+[2026-09-19T16:50:34.906Z] [INFO] Creating new coin test-id
+[2026-09-19T16:50:34.906Z] [INFO] Coin test-id created successfully
+[2026-09-19T16:50:34.909Z] [INFO] PUT /coins/nonexistent
+[2026-09-19T16:50:34.910Z] [INFO] Updating coin nonexistent
+[2026-09-19T16:50:34.910Z] [WARN] Coin not found for update: nonexistent
+[2026-09-19T16:50:34.912Z] [INFO] PUT /coins/abc-123
+[2026-09-19T16:50:34.913Z] [INFO] Updating coin abc-123
+[2026-09-19T16:50:34.913Z] [INFO] Coin abc-123 updated successfully
+[2026-09-19T16:50:34.916Z] [INFO] DELETE /coins/nonexistent
+[2026-09-19T16:50:34.916Z] [INFO] Deleting coin nonexistent
+[2026-09-19T16:50:34.916Z] [WARN] Coin not found for deletion: nonexistent
+[2026-09-19T16:50:34.919Z] [INFO] DELETE /coins/abc-123
+[2026-09-19T16:50:34.919Z] [INFO] Deleting coin abc-123
+[2026-09-19T16:50:34.920Z] [INFO] Coin abc-123 deleted successfully
+[2026-09-19T16:50:34.922Z] [INFO] GET /categories
+[2026-09-19T16:50:34.922Z] [INFO] Fetching categories
+[2026-09-19T16:50:34.925Z] [INFO] GET /denominations
+[2026-09-19T16:50:34.926Z] [INFO] Fetching active denominations
+[2026-09-19T16:50:34.928Z] [INFO] GET /denominations
+[2026-09-19T16:50:34.929Z] [INFO] Fetching active denominations
+[2026-09-19T16:50:34.931Z] [INFO] GET /mintmarks
+[2026-09-19T16:50:34.932Z] [INFO] Fetching active mint marks
+[2026-09-19T16:50:34.934Z] [INFO] GET /mintmarks
+[2026-09-19T16:50:34.934Z] [INFO] Fetching active mint marks
+[2026-09-19T16:50:34.937Z] [INFO] POST /categories
+[2026-09-19T16:50:34.937Z] [INFO] Adding category: undefined
+[2026-09-19T16:50:34.940Z] [INFO] POST /categories
+[2026-09-19T16:50:34.940Z] [INFO] Adding category: Platinum
+[2026-09-19T16:50:34.944Z] [INFO] DELETE /categories/Nonexistent
+[2026-09-19T16:50:34.944Z] [INFO] Deleting category: Nonexistent
+[2026-09-19T16:50:34.944Z] [WARN] Category not found: Nonexistent
+[2026-09-19T16:50:34.947Z] [INFO] GET /coin-sets
+[2026-09-19T16:50:34.947Z] [INFO] Fetching coin sets
+[2026-09-19T16:50:34.949Z] [INFO] POST /coin-sets
+[2026-09-19T16:50:34.949Z] [INFO] Adding coin set: undefined
+[2026-09-19T16:50:34.952Z] [INFO] POST /coin-sets
+[2026-09-19T16:50:34.953Z] [INFO] Adding coin set: Walking Liberty Set
+[2026-09-19T16:50:34.955Z] [INFO] GET /transactions
+[2026-09-19T16:50:34.956Z] [INFO] Fetching transactions
+[2026-09-19T16:50:34.959Z] [INFO] GET /transactions
+[2026-09-19T16:50:34.960Z] [INFO] Fetching transactions for coin abc-123
+[2026-09-19T16:50:34.962Z] [INFO] POST /transactions
+[2026-09-19T16:50:34.963Z] [INFO] Creating transaction 1992e08f-48d2-4786-acf5-e28a484606f6 for coin undefined
+[2026-09-19T16:50:34.966Z] [INFO] POST /transactions
+[2026-09-19T16:50:34.966Z] [INFO] Creating transaction tx-2 for coin abc-123
+[2026-09-19T16:50:34.967Z] [INFO] Transaction tx-2 created successfully
+[2026-09-19T16:50:34.969Z] [INFO] DELETE /transactions/nonexistent
+[2026-09-19T16:50:34.969Z] [INFO] Deleting transaction nonexistent
+[2026-09-19T16:50:34.970Z] [WARN] Transaction not found: nonexistent
+[2026-09-19T16:50:34.972Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:50:34.972Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:50:34.975Z] [INFO] GET /spot-prices/latest
+[2026-09-19T16:50:34.975Z] [INFO] Fetching latest spot prices from database
+[2026-09-19T16:50:34.977Z] [INFO] POST /spot-prices
+[2026-09-19T16:50:34.978Z] [INFO] Saving spot prices: Au=$2400 Ag=$30
+[2026-09-19T16:50:34.980Z] [INFO] GET /settings/nonexistent
+[2026-09-19T16:50:34.980Z] [INFO] Fetching setting: nonexistent
+[2026-09-19T16:50:34.980Z] [WARN] Setting not found: nonexistent
+[2026-09-19T16:50:34.983Z] [INFO] GET /settings/visibleColumns
+[2026-09-19T16:50:34.983Z] [INFO] Fetching setting: visibleColumns
+[2026-09-19T16:50:34.986Z] [INFO] GET /settings/theme
+[2026-09-19T16:50:34.986Z] [INFO] Fetching setting: theme
+[2026-09-19T16:50:34.989Z] [INFO] PUT /settings/visibleColumns
+[2026-09-19T16:50:34.989Z] [INFO] Saving setting: visibleColumns
