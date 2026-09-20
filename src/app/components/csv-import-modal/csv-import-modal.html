@@ -5,6 +5,45 @@
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
+      <!--
+        Guidance shown before a file is chosen. Previously this modal opened
+        with nothing but a file button, which gave a first-time user no idea
+        what the file should look like. The template download is generated
+        from the same field list the importer uses, so it cannot go stale.
+      -->
+      @if (csvHeaders().length === 0) {
+        <div class="csv-help">
+          <p>
+            There is no required format &mdash; pick any comma-separated file with a
+            <strong>header row</strong> and you will be able to match your columns to
+            coin fields on the next screen.
+          </p>
+          <p class="csv-help-actions">
+            <button type="button" class="small-button" (click)="downloadTemplate()">
+              Download blank template
+            </button>
+            <span class="csv-help-hint">
+              Already have coins? <strong>Export &rarr; CSV</strong> produces a file that
+              re-imports with every column matched automatically.
+            </span>
+          </p>
+          <details>
+            <summary>Columns this importer recognises</summary>
+            <ul class="csv-help-columns">
+              @for (field of csvMappableFields; track field.key) {
+                @if (field.key) { <li>{{ field.label }}</li> }
+              }
+            </ul>
+            <p class="csv-help-note">
+              Column order does not matter, and you can leave any of them out.
+              Unrecognised columns are simply left for you to map by hand or skip.
+              Prices may include <code>$</code> and commas. Year is free text, so
+              ranges such as <code>1878-S</code> are fine.
+            </p>
+          </details>
+        </div>
+      }
+
       <label class="file-picker">
         <input type="file" accept=".csv,.txt" (change)="handleCsvFileSelection($event)" />
         Select CSV file

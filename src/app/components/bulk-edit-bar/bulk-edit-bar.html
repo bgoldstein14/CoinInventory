@@ -1,0 +1,18 @@
+<!-- Bulk edit bar -->
+<div class="bulk-edit-bar">
+  <span class="bulk-count">{{ selection().selectionCount() }} coin{{ selection().selectionCount() === 1 ? '' : 's' }} selected</span>
+  <div class="bulk-actions">
+    <select #bulkField>
+      <option value="category">Category</option>
+      <option value="grade">Grade</option>
+      <option value="country">Country</option>
+      <option value="coinSet">Set</option>
+      <option value="dealer">Dealer</option>
+      <option value="metalContent">Metal</option>
+    </select>
+    <input #bulkValue type="text" placeholder="New value" />
+    <button type="button" class="small-button" (click)="selection().bulkUpdateField(bulkField.value, bulkValue.value); bulkValue.value=''">Apply</button>
+    <button type="button" class="danger small-button" (click)="selection().bulkDeleteCoins()">Delete Selected</button>
+    <button type="button" class="secondary small-button" (click)="selection().clearSelection()">Clear</button>
+  </div>
+</div>

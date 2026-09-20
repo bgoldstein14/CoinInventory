@@ -1,0 +1,25 @@
+{
+  // Build-only TypeScript config, used by "npm run build".
+  //
+  // WHY THIS EXISTS (separate from tsconfig.json):
+  // tsconfig.json intentionally includes "**/*.ts" so that `tsc --noEmit`
+  // type-checks the test files too. But test files must NOT be emitted into
+  // dist/ -- when they were, `npm run build` produced dist/*.spec.js, and
+  // Vitest then discovered those stale compiled copies and tried to run
+  // them, failing with "Vitest cannot be imported in a CommonJS module
+  // using require()".
+  //
+  // Worse, a stale dist/ is genuinely dangerous here: "npm start" runs
+  // `node dist/server.js`. A dist/ built before the connection-pool fix
+  // would silently run the OLD code -- the version with no
+  // pool.on('error') listener, whose missing error handler was killing the
+  // whole Node process. Keeping build output limited to production sources
+  // makes that far less likely to go unnoticed.
+  "extends": "./tsconfig.json",
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/*.spec.ts",
+    "test-support"
+  ]
+}

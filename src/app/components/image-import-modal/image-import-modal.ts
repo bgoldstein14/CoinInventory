@@ -3,8 +3,25 @@ import { Component, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { ImageMatchingService } from '../../services/image-matching.service';
 import { InventoryService } from '../../services/inventory.service';
-import { PendingImageMatch } from '../../types/coin.model';
+import { CoinRecord, PendingImageReview, RankedImageMatch } from '../../types/coin.model';
 
+/**
+ * Image import + review screen.
+ *
+ * The matching service deliberately refuses to guess (see
+ * image-matching.service.ts). That means this component has one job beyond
+ * showing results: give the user a fast way to resolve everything the matcher
+ * was not sure about.
+ *
+ * Three buckets are shown:
+ *   1. "Ready to attach"  - the matcher was near-certain. Pre-selected; the
+ *                           user can reject or reassign.
+ *   2. "Needs your choice"- plausible candidates exist. The user picks one,
+ *                           searches for a different coin, or skips.
+ *   3. "No match found"   - nothing worth suggesting. Search or skip.
+ *
+ * Nothing is written to the inventory until "Attach" is pressed.
+ */
 @Component({
   selector: 'app-image-import-modal',
   imports: [FormsModule, DecimalPipe],
@@ -18,24 +35,51 @@ export class ImageImportModal {
 
   readonly closed = output<void>();
 
-  protected readonly pendingImageMatches = signal<PendingImageMatch[]>([]);
+  /** One row per selected image file. */
+  protected readonly imageReviews = signal<PendingImageReview[]>([]);
+
+  /** Per-image free-text coin search ("filename" -> "search text"). */
+  protected readonly coinSearches = signal<Record<string, string>>({});
+
+  /** The actual File objects, kept so we can read their bytes on apply. */
   private pendingFiles = new Map<string, File>();
 
-  protected readonly autoMatchedImages = computed(() =>
-    this.pendingImageMatches().filter(m => m.status === 'auto-matched' || m.status === 'confirmed')
+  /* ---------------------------------------------------------------------
+   * Grouping for the template
+   * ------------------------------------------------------------------- */
+
+  /** Matcher was confident. Still rejectable/reassignable. */
+  protected readonly autoMatches = computed(() =>
+    this.imageReviews().filter(r => r.result.status === 'auto')
   );
 
-  protected readonly reviewImages = computed(() =>
-    this.pendingImageMatches().filter(m => m.status === 'pending')
+  /** Matcher had candidates but was not certain. */
+  protected readonly reviewMatches = computed(() =>
+    this.imageReviews().filter(r => r.result.status === 'review')
   );
 
-  protected readonly unmatchedPendingImages = computed(() =>
-    this.pendingImageMatches().filter(m => m.status === 'unmatched')
+  /** Matcher had nothing worth suggesting. */
+  protected readonly unmatchedImages = computed(() =>
+    this.imageReviews().filter(r => r.result.status === 'none')
   );
 
-  protected readonly confirmedCount = computed(() =>
-    this.pendingImageMatches().filter(m => m.status === 'confirmed' || m.status === 'auto-matched').length
+  /** Rows that still need a decision from the user. */
+  protected readonly outstandingCount = computed(() =>
+    this.imageReviews().filter(r => r.decision === 'review').length
   );
+
+  /** Rows that will actually be written when "Attach" is pressed. */
+  protected readonly readyToAttach = computed(() =>
+    this.imageReviews().filter(
+      r => (r.decision === 'auto' || r.decision === 'confirmed') && r.selectedCoinId
+    )
+  );
+
+  protected readonly attachCount = computed(() => this.readyToAttach().length);
+
+  /* ---------------------------------------------------------------------
+   * File selection
+   * ------------------------------------------------------------------- */
 
   async handleDirectorySelection(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
@@ -44,13 +88,14 @@ export class ImageImportModal {
     if (imageFiles.length === 0) return;
 
     this.cleanupPendingImages();
-    const fileNames = imageFiles.map(f => f.name);
-    const matches = this.imageMatchingService.matchImages(fileNames, this.inv.inventory());
 
-    const pending: PendingImageMatch[] = [];
+    const fileNames = imageFiles.map(f => f.name);
+    const results = this.imageMatchingService.matchImages(fileNames, this.inv.inventory());
+
+    const rows: PendingImageReview[] = [];
     for (let i = 0; i < imageFiles.length; i++) {
       const file = imageFiles[i];
-      const match = matches[i];
+      const result = results[i];
       this.pendingFiles.set(file.name, file);
 
       let thumbnailUrl = '';
@@ -58,52 +103,158 @@ export class ImageImportModal {
         thumbnailUrl = URL.createObjectURL(file);
       }
 
-      let status: PendingImageMatch['status'];
-      if (!match.matchedRecordId || match.confidence < 0.55) status = 'unmatched';
-      else if (match.confidence >= 0.8) status = 'auto-matched';
-      else status = 'pending';
+      // Only an 'auto' result arrives pre-selected. 'review' and 'none' start
+      // with nothing chosen, so an unattended import can never mis-file a coin.
+      const isAuto = result.status === 'auto' && !!result.matchedRecordId;
 
-      pending.push({
-        fileName: file.name, thumbnailUrl,
-        matchedCoinId: match.matchedRecordId, confidence: match.confidence,
-        reason: match.reason, status
+      rows.push({
+        fileName: file.name,
+        thumbnailUrl,
+        result,
+        selectedCoinId: isAuto ? result.matchedRecordId : null,
+        selectionReason: result.reason,
+        confidence: result.confidence,
+        decision: isAuto ? 'auto' : 'review'
       });
     }
 
-    this.pendingImageMatches.set(pending);
+    this.imageReviews.set(rows);
+    this.coinSearches.set({});
     input.value = '';
   }
 
+  /* ---------------------------------------------------------------------
+   * User decisions
+   * ------------------------------------------------------------------- */
+
+  /** Accept the matcher's pre-selected coin. */
   confirmImageMatch(fileName: string): void {
-    this.updatePendingMatch(fileName, { status: 'confirmed' });
+    const row = this.rowFor(fileName);
+    if (!row?.selectedCoinId) return;
+    this.updateRow(fileName, { decision: 'confirmed' });
   }
 
+  /** Drop the matcher's suggestion and hand the decision back to the user. */
   rejectImageMatch(fileName: string): void {
-    this.updatePendingMatch(fileName, { status: 'rejected', matchedCoinId: null });
-  }
-
-  reassignImageMatch(fileName: string, coinId: string): void {
-    if (!coinId) {
-      this.updatePendingMatch(fileName, { status: 'unmatched', matchedCoinId: null, confidence: 0 });
-      return;
-    }
-    const coin = this.inv.inventory().find(c => c.id === coinId);
-    this.updatePendingMatch(fileName, {
-      status: 'confirmed', matchedCoinId: coinId, confidence: 1,
-      reason: coin ? `Manually assigned to ${this.coinNameById(coin.id)}.` : 'Manually assigned.'
+    this.updateRow(fileName, {
+      decision: 'review',
+      selectedCoinId: null,
+      confidence: 0,
+      selectionReason: 'Suggestion rejected - choose a coin or skip this image.'
     });
   }
 
-  async applyConfirmedMatches(): Promise<void> {
-    const confirmed = this.pendingImageMatches().filter(
-      m => (m.status === 'confirmed' || m.status === 'auto-matched') && m.matchedCoinId
-    );
+  /** Pick one of the ranked candidates the matcher offered. */
+  chooseCandidate(fileName: string, candidate: RankedImageMatch): void {
+    this.updateRow(fileName, {
+      decision: 'confirmed',
+      selectedCoinId: candidate.coinId,
+      confidence: candidate.score,
+      selectionReason: `Chosen from suggestions: ${candidate.reason}`
+    });
+  }
 
-    for (const match of confirmed) {
-      const file = this.pendingFiles.get(match.fileName);
-      if (!file || !match.matchedCoinId) continue;
+  /** Assign to any coin in the inventory (from the search box or dropdown). */
+  reassignImageMatch(fileName: string, coinId: string): void {
+    if (!coinId) {
+      this.updateRow(fileName, { decision: 'review', selectedCoinId: null, confidence: 0 });
+      return;
+    }
+    this.updateRow(fileName, {
+      decision: 'confirmed',
+      selectedCoinId: coinId,
+      confidence: 1,
+      selectionReason: `Manually assigned to ${this.coinNameById(coinId)}.`
+    });
+    this.setCoinSearch(fileName, '');
+  }
+
+  /** Leave this image alone. */
+  skipImage(fileName: string): void {
+    this.updateRow(fileName, {
+      decision: 'skipped',
+      selectedCoinId: null,
+      confidence: 0,
+      selectionReason: 'Skipped - this image will not be attached.'
+    });
+  }
+
+  /** Undo a skip / confirmation and go back to needing a decision. */
+  resetDecision(fileName: string): void {
+    const row = this.rowFor(fileName);
+    if (!row) return;
+    const isAuto = row.result.status === 'auto' && !!row.result.matchedRecordId;
+    this.updateRow(fileName, {
+      decision: isAuto ? 'auto' : 'review',
+      selectedCoinId: isAuto ? row.result.matchedRecordId : null,
+      confidence: isAuto ? row.result.confidence : 0,
+      selectionReason: row.result.reason
+    });
+  }
+
+  /* ---------------------------------------------------------------------
+   * Coin search (for "none of these candidates is right")
+   * ------------------------------------------------------------------- */
+
+  setCoinSearch(fileName: string, term: string): void {
+    this.coinSearches.set({ ...this.coinSearches(), [fileName]: term });
+  }
+
+  coinSearchTerm(fileName: string): string {
+    return this.coinSearches()[fileName] ?? '';
+  }
+
+  /** Up to 8 inventory coins whose label contains every word typed. */
+  coinSearchResults(fileName: string): CoinRecord[] {
+    const term = this.coinSearchTerm(fileName).trim().toLowerCase();
+    if (term.length < 2) return [];
+    const words = term.split(/\s+/);
+    return this.inv
+      .inventory()
+      .filter(coin => {
+        const label = this.coinNameById(coin.id).toLowerCase();
+        return words.every(word => label.includes(word));
+      })
+      .slice(0, 8);
+  }
+
+  /* ---------------------------------------------------------------------
+   * Display helpers
+   * ------------------------------------------------------------------- */
+
+  coinNameById(coinId: string | null): string {
+    if (!coinId) return 'None';
+    const coin = this.inv.inventory().find(c => c.id === coinId);
+    if (!coin) return 'Unknown';
+    return this.imageMatchingService.describeCoin(coin);
+  }
+
+  /**
+   * "What we read from the filename", as chips the user can sanity-check.
+   * An empty list means the filename told us nothing.
+   */
+  parsedChips(row: PendingImageReview): string[] {
+    const parsed = row.result.parsed;
+    const chips: string[] = [];
+    if (parsed.year !== null) chips.push(`Year ${parsed.year}`);
+    if (parsed.mintMark) chips.push(`Mint ${parsed.mintMark.toUpperCase()}`);
+    if (parsed.denominationLabel) chips.push(parsed.denominationLabel);
+    if (parsed.coinTypeTokens.length) chips.push(`Type: ${parsed.coinTypeTokens.join(' ')}`);
+    if (parsed.grade) chips.push(`Grade ${parsed.grade.toUpperCase()}`);
+    for (const cert of parsed.certNumbers) chips.push(`Cert ${cert}`);
+    return chips;
+  }
+
+  /* ---------------------------------------------------------------------
+   * Apply
+   * ------------------------------------------------------------------- */
+
+  async applyConfirmedMatches(): Promise<void> {
+    for (const row of this.readyToAttach()) {
+      const file = this.pendingFiles.get(row.fileName);
+      if (!file || !row.selectedCoinId) continue;
       const dataUrl = await this.readFileAsDataUrl(file);
-      const coin = this.inv.inventory().find(c => c.id === match.matchedCoinId);
+      const coin = this.inv.inventory().find(c => c.id === row.selectedCoinId);
       if (!coin) continue;
       this.inv.updateCoin(coin.id, { imagePaths: [...new Set([...coin.imagePaths, dataUrl])] });
     }
@@ -111,31 +262,33 @@ export class ImageImportModal {
     this.close();
   }
 
-  coinNameById(coinId: string | null): string {
-    if (!coinId) return 'None';
-    const coin = this.inv.inventory().find(c => c.id === coinId);
-    if (!coin) return 'Unknown';
-    return [coin.coinType, coin.denomination, coin.year].filter(Boolean).join(' ') || 'Unknown';
-  }
-
   close(): void {
     this.cleanupPendingImages();
     this.closed.emit();
   }
 
-  private updatePendingMatch(fileName: string, updates: Partial<PendingImageMatch>): void {
-    this.pendingImageMatches.set(
-      this.pendingImageMatches().map(m => m.fileName === fileName ? { ...m, ...updates } : m)
+  /* ---------------------------------------------------------------------
+   * Internals
+   * ------------------------------------------------------------------- */
+
+  private rowFor(fileName: string): PendingImageReview | undefined {
+    return this.imageReviews().find(r => r.fileName === fileName);
+  }
+
+  private updateRow(fileName: string, updates: Partial<PendingImageReview>): void {
+    this.imageReviews.set(
+      this.imageReviews().map(r => (r.fileName === fileName ? { ...r, ...updates } : r))
     );
   }
 
   private cleanupPendingImages(): void {
-    for (const match of this.pendingImageMatches()) {
-      if (match.thumbnailUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) {
-        URL.revokeObjectURL(match.thumbnailUrl);
+    for (const row of this.imageReviews()) {
+      if (row.thumbnailUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        URL.revokeObjectURL(row.thumbnailUrl);
       }
     }
-    this.pendingImageMatches.set([]);
+    this.imageReviews.set([]);
+    this.coinSearches.set({});
     this.pendingFiles.clear();
   }
 

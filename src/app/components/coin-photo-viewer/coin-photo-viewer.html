@@ -1,0 +1,12 @@
+<!--
+  Clicking the dark backdrop closes the viewer; clicking the photo itself does
+  not, hence the $event.stopPropagation() on the inner element.
+-->
+<div class="photo-viewer-backdrop" (click)="images().closePhotoViewer()">
+  <div class="photo-viewer" (click)="$event.stopPropagation()">
+    <button type="button" class="photo-viewer__close" (click)="images().closePhotoViewer()" aria-label="Close">&times;</button>
+    <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="images().movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
+    <img [src]="coin().imagePaths[images().photoViewerIndex()]" alt="Coin image, full size" class="photo-viewer__image" />
+    <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="images().movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
+  </div>
+</div>

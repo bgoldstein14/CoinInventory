@@ -1,15 +1,28 @@
-import { Injectable } from '@angular/core';
+﻿import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, of } from 'rxjs';
+import { catchError, map, timeout } from 'rxjs/operators';
 import {
   CoinRecord,
   Denomination,
   MintMarkOption,
   TransactionRecord,
   SpotPrices,
+  SpotPriceResult,
   LogEntry
 } from '../types/coin.model';
-import { SpotPriceResult } from './spot-price.service';
+import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
+
+// ============================================================================
+// Shared helpers
+// ============================================================================
+// These used to be defined here. They now live in ./http-utils so that
+// services which only need a helper (e.g. LoggingService) can import it
+// without dragging ApiService -- and therefore Angular's HttpClient/XHR
+// backend -- into the module graph. Re-exported so existing imports of
+// `describeHttpError` / `resolveApiBaseUrl` / `retryTransientFailures` from
+// './api.service' keep working unchanged.
+export { describeHttpError, resolveApiBaseUrl, retryTransientFailures, isHttpErrorResponse, isRetryableError } from './http-utils';
 
 /**
  * ApiService provides typed HTTP methods for all backend API endpoints.
@@ -26,14 +39,19 @@ import { SpotPriceResult } from './spot-price.service';
  *     error: (err) => console.error('Failed to load coins:', err)
  *   });
  *
- * The baseUrl defaults to localhost:3000 for local development.
- * In production, this should be updated to point to the production backend.
+ * The baseUrl is resolved at runtime by `resolveApiBaseUrl()` â€” see that
+ * function for the localhost:3000 vs. same-origin rules.
+ *
+ * Coin writes (POST/PUT/DELETE) are wrapped in `retryTransientFailures()` so a
+ * brief backend hiccup does not lose the user's edit.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  // Base URL for all API calls
-  // TODO: Replace with environment variable in production
-  private readonly baseUrl = 'http://localhost:3000';
+  /**
+   * Base URL for all API calls, resolved once when the service is created.
+   * See `resolveApiBaseUrl()` above for the rules.
+   */
+  private readonly baseUrl = resolveApiBaseUrl();
 
   constructor(private http: HttpClient) {}
 
@@ -60,30 +78,46 @@ export class ApiService {
 
   /**
    * Create a new coin in the inventory.
+   * Retries automatically on network/5xx failures (see retryTransientFailures).
    * @param coin - Partial coin record with required fields
    * @returns Observable with the newly created coin's ID
    */
   createCoin(coin: Partial<CoinRecord>): Observable<{ id: string }> {
-    return this.http.post<{ id: string }>(`${this.baseUrl}/api/coins`, coin);
+    return this.http
+      .post<{ id: string }>(`${this.baseUrl}/api/coins`, coin)
+      .pipe(retryTransientFailures());
   }
 
   /**
    * Update an existing coin's data.
+   *
+   * IMPORTANT: `coin` must contain ONLY the fields that actually changed.
+   * The backend does a partial update, so sending a whole record would
+   * overwrite fields the user never touched. InventoryService.updateCoin()
+   * is responsible for computing that minimal diff.
+   *
+   * Retries automatically on network/5xx failures.
+   *
    * @param id - The coin's unique identifier
-   * @param coin - Partial coin record with fields to update
+   * @param coin - Partial coin record containing ONLY changed fields
    * @returns Observable that completes when update is done
    */
   updateCoin(id: string, coin: Partial<CoinRecord>): Observable<void> {
-    return this.http.put<void>(`${this.baseUrl}/api/coins/${id}`, coin);
+    return this.http
+      .put<void>(`${this.baseUrl}/api/coins/${id}`, coin)
+      .pipe(retryTransientFailures());
   }
 
   /**
    * Delete a coin from the inventory.
+   * Retries automatically on network/5xx failures.
    * @param id - The coin's unique identifier
    * @returns Observable that completes when deletion is done
    */
   deleteCoin(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/coins/${id}`);
+    return this.http
+      .delete<void>(`${this.baseUrl}/api/coins/${id}`)
+      .pipe(retryTransientFailures());
   }
 
   // ========================================
@@ -309,16 +343,28 @@ export class ApiService {
   // ========================================
 
   /**
-   * Check if the backend API is available.
-   * Makes a simple GET request to /api/coins with a short timeout.
-   * @returns Observable that emits true if backend is available, false otherwise
+   * Check if the backend API is alive.
+   *
+   * Hits the dedicated `GET /api/health` endpoint, which returns
+   * `200 { status: 'ok' }` when the server and its database are healthy,
+   * or `503` when they are not.
+   *
+   * This observable NEVER errors â€” it always emits a single boolean, which
+   * makes it safe to use directly in a template or a simple `if`:
+   *
+   *   this.api.healthCheck().subscribe(alive => console.log(alive));
+   *
+   * The pipeline reads as: wait at most 5 seconds (`timeout`), treat any
+   * successful response as `true` (`map`), and turn *any* failure â€” timeout,
+   * 503, network error â€” into `false` (`catchError` + `of(false)`).
+   *
+   * @returns Observable that emits true if the backend is available, false otherwise
    */
   healthCheck(): Observable<boolean> {
-    // This is a simplified implementation
-    // In a real app, you'd use timeout() and catchError() operators
-    return this.http.get<CoinRecord[]>(`${this.baseUrl}/api/coins`).pipe(
-      // If request succeeds, return true
-      // If request fails, catchError will handle it in the component
-    ) as any; // Type assertion needed because we're simplifying the implementation
+    return this.http.get<{ status: string }>(`${this.baseUrl}/api/health`).pipe(
+      timeout(5000),
+      map(() => true),
+      catchError(() => of(false))
+    );
   }
 }

@@ -1,14 +1,30 @@
+// Styles for the application shell only.
+//
+// `base` sets up the page background and pulls in the shared `controls`
+// primitives (buttons, badges, the box-sizing reset); `layout` is the flex
+// column, the header and the main content grid.
+//
+// Everything that belongs to one region of the screen now lives with that
+// region's component — the toolbar, filter bar, inventory table, detail panel,
+// image overlays, bulk edit bar and settings dialog all carry their own .scss.
+// Angular scopes component styles, so a rule written here could not reach into
+// those child templates anyway.
 @use 'styles/base' as *;
 @use 'styles/layout' as *;
-@use 'styles/inventory-table' as *;
-@use 'styles/detail-panel' as *;
-@use 'styles/overlays' as *;
 
+// ---- Connection status bar (fixed to the bottom of the window) ----
+
+// The status bar is the last row of the root flex column, NOT a fixed
+// overlay.
+//
+// It used to be `position: fixed; bottom: 0`, which took it out of the
+// document flow. Nothing reserved space for it, so it sat on top of the
+// bottom of the inventory table and hid the last row — and the shell's
+// `calc(100vh - 24px)` was an attempt to compensate that never lined up.
+// As a normal flex item it simply occupies its own height and the shell
+// gets exactly what is left.
 .status-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -16,7 +32,6 @@
   background: #1e1e1e;
   color: #ccc;
   font-size: 0.75rem;
-  z-index: 1000;
   border-top: 1px solid #333;
 }
 
@@ -40,7 +55,12 @@
   50% { opacity: 0.3; }
 }
 
+// ---- Database error banner (above the shell) ----
+
+// First row of the root flex column when the database is unreachable.
+// `flex-shrink: 0` stops it being squashed when the table is tall.
 .db-error-banner {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 10px;

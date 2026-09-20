@@ -42,14 +42,14 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   coinType: 'Type', // Changed from 'Name' - displays coin variant (e.g., "Walking Liberty")
   grade: 'Grade',
   category: 'Category',
-  denomination: 'Denomination',
+  denomination: 'Denom.',
   country: 'Country',
   year: 'Year',
   purchasePrice: 'Cost',
   currentValue: 'Value',
   meltValue: 'Melt Value', // New: computed melt value
   soldPrice: 'Sold Price',
-  mintMark: 'Mint Mark',
+  mintMark: 'MM',
   variety: 'Variety',
   certNumber: 'Cert',
   dealer: 'Dealer',
@@ -93,6 +93,19 @@ export interface SortState {
  * @param column - The column identifier
  * @returns Formatted string for display
  */
+export function formatDenominationDisplay(value: string): string {
+  const text = (value ?? '').trim();
+  if (!text) return '—';
+
+  return text
+    .replace(/1\/-/gi, '1 sh')
+    .replace(/2\/-/gi, '2 sh')
+    .replace(/5\/-/gi, '5 sh')
+    .replace(/1\s*shilling/gi, '1 sh')
+    .replace(/2\s*shilling/gi, '2 sh')
+    .replace(/5\s*shilling/gi, '5 sh');
+}
+
 export function formatInventoryCell(coin: CoinRecord, column: InventoryColumn): string {
   switch (column) {
     case 'coinType': // Changed from 'name' - displays coin variant
@@ -105,7 +118,7 @@ export function formatInventoryCell(coin: CoinRecord, column: InventoryColumn): 
       return coin.category || '—';
 
     case 'denomination':
-      return coin.denomination || '—';
+      return formatDenominationDisplay(coin.denomination);
 
     case 'country':
       return coin.country || '—';

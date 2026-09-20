@@ -1,0 +1,40 @@
+<div class="topbar-actions">
+  <div class="toolbar-actions compact-actions">
+    <button type="button" class="secondary small-button" (click)="addCoinRequested.emit()">Add Coin</button>
+
+    <div class="split-button" [class.open]="importMenuOpen()">
+      <button type="button" class="small-button" (click)="handleImportSelection('qif')">Import</button>
+      <button type="button" class="small-button split-button__toggle" (click)="toggleImportMenu()" aria-label="Choose import type">▾</button>
+      @if (importMenuOpen()) {
+        <div class="split-menu">
+          <button type="button" class="menu-item" (click)="handleImportSelection('qif')">QIF</button>
+          <button type="button" class="menu-item" (click)="handleImportSelection('csv')">CSV</button>
+          <button type="button" class="menu-item" (click)="handleImportSelection('json')">JSON</button>
+        </div>
+      }
+    </div>
+
+    <div class="split-button" [class.open]="exportMenuOpen()">
+      <button type="button" class="secondary small-button" (click)="handleExportSelection('csv')">Export</button>
+      <button type="button" class="secondary small-button split-button__toggle" (click)="toggleExportMenu()" aria-label="Choose export type">▾</button>
+      @if (exportMenuOpen()) {
+        <div class="split-menu split-menu--secondary">
+          <button type="button" class="menu-item" (click)="handleExportSelection('csv')">CSV</button>
+          <button type="button" class="menu-item" (click)="handleExportSelection('json')">JSON</button>
+          <button type="button" class="menu-item" (click)="handleExportSelection('insurance')">Insurance CSV</button>
+        </div>
+      }
+    </div>
+
+    <button
+      type="button"
+      class="secondary small-button settings-button"
+      [class.settings-button--active]="settingsOpen()"
+      [attr.aria-expanded]="settingsOpen()"
+      (click)="settingsRequested.emit()"
+      aria-label="Open settings"
+    >
+      ⚙ Settings
+    </button>
+  </div>
+</div>

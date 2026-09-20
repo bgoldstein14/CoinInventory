@@ -1,0 +1,33 @@
+<!--
+  Clicking the dark backdrop closes the gallery; the $event.stopPropagation()
+  on the panel itself stops a click *inside* the gallery from bubbling up and
+  closing it too.
+-->
+<div class="modal-backdrop" (click)="images().closeImageGallery()">
+  <div class="modal modal--wide image-gallery-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Images</h2>
+      <button type="button" class="modal-close" (click)="images().closeImageGallery()" aria-label="Close images">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="image-gallery" (drop)="images().handleImageDrop($event)" (dragover)="images().handleDragOver($event)">
+        <div class="image-gallery__header">
+          <h3>Attached photos</h3>
+          <label class="file-picker file-picker--compact">
+            <input type="file" multiple (change)="images().addCoinImages($event)" />
+            Add images
+          </label>
+        </div>
+        <div class="image-list">
+          @for (imagePath of coin().imagePaths; track imagePath; let i = $index) {
+            <div class="image-item">
+              <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
+              <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+              <button type="button" class="secondary small-button" (click)="images().removeCoinImage(imagePath)">Delete</button>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

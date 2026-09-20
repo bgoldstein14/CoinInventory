@@ -1,6 +1,18 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { ApiService } from './api.service';
-import { of } from 'rxjs';
+import { ApiService, describeHttpError, resolveApiBaseUrl } from './api.service';
+import { defer, firstValueFrom, of, throwError } from 'rxjs';
+
+/**
+ * Builds a stand-in for Angular's `HttpErrorResponse`.
+ *
+ * We deliberately do NOT import the real class: doing so pulls Angular's XHR
+ * backend into this test file and it then needs the JIT compiler. The helpers
+ * under test identify HTTP errors structurally (by their numeric `status`),
+ * so a plain object is an accurate stand-in.
+ */
+function httpError(status: number, statusText: string, body?: unknown) {
+  return { status, statusText, error: body ?? null, name: 'HttpErrorResponse' };
+}
 
 /**
  * Tests for ApiService.
@@ -177,5 +189,118 @@ describe('ApiService', () => {
 
     service.postLog(logEntry);
     expect(mockHttpClient.post).toHaveBeenCalledWith(`${baseUrl}/api/log`, logEntry);
+  });
+
+  // --- Bounded retry on transient failures ---
+
+  it('retries a 503 on updateCoin with exponential backoff, then succeeds', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let attempts = 0;
+      // `defer` re-runs the factory on every (re)subscription, which is exactly
+      // what `retry` does — so this counts real attempts.
+      mockHttpClient.put = vi.fn(() =>
+        defer(() => {
+          attempts++;
+          return attempts < 3
+            ? throwError(() => httpError(503, 'Service Unavailable'))
+            : of(undefined);
+        })
+      );
+
+      const result = firstValueFrom(service.updateCoin('c1', { grade: 'MS66' }));
+      // Backoff is 500ms then 1000ms; 2s covers both.
+      await vi.advanceTimersByTimeAsync(2000);
+
+      await expect(result).resolves.toBeUndefined();
+      expect(attempts).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not retry a deterministic 409 conflict', async () => {
+    let attempts = 0;
+    mockHttpClient.put = vi.fn(() =>
+      defer(() => {
+        attempts++;
+        return throwError(() => httpError(409, 'Conflict'));
+      })
+    );
+
+    await expect(firstValueFrom(service.updateCoin('c1', { grade: 'MS66' }))).rejects.toBeTruthy();
+    expect(attempts).toBe(1);
+  });
+
+  it('gives up after a bounded number of retries', async () => {
+    vi.useFakeTimers();
+
+    try {
+      let attempts = 0;
+      mockHttpClient.delete = vi.fn(() =>
+        defer(() => {
+          attempts++;
+          return throwError(() => httpError(0, 'Unknown Error'));
+        })
+      );
+
+      const result = firstValueFrom(service.deleteCoin('c1'));
+      // Attach the rejection handler before advancing so it is never floating.
+      const assertion = expect(result).rejects.toBeTruthy();
+      await vi.advanceTimersByTimeAsync(5000);
+      await assertion;
+
+      // 1 original attempt + 2 retries.
+      expect(attempts).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // --- Health check ---
+
+  it('healthCheck calls GET /api/health and maps success to true', async () => {
+    mockHttpClient.get = vi.fn(() => of({ status: 'ok' }));
+
+    await expect(firstValueFrom(service.healthCheck())).resolves.toBe(true);
+    expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/health`);
+  });
+
+  it('healthCheck maps a failure (e.g. 503) to false instead of erroring', async () => {
+    mockHttpClient.get = vi.fn(() =>
+      throwError(() => httpError(503, 'Service Unavailable'))
+    );
+
+    await expect(firstValueFrom(service.healthCheck())).resolves.toBe(false);
+  });
+
+  // --- Base URL resolution ---
+
+  it('resolveApiBaseUrl falls back to localhost:3000 outside a browser', () => {
+    // Unit tests run in Node, where `window` is undefined.
+    expect(resolveApiBaseUrl()).toBe('http://localhost:3000');
+  });
+
+  // --- Error message helper ---
+
+  it('describeHttpError extracts status, statusText and the server message', () => {
+    const error = httpError(409, 'Conflict', { error: 'coin already exists' });
+
+    const message = describeHttpError(error);
+    expect(message).toContain('409');
+    expect(message).toContain('Conflict');
+    expect(message).toContain('coin already exists');
+    // Must stay short — the old code JSON.stringify'd the whole response.
+    expect(message.length).toBeLessThan(120);
+  });
+
+  it('describeHttpError reports status 0 as a network error', () => {
+    expect(describeHttpError(httpError(0, 'Unknown Error'))).toContain('Network error');
+  });
+
+  it('describeHttpError handles plain Errors and unknown values', () => {
+    expect(describeHttpError(new Error('boom'))).toBe('boom');
+    expect(describeHttpError('just a string')).toBe('just a string');
   });
 });

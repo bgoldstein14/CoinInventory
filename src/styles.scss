@@ -1,1 +1,26 @@
-/* You can add global styles to this file, and also import other style files */
+/* Global styles.
+ *
+ * This file was previously empty, which was the root cause of the page-level
+ * scrollbar: with no reset, the browser's default `body { margin: 8px }` is
+ * still in effect. Combined with the app root asking for a full `100vh`, the
+ * document became 100vh + 16px tall, so the whole window scrolled by a
+ * sliver no matter what the app did internally.
+ *
+ * The app is a fixed-height, single-screen application: it manages its own
+ * scrolling inside the inventory table and the detail panel, and the page
+ * itself should never scroll.
+ */
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  /* The application shell is exactly viewport-height and handles scrolling
+   * internally. Anything that overflows the window is a layout bug, so make
+   * it visible as clipping rather than hiding it behind a page scrollbar. */
+  overflow: hidden;
+}

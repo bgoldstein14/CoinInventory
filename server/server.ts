@@ -1,26 +1,47 @@
 /**
  * Express server entry point — sets up middleware and mounts route modules.
  *
- * Route modules:
- *   routes/coins.ts   — Coin CRUD + image management (mounted at /api/coins)
- *   routes/lookups.ts  — Categories, Coin Sets, Denominations, Mint Marks (mounted at /api)
- *   routes/data.ts     — Transactions, Spot Prices, Settings, Frontend Log (mounted at /api)
+ * This file is deliberately kept short: its job is wiring, not logic. Anything
+ * that does real work lives in one of the folders below.
  *
- * Database helpers live in db.ts (getPool, rowToCoin, formatDate).
+ * Route modules:
+ *   routes/health.ts   — GET /api/health, the launcher's readiness probe
+ *   routes/coins/      — Coin CRUD + image management (mounted at /api/coins)
+ *   routes/lookups/    — Categories, Metal Contents, Coin Sets, Denominations,
+ *                        Mint Marks (mounted at /api)
+ *   routes/data/       — Transactions, Spot Prices, Settings, Frontend Log
+ *                        (mounted at /api)
+ *
+ * Database helpers live in the db/ folder (getPool, withDb, rowToCoin,
+ * formatDate, COIN_FIELDS, DB_BINDINGS...). Start with db/index.ts — its
+ * header explains the production crash that shaped the whole database layer.
  */
 
 import 'dotenv/config';
 import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import path from 'path';
-import { logInfo } from './logger';
+import { logInfo, logError } from './logger';
+import { installProcessSafetyNet } from './process-safety';
 
+import healthRouter from './routes/health';
 import coinsRouter from './routes/coins';
 import lookupsRouter from './routes/lookups';
 import dataRouter from './routes/data';
 
 // Re-export getPool so tests and other consumers can still import from './server'
 export { getPool } from './db';
+
+// ============================================================
+// Process-level safety net
+// ============================================================
+//
+// Installs the 'unhandledRejection' / 'uncaughtException' handlers that make
+// a fatal error show up in app.log instead of silently ending the process.
+// See process-safety.ts for the full story. Done here at module load so the
+// handlers are active for the whole lifetime of the process (including during
+// tests).
+installProcessSafetyNet();
 
 // ============================================================
 // Express app
@@ -44,6 +65,9 @@ app.use('/api', (req, _res, next) => {
 // ============================================================
 // Mount route modules
 // ============================================================
+// Health first, so the launcher's readiness probe is registered before
+// anything else — same order as when it was declared inline here.
+app.use('/api', healthRouter);
 app.use('/api/coins', coinsRouter);
 app.use('/api', lookupsRouter);
 app.use('/api', dataRouter);
@@ -59,8 +83,8 @@ app.get('*', (_req: Request, res: Response) => {
 // Global error handler
 // ============================================================
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  const { logError } = require('./logger');
   logError('Unhandled error', err);
+  if (res.headersSent) return;
   res.status(500).json({ error: 'Internal server error' });
 });
 

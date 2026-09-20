@@ -27,10 +27,25 @@
 .import-stat--matched { background: #e5f3e6; color: #2b6b34; }
 .import-stat--review { background: #fff8e8; color: #8a5b1f; }
 .import-stat--unmatched { background: #fbe9e7; color: #8a2c22; }
+.import-stat--outstanding { background: #e9edfb; color: #2e3f7a; }
 
 .image-match-section {
   margin-bottom: 16px;
-  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+  h3 { margin: 0 0 4px; font-size: 0.88rem; }
+}
+
+.section-hint {
+  margin: 0 0 8px;
+  font-size: 0.75rem;
+  color: #8a7a63;
+  line-height: 1.4;
+
+  code {
+    background: #f2ece2;
+    border-radius: 4px;
+    padding: 0 4px;
+    font-size: 0.72rem;
+  }
 }
 
 .image-match-list { display: grid; gap: 8px; }
@@ -49,6 +64,21 @@
 .image-match-card--confirmed { border-color: #b9dfc0; background: #f6fbf6; }
 .image-match-card--review { border-color: #f0d59a; background: #fffcf5; }
 .image-match-card--unmatched { border-color: #edb7ac; background: #fef8f7; }
+.image-match-card--skipped { opacity: 0.6; }
+
+// Review / unmatched cards stack their sections vertically so the ranked
+// candidate list and the search box have room to breathe.
+.image-match-card--stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.match-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
 
 .match-thumb {
   width: 56px;
@@ -92,5 +122,144 @@
     border-radius: 6px;
     font-size: 0.82rem;
     background: #fdfaf6;
+  }
+}
+
+.match-reason {
+  font-size: 0.72rem;
+  color: #8a7a63;
+  line-height: 1.35;
+}
+
+.match-skipped-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #6b5c48;
+  padding: 4px 8px;
+  background: #ece5da;
+  border-radius: 999px;
+}
+
+.match-selected {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  background: #f6fbf6;
+  border: 1px solid #b9dfc0;
+  border-radius: 8px;
+}
+
+// ---- "What we read from the filename" chips ----
+
+.parsed-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0;
+}
+
+.parsed-chip {
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1eadf;
+  color: #5c4935;
+  border: 1px solid #e2d6c3;
+}
+
+.parsed-chip--empty {
+  background: transparent;
+  border-style: dashed;
+  color: #8a7a63;
+}
+
+// ---- Ranked candidate list ----
+
+.candidate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.candidate {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #ebdfcc;
+  border-radius: 8px;
+
+  &:first-child { border-color: #d9c7a5; }
+}
+
+.candidate-main { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.candidate-name { font-size: 0.8rem; font-weight: 600; }
+.candidate-reason { font-size: 0.71rem; color: #8a7a63; line-height: 1.35; }
+
+.candidate-score {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #5c4935;
+  flex-shrink: 0;
+  min-width: 42px;
+  text-align: right;
+}
+
+// ---- Manual coin search ----
+
+.candidate-search {
+  display: grid;
+  gap: 4px;
+
+  input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 1px solid #d9c7a5;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    background: #fdfaf6;
+  }
+}
+
+.candidate-search-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #8a7a63;
+}
+
+.search-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+  border: 1px solid #ebdfcc;
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.search-empty { margin: 0; font-size: 0.72rem; color: #8a7a63; }
+
+.link-button {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 8px;
+  font-size: 0.8rem;
+  color: #2c1c0e;
+  cursor: pointer;
+  border-radius: 0;
+
+  &:hover {
+    background: #f3ece1;
+    transform: none;
+    box-shadow: none;
   }
 }

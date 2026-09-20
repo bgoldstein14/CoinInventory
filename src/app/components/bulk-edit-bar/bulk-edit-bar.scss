@@ -1,0 +1,60 @@
+// Styles for the floating bulk-edit bar.
+// Moved here from the old `styles/_overlays.scss` partial.
+@use '../../styles/controls' as *;
+
+// Not part of the original markup, and the bar is position: fixed — keep the
+// host element out of the layout.
+:host { display: contents; }
+
+// ---- Bulk edit bar ----
+
+.bulk-edit-bar {
+  position: fixed;
+  bottom: 24px;
+  left: 0;
+  right: 0;
+  z-index: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 12px 24px;
+  background: linear-gradient(135deg, #2c1c0e, #4a3520);
+  color: #fff;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.bulk-count {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.bulk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+
+  select, input {
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.15);
+    color: #fff;
+    font-size: 0.82rem;
+
+    &::placeholder { color: rgba(255, 255, 255, 0.6); }
+    option { color: #1f1f22; }
+  }
+}
+
+// ---- Responsive & print ----
+// (Both rules moved from `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .bulk-edit-bar { flex-wrap: wrap; }
+}
+
+@media print {
+  .bulk-edit-bar { display: none !important; }
+}

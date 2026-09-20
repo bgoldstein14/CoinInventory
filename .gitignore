@@ -49,3 +49,6 @@ server/.env
 Thumbs.db
 server/logs/app.log
 server/logs/app.log
+
+# Claude Code local settings
+.claude/settings.local.json

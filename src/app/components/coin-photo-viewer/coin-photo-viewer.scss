@@ -1,0 +1,72 @@
+// Styles for the full-screen photo lightbox.
+// Moved here from the old `styles/_overlays.scss` partial.
+@use '../../styles/controls' as *;
+
+// Not part of the original markup, and the backdrop is position: fixed — keep
+// the host element out of the layout entirely.
+:host { display: contents; }
+
+// ---- Photo viewer ----
+
+.photo-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 14, 8, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 32px;
+}
+
+.photo-viewer {
+  position: relative;
+  max-width: min(90vw, 900px);
+  max-height: 85vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.photo-viewer__image {
+  max-width: 100%;
+  max-height: 85vh;
+  border-radius: 10px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.photo-viewer__close,
+.photo-viewer__nav {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2c1c0e;
+  border: none;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { transform: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+}
+
+.photo-viewer__close { top: -16px; right: -16px; }
+.photo-viewer__nav--prev { left: -48px; top: 50%; transform: translateY(-50%); }
+.photo-viewer__nav--next { right: -48px; top: 50%; transform: translateY(-50%); }
+
+// ---- Responsive & print ----
+// On a narrow screen the prev/next buttons sit inside the image instead of
+// hanging off its edges. (Both rules moved from `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .photo-viewer__nav--prev { left: 8px; }
+  .photo-viewer__nav--next { right: 8px; }
+}
+
+@media print {
+  .photo-viewer-backdrop { display: none !important; }
+}

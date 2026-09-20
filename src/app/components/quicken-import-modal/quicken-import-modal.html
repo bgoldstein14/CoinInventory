@@ -21,7 +21,10 @@
       </label>
 
       @if (parsing() || importing()) {
-        <div class="hint-text" aria-live="polite"><strong>Working...</strong> Loading Quicken data…</div>
+        <div class="busy-indicator" aria-live="polite" role="status">
+          <span class="busy-spinner" aria-hidden="true"></span>
+          <span><strong>Working...</strong> Loading Quicken data…</span>
+        </div>
       }
 
       <textarea
@@ -97,14 +100,78 @@
         </div>
       }
 
+      <!--
+        Exceptions: coins the parser could read but refused to import because
+        fewer than 2 of Year / Coin Type / Denomination were present. These are
+        always shown, never silently dropped, and each row can be forced into
+        the import with "Import anyway".
+      -->
+      @if (rejectedRecords().length > 0) {
+        <div class="exception-list" role="region" aria-label="Import exceptions">
+          <h3>Exceptions — not imported ({{ rejectedRecords().length }})</h3>
+          <p class="hint-text">
+            A coin needs at least 2 of Year, Coin Type and Denomination to be imported.
+            These rows did not qualify. Use “Import anyway” if you want one regardless —
+            you can fill in the missing details after importing.
+          </p>
+          <table class="exception-table">
+            <thead>
+              <tr>
+                <th>Quicken security name</th>
+                <th>Year</th>
+                <th>Coin Type</th>
+                <th>Denomination</th>
+                <th>Reason</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (exception of rejectedRecords(); track exception.securityName) {
+                <tr>
+                  <td><code>{{ exception.securityName }}</code></td>
+                  <td>{{ exception.record.year || '—' }}</td>
+                  <td>{{ exception.record.coinType || '—' }}</td>
+                  <td>{{ exception.record.denomination || '—' }}</td>
+                  <td>{{ exception.reason }}</td>
+                  <td>
+                    <button
+                      type="button"
+                      class="secondary small-button"
+                      (click)="overrideException(exception.securityName)"
+                    >
+                      Import anyway
+                    </button>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (overriddenSecurityNames().length > 0) {
+        <div class="override-list">
+          <h3>Imported despite missing details ({{ overriddenSecurityNames().length }})</h3>
+          <ul>
+            @for (securityName of overriddenSecurityNames(); track securityName) {
+              <li>
+                <code>{{ securityName }}</code>
+                <button type="button" class="secondary small-button" (click)="undoOverride(securityName)">
+                  Undo
+                </button>
+              </li>
+            }
+          </ul>
+        </div>
+      }
+
       @if (importedRecords().length > 0) {
         <div class="import-preview">
           <h3>Import preview ({{ importedRecords().length }} coins)</h3>
-          <p class="hint-text">Review parsed attributes before importing. Values are extracted from Quicken security names.</p>
+          <p class="hint-text">Review the coins that will be imported. Values are extracted from Quicken security names.</p>
           @for (accountName of groupedAccountNames(); track accountName) {
             <div class="account-group-preview">
               <h4>{{ accountName }}</h4>
-              <!-- Enhanced preview table showing parsed attributes -->
               <table class="import-preview-table">
                 <thead>
                   <tr>
@@ -133,36 +200,6 @@
               </table>
             </div>
           }
-        </div>
-      }
-
-      <!-- Show skipped records (sold/transferred coins) -->
-      @if (skippedRecords().length > 0) {
-        <div class="import-preview skipped-preview">
-          <h3>Skipped Records ({{ skippedRecords().length }} coins)</h3>
-          <p class="hint-text">
-            These coins were sold or transferred out (net quantity &le; 0) and will not be imported.
-          </p>
-          <table class="import-preview-table">
-            <thead>
-              <tr>
-                <th>Coin Type</th>
-                <th>Denomination</th>
-                <th>Year</th>
-                <th>Reason</th>
-              </tr>
-            </thead>
-            <tbody>
-              @for (record of skippedRecords(); track record.id) {
-                <tr class="skipped-row">
-                  <td>{{ record.coinType || '—' }}</td>
-                  <td>{{ record.denomination || '—' }}</td>
-                  <td>{{ record.year || '—' }}</td>
-                  <td><span class="badge badge--warning">Sold/Transferred</span></td>
-                </tr>
-              }
-            </tbody>
-          </table>
         </div>
       }
     </div>

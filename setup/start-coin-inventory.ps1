@@ -1,95 +1,44 @@
+<#
+    Compatibility shim.
+
+    The real launcher is start-coin-inventory.ps1 in the PROJECT ROOT. This
+    file used to be a second, independent implementation, and the two drifted
+    apart -- they had different readiness probes, different lock files (this
+    one used %TEMP%, the root one uses the project directory) and different
+    shutdown logic. Because the lock files differed, launching via this script
+    and via the root launch-coin-inventory.cmd at the same time started two
+    copies of the servers that then fought over ports 3000 and 4200.
+
+    Rather than maintain two launchers, this now simply forwards to the root
+    one, so `setup\start-coin-inventory.cmd` keeps working.
+
+    Three behaviours of the old version were deliberately NOT carried over:
+
+      * "npm install" on every launch. Dependencies do not change between
+        runs, and on a network share this was slow and turned any transient
+        npm failure into a failed startup. The root launcher installs only
+        when node_modules is actually missing.
+
+      * A cleanup routine that killed any process whose command line
+        contained the app directory AND the substring 'server'. That is
+        broad enough to terminate an editor, a terminal, or another tool
+        that merely had the project path open.
+
+      * Guessing the browser process by enumerating msedge.exe and taking
+        the newest one. Edge spawns renderer and GPU child processes, so
+        this could latch onto a short-lived helper and shut the app down
+        moments after it started.
+#>
+
 $ErrorActionPreference = 'Stop'
 
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
-$appDir = (Resolve-Path (Join-Path $scriptDir '..')).Path
-$edgeUrl = 'http://localhost:4200'
-$lockPath = Join-Path $env:TEMP 'coin-inventory-launch.lock'
+$scriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
+$rootScript = Join-Path (Resolve-Path (Join-Path $scriptDir '..')).Path 'start-coin-inventory.ps1'
 
-function Stop-TrackedApp {
-    $processes = Get-CimInstance Win32_Process |
-        Where-Object {
-            $_.CommandLine -and
-            $_.CommandLine.Contains($appDir) -and
-            (
-                $_.CommandLine.Contains('npm start') -or
-                $_.CommandLine.Contains('ng serve') -or
-                $_.CommandLine.Contains('tsx server.ts') -or
-                $_.CommandLine.Contains('server')
-            )
-        }
-
-    foreach ($process in $processes) {
-        try {
-            Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
-        } catch {
-            Write-Host "Unable to stop process $($process.ProcessId): $($_.Exception.Message)"
-        }
-    }
-
-    if (Test-Path $lockPath) {
-        Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
-    }
-}
-
-try {
-    if (Test-Path $lockPath) {
-        $existingPid = Get-Content $lockPath -ErrorAction SilentlyContinue
-        if ($existingPid) {
-            $existing = Get-Process -Id $existingPid -ErrorAction SilentlyContinue
-            if ($existing) {
-                Stop-Process -Id $existingPid -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Remove-Item $lockPath -Force -ErrorAction SilentlyContinue
-    }
-
-    $node = Get-Command node -ErrorAction SilentlyContinue
-    if (-not $node) {
-        Write-Host 'Node.js is not installed.'
-        Write-Host 'Launching installer...'
-        & (Join-Path $scriptDir 'install-node.ps1')
-        $node = Get-Command node -ErrorAction SilentlyContinue
-        if (-not $node) {
-            Write-Error 'Node.js is still unavailable. Please install it manually from https://nodejs.org/'
-            exit 1
-        }
-    }
-
-    Set-Location $appDir
-    Write-Host 'Installing dependencies...'
-    npm install
-
-    Write-Host 'Starting Coin Inventory...'
-    $appProcess = Start-Process -FilePath 'cmd.exe' -ArgumentList "/c cd /d `"$appDir`" && npm start -- --host 0.0.0.0" -PassThru -WindowStyle Minimized
-    [System.IO.File]::WriteAllText($lockPath, $appProcess.Id)
-
-    Write-Host "Opening Edge to $edgeUrl"
-    $existingEdgeProcesses = @(Get-Process -Name msedge -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id)
-    Start-Process "microsoft-edge:$edgeUrl"
-
-    $browserProcess = $null
-    for ($attempt = 0; $attempt -lt 30; $attempt++) {
-        Start-Sleep -Milliseconds 500
-        $candidate = @(Get-Process -Name msedge -ErrorAction SilentlyContinue | Where-Object { $_.Id -notin $existingEdgeProcesses } | Sort-Object StartTime -Descending)
-        if ($candidate.Count -gt 0) {
-            $browserProcess = $candidate[0]
-            break
-        }
-    }
-
-    if ($null -ne $browserProcess) {
-        while (-not $browserProcess.HasExited) {
-            Start-Sleep -Seconds 2
-            $browserProcess = Get-Process -Id $browserProcess.Id -ErrorAction SilentlyContinue
-        }
-    }
-
-    Write-Host 'Browser closed. Stopping Coin Inventory...'
-    Stop-TrackedApp
-    exit 0
-}
-catch {
-    Write-Error $_.Exception.Message
-    Stop-TrackedApp
+if (-not (Test-Path $rootScript)) {
+    Write-Host "Cannot find the main launcher at $rootScript" -ForegroundColor Red
     exit 1
 }
+
+& $rootScript
+exit $LASTEXITCODE

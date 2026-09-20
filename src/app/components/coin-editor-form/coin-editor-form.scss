@@ -1,0 +1,144 @@
+// Styles for the editable field grid inside the detail sidebar.
+// Moved here from the old `styles/_detail-panel.scss` partial.
+@use '../../styles/controls' as *;
+@use '../../styles/field' as *;
+
+// Not part of the original markup — keep the host out of the layout so
+// `.detail-editor` and `.detail-notes` remain direct children of the panel.
+:host { display: contents; }
+
+// ---- Editor grid ----
+
+.detail-editor {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-editor__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.detail-editor__row--top,
+.detail-editor__row--pricing,
+.detail-editor__row--metadata,
+.detail-editor__row--certs,
+.detail-editor__row--bottom-metrics,
+.detail-editor__row--weight-inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.detail-editor__row--certs {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  column-gap: 14px;
+}
+
+// ---- Individual fields ----
+//
+// The base `.detail-field` look and `--full` modifier now live in
+// `styles/_field.scss` (see the `@use` at the top of this file), because the
+// add-transaction row in the detail sidebar uses the same pattern. Only the
+// modifiers specific to this editor's grid remain below.
+
+.detail-field--grade-wrap {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.detail-grade-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cac-inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: #5c4935;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-field--compact,
+.detail-field--narrow,
+.detail-field--money,
+.detail-field--weight,
+.detail-field--pm-weight,
+.detail-field--pm-percent {
+  min-width: 0;
+}
+
+.detail-field--narrow {
+  max-width: 130px;
+}
+
+.detail-field--money {
+  max-width: 140px;
+}
+
+.detail-field--weight {
+  max-width: 150px;
+}
+
+.detail-field--cert-company {
+  max-width: 200px;
+}
+
+.detail-field--cert-number {
+  max-width: 220px;
+}
+
+.detail-field--pm-weight {
+  max-width: 150px;
+}
+
+.detail-field--pm-percent {
+  max-width: 100px;
+}
+
+.cac-toggle-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: #5c4935;
+  font-weight: 600;
+}
+
+// ---- Notes ----
+
+.detail-notes { margin-top: 8px; }
+
+.detail-notes-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #5c4935;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.detail-notes textarea {
+  width: 100%;
+  min-height: 52px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid #d9c7a5;
+  border-radius: 7px;
+  background: #fdfaf6;
+}
+
+// ---- Responsive ----
+// On a narrow screen the two/three-column field grid collapses to one column.
+// (Moved from `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .detail-editor { grid-template-columns: 1fr; }
+}

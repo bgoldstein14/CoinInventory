@@ -1,0 +1,158 @@
+// Styles for the detail sidebar frame: heading, badges, action buttons and the
+// transaction history. Moved here from the old `styles/_detail-panel.scss`
+// partial. The editable form's own styles now live with CoinEditorForm.
+@use '../../styles/controls' as *;
+@use '../../styles/panel' as *;
+@use '../../styles/field' as *;
+
+// The host element is not part of the original markup, so keep it out of the
+// layout: `<aside class="panel detail-panel">` must remain a direct child of
+// the `.main-content` grid for the two-column layout to work.
+:host { display: contents; }
+
+// ---- Detail panel ----
+
+.detail-panel {
+  position: sticky;
+  top: 12px;
+  max-height: calc(100vh - 70px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 10px;
+
+  h2 { font-size: 0.94rem; margin: 0; word-break: break-word; }
+}
+
+.detail-badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.detail-header-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+// ---- Valuation summary ----
+
+.detail-valuation {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.valuation-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 0.76rem;
+
+  span { color: #5c4935; }
+  strong { color: #2c1c0e; }
+
+  &.gain strong { color: #2b6b34; }
+  &.loss strong { color: #8a2c22; }
+
+  &.melt-row {
+    border-top: 1px solid #ecdcc0;
+    margin-top: 6px;
+    padding-top: 8px;
+    strong { color: #7a5b26; }
+  }
+}
+
+// ---- Transaction history ----
+
+.detail-transactions {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+
+  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+}
+
+.transaction-list {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #e8daca;
+    border-radius: 8px;
+    font-size: 0.8rem;
+  }
+}
+
+.txn-type {
+  text-transform: capitalize;
+  font-weight: 600;
+  font-size: 0.72rem;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #eaf1fb;
+  color: #29528a;
+}
+
+.txn-amount { font-weight: 600; }
+.txn-date { color: #7a6a53; }
+.txn-dealer { color: #5c4935; font-style: italic; }
+
+// Each control is now wrapped in a `.detail-field` label, so the flex
+// children here are the labels rather than the bare inputs. The control's
+// own appearance (border, padding, background) comes from the shared
+// `styles/_field.scss` rule, which is what keeps this row visually identical
+// to the coin editor above it.
+.add-transaction-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: end; // captions vary in height; keep the controls on one line
+
+  .detail-field { flex: 0 0 auto; }
+
+  // Sizes that used to be set on the inputs directly now size the wrapper.
+  select { min-width: 100px; }
+  input[type="date"] { width: 130px; }
+}
+
+.detail-field--txn-amount { width: 90px; }
+
+// Notes takes whatever room is left on the row.
+.detail-field--txn-notes { flex: 1 1 120px; min-width: 120px; }
+
+// ---- Responsive & print ----
+// On a narrow screen the sidebar stops being sticky and just flows with the
+// page; on paper it is dropped entirely. (Both moved from `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .detail-panel { position: static; max-height: none; }
+}
+
+@media print {
+  .detail-panel { display: none !important; }
+}

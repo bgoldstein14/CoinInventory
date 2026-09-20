@@ -1,0 +1,227 @@
+// Styles for the inventory grid. Moved here wholesale from the old
+// `styles/_inventory-table.scss` partial, which only this component used.
+//
+// `controls` supplies the shared button / badge / checkbox look, plus the
+// `box-sizing: border-box` reset — Angular scopes styles per component, so each
+// component has to ask for the shared basics itself.
+@use '../../styles/controls' as *;
+@use '../../styles/panel' as *;
+
+// The host element is an artefact of making this a component; `display: contents`
+// removes it from layout so `<section class="panel">` remains a direct child of
+// the `.main-content` grid, exactly as it was in app.html.
+:host { display: contents; }
+
+// ---- Inventory panel header ----
+
+.inventory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.selection-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #1d4ed8;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+// ---- Column picker ----
+
+.column-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
+// ---- Table ----
+
+.inventory-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventory-table-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+  font-size: 0.7rem;
+}
+
+.inventory-table th,
+.inventory-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ede5d8;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-table thead th {
+  background: #f8f0e4;
+  color: #5d4832;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  &:hover { color: #8e5b2d; }
+}
+
+.sort-indicator {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 0.65rem;
+}
+
+.check-column {
+  width: 32px;
+  text-align: center;
+
+  input { accent-color: #8e5b2d; cursor: pointer; }
+}
+
+// ---- Table rows ----
+
+.inventory-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s ease;
+
+  &:hover { background: #fdf8f0; }
+
+  // A row that has not been saved to the database yet (see the `is-draft`
+  // comment in the template). Deliberately a faint warm tint only — the
+  // "Unsaved" chip is what actually carries the message; this just makes the
+  // row easy to pick out when several are on screen.
+  //
+  // Declared BEFORE `.selected` on purpose: the two rules have the same CSS
+  // specificity, so whichever comes last wins, and the selection highlight
+  // must always beat the draft tint.
+  &.is-draft {
+    background: #fffaf0;
+
+    &:hover { background: #fff4e3; }
+  }
+
+  &.selected {
+    background: #f5ead8;
+    box-shadow: inset 3px 0 0 #b98748;
+  }
+
+  &.multi-selected { background: #eef2ff; }
+
+  &.selected.multi-selected {
+    background: #e8edf8;
+    box-shadow: inset 3px 0 0 #4f6dba;
+  }
+}
+
+.empty-row td {
+  text-align: center;
+  color: #8a7a63;
+  padding: 32px 12px;
+  cursor: default;
+}
+
+// ---- "Unsaved" chip on draft rows ----
+// Only the colour modifier lives here; the pill shape, padding and font come
+// from the shared `.badge` primitive in styles/_controls.scss, which is
+// already pulled in at the top of this file.
+
+.badge--draft {
+  background: #fdf0d9;
+  color: #8a5a10;
+  border: 1px solid #ecd2a0;
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  margin-right: 6px;
+  cursor: help;
+}
+
+// ---- Row thumbnails ----
+
+.thumb-column { width: 48px; }
+
+.row-thumb {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+}
+
+.row-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  text-align: center;
+  color: #a4937a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px;
+}
+
+.row-action-stack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-action-stack .small-button {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+// ---- Print ----
+// On paper the table should fill the page and lose its selection column.
+// (Moved from `_overlays.scss`.)
+
+@media print {
+  .inventory-panel { border: none; box-shadow: none; padding: 0; margin: 0; }
+
+  .check-column { display: none; }
+}

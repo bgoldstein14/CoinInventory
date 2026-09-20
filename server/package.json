@@ -5,7 +5,8 @@
   "private": true,
   "scripts": {
     "start": "node dist/server.js",
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
     "dev": "tsx watch server.ts",
     "test": "vitest run"
   },
@@ -22,6 +23,7 @@
   "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
+    "@types/mssql": "^12.3.0",
     "@types/node": "^22.15.0",
     "@types/supertest": "^6.0.2",
     "supertest": "^7.0.0",

@@ -24,6 +24,15 @@ export class CsvImportModal {
 
   protected readonly csvPreviewCount = computed(() => this.csvRows().length);
 
+  /**
+   * Downloads a starter CSV with the recognised header row and two example
+   * coins, so a first-time user has something concrete to edit rather than
+   * having to guess at the format.
+   */
+  protected downloadTemplate(): void {
+    this.csvService.downloadCsvTemplate();
+  }
+
   protected async handleCsvFileSelection(event: Event): Promise<void> {
     const input = event.target as HTMLInputElement;
     const file = input.files?.[0];

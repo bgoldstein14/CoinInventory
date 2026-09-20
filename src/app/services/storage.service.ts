@@ -25,7 +25,8 @@ export const StorageKeys = {
   CategoryOptions: 'coin-inventory-category-options',
   CoinSets: 'coin-inventory-sets',
   Transactions: 'coin-inventory-transactions',
-  SpotPrices: 'coin-inventory-spot-prices'
+  SpotPrices: 'coin-inventory-spot-prices',
+  AppSettings: 'coin-inventory-app-settings'
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

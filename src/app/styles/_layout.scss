@@ -1,9 +1,35 @@
+// The outer page layout owned by the App shell: the flex column, the header,
+// and the one/two column main content grid.
+//
+// Styles for things that now live in child components have moved out:
+//  - the search/filter toolbar -> components/inventory-filter-bar
+//  - the header action buttons -> components/app-toolbar
+//  - the white `.panel` card    -> styles/_panel.scss (shared by two components)
+
 // ---- Layout shell ----
 
+// The shell fills whatever vertical space the root flex column gives it,
+// rather than computing its own height.
+//
+// It used to be `height: calc(100vh - 24px)`, a hand-tuned guess meant to
+// leave room for the body margin and the fixed status bar. That guess never
+// quite matched reality, which is where the leftover vertical "wiggle room"
+// came from. `flex: 1` measures it exactly instead.
+//
+// `min-height: 0` is required: a flex item defaults to `min-height: auto`,
+// which refuses to shrink below its content. Without it the inner table
+// would push the shell taller than the viewport and the page would scroll
+// again.
 .app-shell {
   max-width: 1440px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
   margin: 0 auto;
-  padding: 24px 24px 80px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 // ---- Top bar ----
@@ -12,17 +38,9 @@
   display: flex;
   justify-content: space-between;
   align-items: end;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.eyebrow {
-  margin: 0 0 4px;
-  color: #7a5b35;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  font-size: 0.7rem;
-  font-weight: 700;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
 }
 
 h1 {
@@ -34,17 +52,17 @@ h1 {
 
 .summary-cards {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .metric-card {
-  min-width: 130px;
+  min-width: 110px;
   background: #fff;
   border: 1px solid #e8daca;
-  border-radius: 14px;
-  padding: 12px 16px;
-  box-shadow: 0 4px 12px rgba(32, 22, 10, 0.04);
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(32, 22, 10, 0.04);
 
   span {
     display: block;
@@ -57,7 +75,7 @@ h1 {
   strong {
     display: block;
     margin-top: 4px;
-    font-size: 1.25rem;
+    font-size: 1rem;
     color: #2c1c0e;
   }
 
@@ -65,108 +83,55 @@ h1 {
   &.loss strong { color: #8a2c22; }
 }
 
-// ---- Toolbar ----
-
-.toolbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 16px;
-  padding: 12px 16px;
-  background: #fff;
-  border: 1px solid #e8daca;
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(32, 22, 10, 0.03);
-}
-
-.toolbar-search {
-  flex: 1 1 200px;
-  padding: 8px 12px;
-  border: 1px solid #d9c7a5;
-  border-radius: 8px;
-  background: #fdfaf6;
-  min-width: 160px;
-}
-
-.toolbar-filter {
-  padding: 8px 12px;
-  border: 1px solid #d9c7a5;
-  border-radius: 8px;
-  background: #fdfaf6;
-  min-width: 150px;
-}
-
-.toolbar-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  margin-left: auto;
-}
-
-.toolbar-export-group {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-}
-
-// ---- Advanced filters ----
-
-.advanced-filters {
-  margin-bottom: 16px;
-  padding: 14px 18px;
-  background: #fff;
-  border: 1px solid #e8daca;
-  border-radius: 14px;
-  box-shadow: 0 2px 8px rgba(32, 22, 10, 0.03);
-}
-
-.filter-group {
-  display: flex;
-  gap: 10px 14px;
-  flex-wrap: wrap;
-  align-items: end;
-
-  label {
-    display: grid;
-    gap: 3px;
-    font-size: 0.75rem;
-    color: #5c4935;
-    font-weight: 600;
-    min-width: 120px;
-  }
-
-  input, select {
-    padding: 7px 10px;
-    border: 1px solid #d9c7a5;
-    border-radius: 8px;
-    background: #fdfaf6;
-    font-size: 0.85rem;
-    width: 100%;
-  }
-}
-
 // ---- Main content grid ----
 
 .main-content {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
-  align-items: start;
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
 
-  &.has-detail { grid-template-columns: 1fr 400px; }
+  &.has-detail { grid-template-columns: minmax(0, 1fr) 360px; }
 }
 
-// ---- Panels ----
+// ---- Responsive ----
+// Below 900px the detail sidebar drops underneath the table instead of sitting
+// beside it. (Moved here from the old `_overlays.scss`.)
 
-.panel {
-  background: #fff;
-  border: 1px solid #e8daca;
-  border-radius: 16px;
-  padding: 18px;
-  box-shadow: 0 4px 14px rgba(30, 20, 12, 0.04);
+@media (max-width: 900px) {
+  .topbar { display: block; }
+  .summary-cards { margin-top: 12px; }
+  .main-content.has-detail { grid-template-columns: 1fr; }
+}
 
-  h2 { margin: 0; font-size: 1.1rem; color: #2c1c0e; }
-  h3 { margin: 0 0 10px; font-size: 0.95rem; color: #3d2e1e; }
+// ---- Print ----
+
+@media print {
+  body { background: white; }
+
+  .topbar { display: none !important; }
+
+  .main-content.has-detail { grid-template-columns: 1fr; }
+
+  // On screen the app is deliberately locked to exactly one viewport with
+  // internal scrolling. For print that would clip everything past the first
+  // page, so release the height constraints and let content flow naturally
+  // across pages.
+  :host {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-shell {
+    height: auto;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .main-content { min-height: 0; }
+
+  .status-bar { display: none !important; }
 }

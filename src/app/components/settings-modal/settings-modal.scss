@@ -1,0 +1,67 @@
+// Styles for the Settings dialog. Moved here from `app.scss`.
+@use '../../styles/controls' as *;
+
+// Not part of the original markup, and the dialog is position: fixed — keep
+// the host element out of the layout.
+:host { display: contents; }
+
+// NOTE (deliberate, not an oversight): this dialog uses the `.modal-backdrop`
+// / `.modal` / `.modal-header` class names, but `app.scss` never imported
+// `styles/_modal.scss`, so those classes have had no styling here for as long
+// as this markup has lived in app.html. That behaviour is preserved exactly by
+// this extraction. Adding `@use '../../styles/modal' as *;` above would give
+// the dialog the same chrome as the other modals — a one-line change, left out
+// on purpose so this refactor changes nothing visually.
+
+// ---- Settings body ----
+
+.settings-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.settings-row,
+.settings-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.settings-list-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.settings-list-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.8rem;
+  color: #ddd;
+}
+
+.settings-list-grid textarea {
+  min-height: 110px;
+  resize: vertical;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #ddd;
+}
+
+// ---- Responsive & print ----
+// These two rules used to live in `_overlays.scss` and did reach this markup
+// while it was part of app.html, so they move across with it.
+
+@media (max-width: 900px) {
+  .modal { max-width: 100%; border-radius: 14px; }
+}
+
+@media print {
+  .modal-backdrop { display: none !important; }
+}

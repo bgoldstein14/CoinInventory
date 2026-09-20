@@ -1,0 +1,91 @@
+<!--
+  Clicking the backdrop cancels (same as the Cancel button); the
+  $event.stopPropagation() keeps clicks inside the dialog from closing it.
+-->
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Settings</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body settings-modal-body">
+      <div class="settings-row">
+        <label class="checkbox-label">
+          <input type="checkbox" [checked]="showTransactionsInDetails()" (change)="showTransactionsInDetailsChange.emit($any($event.target).checked)" />
+          <span>Show transactions section in details</span>
+        </label>
+      </div>
+
+      <div class="settings-group">
+        <h3>Reference lists</h3>
+        <div class="settings-list-grid">
+          <label>
+            <span>Categories</span>
+            <div class="settings-inline-add">
+              <input type="text" [ngModel]="categoryDraft()" (ngModelChange)="categoryDraft.set($event)" placeholder="Add category" />
+              <button type="button" class="secondary small-button" (click)="addCategory()">Add</button>
+            </div>
+            <div class="settings-chip-list">
+              @for (category of inv.categoryOptions(); track category) {
+                <button type="button" class="chip-button" (click)="removeCategory(category)">
+                  {{ category }} <span aria-hidden="true">×</span>
+                </button>
+              }
+            </div>
+            <textarea [ngModel]="categoryListText()" (ngModelChange)="updateCategoryListText($event)"></textarea>
+          </label>
+          <label>
+            <span>Denominations</span>
+            <div class="settings-inline-add">
+              <input type="text" [ngModel]="denominationDraft()" (ngModelChange)="denominationDraft.set($event)" placeholder="Add denomination" />
+              <button type="button" class="secondary small-button" (click)="addDenomination()">Add</button>
+            </div>
+            <div class="settings-chip-list">
+              @for (denomination of inv.denominations(); track denomination.denominationId) {
+                <button type="button" class="chip-button" (click)="removeDenominationEntry(denomination.denominationId)">
+                  {{ denomination.label }} <span aria-hidden="true">×</span>
+                </button>
+              }
+            </div>
+            <textarea [ngModel]="denominationListText()" (ngModelChange)="updateDenominationListText($event)"></textarea>
+          </label>
+          <label>
+            <span>Mint marks</span>
+            <div class="settings-inline-add">
+              <input type="text" [ngModel]="mintMarkDraft()" (ngModelChange)="mintMarkDraft.set($event)" placeholder="Add mint mark" />
+              <button type="button" class="secondary small-button" (click)="addMintMark()">Add</button>
+            </div>
+            <div class="settings-chip-list">
+              @for (mintMark of inv.mintMarks(); track mintMark.mintMarkId) {
+                <button type="button" class="chip-button" (click)="removeMintMarkEntry(mintMark.mintMarkId)">
+                  {{ mintMark.label }} <span aria-hidden="true">×</span>
+                </button>
+              }
+            </div>
+            <textarea [ngModel]="mintMarkListText()" (ngModelChange)="updateMintMarkListText($event)"></textarea>
+          </label>
+          <label>
+            <span>Metal content</span>
+            <div class="settings-inline-add">
+              <input type="text" [ngModel]="metalContentDraft()" (ngModelChange)="metalContentDraft.set($event)" placeholder="Add metal" />
+              <button type="button" class="secondary small-button" (click)="addMetalContent()">Add</button>
+            </div>
+            <div class="settings-chip-list">
+              @for (metal of inv.metalContents(); track metal) {
+                <button type="button" class="chip-button" (click)="removeMetalContent(metal)">
+                  {{ metal }} <span aria-hidden="true">×</span>
+                </button>
+              }
+            </div>
+            <textarea [ngModel]="metalContentListText()" (ngModelChange)="updateMetalContentListText($event)"></textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="closed.emit()">Cancel</button>
+        <button type="button" (click)="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>

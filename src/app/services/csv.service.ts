@@ -146,6 +146,45 @@ export class CsvService {
     this.downloadBlob(lines.join('\n'), 'coin-inventory.csv', 'text/csv');
   }
 
+  /**
+   * Downloads an empty CSV containing just the header row this importer
+   * recognises, plus two example coins.
+   *
+   * WHY: there is no fixed CSV schema — the importer maps whatever columns
+   * you give it. That flexibility is good, but it left new users with no
+   * idea what to actually type. Rather than document a column list that can
+   * drift out of date, this generates the header row FROM the same
+   * CSV_MAPPABLE_FIELDS list the importer uses, so the template is always
+   * correct by construction.
+   */
+  downloadCsvTemplate(): void {
+    // Every mappable field except the leading "(skip)" placeholder.
+    const headerLabels = CSV_MAPPABLE_FIELDS
+      .filter(field => field.key)
+      .map(field => field.label);
+
+    // Two realistic rows so the expected shape of each column is obvious --
+    // especially that Year is text (so "1878-S" is legal) and that prices
+    // may carry currency formatting.
+    const examples = [
+      ['Morgan Dollar', 'Dollar', '1881', 'Silver Dollars', 'United States', 'MS63',
+       'PCGS', '12345678', 'VAM-1A', 'S', '90% Silver', '2024-03-15', '$1,250.00',
+       '1400', 'Rainbow toning', 'Heritage Auctions', 'Morgan Set', 'Silver',
+       '0.7734', '', ''],
+      ['Mercury Dime', 'Dime', '1916', 'Dimes', 'United States', 'VG8',
+       'NGC', '87654321', '', 'D', '90% Silver', '2023-11-02', '$895.00',
+       '950', 'Key date', 'Local dealer', '', 'Silver',
+       '0.0723', '', '']
+    ];
+
+    const lines = [headerLabels.join(',')];
+    for (const row of examples) {
+      lines.push(row.map(value => this.escapeCsvField(value)).join(','));
+    }
+
+    this.downloadBlob(lines.join('\n'), 'coin-inventory-template.csv', 'text/csv');
+  }
+
   exportInsuranceCsv(coins: CoinRecord[]): void {
     const lines = ['Coin Type,Grade,Cert Company,Cert Number,Current Value,Purchase Price,Purchase Date,Notes'];
     for (const coin of coins) {

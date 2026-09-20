@@ -1,0 +1,232 @@
+<div class="detail-editor">
+  <div class="detail-editor__row detail-editor__row--top">
+    <label class="detail-field detail-field--narrow">
+      <span>Year</span>
+      <input
+        type="text"
+        [ngModel]="coin().year ?? ''"
+        (ngModelChange)="updateSelectedCoin('year', $event)"
+      />
+    </label>
+
+    <label class="detail-field detail-field--narrow">
+      <span>Denom.</span>
+      <select
+        [ngModel]="coin().denomination"
+        (ngModelChange)="updateSelectedCoin('denomination', $event)"
+      >
+        <option value="">(select)</option>
+        @for (country of ['US', 'GB']; track country) {
+          <optgroup [label]="country">
+            @for (denom of inv.denominations(); track denom.denominationId) {
+              @if (denom.country === country && denom.isActive) {
+                <option [value]="denom.label">{{ formatDenominationDisplay(denom.label) }}</option>
+              }
+            }
+          </optgroup>
+        }
+        <option value="__OTHER__">Other</option>
+      </select>
+    </label>
+
+    <label class="detail-field detail-field--narrow">
+      <span>Mint mark</span>
+      <select
+        [ngModel]="coin().mintMark"
+        (ngModelChange)="updateSelectedCoin('mintMark', $event)"
+      >
+        <option value="">(none)</option>
+        @for (mm of inv.mintMarks(); track mm.mintMarkId) {
+          @if (mm.isActive) {
+            <option [value]="mm.label" [title]="mm.description">{{ mm.label }}</option>
+          }
+        }
+        <option value="__OTHER__">Other</option>
+      </select>
+    </label>
+  </div>
+
+  @if (coin().denomination === '__OTHER__') {
+    <label class="detail-field detail-field--full">
+      <span>Custom denomination</span>
+      <input
+        [ngModel]="customDenominationValue()"
+        (ngModelChange)="customDenominationValue.set($event); updateSelectedCoin('denomination', $event)"
+      />
+    </label>
+  }
+
+  @if (coin().mintMark === '__OTHER__') {
+    <label class="detail-field detail-field--full">
+      <span>Custom mint mark</span>
+      <input
+        [ngModel]="customMintMarkValue()"
+        (ngModelChange)="customMintMarkValue.set($event); updateSelectedCoin('mintMark', $event)"
+      />
+    </label>
+  }
+
+  <div class="detail-editor__row">
+    <label class="detail-field">
+      <span>Coin Type</span>
+      <input
+        [ngModel]="coin().coinType"
+        (ngModelChange)="updateSelectedCoin('coinType', $event)"
+      />
+    </label>
+
+    <div class="detail-field detail-field--grade-wrap">
+      <span>Grade</span>
+      <div class="detail-grade-line">
+        <input
+          [ngModel]="coin().grade"
+          (ngModelChange)="updateSelectedCoin('grade', $event)"
+        />
+        <label class="cac-inline-toggle">
+          <input type="checkbox" [checked]="coin().hasCacSticker ?? false" (change)="toggleCacSticker()" />
+          <span>CAC</span>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="detail-editor__row">
+    <label class="detail-field">
+      <span>Variety</span>
+      <input [ngModel]="coin().variety" (ngModelChange)="updateSelectedCoin('variety', $event)" />
+    </label>
+    <label class="detail-field">
+      <span>Country</span>
+      <input [ngModel]="coin().country" (ngModelChange)="updateSelectedCoin('country', $event)" />
+    </label>
+  </div>
+
+  <div class="detail-editor__row">
+    <label class="detail-field">
+      <span>Category</span>
+      <select [ngModel]="coin().category" (ngModelChange)="updateSelectedCoin('category', $event)">
+        <option value="">(none)</option>
+        @for (category of inv.categoryOptions(); track category) { <option [value]="category">{{ category }}</option> }
+      </select>
+    </label>
+    <label class="detail-field">
+      <span>Set / Album</span>
+      <select [ngModel]="coin().coinSet ?? ''" (ngModelChange)="updateSelectedCoin('coinSet', $event)">
+        <option value="">(none)</option>
+        @for (s of inv.coinSets(); track s) { <option [value]="s">{{ s }}</option> }
+      </select>
+    </label>
+  </div>
+
+  <div class="detail-editor__row detail-editor__row--metadata">
+    <label class="detail-field detail-field--compact">
+      <span>Metal</span>
+      <select [ngModel]="coin().metalContent ?? ''" (ngModelChange)="updateSelectedCoin('metalContent', $event)">
+        <option value="">(none)</option>
+        @for (m of metalContentOptions(); track m) { <option [value]="m">{{ m }}</option> }
+      </select>
+    </label>
+    <label class="detail-field detail-field--compact">
+      <span>Composition</span>
+      <input [ngModel]="coin().composition" (ngModelChange)="updateSelectedCoin('composition', $event)" />
+    </label>
+    <label class="detail-field detail-field--compact">
+      <span> </span>
+      <input aria-label="Spacer" style="visibility: hidden;" />
+    </label>
+  </div>
+
+  <div class="detail-editor__row detail-editor__row--bottom-metrics">
+    <label class="detail-field detail-field--weight">
+      <span>Weight</span>
+      <input
+        type="text"
+        [ngModel]="formatWeightInput(coin().weight ?? 0)"
+        (ngModelChange)="updateSelectedCoin('weight', parseWeightInput($event))"
+      />
+    </label>
+    <label class="detail-field detail-field--pm-weight">
+      <span>PM Weight (g)</span>
+      <input
+        type="number"
+        step="0.01"
+        [ngModel]="coin().pmWeightGrams ?? 0"
+        (ngModelChange)="updateSelectedCoin('pmWeightGrams', Number($event))"
+      />
+    </label>
+    <label class="detail-field detail-field--pm-percent">
+      <span>PM %</span>
+      <input
+        type="number"
+        step="0.01"
+        max="100"
+        [ngModel]="coin().pmPercent ?? 0"
+        (ngModelChange)="updateSelectedCoin('pmPercent', Number($event))"
+      />
+    </label>
+  </div>
+
+  <div class="detail-editor__row detail-editor__row--pricing">
+    <label class="detail-field detail-field--money">
+      <span>Price</span>
+      <input
+        type="text"
+        [ngModel]="formatMoneyInput(coin().purchasePrice)"
+        (ngModelChange)="updateSelectedCoin('purchasePrice', parseMoneyInput($event))"
+      />
+    </label>
+    <label class="detail-field detail-field--money">
+      <span>Value</span>
+      <input
+        type="text"
+        [ngModel]="formatMoneyInput(coin().currentValue)"
+        (ngModelChange)="updateSelectedCoin('currentValue', parseMoneyInput($event))"
+      />
+    </label>
+    <label class="detail-field detail-field--narrow">
+      <span> </span>
+      <input aria-label="Spacer" style="visibility: hidden;" />
+    </label>
+  </div>
+
+  <div class="detail-editor__row detail-editor__row--certs">
+    <label class="detail-field detail-field--compact detail-field--cert-company">
+      <span>Certification Co.</span>
+      <input
+        maxlength="5"
+        [ngModel]="coin().certCompany"
+        (ngModelChange)="updateSelectedCoin('certCompany', $event)"
+        style="text-transform: uppercase; width: 7.5ch; min-width: 7.5ch; max-width: 7.5ch;"
+      />
+    </label>
+
+    <label class="detail-field detail-field--compact detail-field--cert-number">
+      <span>Certification Number</span>
+      <input
+        [ngModel]="coin().certNumber"
+        (ngModelChange)="updateSelectedCoin('certNumber', $event)"
+        style="width: 125%; min-width: 125%; max-width: 125%;"
+      />
+    </label>
+
+    <label class="detail-field detail-field--compact">
+      <span> </span>
+      <input aria-label="Spacer" style="visibility: hidden;" />
+    </label>
+  </div>
+
+  <div class="detail-editor__row">
+    <label class="detail-field">
+      <span>Dealer</span>
+      <input [ngModel]="coin().dealer ?? ''" (ngModelChange)="updateSelectedCoin('dealer', $event)" />
+    </label>
+    <label class="detail-field">
+      <span>Purchase date</span>
+      <input type="date" [ngModel]="coin().purchaseDate" (ngModelChange)="updateSelectedCoin('purchaseDate', $event)" />
+    </label>
+  </div>
+</div>
+
+<div class="detail-notes">
+  <label><span class="detail-notes-label">Notes</span><textarea [ngModel]="coin().notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea></label>
+</div>

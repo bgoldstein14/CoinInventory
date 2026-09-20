@@ -1,16 +1,15 @@
 import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
-import { SpotPrices } from '../types/coin.model';
+import { SpotPriceResult } from '../types/coin.model';
 import { ApiService } from './api.service';
 import { LoggingService } from './logging.service';
 import { NotificationService } from './notification.service';
 
-export interface SpotPriceResult {
-  prices: SpotPrices;
-  source: string;
-  timestamp: string;
-  error?: string;
-}
+// SpotPriceResult now lives in ../types/coin.model so that api.service.ts can
+// use it without importing this file (which would create a circular import).
+// Re-exported here so existing `import { SpotPriceResult } from
+// './spot-price.service'` statements keep working.
+export type { SpotPriceResult };
 
 /**
  * SpotPriceService manages fetching current spot prices via the backend proxy.

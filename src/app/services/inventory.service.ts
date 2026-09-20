@@ -9,12 +9,60 @@ import {
 import { ApiService } from './api.service';
 import { LoggingService } from './logging.service';
 import { NotificationService } from './notification.service';
-import { firstValueFrom } from 'rxjs';
+import { CoinChangeTracker } from './inventory/coin-change-tracker';
+import { CoinDraftRegistry } from './inventory/coin-draft-registry';
+import { CoinEditor } from './inventory/coin-editor';
+import { CoinCollection } from './inventory/coin-collection';
+import { LookupManager } from './inventory/lookup-manager';
+import { TransactionManager } from './inventory/transaction-manager';
+import { ConnectionManager } from './inventory/connection-manager';
+import {
+  computeMeltValue,
+  distinctCategories,
+  distinctCountries,
+  distinctDealers,
+  distinctSources,
+  sumCurrentValue,
+  sumProfit,
+  sumPurchasePrice
+} from './inventory/inventory-metrics';
 
 const defaultSpotPrices: SpotPrices = { gold: 0, silver: 0, platinum: 0, copper: 0 };
 
+/* ===========================================================================
+ * InventoryService
+ * ---------------------------------------------------------------------------
+ * The single front door to the coin collection. Components talk to THIS
+ * service and nothing else. It owns the signals everybody reads, and hands
+ * the real work to focused helpers in ./inventory/:
+ *
+ *   coin-change-tracker.ts  what the server has confirmed vs. what is unsaved
+ *   coin-draft-registry.ts  which coins have never reached the database yet
+ *   coin-editor.ts          field edits: optimistic paint, debounce, minimal PUT
+ *   coin-collection.ts      add / import / delete whole coins, and selection
+ *   lookup-manager.ts       categories, coin sets, denominations, mint marks
+ *   transaction-manager.ts  the buy/sell history rows
+ *   connection-manager.ts   start-up loading and the connection banner
+ *   coin-factory.ts         building a blank / imported CoinRecord
+ *   inventory-metrics.ts    totals, distinct lists, melt value (all pure)
+ *
+ * Two rules worth knowing before you change anything here:
+ *
+ *  1. The helpers are ordinary classes created with `new`, NOT Angular
+ *     services. That is deliberate: this service must stay constructible from
+ *     a plain injection context that provides only ApiService, LoggingService
+ *     and NotificationService (which is exactly how the tests build it).
+ *
+ *  2. The signals below are created here and PASSED IN to the helpers, so
+ *     there is exactly one copy of every piece of state no matter who writes
+ *     to it.
+ * =========================================================================== */
+
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
+  // ==========================================================================
+  // State — every signal below is public API; components read these directly.
+  // ==========================================================================
   readonly inventory = signal<CoinRecord[]>([]);
   readonly selectedCoinId = signal<string | null>(null);
   readonly categoryOptions = signal<string[]>([]);
@@ -30,41 +78,26 @@ export class InventoryService {
   readonly mintMarks = signal<MintMarkOption[]>([]);
   readonly metalContents = signal<string[]>([]);
 
+  // ==========================================================================
+  // Derived values — the calculations live in inventory-metrics.ts.
+  // ==========================================================================
   readonly selectedCoin = computed(() =>
     this.inventory().find(c => c.id === this.selectedCoinId()) ?? null
   );
 
-  readonly totalCost = computed(() =>
-    this.inventory().reduce((sum, c) => sum + c.purchasePrice, 0)
-  );
+  readonly totalCost = computed(() => sumPurchasePrice(this.inventory()));
 
-  readonly totalValue = computed(() =>
-    this.inventory().reduce((sum, c) => sum + c.currentValue, 0)
-  );
+  readonly totalValue = computed(() => sumCurrentValue(this.inventory()));
 
-  readonly totalProfit = computed(() =>
-    this.inventory().reduce((sum, c) => sum + (c.currentValue - c.purchasePrice), 0)
-  );
+  readonly totalProfit = computed(() => sumProfit(this.inventory()));
 
-  readonly inventoryCategories = computed(() => {
-    const categories = this.inventory().map(c => c.category).filter(Boolean);
-    return [...new Set(categories)];
-  });
+  readonly inventoryCategories = computed(() => distinctCategories(this.inventory()));
 
-  readonly inventoryCountries = computed(() => {
-    const countries = this.inventory().map(c => c.country).filter(Boolean);
-    return [...new Set(countries)].sort();
-  });
+  readonly inventoryCountries = computed(() => distinctCountries(this.inventory()));
 
-  readonly inventorySources = computed(() => {
-    const sources = this.inventory().map(c => c.source).filter(Boolean);
-    return [...new Set(sources)].sort();
-  });
+  readonly inventorySources = computed(() => distinctSources(this.inventory()));
 
-  readonly inventoryDealers = computed(() => {
-    const dealers = this.inventory().map(c => c.dealer ?? '').filter(Boolean);
-    return [...new Set(dealers)].sort();
-  });
+  readonly inventoryDealers = computed(() => distinctDealers(this.inventory()));
 
   readonly selectedCoinTransactions = computed(() => {
     const coinId = this.selectedCoinId();
@@ -76,374 +109,235 @@ export class InventoryService {
   private readonly logger = inject(LoggingService);
   private readonly notificationService = inject(NotificationService);
 
-  async hydrate(): Promise<void> {
-    this.logger.info('Starting inventory hydration');
-    this.connecting.set(true);
+  // ==========================================================================
+  // The helpers. Declared last, and in dependency order, because a class field
+  // can only use fields that are already declared above it.
+  // ==========================================================================
 
-    try {
-      const coins = await firstValueFrom(this.apiService.getCoins());
+  /** Tracks confirmed-vs-unsaved state for every coin. See its file header. */
+  private readonly changeTracker = new CoinChangeTracker(
+    (coinId) => this.inventory().find(c => c.id === coinId)
+  );
 
-      this.logger.info(`Successfully loaded ${coins.length} coins from database`);
-      this.connected.set(true);
-      this.connectionError.set(null);
-      this.inventory.set(coins);
-      this.ensureSelectedCoin();
+  /**
+   * Which coins are still local-only drafts (added but not yet good enough
+   * to save). See its file header for the state machine.
+   */
+  private readonly drafts = new CoinDraftRegistry();
 
-      const [categories, coinSets, transactions, denominations, mintMarks, metalContents] = await Promise.all([
-        firstValueFrom(this.apiService.getCategories()),
-        firstValueFrom(this.apiService.getCoinSets()),
-        firstValueFrom(this.apiService.getTransactions()),
-        firstValueFrom(this.apiService.getDenominations()),
-        firstValueFrom(this.apiService.getMintMarks()),
-        firstValueFrom(this.apiService.getMetalContents())
-      ]);
+  private readonly lookups = new LookupManager(
+    this.categoryOptions,
+    this.coinSets,
+    this.denominations,
+    this.mintMarks,
+    this.apiService,
+    this.logger,
+    this.notificationService
+  );
 
-      const inventoryCategories = [...new Set(coins.map((coin) => coin.category).filter(Boolean))];
-      const inventoryCoinSets = [...new Set(coins.map((coin) => coin.coinSet ?? '').filter(Boolean))];
-      const resolvedCategories = Array.isArray(categories) && categories.length > 0 ? categories : inventoryCategories;
-      const resolvedCoinSets = Array.isArray(coinSets) && coinSets.length > 0 ? coinSets : inventoryCoinSets;
+  private readonly txns = new TransactionManager(
+    this.transactions,
+    this.apiService,
+    this.logger,
+    this.notificationService
+  );
 
-      if (Array.isArray(resolvedCategories)) this.categoryOptions.set([...new Set(resolvedCategories)].sort());
-      if (Array.isArray(resolvedCoinSets)) this.coinSets.set([...new Set(resolvedCoinSets)].sort());
-      if (Array.isArray(transactions)) this.transactions.set(transactions);
-      this.denominations.set(Array.isArray(denominations) ? denominations : []);
-      this.mintMarks.set(Array.isArray(mintMarks) ? mintMarks : []);
-      this.metalContents.set(Array.isArray(metalContents) ? [...new Set(metalContents)].sort() : []);
+  private readonly coins = new CoinCollection(
+    this.inventory,
+    this.selectedCoinId,
+    this.txns,
+    this.changeTracker,
+    this.drafts,
+    this.lookups,
+    this.apiService,
+    this.logger,
+    this.notificationService
+  );
 
-      this.connecting.set(false);
-      this.notificationService.showInfo('Connected to database');
-      this.logger.info('Database hydration complete');
+  private readonly editor = new CoinEditor(
+    this.inventory,
+    this.changeTracker,
+    this.drafts,
+    this.apiService,
+    this.logger,
+    this.notificationService
+  );
 
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : JSON.stringify(error);
-      this.logger.error('Failed to connect to database', msg);
-      this.connecting.set(false);
-      this.connected.set(false);
-      this.connectionError.set(`Cannot connect to database: ${msg}`);
-      this.notificationService.showError('Cannot connect to database — please check that the backend server is running');
-      throw new Error(`Database connection failed: ${msg}`);
-    }
+  private readonly connection = new ConnectionManager({
+    connecting: this.connecting,
+    connected: this.connected,
+    connectionError: this.connectionError,
+    categoryOptions: this.categoryOptions,
+    coinSets: this.coinSets,
+    transactions: this.transactions,
+    denominations: this.denominations,
+    mintMarks: this.mintMarks,
+    metalContents: this.metalContents,
+    coins: this.coins,
+    apiService: this.apiService,
+    logger: this.logger,
+    notificationService: this.notificationService
+  });
+
+  // ==========================================================================
+  // Start-up / connection — see connection-manager.ts
+  // ==========================================================================
+
+  /**
+   * Load everything from the backend: the coins (fatal if they fail) and then
+   * the optional lookup tables (a failure there is only a warning).
+   *
+   * @throws Error only when the coin fetch itself fails
+   */
+  hydrate(): Promise<void> {
+    return this.connection.hydrate();
   }
+
+  /**
+   * Try connecting again after a failure, without reloading the page.
+   *
+   * @returns true if the app is now connected, false otherwise
+   */
+  retryConnection(): Promise<boolean> {
+    return this.connection.retryConnection();
+  }
+
+  // ==========================================================================
+  // Coins — whole records go to CoinCollection, field edits go to CoinEditor
+  // ==========================================================================
 
   selectCoin(coinId: string): void {
-    this.selectedCoinId.set(coinId);
+    this.coins.selectCoin(coinId);
   }
 
+  ensureSelectedCoin(): void {
+    this.coins.ensureSelectedCoin();
+  }
+
+  /**
+   * Create an empty coin and select it.
+   *
+   * NOTHING is sent to the server: a new coin is a local draft until it has
+   * at least 2 of Year / Coin Type / Denomination, at which point it saves
+   * itself automatically. See `isDraftCoin()` below and
+   * inventory/coin-draft-registry.ts.
+   */
   addBlankCoin(): CoinRecord {
-    const coin: CoinRecord = {
-      id: crypto.randomUUID(),
-      denomination: '',
-      year: '',
-      coinType: '',
-      category: '',
-      country: 'United States',
-      grade: '',
-      certCompany: '',
-      certNumber: '',
-      variety: '',
-      mintMark: '',
-      composition: '',
-      purchaseDate: '',
-      purchasePrice: 0,
-      currentValue: 0,
-      notes: '',
-      imagePaths: [],
-      tags: [],
-      source: 'manual',
-      hasCacSticker: false,
-      pmWeightGrams: undefined,
-      pmPercent: undefined
-    };
-
-    this.inventory.set([...this.inventory(), coin]);
-    this.selectedCoinId.set(coin.id);
-
-    firstValueFrom(this.apiService.createCoin(coin))
-      .then(() => this.logger.info(`Created coin ${coin.id} in database`))
-      .catch((error) => {
-        this.logger.error('Failed to create coin in database', JSON.stringify(error));
-        this.notificationService.showError('Failed to save coin to database');
-      });
-
-    return coin;
+    return this.coins.addBlankCoin();
   }
 
-  updateCoin(coinId: string, updates: Partial<CoinRecord>): void {
-    this.inventory.set(
-      this.inventory().map(c => c.id === coinId ? { ...c, ...updates } : c)
-    );
-
-    firstValueFrom(this.apiService.updateCoin(coinId, updates))
-      .then(() => this.logger.info(`Updated coin ${coinId} in database`))
-      .catch((error) => {
-        this.logger.error(`Failed to update coin ${coinId} in database`, JSON.stringify(error));
-        this.notificationService.showError('Failed to update coin in database');
-      });
+  /**
+   * True while a coin exists only on screen — it has never been written to
+   * the database because it is not yet complete enough to be a coin.
+   *
+   * The inventory table uses this to show the "Unsaved" chip.
+   */
+  isDraftCoin(coinId: string): boolean {
+    return this.drafts.isUnsaved(coinId);
   }
 
-  deleteCoin(coinId: string): void {
-    this.inventory.set(this.inventory().filter(c => c.id !== coinId));
-    this.transactions.set(this.transactions().filter(t => t.coinId !== coinId));
-    this.ensureSelectedCoin();
-
-    firstValueFrom(this.apiService.deleteCoin(coinId))
-      .then(() => this.logger.info(`Deleted coin ${coinId} from database`))
-      .catch((error) => {
-        this.logger.error(`Failed to delete coin ${coinId} from database`, JSON.stringify(error));
-        this.notificationService.showError('Failed to delete coin from database');
-      });
+  /**
+   * A short sentence telling the user what an unsaved row still needs, e.g.
+   * "Not saved yet. Add 1 more of: Coin Type, Denomination."
+   * Empty string for a coin that is already saved (or already qualifies).
+   */
+  draftHint(coin: CoinRecord): string {
+    return this.drafts.describeWhatIsMissing(coin);
   }
 
+  /** Append an imported batch of coins. */
   addCoins(coins: CoinRecord[]): void {
-    this.inventory.set([...this.inventory(), ...coins]);
-    this.ensureSelectedCoin();
-
-    const importedCategories = coins.map(c => c.category).filter(Boolean);
-    this.mergeCategoryOptions(importedCategories);
-
-    const createPromises = coins.map(coin =>
-      firstValueFrom(this.apiService.createCoin(coin))
-        .then(() => ({ ok: true as const, coin }))
-        .catch((error) => {
-          this.logger.error(`Failed to create coin "${coin.coinType} ${coin.year}" (${coin.id}) in database`, JSON.stringify(error));
-          return { ok: false as const, coin, error };
-        })
-    );
-
-    Promise.allSettled(createPromises).then((results) => {
-      const outcomes = results.map(r => r.status === 'fulfilled' ? r.value : { ok: false as const, coin: null, error: r.reason });
-      const succeeded = outcomes.filter(o => o.ok).length;
-      const failed = outcomes.filter(o => !o.ok);
-
-      if (failed.length === 0) {
-        this.logger.info(`Successfully added ${succeeded} coins to database`);
-        this.notificationService.showInfo(`Added ${succeeded} coins to database`);
-      } else {
-        const failedNames = failed.map(f => f.coin ? `${f.coin.coinType || '?'} ${f.coin.year || ''}`.trim() : 'unknown').join(', ');
-        this.logger.error(`Failed to insert ${failed.length} of ${coins.length} coins: ${failedNames}`);
-        if (succeeded > 0) {
-          this.notificationService.showWarning(`Added ${succeeded} coins, but ${failed.length} failed to save to database`);
-        } else {
-          this.notificationService.showError(`Failed to save all ${failed.length} coins to database`);
-        }
-      }
-    });
+    this.coins.addCoins(coins);
   }
 
+  /** Replace the whole inventory from an exported JSON string. */
   importInventoryData(json: string): void {
-    try {
-      const parsed = JSON.parse(json) as CoinRecord[];
-      if (!Array.isArray(parsed) || parsed.length === 0) return;
-
-      const normalized = parsed.map(coin => ({
-        ...coin,
-        id: coin.id || crypto.randomUUID(),
-        imagePaths: Array.isArray(coin.imagePaths) ? coin.imagePaths : [],
-        tags: Array.isArray(coin.tags) ? coin.tags : [],
-        source: coin.source || 'manual',
-        grade: coin.grade || '',
-        category: coin.category || '',
-        hasCacSticker: Boolean(coin.hasCacSticker)
-      }));
-
-      this.inventory.set(normalized);
-      this.ensureSelectedCoin();
-
-      const importedCategories = normalized.map(c => c.category).filter(Boolean);
-      this.mergeCategoryOptions(importedCategories);
-
-      const createPromises = normalized.map(coin =>
-        firstValueFrom(this.apiService.createCoin(coin))
-          .catch((error) => {
-            this.logger.error(`Failed to import coin ${coin.id} to database`, JSON.stringify(error));
-          })
-      );
-      Promise.all(createPromises)
-        .then(() => {
-          this.logger.info(`Imported ${normalized.length} coins to database`);
-          this.notificationService.showInfo(`Imported ${normalized.length} coins to database`);
-        })
-        .catch((error) => {
-          this.logger.error('Failed to import some coins to database', JSON.stringify(error));
-          this.notificationService.showError('Failed to import some coins to database');
-        });
-    } catch (e) {
-      this.logger.error('Failed to parse import data', String(e));
-      this.notificationService.showError('Failed to parse import data');
-    }
+    this.coins.importInventoryData(json);
   }
+
+  /** Remove a coin from the list, its transactions, and the database. */
+  deleteCoin(coinId: string): void {
+    this.coins.deleteCoin(coinId);
+  }
+
+  /**
+   * Apply an edit to a coin: the screen updates immediately and only the
+   * changed fields are PUT to the server a second later.
+   *
+   * @see CoinEditor — the optimistic-update, minimal-diff and failed-save
+   *      retry rules all live there, and they are the most safety-critical
+   *      code in the app.
+   */
+  updateCoin(coinId: string, updates: Partial<CoinRecord>): void {
+    this.editor.updateCoin(coinId, updates);
+  }
+
+  // ==========================================================================
+  // Transactions (buy / sell history attached to a coin)
+  // ==========================================================================
 
   addTransaction(txn: TransactionRecord): void {
-    this.transactions.set([...this.transactions(), txn]);
-
-    firstValueFrom(this.apiService.createTransaction(txn))
-      .then(() => this.logger.info(`Created transaction ${txn.id} in database`))
-      .catch((error) => {
-        this.logger.error(`Failed to create transaction in database`, JSON.stringify(error));
-        this.notificationService.showError('Failed to save transaction to database');
-      });
+    this.txns.addTransaction(txn);
   }
 
   deleteTransaction(txnId: string): void {
-    this.transactions.set(this.transactions().filter(t => t.id !== txnId));
-
-    firstValueFrom(this.apiService.deleteTransaction(txnId))
-      .then(() => this.logger.info(`Deleted transaction ${txnId} from database`))
-      .catch((error) => {
-        this.logger.error(`Failed to delete transaction from database`, JSON.stringify(error));
-        this.notificationService.showError('Failed to delete transaction from database');
-      });
+    this.txns.deleteTransaction(txnId);
   }
+
+  // ==========================================================================
+  // Spot prices and melt value
+  // ==========================================================================
 
   updateSpotPrices(prices: SpotPrices): void {
     this.spotPrices.set(prices);
   }
 
+  /** What a coin's precious metal is worth today, or null if unknowable. */
+  meltValue(coin: CoinRecord): number | null {
+    return computeMeltValue(coin, this.spotPrices());
+  }
+
+  // ==========================================================================
+  // Lookup lists — all delegated to LookupManager
+  // ==========================================================================
+
   mergeCategoryOptions(names: string[]): void {
-    const current = new Set(this.categoryOptions());
-    const missing: string[] = [];
-
-    for (const name of names) {
-      const trimmed = name.trim();
-      if (trimmed && !current.has(trimmed)) {
-        current.add(trimmed);
-        missing.push(trimmed);
-      }
-    }
-
-    if (missing.length === 0) return;
-
-    this.categoryOptions.set([...current].sort());
-
-    for (const name of missing) {
-      firstValueFrom(this.apiService.createCategory(name))
-        .then(() => this.logger.info(`Persisted category to database: ${name}`))
-        .catch((error) => {
-          this.logger.error(`Failed to persist category "${name}" to database`, JSON.stringify(error));
-          this.notificationService.showError(`Failed to save category "${name}" to database`);
-        });
-    }
+    this.lookups.mergeCategoryOptions(names);
   }
 
   removeCategoryOption(category: string): void {
-    this.categoryOptions.set(this.categoryOptions().filter(o => o !== category));
+    this.lookups.removeCategoryOption(category);
   }
 
   addCoinSet(name: string): void {
-    const current = this.coinSets();
-    if (!current.includes(name)) {
-      this.coinSets.set([...current, name].sort());
-    }
+    this.lookups.addCoinSet(name);
   }
 
   removeCoinSet(name: string): void {
-    this.coinSets.set(this.coinSets().filter(s => s !== name));
+    this.lookups.removeCoinSet(name);
   }
 
-  meltValue(coin: CoinRecord): number | null {
-    const pmWeight = coin.pmWeightGrams ?? 0;
-    const pmPct = coin.pmPercent ?? 0;
-    const metal = (coin.metalContent ?? '').toLowerCase();
-
-    if (pmWeight <= 0 || pmPct <= 0 || !metal) return null;
-
-    const prices = this.spotPrices();
-    const GRAMS_PER_TROY_OZ = 31.1035;
-
-    let spotPerOz = 0;
-    if (metal.includes('gold')) spotPerOz = prices.gold;
-    else if (metal.includes('silver')) spotPerOz = prices.silver;
-    else if (metal.includes('platinum')) spotPerOz = prices.platinum;
-    else if (metal.includes('copper')) spotPerOz = prices.copper;
-
-    if (spotPerOz <= 0) return null;
-
-    return (pmWeight / GRAMS_PER_TROY_OZ) * (pmPct / 100) * spotPerOz;
+  loadDenominations(): Promise<void> {
+    return this.lookups.loadDenominations();
   }
 
-  ensureSelectedCoin(): void {
-    if (this.inventory().length === 0) { this.selectedCoinId.set(null); return; }
-    const current = this.selectedCoinId();
-    if (!current || !this.inventory().some(c => c.id === current)) {
-      this.selectedCoinId.set(this.inventory()[0].id);
-    }
+  addDenomination(d: Partial<Denomination>): Promise<void> {
+    return this.lookups.addDenomination(d);
   }
 
-  // ========================================
-  // Denomination Management
-  // ========================================
-
-  async loadDenominations(): Promise<void> {
-    try {
-      const denominations = await firstValueFrom(this.apiService.getDenominations());
-      this.denominations.set(denominations);
-      this.logger.info(`Loaded ${denominations.length} denominations from database`);
-    } catch (error) {
-      this.logger.error('Failed to load denominations', JSON.stringify(error));
-      this.notificationService.showError('Failed to load denominations');
-    }
+  removeDenomination(id: number): Promise<void> {
+    return this.lookups.removeDenomination(id);
   }
 
-  async addDenomination(d: Partial<Denomination>): Promise<void> {
-    try {
-      const created = await firstValueFrom(this.apiService.createDenomination(d));
-      this.denominations.set([...this.denominations(), created]);
-      this.logger.info(`Created denomination: ${created.label}`);
-      this.notificationService.showInfo(`Added denomination: ${created.label}`);
-    } catch (error) {
-      this.logger.error('Failed to create denomination', JSON.stringify(error));
-      this.notificationService.showError('Failed to create denomination');
-    }
+  loadMintMarks(): Promise<void> {
+    return this.lookups.loadMintMarks();
   }
 
-  async removeDenomination(id: number): Promise<void> {
-    try {
-      await firstValueFrom(this.apiService.deleteDenomination(id));
-      this.denominations.set(this.denominations().filter(d => d.denominationId !== id));
-      this.logger.info(`Deleted denomination: ${id}`);
-      this.notificationService.showInfo('Denomination removed');
-    } catch (error) {
-      this.logger.error('Failed to delete denomination', JSON.stringify(error));
-      this.notificationService.showError('Failed to delete denomination');
-    }
+  addMintMark(m: Partial<MintMarkOption>): Promise<void> {
+    return this.lookups.addMintMark(m);
   }
 
-  // ========================================
-  // Mint Mark Management
-  // ========================================
-
-  async loadMintMarks(): Promise<void> {
-    try {
-      const mintMarks = await firstValueFrom(this.apiService.getMintMarks());
-      this.mintMarks.set(mintMarks);
-      this.logger.info(`Loaded ${mintMarks.length} mint marks from database`);
-    } catch (error) {
-      this.logger.error('Failed to load mint marks', JSON.stringify(error));
-      this.notificationService.showError('Failed to load mint marks');
-    }
-  }
-
-  async addMintMark(m: Partial<MintMarkOption>): Promise<void> {
-    try {
-      const created = await firstValueFrom(this.apiService.createMintMark(m));
-      this.mintMarks.set([...this.mintMarks(), created]);
-      this.logger.info(`Created mint mark: ${created.label}`);
-      this.notificationService.showInfo(`Added mint mark: ${created.label}`);
-    } catch (error) {
-      this.logger.error('Failed to create mint mark', JSON.stringify(error));
-      this.notificationService.showError('Failed to create mint mark');
-    }
-  }
-
-  async removeMintMark(id: number): Promise<void> {
-    try {
-      await firstValueFrom(this.apiService.deleteMintMark(id));
-      this.mintMarks.set(this.mintMarks().filter(m => m.mintMarkId !== id));
-      this.logger.info(`Deleted mint mark: ${id}`);
-      this.notificationService.showInfo('Mint mark removed');
-    } catch (error) {
-      this.logger.error('Failed to delete mint mark', JSON.stringify(error));
-      this.notificationService.showError('Failed to delete mint mark');
-    }
+  removeMintMark(id: number): Promise<void> {
+    return this.lookups.removeMintMark(id);
   }
 }

@@ -1,18 +1,33 @@
-import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
+﻿import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { LoggingService } from './logging.service';
+import { resolveApiBaseUrl } from './http-utils';
 import { of, throwError } from 'rxjs';
 
 /**
  * Tests for LoggingService.
  *
  * This service handles application logging by:
- * - Posting log entries to the backend via HttpClient POST /api/log
+ * - Posting log entries to the backend at <apiBaseUrl>/api/log
  * - Falling back to console.log/warn/error if the HTTP call fails
  * - Supporting INFO, WARN, and ERROR severity levels
  *
  * LoggingService uses constructor injection (not inject()), so it can be
  * created with `new` and the private http field overridden for testing.
  */
+
+/**
+ * The service posts to an ABSOLUTE url, not the relative '/api/log'.
+ *
+ * This matters: during development the app is served by `ng serve` on port
+ * 4200 while the Express backend listens on port 3000, so a relative URL
+ * posts to the dev server (which has no such route) and every frontend log
+ * line is silently lost. Tests previously asserted the relative path, which
+ * is why the bug went unnoticed.
+ *
+ * Under Vitest there is no `window`, so resolveApiBaseUrl() returns the
+ * development backend, http://localhost:3000.
+ */
+const LOG_URL = `${resolveApiBaseUrl()}/api/log`;
 describe('LoggingService', () => {
   let service: LoggingService;
   let mockHttpClient: any;
@@ -40,7 +55,7 @@ describe('LoggingService', () => {
     service.info('Test info message', 'Additional details');
 
     expect(mockHttpClient.post).toHaveBeenCalledWith(
-      '/api/log',
+      LOG_URL,
       expect.objectContaining({
         level: 'INFO',
         message: 'Test info message',
@@ -54,7 +69,7 @@ describe('LoggingService', () => {
     service.warn('Test warning message');
 
     expect(mockHttpClient.post).toHaveBeenCalledWith(
-      '/api/log',
+      LOG_URL,
       expect.objectContaining({
         level: 'WARN',
         message: 'Test warning message',
@@ -67,7 +82,7 @@ describe('LoggingService', () => {
     service.error('Test error message', 'Stack trace details');
 
     expect(mockHttpClient.post).toHaveBeenCalledWith(
-      '/api/log',
+      LOG_URL,
       expect.objectContaining({
         level: 'ERROR',
         message: 'Test error message',
@@ -124,7 +139,7 @@ describe('LoggingService', () => {
     service.info('Message only');
 
     expect(mockHttpClient.post).toHaveBeenCalledWith(
-      '/api/log',
+      LOG_URL,
       expect.objectContaining({
         level: 'INFO',
         message: 'Message only',
@@ -140,4 +155,77 @@ describe('LoggingService', () => {
       expect.stringContaining('[INFO] Main message | Extra details')
     );
   });
+
+  it('posts to the absolute backend URL, not a relative path', () => {
+    service.info('Test message');
+
+    const calledUrl = mockHttpClient.post.mock.calls[0][0];
+    expect(calledUrl).toBe('http://localhost:3000/api/log');
+    // Guard against a regression to the relative path, which would post to
+    // the Angular dev server on port 4200 instead of the API on 3000.
+    expect(calledUrl).not.toBe('/api/log');
+  });
+
+  // ----------------------------------------------------------------
+  // Backoff behaviour
+  // ----------------------------------------------------------------
+  // The old implementation set `backendAvailable = false` on the first
+  // failure and never reset it, so a single transient blip disabled backend
+  // logging for the whole browser session -- losing exactly the log lines
+  // you need when something is going wrong. It now backs off temporarily
+  // and recovers.
+
+  it('stops posting to the backend during the backoff window after a failure', () => {
+    mockHttpClient.post.mockReturnValue(throwError(() => new Error('Network error')));
+    service.info('First message, this one is attempted');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+
+    // Further logs inside the backoff window should not hit the network.
+    service.info('Second message');
+    service.info('Third message');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+
+    // ...but they must still reach the console.
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining('[INFO] Third message'));
+  });
+
+  it('resumes backend logging once the backoff window expires', () => {
+    const realNow = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(realNow);
+
+    mockHttpClient.post.mockReturnValue(throwError(() => new Error('Network error')));
+    service.info('Failing message');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+
+    // Still suppressed 10 seconds later (backoff is 30s).
+    nowSpy.mockReturnValue(realNow + 10_000);
+    service.info('Still suppressed');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(1);
+
+    // 31 seconds later the backend is tried again.
+    nowSpy.mockReturnValue(realNow + 31_000);
+    mockHttpClient.post.mockReturnValue(of({}));
+    service.info('Retried message');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('clears the backoff immediately after a successful post', () => {
+    const realNow = Date.now();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(realNow);
+
+    mockHttpClient.post.mockReturnValue(throwError(() => new Error('Network error')));
+    service.info('Failing message');
+
+    // Let the window lapse and succeed once.
+    nowSpy.mockReturnValue(realNow + 31_000);
+    mockHttpClient.post.mockReturnValue(of({}));
+    service.info('Successful message');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(2);
+
+    // Because that succeeded, the very next log goes straight out with no
+    // further waiting.
+    service.info('Immediately after success');
+    expect(mockHttpClient.post).toHaveBeenCalledTimes(3);
+  });
 });
+

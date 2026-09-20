@@ -58,6 +58,33 @@
   line-height: 1.4;
 }
 
+.busy-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 0 0;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #fff6e9;
+  border: 1px solid #f0d9aa;
+  color: #6d4d1b;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.busy-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(109, 77, 27, 0.2);
+  border-top-color: #8e5b2d;
+  border-radius: 50%;
+  animation: quicken-spin 0.8s linear infinite;
+}
+
+@keyframes quicken-spin {
+  to { transform: rotate(360deg); }
+}
+
 .warning-list {
   margin-top: 12px;
   background: #fff8e8;
@@ -67,6 +94,56 @@
 
   h3 { margin: 0 0 6px; color: #8a5b1f; font-size: 0.8rem; }
   ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; font-size: 0.8rem; color: #6a5030; }
+}
+
+// Exceptions: coins rejected for having fewer than 2 of the 3 main details.
+// Styled as a "needs your attention" panel rather than an error, because the
+// user can choose to import them anyway.
+.exception-list {
+  margin-top: 14px;
+  background: #fdf1ee;
+  border: 1px solid #edc3b6;
+  border-radius: 10px;
+  padding: 10px 12px;
+
+  h3 { margin: 0 0 6px; color: #8c3b22; font-size: 0.8rem; }
+  .hint-text { margin-top: 0; }
+}
+
+.exception-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+
+  th, td {
+    text-align: left;
+    padding: 5px 6px;
+    border-bottom: 1px solid #f0d8d0;
+    vertical-align: top;
+  }
+
+  th { color: #8c3b22; font-weight: 600; }
+  code { font-family: inherit; font-weight: 600; color: #5c3a2e; }
+}
+
+.override-list {
+  margin-top: 12px;
+  background: #f3f7ef;
+  border: 1px solid #cfdec2;
+  border-radius: 10px;
+  padding: 10px 12px;
+
+  h3 { margin: 0 0 6px; color: #4a6435; font-size: 0.8rem; }
+  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.8rem;
+  }
+  code { font-family: inherit; font-weight: 600; color: #3f5530; }
 }
 
 .import-preview {

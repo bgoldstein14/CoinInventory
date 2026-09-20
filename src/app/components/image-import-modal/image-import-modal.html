@@ -16,34 +16,65 @@
         </label>
       </div>
 
-      @if (pendingImageMatches().length > 0) {
+      @if (imageReviews().length > 0) {
         <div class="image-import-summary">
-          <span>{{ pendingImageMatches().length }} images found</span>
-          <span class="import-stat import-stat--matched">{{ autoMatchedImages().length }} auto-matched</span>
-          <span class="import-stat import-stat--review">{{ reviewImages().length }} need review</span>
-          <span class="import-stat import-stat--unmatched">{{ unmatchedPendingImages().length }} unmatched</span>
+          <span>{{ imageReviews().length }} images found</span>
+          <span class="import-stat import-stat--matched">{{ autoMatches().length }} confident</span>
+          <span class="import-stat import-stat--review">{{ reviewMatches().length }} need your choice</span>
+          <span class="import-stat import-stat--unmatched">{{ unmatchedImages().length }} no match</span>
+          @if (outstandingCount() > 0) {
+            <span class="import-stat import-stat--outstanding">{{ outstandingCount() }} still undecided</span>
+          }
         </div>
 
-        @if (autoMatchedImages().length > 0) {
+        <!-- ================= 1. CONFIDENT MATCHES ================= -->
+        @if (autoMatches().length > 0) {
           <div class="image-match-section">
-            <h3>Auto-matched</h3>
+            <h3>Ready to attach</h3>
+            <p class="section-hint">
+              The filename matched one coin on several attributes with no close runner-up.
+              These will be attached unless you reject or skip them.
+            </p>
             <div class="image-match-list">
-              @for (match of autoMatchedImages(); track match.fileName) {
-                <div class="image-match-card" [class.image-match-card--confirmed]="match.status === 'confirmed'">
-                  @if (match.thumbnailUrl) {
-                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
+              @for (row of autoMatches(); track row.fileName) {
+                <div
+                  class="image-match-card"
+                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
+                  [class.image-match-card--skipped]="row.decision === 'skipped'"
+                >
+                  @if (row.thumbnailUrl) {
+                    <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
                   }
                   <div class="match-info">
-                    <span class="match-filename">{{ match.fileName }}</span>
-                    <span class="match-coin">{{ coinNameById(match.matchedCoinId) }}</span>
-                    <span class="match-confidence">{{ match.confidence * 100 | number: '1.0-0' }}% match</span>
+                    <span class="match-filename">{{ row.fileName }}</span>
+                    <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
+                    <span class="match-confidence">
+                      {{ row.confidence * 100 | number: '1.0-0' }}% confident
+                    </span>
+                    <span class="match-reason">{{ row.selectionReason }}</span>
+                    @if (parsedChips(row).length > 0) {
+                      <span class="parsed-chips">
+                        @for (chip of parsedChips(row); track chip) {
+                          <span class="parsed-chip">{{ chip }}</span>
+                        }
+                      </span>
+                    }
                   </div>
                   <div class="match-actions">
-                    @if (match.status === 'auto-matched') {
-                      <button type="button" class="small-button" (click)="confirmImageMatch(match.fileName)">Confirm</button>
-                      <button type="button" class="secondary small-button" (click)="rejectImageMatch(match.fileName)">Reject</button>
-                    } @else {
-                      <span class="match-confirmed-badge">Confirmed</span>
+                    @switch (row.decision) {
+                      @case ('skipped') {
+                        <span class="match-skipped-badge">Skipped</span>
+                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
+                      }
+                      @case ('confirmed') {
+                        <span class="match-confirmed-badge">Confirmed</span>
+                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
+                      }
+                      @default {
+                        <button type="button" class="small-button" (click)="confirmImageMatch(row.fileName)">Confirm</button>
+                        <button type="button" class="secondary small-button" (click)="rejectImageMatch(row.fileName)">Reject</button>
+                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
+                      }
                     }
                   </div>
                 </div>
@@ -52,55 +83,177 @@
           </div>
         }
 
-        @if (reviewImages().length > 0) {
+        <!-- ================= 2. NEEDS A CHOICE ================= -->
+        @if (reviewMatches().length > 0) {
           <div class="image-match-section">
-            <h3>Needs review</h3>
+            <h3>Needs your choice</h3>
+            <p class="section-hint">
+              Several coins fit the filename, or the filename did not carry enough
+              detail to be sure. Nothing here is attached until you pick a coin.
+            </p>
             <div class="image-match-list">
-              @for (match of reviewImages(); track match.fileName) {
-                <div class="image-match-card image-match-card--review">
-                  @if (match.thumbnailUrl) {
-                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
-                  }
-                  <div class="match-info">
-                    <span class="match-filename">{{ match.fileName }}</span>
-                    <span class="match-coin">Suggested: {{ coinNameById(match.matchedCoinId) }}</span>
-                    <span class="match-confidence">{{ match.confidence * 100 | number: '1.0-0' }}% match</span>
-                  </div>
-                  <div class="match-assign">
-                    <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
-                      <option value="">Assign to coin&hellip;</option>
-                      @for (coin of inv.inventory(); track coin.id) {
-                        <option [value]="coin.id" [selected]="coin.id === match.matchedCoinId">{{ coinNameById(coin.id) }}</option>
+              @for (row of reviewMatches(); track row.fileName) {
+                <div
+                  class="image-match-card image-match-card--review image-match-card--stacked"
+                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
+                  [class.image-match-card--skipped]="row.decision === 'skipped'"
+                >
+                  <div class="match-head">
+                    @if (row.thumbnailUrl) {
+                      <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
+                    }
+                    <div class="match-info">
+                      <span class="match-filename">{{ row.fileName }}</span>
+                      <span class="parsed-chips">
+                        @for (chip of parsedChips(row); track chip) {
+                          <span class="parsed-chip">{{ chip }}</span>
+                        }
+                        @if (parsedChips(row).length === 0) {
+                          <span class="parsed-chip parsed-chip--empty">Nothing recognised in the filename</span>
+                        }
+                      </span>
+                      <span class="match-reason">{{ row.result.reason }}</span>
+                    </div>
+                    <div class="match-actions">
+                      @if (row.decision === 'skipped') {
+                        <span class="match-skipped-badge">Skipped</span>
+                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
+                      } @else {
+                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
                       }
-                    </select>
+                    </div>
                   </div>
+
+                  @if (row.decision === 'confirmed' && row.selectedCoinId) {
+                    <div class="match-selected">
+                      <span class="match-confirmed-badge">Will attach to</span>
+                      <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
+                      <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Change</button>
+                    </div>
+                  } @else if (row.decision !== 'skipped') {
+                    @if (row.result.candidates.length > 0) {
+                      <ul class="candidate-list">
+                        @for (candidate of row.result.candidates; track candidate.coinId) {
+                          <li class="candidate">
+                            <div class="candidate-main">
+                              <span class="candidate-name">{{ candidate.coinLabel }}</span>
+                              <span class="candidate-reason">{{ candidate.reason }}</span>
+                            </div>
+                            <span class="candidate-score">{{ candidate.score * 100 | number: '1.0-0' }}%</span>
+                            <button type="button" class="small-button" (click)="chooseCandidate(row.fileName, candidate)">
+                              Use this
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                    }
+
+                    <div class="candidate-search">
+                      <label class="candidate-search-label" [attr.for]="'search-' + row.fileName">
+                        Or find a different coin
+                      </label>
+                      <input
+                        type="text"
+                        [id]="'search-' + row.fileName"
+                        placeholder="Type part of a coin name, e.g. morgan 1881"
+                        [value]="coinSearchTerm(row.fileName)"
+                        (input)="setCoinSearch(row.fileName, $any($event.target).value)"
+                      />
+                      @if (coinSearchResults(row.fileName).length > 0) {
+                        <ul class="search-results">
+                          @for (coin of coinSearchResults(row.fileName); track coin.id) {
+                            <li>
+                              <button type="button" class="link-button" (click)="reassignImageMatch(row.fileName, coin.id)">
+                                {{ coinNameById(coin.id) }}
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      } @else if (coinSearchTerm(row.fileName).length >= 2) {
+                        <p class="search-empty">No coin in the inventory matches that search.</p>
+                      }
+                    </div>
+                  }
                 </div>
               }
             </div>
           </div>
         }
 
-        @if (unmatchedPendingImages().length > 0) {
+        <!-- ================= 3. NO MATCH ================= -->
+        @if (unmatchedImages().length > 0) {
           <div class="image-match-section">
-            <h3>Unmatched</h3>
+            <h3>No match found</h3>
+            <p class="section-hint">
+              Nothing in the filename could be tied to a coin (for example
+              <code>IMG_2024.jpg</code>). Search for the right coin or skip the image.
+            </p>
             <div class="image-match-list">
-              @for (match of unmatchedPendingImages(); track match.fileName) {
-                <div class="image-match-card image-match-card--unmatched">
-                  @if (match.thumbnailUrl) {
-                    <img [src]="match.thumbnailUrl" alt="" class="match-thumb" />
-                  }
-                  <div class="match-info">
-                    <span class="match-filename">{{ match.fileName }}</span>
-                    <span class="match-coin">No match found</span>
-                  </div>
-                  <div class="match-assign">
-                    <select (change)="reassignImageMatch(match.fileName, $any($event.target).value)">
-                      <option value="">Assign to coin&hellip;</option>
-                      @for (coin of inv.inventory(); track coin.id) {
-                        <option [value]="coin.id">{{ coinNameById(coin.id) }}</option>
+              @for (row of unmatchedImages(); track row.fileName) {
+                <div
+                  class="image-match-card image-match-card--unmatched image-match-card--stacked"
+                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
+                  [class.image-match-card--skipped]="row.decision === 'skipped'"
+                >
+                  <div class="match-head">
+                    @if (row.thumbnailUrl) {
+                      <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
+                    }
+                    <div class="match-info">
+                      <span class="match-filename">{{ row.fileName }}</span>
+                      <span class="parsed-chips">
+                        @for (chip of parsedChips(row); track chip) {
+                          <span class="parsed-chip">{{ chip }}</span>
+                        }
+                        @if (parsedChips(row).length === 0) {
+                          <span class="parsed-chip parsed-chip--empty">Nothing recognised in the filename</span>
+                        }
+                      </span>
+                      <span class="match-reason">{{ row.result.reason }}</span>
+                    </div>
+                    <div class="match-actions">
+                      @if (row.decision === 'skipped') {
+                        <span class="match-skipped-badge">Skipped</span>
+                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
+                      } @else {
+                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
                       }
-                    </select>
+                    </div>
                   </div>
+
+                  @if (row.decision === 'confirmed' && row.selectedCoinId) {
+                    <div class="match-selected">
+                      <span class="match-confirmed-badge">Will attach to</span>
+                      <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
+                      <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Change</button>
+                    </div>
+                  } @else if (row.decision !== 'skipped') {
+                    <div class="candidate-search">
+                      <label class="candidate-search-label" [attr.for]="'search-none-' + row.fileName">
+                        Find the coin
+                      </label>
+                      <input
+                        type="text"
+                        [id]="'search-none-' + row.fileName"
+                        placeholder="Type part of a coin name, e.g. mercury dime"
+                        [value]="coinSearchTerm(row.fileName)"
+                        (input)="setCoinSearch(row.fileName, $any($event.target).value)"
+                      />
+                      @if (coinSearchResults(row.fileName).length > 0) {
+                        <ul class="search-results">
+                          @for (coin of coinSearchResults(row.fileName); track coin.id) {
+                            <li>
+                              <button type="button" class="link-button" (click)="reassignImageMatch(row.fileName, coin.id)">
+                                {{ coinNameById(coin.id) }}
+                              </button>
+                            </li>
+                          }
+                        </ul>
+                      } @else if (coinSearchTerm(row.fileName).length >= 2) {
+                        <p class="search-empty">No coin in the inventory matches that search.</p>
+                      }
+                    </div>
+                  }
                 </div>
               }
             </div>
@@ -109,8 +262,8 @@
 
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="close()">Cancel</button>
-          <button type="button" (click)="applyConfirmedMatches()" [disabled]="confirmedCount() === 0">
-            Apply {{ confirmedCount() }} match{{ confirmedCount() === 1 ? '' : 'es' }}
+          <button type="button" (click)="applyConfirmedMatches()" [disabled]="attachCount() === 0">
+            Attach {{ attachCount() }} image{{ attachCount() === 1 ? '' : 's' }}
           </button>
         </div>
       }

@@ -1,0 +1,76 @@
+// Styles for the attached-photos overlay.
+// The gallery body itself came from the old `styles/_detail-panel.scss`.
+@use '../../styles/controls' as *;
+
+// Not part of the original markup, and everything inside is position: fixed
+// anyway — keep the host out of the layout.
+:host { display: contents; }
+
+// NOTE (deliberate, not an oversight): this overlay uses the `.modal-backdrop`
+// / `.modal` / `.modal-header` class names, but `app.scss` never imported
+// `styles/_modal.scss`, so those classes have had no styling here for as long
+// as this markup has lived in app.html. That behaviour is preserved exactly by
+// this extraction. Adding `@use '../../styles/modal' as *;` above would give
+// the overlay the same chrome as the other modals — a one-line change, left
+// out on purpose so this refactor changes nothing visually.
+
+// ---- Image gallery ----
+
+.image-gallery {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.image-gallery__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.image-list { display: grid; gap: 8px; }
+
+.image-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #e8daca;
+  border-radius: 8px;
+  font-size: 0.8rem;
+
+  span {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+.coin-thumb {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+  cursor: zoom-in;
+}
+
+// ---- Responsive & print ----
+// These two rules used to live in `_overlays.scss` and did reach this markup
+// while it was part of app.html, so they move across with it.
+
+@media (max-width: 900px) {
+  .modal { max-width: 100%; border-radius: 14px; }
+}
+
+@media print {
+  .modal-backdrop { display: none !important; }
+}

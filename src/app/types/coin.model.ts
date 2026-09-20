@@ -84,6 +84,106 @@ export interface PendingImageMatch {
   status: 'auto-matched' | 'confirmed' | 'rejected' | 'pending' | 'unmatched';
 }
 
+// ---------------------------------------------------------------------------
+// Image filename matching (see services/image-matching.service.ts)
+// ---------------------------------------------------------------------------
+
+/**
+ * Everything the matcher believes it understood from an image filename.
+ *
+ * The UI shows this back to the user ("here is what I read from the name")
+ * so a bad parse is obvious at a glance instead of silently producing a
+ * wrong match. Every field is nullable/empty when the filename gave us no
+ * trustworthy evidence -- we deliberately never guess.
+ */
+export interface ParsedImageAttributes {
+  /** Original filename (directories stripped), kept for display. */
+  fileName: string;
+  /** 4-digit year, validated to a sane minting range. Null when absent or untrustworthy. */
+  year: number | null;
+  /** Mint mark code ("s", "d", "cc", ...) only when it appeared in an unambiguous form. */
+  mintMark: string | null;
+  /** Canonical denomination key used for equality, e.g. "dollar", "double eagle". */
+  denomination: string | null;
+  /** Human-readable denomination label for display, e.g. "Double Eagle ($20)". */
+  denominationLabel: string | null;
+  /** Remaining meaningful words that describe the coin design, e.g. ["morgan"]. */
+  coinTypeTokens: string[];
+  /** Grade token if one was spotted, e.g. "ms63". */
+  grade: string | null;
+  /** Long digit runs that look like certification numbers. */
+  certNumbers: string[];
+  /** Grading service names spotted in the filename, e.g. ["ngc"]. */
+  certCompanies: string[];
+  /** All normalized tokens, for debugging / display. */
+  tokens: string[];
+  /** True when nothing usable was found (e.g. "IMG_2024.jpg"). */
+  isEmpty: boolean;
+}
+
+/**
+ * A single scored inventory coin offered as a possible owner of an image.
+ */
+export interface RankedImageMatch {
+  /** CoinRecord.id */
+  coinId: string;
+  /** Display label, e.g. "Morgan Dollar 1881". */
+  coinLabel: string;
+  /** Normalized 0..1 confidence. */
+  score: number;
+  /** Specific, honest explanation, e.g. "Year 1881 matches; mint mark S matches". */
+  reason: string;
+  /** Number of independently-agreeing strong attributes behind this score. */
+  strongAttributeCount: number;
+}
+
+/**
+ * Per-image outcome of the matcher.
+ *
+ * Extends the legacy {@link ImageMatchCandidate} so existing callers that only
+ * read imagePath/matchedRecordId/confidence/reason keep working unchanged.
+ */
+export interface ImageMatchResult extends ImageMatchCandidate {
+  /**
+   * - 'auto'   : near-certain, safe to attach without asking.
+   * - 'review' : plausible candidates exist but we are not certain -- ask the user.
+   * - 'none'   : nothing worth suggesting.
+   */
+  status: 'auto' | 'review' | 'none';
+  /** Only populated when status === 'auto'. */
+  matchedRecordId: string | null;
+  /** Top candidates, best first (max 5). Present for 'review' and often for 'none'. */
+  candidates: RankedImageMatch[];
+  /** What the matcher read out of the filename. */
+  parsed: ParsedImageAttributes;
+  /** Score gap between the best and second-best candidate. */
+  runnerUpGap: number;
+}
+
+/**
+ * UI-side row for the image import review screen.
+ * Wraps one {@link ImageMatchResult} with the user's decision.
+ */
+export interface PendingImageReview {
+  fileName: string;
+  thumbnailUrl: string;
+  /** Matcher output for this file. */
+  result: ImageMatchResult;
+  /** Coin the image will be attached to once applied (null = nothing yet). */
+  selectedCoinId: string | null;
+  /** Why the current selection was made (matcher reason, or "manually assigned"). */
+  selectionReason: string;
+  /** Confidence of the current selection (1 when the user picked it by hand). */
+  confidence: number;
+  /**
+   * - 'auto'      : matcher is confident; will be applied unless rejected.
+   * - 'review'    : waiting on the user.
+   * - 'confirmed' : user accepted a coin.
+   * - 'skipped'   : user chose to not attach this image.
+   */
+  decision: 'auto' | 'review' | 'confirmed' | 'skipped';
+}
+
 export interface TransactionRecord {
   id: string;
   coinId: string;
@@ -142,4 +242,21 @@ export interface AppNotification {
   message: string; // Message to display to the user
   autoDismiss: boolean; // Whether the notification should auto-dismiss after duration
   duration?: number; // Auto-dismiss duration in milliseconds (only if autoDismiss is true)
+}
+
+/**
+ * Result of a spot-price fetch via the backend COMEX proxy.
+ *
+ * This type lives here rather than in spot-price.service.ts to break a
+ * circular import: api.service.ts needs the type for its fetchSpotPrices()
+ * return value, while spot-price.service.ts needs ApiService. Two modules
+ * importing each other made Angular's HttpClient/XHR backend get pulled in
+ * during module evaluation, which broke unit tests with
+ * "BrowserXhr needs to be compiled using the JIT compiler".
+ */
+export interface SpotPriceResult {
+  prices: SpotPrices;   // The fetched metal prices
+  source: string;       // Where the prices came from, e.g. "COMEX via metals.live"
+  timestamp: string;    // ISO timestamp of the fetch
+  error?: string;       // Present when the fetch failed; prices will be zeroed
 }

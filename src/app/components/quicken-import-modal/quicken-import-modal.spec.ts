@@ -32,7 +32,7 @@ describe('QuickenImportModal', () => {
     let emitted: unknown[] = [];
     modal.imported.subscribe(coins => { emitted = coins; });
 
-    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\nMUS 1/2 Dime\n^`);
+    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nY1853 US Half Dime\nT12.50\nMUS 1/2 Dime\n^`);
     modal['importQuicken']();
 
     expect(emitted).toHaveLength(1);
@@ -46,7 +46,7 @@ describe('QuickenImportModal', () => {
     modal.imported.subscribe(coins => { emitted = coins; });
 
     modal['quickenText'].set(
-      `!Account\nNCoin Collection\n^\n!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\n^`
+      `!Account\nNCoin Collection\n^\n!Type:Invst\nD2024-02-01\nNBuy\nY1853 US Half Dime\nT12.50\n^`
     );
     modal['refreshQuickenAccounts']();
     modal['importQuicken']();
@@ -60,7 +60,7 @@ describe('QuickenImportModal', () => {
     let emitted: unknown[] = [];
     modal.imported.subscribe(coins => { emitted = coins; });
 
-    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\n^`);
+    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nY1853 US Half Dime\nT12.50\n^`);
     modal['importQuicken']();
 
     expect((emitted[0] as { category: string }).category).toBe('');
@@ -80,7 +80,7 @@ describe('QuickenImportModal', () => {
   it('loads a Quicken file and runs a preview parse', async () => {
     const { modal } = createModal();
     const file = new File(
-      ['!Type:Invst\nD2024-02-01\nNBuy\nYUS Half Dime\nT12.50\n^'],
+      ['!Type:Invst\nD2024-02-01\nNBuy\nY1853 US Half Dime\nT12.50\n^'],
       'import.qif',
       { type: 'text/plain' }
     );
@@ -105,36 +105,40 @@ describe('QuickenImportModal', () => {
     expect(Object.keys(grouped)).toEqual(expect.arrayContaining(['Checking', 'Savings']));
   });
 
+  // NOTE: these filter fixtures used placeholder security names ("Old Coin",
+  // "Cheap Coin", ...). Those carry none of the three main details, so the
+  // parser never produced a record to filter and the tests failed with an
+  // empty list -- the date/price filters themselves were fine. Real Quicken
+  // security names are used instead.
   it('applies QIF date filter during import', () => {
     const { modal } = createModal();
     modal['quickenText'].set(
-      `!Type:Invst\nD01/15/2024\nNBuy\nYOld Coin\nT100\n^\n!Type:Invst\nD06/15/2024\nNBuy\nYNew Coin\nT200\n^`
+      `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT100\n^\n!Type:Invst\nD06/15/2024\nNBuy\nY1921 Morgan Dollar MS63\nT200\n^`
     );
     modal['qifDateFrom'].set('2024-03-01');
     modal['previewImport']();
 
     expect(modal['importedRecords']()).toHaveLength(1);
-    // Check purchase price instead of name (which no longer exists)
+    // Only the June purchase survives a "from 2024-03-01" filter.
     expect(modal['importedRecords']()[0].purchasePrice).toBe(200);
   });
 
   it('applies QIF price filter during import', () => {
     const { modal } = createModal();
     modal['quickenText'].set(
-      `!Type:Invst\nD01/15/2024\nNBuy\nYCheap Coin\nT5\n^\n!Type:Invst\nD01/15/2024\nNBuy\nYExpensive Coin\nT500\n^`
+      `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\n^\n!Type:Invst\nD01/15/2024\nNBuy\nY1921 Morgan Dollar MS63\nT500\n^`
     );
     modal['qifPriceMin'].set('100');
     modal['previewImport']();
 
     expect(modal['importedRecords']()).toHaveLength(1);
-    // Check purchase price instead of name (which no longer exists)
     expect(modal['importedRecords']()[0].purchasePrice).toBe(500);
   });
 
   it('applies QIF denomination filter during import', () => {
     const { modal } = createModal();
     modal['quickenText'].set(
-      `!Type:Invst\nD01/15/2024\nNBuy\nYUS Half Dime\nT12\n^\n!Type:Invst\nD01/15/2024\nNBuy\nYQuarter\nT30\n^`
+      `!Type:Invst\nD01/15/2024\nNBuy\nY1853 US Half Dime\nT12\n^\n!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT30\n^`
     );
     // Filter by symbolic denomination "25" to match "25¢"
     modal['qifDenominationFilter'].set('25');
@@ -142,5 +146,76 @@ describe('QuickenImportModal', () => {
 
     expect(modal['importedRecords']()).toHaveLength(1);
     expect(modal['importedRecords']()[0].denomination).toBe('25¢');
+  });
+
+  // --- 2-of-3 main-detail rule, seen from the modal ---
+
+  // A QIF with one good coin and one that only has a year.
+  const mixedQif =
+    `!Type:Invst\nD01/15/2024\nNBuy\nY1921 Morgan Dollar MS63\nT50\n^` +
+    `\n!Type:Invst\nD01/16/2024\nNBuy\nY1943 Steel\nT25\n^`;
+
+  it('surfaces under-detailed coins as exceptions instead of dropping them', () => {
+    const { modal } = createModal();
+    modal['quickenText'].set(mixedQif);
+    modal['previewImport']();
+
+    expect(modal['importedRecords']()).toHaveLength(1);
+    expect(modal['rejectedRecords']()).toHaveLength(1);
+    expect(modal['rejectedRecords']()[0].securityName).toBe('1943 Steel');
+    expect(modal['rejectedRecords']()[0].reason).toContain('Only 1 of 3 required details found');
+  });
+
+  it('does not emit an excepted coin when importing', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    modal['quickenText'].set(mixedQif);
+    modal['importQuicken']();
+
+    expect(emitted).toHaveLength(1);
+    expect((emitted[0] as { coinType: string }).coinType).toBe('Morgan');
+  });
+
+  it('lets the user override an exception and import it anyway', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    modal['quickenText'].set(mixedQif);
+    modal['previewImport']();
+    modal['overrideException']('1943 Steel');
+
+    // The override survives the re-parse that Preview/Import perform.
+    expect(modal['rejectedRecords']()).toHaveLength(0);
+    expect(modal['importedRecords']()).toHaveLength(2);
+
+    modal['importQuicken']();
+    expect(emitted).toHaveLength(2);
+  });
+
+  it('puts an overridden coin back into the exception list when undone', () => {
+    const { modal } = createModal();
+    modal['quickenText'].set(mixedQif);
+    modal['previewImport']();
+    modal['overrideException']('1943 Steel');
+    modal['undoOverride']('1943 Steel');
+
+    expect(modal['importedRecords']()).toHaveLength(1);
+    expect(modal['rejectedRecords']()).toHaveLength(1);
+  });
+
+  it('keeps net-quantity filtering working alongside the detail rule', () => {
+    const { modal } = createModal();
+    modal['quickenText'].set(
+      `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\n^` +
+      `\n!Type:Invst\nD02/20/2024\nNSell\nY1964 Quarter\nT6\n^`
+    );
+    modal['previewImport']();
+
+    expect(modal['importedRecords']()).toHaveLength(0);
+    expect(modal['rejectedRecords']()).toHaveLength(0);
+    expect(modal['skippedRecords']()).toHaveLength(1);
   });
 });

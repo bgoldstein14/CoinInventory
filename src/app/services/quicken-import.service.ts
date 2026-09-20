@@ -27,6 +27,9 @@
 import { Injectable } from '@angular/core';
 import { QuickenImportRecord } from '../types/coin.model';
 import { lookupPmData } from './pm-reference';
+// The 2-of-3 "is this really a coin?" rule is shared with the manual
+// add-a-coin flow — see the re-export block further down for why.
+import { checkMainCoinDetails } from './coin-completeness';
 
 interface CoinTypeRange {
   min: number;
@@ -135,6 +138,10 @@ const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
 };
 
 function inferCoinTypeByYear(denomination: string, year: number): string {
+  if (denomination === '$1' && year >= 1878 && year <= 1921) {
+    return 'Morgan';
+  }
+
   const ranges = COIN_TYPE_BY_DENOMINATION[denomination];
   if (!ranges) return '';
   for (const range of ranges) {
@@ -165,9 +172,46 @@ const DISPOSITION_ACTIONS = new Set(['sell', 'sellx', 'shrsout', 'shtsell', 'rtr
 /** Action codes for cash-only transfers — no security involved, skip silently. */
 const CASH_TRANSFER_ACTIONS = new Set(['xin', 'xout']);
 
+/* ---------------------------------------------------------------------------
+ * THE 2-OF-3 MAIN-DETAIL RULE USED TO BE WRITTEN OUT IN THIS FILE.
+ *
+ * It now lives in `coin-completeness.ts`, because the manual "Add coin"
+ * button needs the very same rule to decide when a half-typed new row has
+ * become worth saving to the database. Two copies of a validation rule is
+ * exactly how they drift apart, so there is now precisely one copy and both
+ * callers import it.
+ *
+ * These re-exports keep this service's public surface (and its tests)
+ * unchanged: `import { checkMainCoinDetails } from './quicken-import.service'`
+ * still works and still resolves to the one shared implementation.
+ * ------------------------------------------------------------------------- */
+export {
+  MINIMUM_MAIN_DETAILS,
+  isCoinDetailPresent,
+  checkMainCoinDetails
+} from './coin-completeness';
+export type { CoinDetailCheck } from './coin-completeness';
+
+/**
+ * A coin that parsed successfully but did not carry enough detail to import.
+ * These are surfaced to the user as "exceptions" -- never silently dropped --
+ * so they can see exactly which QIF rows were skipped and why.
+ */
+export interface QuickenRejectedRecord {
+  /** The raw `Y` (security name) line the coin came from. */
+  securityName: string;
+  /** What we *were* able to parse, so the user can judge / override. */
+  record: QuickenImportRecord;
+  present: string[];
+  missing: string[];
+  reason: string;
+}
+
 export interface QuickenParseResult {
   importedRecords: QuickenImportRecord[];
   skippedRecords: QuickenImportRecord[]; // Coins with net quantity <= 0 (sold or transferred out)
+  /** Coins held (net qty > 0) but failing the 2-of-3 main-detail rule. */
+  rejectedRecords: QuickenRejectedRecord[];
   warnings: string[];
   accounts: string[];
 }
@@ -260,7 +304,6 @@ export class QuickenImportService {
       }
 
       if (!fields.security) {
-        warnings.push('Skipped a Quicken transaction with no security name (Y field).');
         continue;
       }
 
@@ -274,6 +317,20 @@ export class QuickenImportService {
       // Parse attributes from security name
       const attrs = this.parseAttributes(fields.security);
       const purchasePrice = this.resolveAmount(fields);
+      if (purchasePrice < 0) {
+        warnings.push(
+          `Ignored "${fields.security}" -- negative value detected (${purchasePrice.toFixed(2)}); it will not be imported.`
+        );
+        continue;
+      }
+
+      // NOTE: there is deliberately NO "is this coin detailed enough?" test
+      // here. That rule lives in exactly one place -- the final assembly loop
+      // below -- so that no code path can reach `importedRecords` without
+      // passing it. (The previous version tested `!year && !denomination`
+      // here, which only rejected coins missing BOTH fields, and then bolted
+      // on a regex for bare "1934"-style names. See the assembly loop.)
+
       const purchaseDate = fields.date ? this.normalizeDate(fields.date) : '';
 
       // Look up precious metal data based on denomination and year
@@ -332,23 +389,60 @@ export class QuickenImportService {
       }
     }
 
-    // Filter to only coins with net qty > 0 (currently held)
+    // ---------------------------------------------------------------------
+    // THE SINGLE CHOKE POINT.
+    //
+    // Every record that ends up in `importedRecords` passes through this one
+    // loop, so this is the only place the import rules need to be enforced.
+    // Two gates, in order:
+    //   1. Net quantity: coins fully sold/transferred out (qty <= 0) are not
+    //      held any more, so they go to `skippedRecords`.
+    //   2. Main-detail rule: a held coin still needs at least 2 of
+    //      Year / Coin Type / Denomination, or it goes to `rejectedRecords`
+    //      (an exception the user can see -- and optionally override in the
+    //      import modal) rather than being silently dropped.
+    // ---------------------------------------------------------------------
     const importedRecords: QuickenImportRecord[] = [];
     const skippedRecords: QuickenImportRecord[] = [];
+    const rejectedRecords: QuickenRejectedRecord[] = [];
 
     for (const [securityName, data] of netQuantityMap.entries()) {
-      if (data.qty > 0 && data.latestRecord) {
-        importedRecords.push(data.latestRecord);
-      } else if (data.qty <= 0 && data.latestRecord) {
-        // Coin has been fully sold or transferred out
-        skippedRecords.push(data.latestRecord);
-        warnings.push(
-          `Skipped "${securityName}" -- net quantity is ${data.qty} (fully disposed).`
-        );
+      const record = data.latestRecord;
+      if (!record) {
+        // Only dispositions were seen for this security -- there was never an
+        // acquisition to build a record from, so there is nothing to report.
+        continue;
       }
+
+      if (data.qty <= 0) {
+        // Gate 1: coin has been fully sold or transferred out.
+        skippedRecords.push(record);
+        continue;
+      }
+
+      // Gate 2: the 2-of-3 main-detail rule.
+      const detailCheck = checkMainCoinDetails(record);
+      if (!detailCheck.passes) {
+        rejectedRecords.push({
+          securityName,
+          record,
+          present: detailCheck.present,
+          missing: detailCheck.missing,
+          reason: detailCheck.reason
+        });
+        continue;
+      }
+
+      importedRecords.push(record);
     }
 
-    return { importedRecords, skippedRecords, warnings, accounts: [...accounts] };
+    return {
+      importedRecords,
+      skippedRecords,
+      rejectedRecords,
+      warnings,
+      accounts: [...accounts]
+    };
   }
 
   /** Reads the account name out of an `!Account` block's `N` line. */
@@ -452,20 +546,43 @@ export class QuickenImportService {
       return value;
     }
 
-    const [month, day, rawYear] = parts;
-    let year = rawYear;
+    let month: string;
+    let day: string;
+    let year: string;
+
+    if (/^\d{4}$/.test(parts[0])) {
+      // Already ISO-ish (`YYYY-MM-DD`). Some exporters -- and our own test
+      // fixtures -- use this. Reading it as M/D/Y produced nonsense like
+      // "2001-2024-02", which then compared wrongly against the date filters.
+      [year, month, day] = parts;
+    } else {
+      // Quicken's native order: M/D/Y.
+      [month, day, year] = parts;
+    }
+
     if (year.length <= 2) {
+      // Quicken writes 2-digit years; 00-50 -> 2000s, 51-99 -> 1900s.
       const yearNumber = Number.parseInt(year, 10);
+      if (Number.isNaN(yearNumber)) return value;
       year = String(yearNumber <= 50 ? 2000 + yearNumber : 1900 + yearNumber);
     }
 
-    const paddedMonth = month.padStart(2, '0');
-    const paddedDay = day.padStart(2, '0');
-    if (year.length !== 4 || Number.isNaN(Number(paddedMonth)) || Number.isNaN(Number(paddedDay))) {
+    const monthNumber = Number(month);
+    const dayNumber = Number(day);
+    if (
+      year.length !== 4 ||
+      !Number.isInteger(monthNumber) ||
+      !Number.isInteger(dayNumber) ||
+      monthNumber < 1 ||
+      monthNumber > 12 ||
+      dayNumber < 1 ||
+      dayNumber > 31
+    ) {
+      // Unrecognized shape -- return the original text rather than guessing.
       return value;
     }
 
-    return `${year}-${paddedMonth}-${paddedDay}`;
+    return `${year}-${String(monthNumber).padStart(2, '0')}-${String(dayNumber).padStart(2, '0')}`;
   }
 
   /**
@@ -503,17 +620,20 @@ export class QuickenImportService {
     let variety = '';
     let coinType = '';
 
-    // Extract year (leading 4-digit number)
-    const yearMatch = securityName.match(/^(\d{4})/);
+    // Extract year, including an overdate suffix when present (e.g. 1862/1).
+    const yearMatch = securityName.match(/^(\d{4}(?:\/\d{1,2})?)/);
     if (yearMatch) {
       year = yearMatch[1];
     }
 
-    // Extract mintmark (single letter immediately after year, no space)
-    // Common mintmarks: S, D, O, CC, C, W, P
-    const mintMarkMatch = securityName.match(/^\d{4}([SDOCWP]{1,2})\b/i);
+    // Extract mintmark immediately after the year, with or without a hyphen.
+    // Common mintmarks: S, D, O, CC, C, W, P, etc.
+    const mintMarkMatch = securityName.match(/^(?:\d{4}(?:\/\d{1,2})?)[-\s]?([A-Z]{1,2})(?:\b|[-\s])/i);
     if (mintMarkMatch) {
-      mintMark = mintMarkMatch[1].toUpperCase();
+      const discovered = mintMarkMatch[1].toUpperCase();
+      if (['P', 'D', 'S', 'O', 'C', 'CC', 'W', 'MM'].includes(discovered)) {
+        mintMark = discovered;
+      }
     }
 
     // Extract grade (after "-" or space, common patterns)
@@ -556,9 +676,9 @@ export class QuickenImportService {
       denomination = '5¢';
     } else if (/10¢/.test(securityName) || /\bdime\b/i.test(lowerName)) {
       denomination = '10¢';
-    } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName)) {
+    } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName) || /\b25c\b/.test(lowerName)) {
       denomination = '25¢';
-    } else if (/50¢/.test(securityName) || /half[\s-]?dollar/i.test(lowerName)) {
+    } else if (/50¢/.test(securityName) || /\b50c\b/.test(lowerName) || /half[\s-]?dollar/i.test(lowerName)) {
       denomination = '50¢';
     } else if (/20¢/.test(securityName) || /twenty[\s-]?cent/i.test(lowerName) || /\b20c\b/.test(lowerName)) {
       denomination = '20¢';
@@ -605,6 +725,13 @@ export class QuickenImportService {
     if (/\bproof\s+set\b/i.test(lowerName)) return 'Proof Set';
     if (/\bmint\s+set\b/i.test(lowerName)) return 'Mint Set';
     if (/\bmaundy\s+set\b/i.test(lowerName)) return 'Maundy Set';
+
+    // Explicit issue names should win over year-based denomination heuristics.
+    // This keeps commemoratives and special issues from being mislabeled by their date.
+    if (/\boregon\s*(?:trail)?\b/i.test(lowerName)) return 'Oregon Trail';
+    if (/\bcap\s*&\s*rays?\b|cap\s+and\s+rays\b/i.test(lowerName)) return 'Cap & Rays';
+    if (/\bcommemorative\b/i.test(lowerName) && /\btrail\b/i.test(lowerName)) return 'Oregon Trail';
+    if (/\b8\s*reales\b|\b8\s*real\b/i.test(lowerName)) return 'Cap & Rays';
 
     // Explicit coin type names in the security name
     if (/\bmorgan\b/i.test(lowerName)) return 'Morgan';

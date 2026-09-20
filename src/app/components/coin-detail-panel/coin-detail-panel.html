@@ -1,0 +1,100 @@
+<aside class="panel detail-panel">
+  <div class="detail-header">
+    <div>
+      <p class="eyebrow">Selected coin</p>
+      <!-- Display coin type + denomination as the heading (name field removed) -->
+      <h2>{{ coin().coinType || 'Untitled' }} {{ formatDenominationDisplay(coin().denomination) }}</h2>
+      <div class="detail-badges">
+        @if (coin().grade) {
+          <span [class]="gradeBadgeClass(coin().grade)">{{ coin().grade }}</span>
+        }
+        @if (certBadgeLabel(coin()); as certLabel) {
+          <span class="badge badge--cert">{{ certLabel }}</span>
+        }
+        @if (coin().hasCacSticker) {
+          <span class="cac-bean-badge">
+            <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean" />
+            CAC
+          </span>
+        }
+      </div>
+    </div>
+    <div class="detail-header-actions">
+      <button type="button" class="secondary small-button" [disabled]="!images().canOpenImageGallery(coin())" (click)="images().openImageGallery()">
+        {{ images().showImageGallery() ? 'Hide images' : 'Show images' }}
+      </button>
+      <button type="button" class="secondary small-button" (click)="closeRequested.emit()">Close</button>
+      <button type="button" class="danger small-button" (click)="deleteRequested.emit()">Delete</button>
+    </div>
+  </div>
+
+  <app-coin-editor-form [coin]="coin()" />
+
+  @if (showTransactions()) {
+    <div class="detail-transactions">
+      <h3>Transactions</h3>
+      @if (inv.selectedCoinTransactions().length > 0) {
+        <ul class="transaction-list">
+          @for (txn of inv.selectedCoinTransactions(); track txn.id) {
+            <li>
+              <span class="txn-type">{{ txn.type }}</span>
+              <span class="txn-amount">${{ txn.amount | number: '1.2-2' }}</span>
+              <span class="txn-date">{{ txn.date }}</span>
+              @if (txn.dealer) { <span class="txn-dealer">{{ txn.dealer }}</span> }
+              <button type="button" class="secondary small-button" (click)="deleteTransaction(txn.id)">×</button>
+            </li>
+          }
+        </ul>
+      }
+      <!--
+        Each control carries a visible caption, matching the coin editor's
+        `.detail-field` pattern (shared via styles/_field.scss). These inputs
+        previously used `placeholder` as their only label, which vanishes as
+        soon as you type and leaves the row unlabelled.
+      -->
+      <div class="add-transaction-form">
+        <label class="detail-field">
+          <span>Type</span>
+          <select #txnType>
+            <option value="purchase">Purchase</option>
+            <option value="sale">Sale</option>
+            <option value="trade">Trade</option>
+            <option value="appraisal">Appraisal</option>
+          </select>
+        </label>
+
+        <label class="detail-field detail-field--txn-amount">
+          <span>Amount</span>
+          <input #txnAmount type="number" step="0.01" />
+        </label>
+
+        <label class="detail-field">
+          <span>Dealer</span>
+          <input #txnDealer type="text" />
+        </label>
+
+        <label class="detail-field">
+          <span>Date</span>
+          <input #txnDate type="date" />
+        </label>
+
+        <label class="detail-field detail-field--txn-notes">
+          <span>Notes</span>
+          <input #txnNotes type="text" />
+        </label>
+        <!-- A transaction row in the database points at a coin row, so it
+             cannot be saved before the coin itself exists. A brand new coin
+             is a local draft until it has 2 of Year / Coin Type /
+             Denomination — the tooltip says exactly what is still needed. -->
+        <button
+          type="button"
+          class="small-button"
+          [disabled]="inv.isDraftCoin(coin().id)"
+          [title]="inv.isDraftCoin(coin().id) ? inv.draftHint(coin()) : 'Add this transaction'"
+          (click)="addTransactionForSelectedCoin($any(txnType.value), Number(txnAmount.value), txnDealer.value, txnDate.value, txnNotes.value); txnAmount.value=''; txnDealer.value=''; txnNotes.value=''"
+        >Add</button>
+      </div>
+    </div>
+  }
+
+</aside>

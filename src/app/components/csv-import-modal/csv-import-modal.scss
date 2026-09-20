@@ -69,3 +69,64 @@
     color: #5d4832;
   }
 }
+
+// ---- First-run guidance ----------------------------------------------
+// Shown only before a file has been selected. The modal used to open with
+// nothing but a file button, leaving a new user no idea what the CSV should
+// contain.
+
+.csv-help {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #f8f0e4;
+  border: 1px solid #ede5d8;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #5d4832;
+
+  p { margin: 0 0 8px; }
+  p:last-child { margin-bottom: 0; }
+
+  code {
+    background: #fff;
+    border: 1px solid #ede5d8;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 0.78rem;
+  }
+}
+
+.csv-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.csv-help-hint {
+  font-size: 0.78rem;
+  color: #6a5a47;
+}
+
+.csv-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.csv-help-columns {
+  // A plain multi-column list keeps 21 field names compact.
+  columns: 3;
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 0.78rem;
+
+  li { break-inside: avoid; }
+}
+
+.csv-help-note {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: #6a5a47;
+}

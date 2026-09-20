@@ -2,7 +2,11 @@ import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { InventoryService } from '../../services/inventory.service';
-import { QuickenImportService } from '../../services/quicken-import.service';
+import {
+  QuickenImportService,
+  QuickenParseResult,
+  QuickenRejectedRecord
+} from '../../services/quicken-import.service';
 import { CoinRecord, QuickenImportRecord } from '../../types/coin.model';
 
 const unassignedQuickenAccount = 'Unassigned';
@@ -24,6 +28,21 @@ export class QuickenImportModal {
   protected readonly quickenText = signal<string>('');
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
   protected readonly skippedRecords = signal<QuickenImportRecord[]>([]); // Sold/transferred coins
+  /**
+   * Coins the parser refused to import because they carry fewer than 2 of the
+   * 3 main details (Year / Coin Type / Denomination). Shown to the user as an
+   * "exceptions" list -- never silently discarded.
+   */
+  protected readonly rejectedRecords = signal<QuickenRejectedRecord[]>([]);
+  /**
+   * Security names the user has explicitly chosen to import anyway.
+   *
+   * We key overrides by security name rather than record id because every
+   * re-parse generates fresh `crypto.randomUUID()` ids -- a record id would
+   * stop matching the moment the user pressed Preview again. The security
+   * name is the stable identity of the QIF row.
+   */
+  protected readonly overriddenSecurities = signal<string[]>([]);
   protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
   protected readonly selectedAccounts = signal<string[]>([]);
@@ -72,12 +91,75 @@ export class QuickenImportModal {
     this.selectedAccounts.set(selected.length === accounts.length ? [] : [...accounts]);
   }
 
-  protected previewImport(): void {
-    const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
-    const filtered = this.applyQifFilters(result.importedRecords);
+  /**
+   * Re-parses the QIF text and refreshes every preview signal.
+   *
+   * Preview, file-load and Import all funnel through here so they can never
+   * disagree about what is about to be imported.
+   *
+   * @returns the records that would be imported right now.
+   */
+  private refreshPreview(text: string = this.quickenText()): QuickenImportRecord[] {
+    const result = this.quickenImportService.parse(text, this.selectedAccounts());
+    const { imported, rejected } = this.applyDetailOverrides(result);
+    const filtered = this.applyQifFilters(imported);
+
     this.importedRecords.set(filtered);
-    this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
+    this.skippedRecords.set(result.skippedRecords); // Sold/transferred coins
+    this.rejectedRecords.set(rejected); // Not enough detail to import
     this.quickenWarnings.set(result.warnings);
+
+    return filtered;
+  }
+
+  /**
+   * Moves any exception the user has chosen to override out of the rejected
+   * list and into the import list.
+   */
+  private applyDetailOverrides(result: QuickenParseResult): {
+    imported: QuickenImportRecord[];
+    rejected: QuickenRejectedRecord[];
+  } {
+    const overridden = this.overriddenSecurities();
+    if (overridden.length === 0) {
+      return { imported: result.importedRecords, rejected: result.rejectedRecords };
+    }
+
+    const imported = [...result.importedRecords];
+    const rejected: QuickenRejectedRecord[] = [];
+    for (const exception of result.rejectedRecords) {
+      if (overridden.includes(exception.securityName)) {
+        imported.push(exception.record);
+      } else {
+        rejected.push(exception);
+      }
+    }
+    return { imported, rejected };
+  }
+
+  /** User pressed "Import anyway" on an exception row. */
+  protected overrideException(securityName: string): void {
+    if (!this.overriddenSecurities().includes(securityName)) {
+      this.overriddenSecurities.set([...this.overriddenSecurities(), securityName]);
+    }
+    this.refreshPreview();
+  }
+
+  /** User changed their mind about an overridden exception. */
+  protected undoOverride(securityName: string): void {
+    this.overriddenSecurities.set(
+      this.overriddenSecurities().filter(name => name !== securityName)
+    );
+    this.refreshPreview();
+  }
+
+  /** Security names the user has forced into the import, for the UI to list. */
+  protected overriddenSecurityNames(): string[] {
+    return this.overriddenSecurities();
+  }
+
+  protected previewImport(): void {
+    this.refreshPreview();
   }
 
   protected async handleQuickenFileSelection(event: Event): Promise<void> {
@@ -91,13 +173,12 @@ export class QuickenImportModal {
       const text = new TextDecoder('windows-1252').decode(buffer);
       this.quickenText.set(text);
       this.selectedAccounts.set([]);
+      // A brand new file means any overrides from the previous file no longer
+      // apply -- clear them so nothing is imported behind the user's back.
+      this.overriddenSecurities.set([]);
       this.refreshQuickenAccounts();
 
-      const result = this.quickenImportService.parse(text, this.selectedAccounts());
-      const filtered = this.applyQifFilters(result.importedRecords);
-      this.importedRecords.set(filtered);
-      this.skippedRecords.set(result.skippedRecords); // Show sold/transferred coins
-      this.quickenWarnings.set(result.warnings);
+      this.refreshPreview(text);
     } finally {
       this.parsing.set(false);
     }
@@ -105,11 +186,11 @@ export class QuickenImportModal {
 
   protected importQuicken(): void {
     this.importing.set(true);
-    const result = this.quickenImportService.parse(this.quickenText(), this.selectedAccounts());
-    const filtered = this.applyQifFilters(result.importedRecords);
-    this.importedRecords.set(filtered);
-    this.skippedRecords.set(result.skippedRecords);
-    this.quickenWarnings.set(result.warnings);
+    // Re-parse rather than trusting the preview signal: the import list is
+    // rebuilt from the same choke point that enforces the detail rule, so an
+    // under-detailed coin cannot reach the inventory unless it was explicitly
+    // overridden.
+    const filtered = this.refreshPreview();
 
     const newCoins: CoinRecord[] = filtered.map((record): CoinRecord => ({
       id: record.id,
@@ -153,6 +234,7 @@ export class QuickenImportModal {
     const denom = this.qifDenominationFilter().trim().toLowerCase();
 
     return records.filter(r => {
+      if (r.purchasePrice < 0 || r.currentValue < 0) return false;
       if (dateFrom && (r.purchaseDate ?? '') < dateFrom) return false;
       if (dateTo && (r.purchaseDate ?? '') > dateTo) return false;
       if (priceMin !== null && r.purchasePrice < priceMin) return false;

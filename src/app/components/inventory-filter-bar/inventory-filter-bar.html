@@ -1,0 +1,80 @@
+<div class="toolbar">
+  <input
+    type="search"
+    class="toolbar-search"
+    placeholder="Search coins&hellip;"
+    [ngModel]="filters().searchQuery()"
+    (ngModelChange)="searchQueryChange.emit($event)"
+    aria-label="Search inventory"
+  />
+
+  <select
+    class="toolbar-filter"
+    [ngModel]="filters().categoryFilter()"
+    (ngModelChange)="categoryFilterChange.emit($event)"
+    aria-label="Filter by category"
+  >
+    <option [value]="filters().allCategoriesFilter">All categories</option>
+    @for (category of inv.inventoryCategories(); track category) {
+      <option [value]="category">{{ category }}</option>
+    }
+  </select>
+
+  <button type="button" class="secondary small-button" (click)="filters().toggleAdvancedFilters()">
+    Filters {{ filters().showAdvancedFilters() ? '▲' : '▼' }}
+  </button>
+
+  <button type="button" class="secondary small-button" (click)="manageCategoriesRequested.emit()">Categories</button>
+  <button type="button" class="secondary small-button" (click)="reportsRequested.emit()">Reports</button>
+  <button type="button" class="secondary small-button" (click)="spotPricesRequested.emit()">Spot Prices</button>
+</div>
+
+@if (filters().showAdvancedFilters()) {
+  <div class="advanced-filters">
+    <div class="filter-group">
+      <label>
+        <span>Grade</span>
+        <input type="text" placeholder="e.g. MS, VF, AU" [ngModel]="filters().gradeFilter()" (ngModelChange)="filters().gradeFilter.set($event)" />
+      </label>
+      <label>
+        <span>Min value</span>
+        <input type="number" step="0.01" placeholder="$0" [ngModel]="filters().valueMinFilter()" (ngModelChange)="filters().valueMinFilter.set($event)" />
+      </label>
+      <label>
+        <span>Max value</span>
+        <input type="number" step="0.01" placeholder="$∞" [ngModel]="filters().valueMaxFilter()" (ngModelChange)="filters().valueMaxFilter.set($event)" />
+      </label>
+      <label>
+        <span>Country</span>
+        <select [ngModel]="filters().countryFilter()" (ngModelChange)="filters().countryFilter.set($event)">
+          <option value="">All countries</option>
+          @for (c of inv.inventoryCountries(); track c) {
+            <option [value]="c">{{ c }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Source</span>
+        <select [ngModel]="filters().sourceFilter()" (ngModelChange)="filters().sourceFilter.set($event)">
+          <option value="">All sources</option>
+          @for (s of inv.inventorySources(); track s) {
+            <option [value]="s">{{ s }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Set</span>
+        <select [ngModel]="filters().coinSetFilter()" (ngModelChange)="filters().coinSetFilter.set($event)">
+          <option [value]="filters().allSetsFilter">All sets</option>
+          @for (s of inv.coinSets(); track s) {
+            <option [value]="s">{{ s }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        <span>Dealer</span>
+        <input type="text" placeholder="Search dealers" [ngModel]="filters().dealerFilter()" (ngModelChange)="filters().dealerFilter.set($event)" />
+      </label>
+    </div>
+  </div>
+}

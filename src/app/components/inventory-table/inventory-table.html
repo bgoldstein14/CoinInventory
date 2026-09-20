@@ -1,0 +1,108 @@
+<section class="panel inventory-panel">
+  <div class="inventory-header">
+    <h2>
+      Inventory
+      @if (selection().selectionCount() > 0) {
+        <span class="selection-badge">{{ selection().selectionCount() }} selected</span>
+      }
+    </h2>
+    <button type="button" class="secondary small-button" (click)="columns().toggleColumnPicker()">
+      Columns {{ columns().showColumnPicker() ? '▲' : '▼' }}
+    </button>
+  </div>
+
+  @if (columns().showColumnPicker()) {
+    <div class="column-picker">
+      @for (column of columns().inventoryColumnOptions(); track column) {
+        <label class="toggle-item">
+          <input type="checkbox" [checked]="columns().visibleInventoryColumns().includes(column)" (change)="columns().toggleColumn(column)" />
+          <span>{{ columns().inventoryColumnLabels[column] }}</span>
+        </label>
+      }
+    </div>
+  }
+
+  <div class="inventory-table-wrap">
+    <table class="inventory-table">
+      <thead>
+        <tr>
+          <th class="check-column">
+            <input type="checkbox" [checked]="selection().allVisibleSelected()" (change)="selection().toggleAllCoins()" title="Select all" />
+          </th>
+          <th class="thumb-column">Photo</th>
+          @for (column of columns().visibleInventoryColumns(); track column) {
+            <th class="sortable-header" (click)="filters().setSortColumn(column)">
+              {{ columns().inventoryColumnLabels[column] }}
+              <span class="sort-indicator">{{ filters().sortIndicator(column) }}</span>
+            </th>
+          }
+          <th>Images</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (coin of filters().filteredInventory(); track coin.id) {
+          <!-- `is-draft` marks a row that exists on screen only: it has not
+               reached the database yet because it still needs 2 of
+               Year / Coin Type / Denomination. See InventoryService.isDraftCoin. -->
+          <tr [class.selected]="inv.selectedCoinId() === coin.id" [class.multi-selected]="selection().isCoinSelected(coin.id)" [class.is-draft]="inv.isDraftCoin(coin.id)" (click)="coinSelected.emit(coin.id)">
+            <td class="check-column" (click)="$event.stopPropagation()">
+              <input type="checkbox" [checked]="selection().isCoinSelected(coin.id)" (click)="selection().toggleCoinSelection(coin.id, $event)" />
+            </td>
+            <td class="thumb-column">
+              @if (primaryImage(coin); as image) {
+                <img [src]="image" alt="" class="row-thumb" />
+              } @else {
+                <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
+              }
+            </td>
+            @for (column of columns().visibleInventoryColumns(); track column; let firstColumn = $first) {
+              <td>
+                <!-- The "Unsaved" chip rides in the first visible column so it
+                     reads as part of the row rather than as an extra column.
+                     Its tooltip spells out what the row still needs. -->
+                @if (firstColumn && inv.isDraftCoin(coin.id)) {
+                  <span class="badge badge--draft" [title]="inv.draftHint(coin)">Unsaved</span>
+                }
+                @if (column === 'grade') {
+                  <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
+                  @if (coin.hasCacSticker) {
+                    <img [src]="cacGreenBeanIconPath" alt="CAC" title="CAC green bean" class="cac-bean cac-bean--inline" />
+                  }
+                } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
+                  <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
+                } @else {
+                  {{ formatInventoryCell(coin, column) }}
+                }
+              </td>
+            }
+            <td>
+              <div class="row-action-stack">
+                <button
+                  type="button"
+                  class="secondary small-button"
+                  [disabled]="!coin.imagePaths.length"
+                  (click)="$event.stopPropagation(); imagesRequested.emit(coin.id)"
+                >
+                  {{ coin.imagePaths.length > 0 ? 'Images' : 'No images' }}
+                </button>
+                <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); detailRequested.emit(coin.id)">
+                  Details
+                </button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr class="empty-row">
+            <td [attr.colspan]="columns().visibleInventoryColumns().length + 3">
+              @if (inv.inventory().length === 0) {
+                No coins yet. Add one manually or import from a QIF/CSV file.
+              } @else {
+                No coins match the current search and filters.
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>
