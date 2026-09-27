@@ -51,7 +51,7 @@ describe('SpotPriceService', () => {
         platinum: 1025.00,
         copper: 4.15
       },
-      source: 'metals.live (COMEX)',
+      source: 'COMEX/NYMEX futures via Yahoo Finance',
       timestamp: '2024-01-15T12:00:00Z'
     };
 

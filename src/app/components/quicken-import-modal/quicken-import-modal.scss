@@ -169,3 +169,16 @@
   padding: 6px 10px;
   font-size: 0.82rem;
 }
+
+/*
+ * The green CAC sticker indicator in the import-preview table.
+ *
+ * CAC's real-world sticker is green, so the check mark is green too -- it
+ * reads at a glance without needing the column header. The `title` attribute
+ * on the span (see the template) carries the wording for anyone who hovers,
+ * and the column header spells it out for screen readers.
+ */
+.cac-indicator {
+  color: #2e7d32;
+  font-weight: 700;
+}

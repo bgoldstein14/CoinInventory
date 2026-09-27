@@ -8,5 +8,16 @@
     <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="images().movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
     <img [src]="coin().imagePaths[images().photoViewerIndex()]" alt="Coin image, full size" class="photo-viewer__image" />
     <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="images().movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
+    <!--
+      "Full size" here still means the DOWNSCALED copy (1600px) that is stored
+      in the database. The caption below links to the genuine original on disk,
+      which is the only way to see the full-resolution photo — and it doubles as
+      a record of where that file lives. Renders nothing if no path was saved.
+    -->
+    @if (currentImage(); as imageData) {
+      <p class="photo-viewer__path">
+        <app-coin-image-path-link [imageData]="imageData" [coinId]="coin().id" />
+      </p>
+    }
   </div>
 </div>

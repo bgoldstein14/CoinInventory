@@ -1,0 +1,136 @@
+// Styles for one coin's group of proposed photos in the batch image import.
+// Buttons, .small-button and .secondary come from the shared controls partial.
+@use '../../styles/controls' as *;
+
+.coin-group {
+  border: 1px solid #e8daca;
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+  display: grid;
+  gap: 8px;
+}
+
+// A coin with nothing ticked is dimmed: it will contribute no photos.
+.coin-group--empty { opacity: 0.62; }
+
+.coin-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 2px 0;
+  color: #2c1c0e;
+  font-weight: 600;
+  border-radius: 0;
+
+  &:hover:not(:disabled) {
+    background: none;
+    box-shadow: none;
+    text-decoration: underline;
+  }
+}
+
+.coin-group-caret { color: #8a7a63; font-size: 0.8rem; width: 12px; flex-shrink: 0; }
+
+.coin-group-name {
+  font-size: 0.85rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coin-group-count {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: #5c4935;
+  background: #f3ece1;
+  border-radius: 999px;
+  padding: 2px 8px;
+  flex-shrink: 0;
+}
+
+.coin-group-bulk {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.coin-group-section { display: grid; gap: 4px; }
+
+.coin-group-section-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #8a7a63;
+}
+
+// Fixed-width tiles in a wrapping grid: the number of photos per coin varies
+// from 1 to 10, and auto-fill keeps the rows tidy at every count.
+.coin-group-thumbs {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 6px;
+}
+
+.photo-tile {
+  display: grid;
+  gap: 2px;
+  justify-items: center;
+  padding: 5px;
+  border: 1px solid #ebdfcc;
+  border-radius: 8px;
+  background: #fdfaf6;
+  cursor: pointer;
+  font-size: 0.7rem;
+
+  input[type="checkbox"] { justify-self: start; margin: 0; cursor: pointer; }
+
+  &:hover { border-color: #d9c7a5; }
+}
+
+// Unticked tiles are greyed out so "what will be saved" is obvious at a glance.
+.photo-tile--off {
+  opacity: 0.5;
+  background: #f4f1ec;
+
+  .photo-tile-img { filter: grayscale(1); }
+}
+
+.photo-tile-img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 5px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+}
+
+.photo-tile-img--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #b0a08a;
+  font-size: 0.66rem;
+  border-style: dashed;
+}
+
+.photo-tile-caption { font-weight: 600; color: #5c4935; text-align: center; }
+
+.photo-tile-file {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+  color: #8a7a63;
+  font-size: 0.64rem;
+}
+
+.photo-tile-size { font-size: 0.64rem; color: #a89a86; }

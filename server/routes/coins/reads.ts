@@ -4,8 +4,15 @@
  * Mounted (via routes/coins/index.ts) at /api/coins, so the paths below are
  * relative to that:
  *
- *   GET /      -> GET /api/coins       all coins, with images and tags joined
+ *   GET /      -> GET /api/coins       all coins, with tags joined, an
+ *                                      `imageCount`, and (for now) the images
+ *                                      inline unless ?includeImages=false
  *   GET /:id   -> GET /api/coins/:id   one coin, with its images and tags
+ *
+ * The list query itself — the SQL, the COUNT(*) aggregate behind `imageCount`,
+ * and the `includeImages` flag — lives in routes/coins/list-query.ts, which
+ * also documents WHY the list must be able to omit image payloads (the short
+ * version: returning every base64 image on every app load is ~150 MB of JSON).
  *
  * Reads are separated from writes (routes/coins/writes.ts) because they are
  * completely different in shape: these two handlers are plain SELECTs plus a
@@ -24,42 +31,31 @@ import { logInfo, logWarn } from '../../logger';
 import { withDb, rowToCoin, DB_BINDINGS } from '../../db';
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
+import { loadCoinList, shouldIncludeImages } from './list-query';
 
 const router = Router();
 
 // ============================================================
-// GET /api/coins — all coins with images and tags joined
+// GET /api/coins — all coins with tags, imageCount, and (for now) images
 // ============================================================
-router.get('/', async (_req: Request, res: Response) => {
+//
+// `?includeImages=false` drops the `imagePaths` array from every coin, which is
+// what the app should use once the client fetches full images on demand from
+// GET /api/coins/:id/images.
+//
+// NOTE ON THE DEFAULT: with the parameter absent, `imagePaths` is STILL
+// populated, exactly as before. That is a deliberate, temporary compatibility
+// shim while the Angular client is migrated — it is scheduled to flip to
+// "omit by default" in a follow-up change. The full explanation is on
+// shouldIncludeImages() in list-query.ts; please read it before relying on the
+// current default.
+router.get('/', async (req: Request, res: Response) => {
+  const includeImages = shouldIncludeImages(req.query['includeImages']);
+
   try {
-    logInfo('Fetching all coins with images and tags');
+    logInfo(`Fetching all coins with tags and image counts (includeImages=${includeImages})`);
 
-    const coins = await withDb(async (db) => {
-      const coinsResult = await db.request().query('SELECT * FROM Coins ORDER BY Denomination, Year');
-      const imagesResult = await db.request().query('SELECT * FROM CoinImages ORDER BY SortOrder');
-      const tagsResult = await db.request().query('SELECT * FROM CoinTags ORDER BY Tag');
-
-      // Build lookup maps for images and tags by CoinId
-      const imagesByCoinId = new Map<string, string[]>();
-      for (const img of imagesResult.recordset) {
-        const coinId = img['CoinId'] as string;
-        if (!imagesByCoinId.has(coinId)) imagesByCoinId.set(coinId, []);
-        imagesByCoinId.get(coinId)!.push(img['ImageData'] as string);
-      }
-
-      const tagsByCoinId = new Map<string, string[]>();
-      for (const t of tagsResult.recordset) {
-        const coinId = t['CoinId'] as string;
-        if (!tagsByCoinId.has(coinId)) tagsByCoinId.set(coinId, []);
-        tagsByCoinId.get(coinId)!.push(t['Tag'] as string);
-      }
-
-      return coinsResult.recordset.map((row: Record<string, unknown>) => ({
-        ...rowToCoin(row),
-        imagePaths: imagesByCoinId.get(row['CoinId'] as string) ?? [],
-        tags: tagsByCoinId.get(row['CoinId'] as string) ?? [],
-      }));
-    });
+    const coins = await withDb((db) => loadCoinList(db, includeImages));
 
     logInfo(`Retrieved ${coins.length} coins`);
     res.json(coins);
@@ -85,13 +81,16 @@ router.get('/:id', async (req: Request, res: Response) => {
       // Returning null (rather than throwing) keeps the 404 out of the catch block.
       if (coinResult.recordset.length === 0) return null;
 
+      // Explicit column lists rather than `SELECT *`. This endpoint is for ONE
+      // coin, so returning its images inline is fine and intentional — but
+      // there is still no reason to fetch columns we do not use.
       const imagesResult = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
-        .query('SELECT * FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
+        .query('SELECT ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
 
       const tagsResult = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
-        .query('SELECT * FROM CoinTags WHERE CoinId = @id ORDER BY Tag');
+        .query('SELECT Tag FROM CoinTags WHERE CoinId = @id ORDER BY Tag');
 
       return {
         ...rowToCoin(coinResult.recordset[0]),

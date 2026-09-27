@@ -79,6 +79,38 @@
 
 // ---- Transaction history ----
 
+// ---- Original image files ----
+// Same card treatment as the transaction history below, so the sidebar reads
+// as a stack of consistent sections.
+.detail-image-paths {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+  // The sidebar is narrow and paths are long. Without this a flex/grid child
+  // refuses to shrink below its content width and pushes the panel wider.
+  min-width: 0;
+
+  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+}
+
+// A stacked list of paths. The children are the CoinImagePathLink components'
+// own <a>/<span> elements: that component sets `:host { display: contents }`,
+// so they become direct grid items here and the `gap` spaces the text itself
+// rather than an invisible wrapper.
+.image-path-list {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.image-path-empty {
+  margin: 0;
+  color: #8a7a63;
+  font-size: 0.78rem;
+}
+
 .detail-transactions {
   margin-top: 14px;
   padding: 12px;

@@ -88,6 +88,19 @@
 
 .detail-field--cert-company {
   max-width: 200px;
+
+  // The input used to carry an inline `width: 7.5ch` (plus matching min/max),
+  // which clipped the final letter of "ANACS".
+  //
+  // Two things made 7.5ch too narrow: `ch` is the width of the digit "0",
+  // but grader names are UPPERCASE letters, which are wider; and the global
+  // `box-sizing: border-box` means that width had to cover the input's
+  // 7px horizontal padding and 1px border on each side as well as the text.
+  // 12ch leaves comfortable room for the longest grader name in use.
+  input {
+    width: 12ch;
+    text-transform: uppercase;
+  }
 }
 
 .detail-field--cert-number {

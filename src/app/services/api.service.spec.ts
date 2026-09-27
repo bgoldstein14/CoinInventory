@@ -275,6 +275,33 @@ describe('ApiService', () => {
     await expect(firstValueFrom(service.healthCheck())).resolves.toBe(false);
   });
 
+  // --- App info (the image import's base-folder prefill) ---
+
+  it('getAppFolder calls GET /api/app-info and returns the folder', async () => {
+    mockHttpClient.get = vi.fn(() => of({ appFolder: 'D:\\CoinInventory', source: 'module' }));
+
+    await expect(firstValueFrom(service.getAppFolder())).resolves.toBe('D:\\CoinInventory');
+    expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/app-info`);
+  });
+
+  it('getAppFolder maps any failure to an empty string instead of erroring', async () => {
+    // This value only prefills a text box on the image-import screen. If the
+    // endpoint is missing (a backend that has not been rebuilt) or the server
+    // is down, the screen must still open with an empty box and its existing
+    // "no folder given" warning -- never a thrown error.
+    mockHttpClient.get = vi.fn(() => throwError(() => httpError(404, 'Not Found')));
+
+    await expect(firstValueFrom(service.getAppFolder())).resolves.toBe('');
+  });
+
+  it('getAppFolder tolerates a 200 with no appFolder in the body', async () => {
+    // A proxy or an older backend could answer successfully with a body of a
+    // different shape; `undefined` must not reach the text box.
+    mockHttpClient.get = vi.fn(() => of({}));
+
+    await expect(firstValueFrom(service.getAppFolder())).resolves.toBe('');
+  });
+
   // --- Base URL resolution ---
 
   it('resolveApiBaseUrl falls back to localhost:3000 outside a browser', () => {

@@ -43,13 +43,23 @@
   border: 1px solid #e8daca;
   border-radius: 8px;
   font-size: 0.8rem;
+}
 
-  span {
-    flex: 1;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+// The middle column of a gallery row: the "Attached image" caption stacked on
+// top of the original file's path. `min-width: 0` is what actually lets the
+// caption ellipsise — without it a flex child refuses to shrink below its
+// content width and the row stretches the dialog instead.
+.image-item__meta {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.image-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .coin-thumb {

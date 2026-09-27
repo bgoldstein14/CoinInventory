@@ -4,18 +4,18 @@
  * Two different things share this prefix, which is worth being clear about:
  *
  *   GET  /spot-prices/latest  reads the most recent row we SAVED in SQL Server
- *   GET  /spot-prices/fetch   calls out to the metals.live web API for LIVE
+ *   GET  /spot-prices/fetch   calls out to COMEX/NYMEX futures for LIVE
  *                             prices — it touches no database at all
  *   POST /spot-prices         saves a set of prices as a new history row
  *
  * Mounted (via routes/data/index.ts) at /api, so those become
  * /api/spot-prices/latest and so on.
  *
- * The /fetch handler is the only outbound HTTP call in the whole backend. It
- * deliberately answers 200 with zeroed prices and an `error` field when the
- * upstream call fails, rather than erroring the request — the frontend treats
- * missing spot prices as "unknown", and a dead third-party API should not make
- * the app look broken.
+ * The /fetch handler is the only outbound HTTP call in the whole backend; the
+ * call itself lives in ./spot-price-source. It deliberately answers 200 with
+ * zeroed prices and an `error` field when the upstream call fails, rather than
+ * erroring the request — the frontend treats missing spot prices as "unknown",
+ * and a dead third-party API should not make the app look broken.
  *
  * Database calls go through `withDb()`; parameter types come from DB_BINDINGS.
  */
@@ -24,6 +24,7 @@ import { Router, Request, Response } from 'express';
 import { logInfo, logError } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
 import { sendDbError } from '../db-error-response';
+import { fetchSpotPrices } from './spot-price-source';
 
 const router = Router();
 
@@ -59,31 +60,42 @@ router.get('/spot-prices/latest', async (_req: Request, res: Response) => {
   }
 });
 
-// Fetches live spot prices from metals.live (COMEX proxy)
+/**
+ * Fetches live prices from COMEX/NYMEX futures. Touches no database.
+ *
+ * The actual outbound call lives in ./spot-price-source so this route stays
+ * about HTTP shape, and so the upstream can be swapped without touching
+ * routing code. See that file for why metals.live was replaced.
+ *
+ * Still answers 200 on failure, with zeroed prices and an `error` field: the
+ * frontend treats missing prices as "unknown", and a dead third-party API
+ * should not make the app look broken. But it now also reports *which* metals
+ * failed, so a zero is never silently presented as a real price -- that is
+ * exactly how the dead metals.live endpoint went unnoticed.
+ */
 router.get('/spot-prices/fetch', async (_req: Request, res: Response) => {
-  logInfo('Fetching spot prices from metals.live...');
   try {
-    const response = await fetch('https://api.metals.live/v1/spot');
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = (await response.json()) as Array<Record<string, number>>;
+    const { prices, source, failed } = await fetchSpotPrices();
 
-    const prices = { gold: 0, silver: 0, platinum: 0, copper: 0 };
-    for (const entry of data) {
-      if (entry['gold'] !== undefined) prices.gold = entry['gold'];
-      if (entry['silver'] !== undefined) prices.silver = entry['silver'];
-      if (entry['platinum'] !== undefined) prices.platinum = entry['platinum'];
-      if (entry['copper'] !== undefined) prices.copper = entry['copper'];
-    }
-
-    logInfo(`Spot prices fetched: Au=$${prices.gold} Ag=$${prices.silver}`);
-    res.json({ prices, source: 'COMEX via metals.live', timestamp: new Date().toISOString() });
+    res.json({
+      prices,
+      source,
+      timestamp: new Date().toISOString(),
+      // Only present when something went wrong, so existing callers that just
+      // check for `error` keep working unchanged.
+      ...(failed.length
+        ? { error: `No price available for: ${failed.join(', ')}`, failed }
+        : {}),
+    });
   } catch (err) {
-    logError('Spot price fetch failed', err);
+    // fetchSpotPrices() is written not to throw, so reaching here means
+    // something unexpected broke. Keep the same graceful-degradation shape.
+    logError('Spot price fetch failed unexpectedly', err);
     res.json({
       prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
-      source: 'COMEX via metals.live',
+      source: 'COMEX/NYMEX futures via Yahoo Finance',
       timestamp: new Date().toISOString(),
-      error: err instanceof Error ? err.message : 'Unknown error'
+      error: err instanceof Error ? err.message : 'Unknown error',
     });
   }
 });

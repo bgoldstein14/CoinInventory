@@ -35,13 +35,32 @@
  * key to defect #2: two coins that differ only by mint mark (1881-S vs 1881-O)
  * will end up only ~0.10 apart, which is inside the runner-up margin, so they
  * both get sent to review instead of one being silently chosen.
+ *
+ * CERT COMPANY and GRADE are the two smallest weights, and deliberately so.
+ * This collection's filenames name them constantly:
+ *
+ *     1904 $20 - PCGS MS63 - small.jpg
+ *     1875-S 20-cent ANACS XF40.jpg
+ *
+ * but on their own they barely discriminate: hundreds of coins are "PCGS" and
+ * dozens share any given grade. They earn their keep TOGETHER -- "PCGS MS63"
+ * narrows a collection down hard -- so match-scorer.ts only counts them as a
+ * strong attribute when BOTH agree, and then only as ONE strong attribute
+ * between them, never two. Their small weights mean they can tip a close race
+ * but can never carry a match on their own.
+ *
+ * The five original weights are UNCHANGED. Adding the two new ones takes the
+ * total to 1.08, which very slightly lowers every coverage figure (see the
+ * damping table below) -- the numbers there have been recomputed.
  */
 export const WEIGHTS = {
   year: 0.30,
   denomination: 0.26,
   coinType: 0.22,
   certNumber: 0.13,
-  mintMark: 0.09
+  mintMark: 0.09,
+  certCompany: 0.05,
+  grade: 0.03
 } as const;
 
 /** Sum of every weight (1.0). Used to measure "how much evidence was usable". */
@@ -55,25 +74,37 @@ export const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((sum, w) => sum + w, 0
  * exactly defect #1.
  *
  * Fix: multiply the normalized score by how much of the available evidence we
- * were actually able to compare (`coverage`). With these constants:
+ * were actually able to compare (`coverage`). Coverage is the comparable
+ * weight divided by TOTAL_WEIGHT (now 1.08), so with these constants:
  *
- *   coverage 0.30 (year only)           -> x0.79  -> max score 0.79  (never auto)
- *   coverage 0.48 (denomination + type) -> x0.844 -> just under the bar
- *   coverage 0.56 (year + denomination) -> x0.868 -> can auto
- *   coverage 0.78 (year + denom + type) -> x0.934 -> comfortably auto
- *   coverage 0.87 (all four core attrs) -> x0.961 -> comfortably auto
+ *   weight 0.22 (coin type only)        -> x0.761 -> max score 0.76 (never auto)
+ *   weight 0.30 (year only)             -> x0.783 -> max score 0.78 (never auto)
+ *   weight 0.48 (denomination + type)   -> x0.833 -> just under the bar
+ *   weight 0.56 (year + denomination)   -> x0.856 -> can auto
+ *   weight 0.78 (year + denom + type)   -> x0.917 -> comfortably auto
+ *   weight 0.87 (all four core attrs)   -> x0.942 -> comfortably auto
  *
  * So a filename that only gives us a denomination and a design name (no year)
  * can never auto-assign: we would have no way to tell a 1904 Liberty Head
  * Double Eagle from a 1907 one.
+ *
+ * The 0.22 line is the one that governs ANCIENT coins. "Constantine - RIC 34 -
+ * Obverse.jpg" has no year and no denomination, so coin type is its only
+ * comparable attribute and its score is capped at 0.76 -- below the 0.85 bar,
+ * and only one strong attribute where the gate demands two. Ancients therefore
+ * always go to review with a ranked shortlist. That is by design.
  */
 export const DAMPING_FLOOR = 0.70;
 export const DAMPING_RANGE = 0.30;
 
 /**
  * Auto-assign gate (a): the top candidate must score at least this much.
- * 0.85 is set just above the "denomination + coin type, no year" case (0.844)
- * and just below the "year + denomination" case (0.868).
+ * 0.85 is set just above the "denomination + coin type, no year" case (0.833)
+ * and just below the "year + denomination" case (0.856).
+ *
+ * UNCHANGED by the real-filename work. The two new weights shifted the
+ * coverage table slightly, but 0.85 still falls in the same gap between those
+ * two cases, so the bar means exactly what it always meant.
  */
 export const AUTO_SCORE_THRESHOLD = 0.85;
 

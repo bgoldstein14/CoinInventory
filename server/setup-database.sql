@@ -77,13 +77,39 @@ CREATE TABLE Coins (
 );
 
 -- ----- CoinImages --------------------------------------------
--- Stores multiple images per coin (front, back, detail shots)
--- Images stored as base64-encoded data URLs
+-- MANY photos per coin: one ROW per photo, not one column per photo.
+--
+-- This is the whole mechanism for "multiple pictures per coin". A coin with ten
+-- photos is ten rows here, all sharing the same CoinId. There is deliberately
+-- no limit on how many a coin may have, and nothing about the design changes
+-- between one photo and twenty. In practice the photo library holds 8-10 files
+-- for a typical coin: obverse and reverse, the slab label, plus derivative
+-- renderings (Small / Orig / Sharpened) and occasional retakes.
+--
+-- SortOrder is that photo's position WITHIN its coin, zero-based, and is the
+-- only thing deciding display order - the app always reads images as
+-- "WHERE CoinId = @id ORDER BY SortOrder". Two photos of the same coin sharing
+-- a SortOrder therefore have no defined order between them, which is why new
+-- inserts assign MAX(SortOrder) + 1 (see routes/coins/images.ts) and why
+-- migration 003 renumbers any historical collisions.
+--
+-- ImageData is a DOWNSCALED base64 copy, sized for display. The originals are
+-- far too large to hold in the database - up to roughly 46 MB each, decoding to
+-- ~190 MB in memory - so the full-resolution file stays on disk and only a
+-- small rendering is stored.
+--
+-- SourcePath is where that original file lives on the machine hosting the app.
+-- It serves two purposes: it documents the file's location for the user, and it
+-- lets the UI offer a link that opens the full-scale image (served by
+-- GET /api/images/file). It is NULLABLE on purpose - photos imported before the
+-- column existed have no known path, and "unknown" is not "empty string".
+-- Those rows keep working; the UI just shows no link for them.
 CREATE TABLE CoinImages (
     ImageId             INT                 IDENTITY(1,1) PRIMARY KEY,
-    CoinId              UNIQUEIDENTIFIER    NOT NULL,       -- Which coin this image belongs to
-    ImageData           NVARCHAR(MAX)       NULL,           -- Base64 data URL
-    SortOrder           INT                 NOT NULL DEFAULT 0,  -- Display order
+    CoinId              UNIQUEIDENTIFIER    NOT NULL,       -- Which coin this image belongs to (many rows per coin)
+    ImageData           NVARCHAR(MAX)       NULL,           -- Base64 data URL (downscaled copy for display)
+    SortOrder           INT                 NOT NULL DEFAULT 0,  -- Zero-based position within THIS coin's photos
+    SourcePath          NVARCHAR(400)       NULL,           -- Absolute path of the original file (may be absent)
     CONSTRAINT FK_CoinImages_Coin
         FOREIGN KEY (CoinId) REFERENCES Coins(CoinId) ON DELETE CASCADE
 );
@@ -208,7 +234,14 @@ GO
 -- ============================================================
 -- Indexes to speed up common queries and JOIN operations
 
-CREATE INDEX IX_CoinImages_CoinId        ON CoinImages    (CoinId);
+-- CoinImages is indexed on (CoinId, SortOrder), not CoinId alone, because the
+-- app's hot image query is always "this coin's photos, in display order":
+--   WHERE CoinId = @id ORDER BY SortOrder
+-- Including SortOrder in the key means the rows come off the index already
+-- sorted and the plan needs no separate sort step. With up to ten photos per
+-- coin that is worth having. (Migration 003 applies this same change to an
+-- existing database, where it replaces the old CoinId-only index.)
+CREATE INDEX IX_CoinImages_CoinId_SortOrder ON CoinImages  (CoinId, SortOrder);
 CREATE INDEX IX_CoinTags_CoinId          ON CoinTags      (CoinId);
 CREATE INDEX IX_Coins_Category           ON Coins         (Category);
 CREATE INDEX IX_Coins_Grade              ON Coins         (Grade);

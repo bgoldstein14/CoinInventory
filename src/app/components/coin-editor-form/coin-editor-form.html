@@ -193,10 +193,9 @@
     <label class="detail-field detail-field--compact detail-field--cert-company">
       <span>Certification Co.</span>
       <input
-        maxlength="5"
+        maxlength="10"
         [ngModel]="coin().certCompany"
         (ngModelChange)="updateSelectedCoin('certCompany', $event)"
-        style="text-transform: uppercase; width: 7.5ch; min-width: 7.5ch; max-width: 7.5ch;"
       />
     </label>
 

@@ -93,6 +93,124 @@ describe('POST /api/coins', () => {
   });
 });
 
+// ============================================================
+// imagePaths and the SourcePath column
+// ============================================================
+//
+// `imagePaths` is polymorphic by design (see the header of writes.ts): each
+// element may be the bare base64 string it has always been, or an object
+// `{ imageData, sourcePath }`. The mixed-array test below is the one that
+// matters — it proves a half-migrated client works, which is the actual state
+// of the frontend today.
+
+describe('imagePaths carries sourcePath through POST /api/coins', () => {
+  /** The values bound to @sourcePath during the request, in insert order. */
+  const boundSourcePaths = (): unknown[] =>
+    capturedInputs.filter((entry) => entry.name === 'sourcePath').map((entry) => entry.value);
+
+  it('accepts a mix of bare strings and { imageData, sourcePath } objects', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'mixed-id',
+        denomination: 'Dollar',
+        imagePaths: [
+          // The legacy form: no idea where the original lives -> SQL NULL.
+          'data:image/png;base64,legacy',
+          // The new form.
+          { imageData: 'data:image/png;base64,new', sourcePath: 'C:\\Coin Pictures\\b.jpg' },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(boundSourcePaths()).toEqual([null, 'C:\\Coin Pictures\\b.jpg']);
+
+    const insertSql = mockRequest.query.mock.calls
+      .map((call) => call[0] as string)
+      .find((text) => text.includes('INSERT INTO CoinImages'));
+    expect(insertSql).toContain('SourcePath');
+  });
+
+  it('binds sourcePath as NVARCHAR(400), matching setup-database.sql', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    // A path at exactly the column length must survive untruncated; declaring
+    // the parameter shorter than the column would silently trim it.
+    const maxLengthPath = 'C:\\' + 'p'.repeat(397);
+
+    await request(app)
+      .post('/api/coins')
+      .send({
+        denomination: 'Dollar',
+        imagePaths: [{ imageData: 'data:image/png;base64,a', sourcePath: maxLengthPath }],
+      });
+
+    const input = capturedInputs.find((entry) => entry.name === 'sourcePath');
+    expect(input?.value).toBe(maxLengthPath);
+    expect(input?.type).toMatchObject({ length: 400 });
+  });
+
+  it('keeps SortOrder gap-free when an entry carries no image data', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    await request(app)
+      .post('/api/coins')
+      .send({
+        denomination: 'Dollar',
+        imagePaths: [
+          'data:image/png;base64,a',
+          '',                                        // dropped by the normalizer
+          { sourcePath: 'C:\\pics\\no-data.jpg' },   // dropped: no imageData
+          'data:image/png;base64,b',
+        ],
+      });
+
+    const sortOrders = capturedInputs
+      .filter((entry) => entry.name === 'sortOrder')
+      .map((entry) => entry.value);
+    expect(sortOrders).toEqual([0, 1]);
+  });
+});
+
+describe('imagePaths replacement on PUT /api/coins/:id', () => {
+  it('still replaces the whole set, now writing SourcePath too', async () => {
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({
+        imagePaths: [{ imageData: 'data:image/png;base64,a', sourcePath: 'C:\\pics\\a.png' }],
+      });
+
+    expect(res.status).toBe(200);
+
+    const statements = mockRequest.query.mock.calls.map((call) => call[0] as string);
+    // Replacement semantics are unchanged: delete-then-insert.
+    expect(statements.some((s) => s.includes('DELETE FROM CoinImages'))).toBe(true);
+    expect(statements.some((s) => s.includes('INSERT INTO CoinImages') && s.includes('SourcePath'))).toBe(true);
+
+    const input = capturedInputs.find((entry) => entry.name === 'sourcePath');
+    expect(input?.value).toBe('C:\\pics\\a.png');
+  });
+
+  it('does not touch the images when imagePaths is absent from the body', async () => {
+    // The partial-update rule, restated for images: a PUT that does not mention
+    // imagePaths must leave every photo alone.
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    await request(app).put('/api/coins/abc-123').send({ coinType: 'Morgan' });
+
+    const statements = mockRequest.query.mock.calls.map((call) => call[0] as string);
+    expect(statements.some((s) => s.includes('CoinImages'))).toBe(false);
+  });
+});
+
 describe('PUT /api/coins/:id', () => {
   it('returns 404 for non-existent coin', async () => {
     mockRequest.query.mockResolvedValueOnce({ recordset: [] });

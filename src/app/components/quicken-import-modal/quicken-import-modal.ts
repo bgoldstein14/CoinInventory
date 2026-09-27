@@ -200,7 +200,11 @@ export class QuickenImportModal {
       category: this.categoryFromQuickenAccount(record.account),
       country: record.country,
       grade: record.grade,
-      certCompany: '', certNumber: '',
+      // The grading service comes straight from the parsed security name
+      // (e.g. "PCGS" out of "1927 $20 - PCGS MS64"). The certificate NUMBER
+      // is still blank on purpose -- Quicken names never carry one.
+      certCompany: record.certCompany,
+      certNumber: '',
       variety: record.variety,
       mintMark: record.mintMark,
       composition: '',
@@ -210,7 +214,10 @@ export class QuickenImportModal {
       notes: record.notes,
       imagePaths: [], tags: [],
       source: 'quicken',
-      hasCacSticker: false,
+      // Green CAC sticker, also parsed from the security name (e.g.
+      // "PCGS/CAC AU58"). Kept as a plain boolean -- the backend binds this
+      // to a BIT NOT NULL column, so `undefined` must never reach it.
+      hasCacSticker: record.hasCacSticker,
       pmWeightGrams: record.pmWeightGrams,
       pmPercent: record.pmPercent
     }));

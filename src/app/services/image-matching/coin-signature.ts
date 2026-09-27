@@ -25,6 +25,9 @@
  * =========================================================================== */
 
 import { CoinRecord } from '../../types/coin.model';
+import { foldCatalogRefs } from './catalog-refs';
+import { readTrustedDenominationText } from './denomination-units';
+import { normalizeGrade } from './grade-parser';
 import { MINT_CODES, MINT_NAMES } from './reference-tables';
 import {
   findDenomination,
@@ -94,7 +97,16 @@ export function parseCoin(coin: CoinRecord): Signature {
 
   // -- denomination ------------------------------------------------------
   const denomTokens = tokenize(coin.denomination ?? '');
-  let denomination = findDenomination(denomTokens);
+  let denomination: { key: string; label: string } | null = findDenomination(denomTokens);
+
+  // Word table found nothing? Try reading the field as a unit-bound face value.
+  // Records in this collection are often written "50 Cents", "20 Cents" or
+  // "$20" -- forms the word table does not list. This is safe on a record (but
+  // NOT on a filename) because the whole field must match; see
+  // denomination-units.readTrustedDenominationText.
+  if (!denomination) {
+    denomination = readTrustedDenominationText(coin.denomination ?? '');
+  }
 
   const typeText = [coin.coinType, coin.variety].filter(Boolean).join(' ');
   const typeTokens = tokenize(typeText);
@@ -117,7 +129,11 @@ export function parseCoin(coin: CoinRecord): Signature {
     }
   }
 
-  const coinTypeTokens = meaningfulTokens(typeRemainder);
+  // Join catalogue references into single tokens the same way the filename
+  // parser does, so a record whose variety reads "Sear 6819" produces the
+  // token "sear6819" and can match a filename that says the same thing. Both
+  // sides MUST fold, or they would never agree -- see catalog-refs.ts.
+  const coinTypeTokens = meaningfulTokens(foldCatalogRefs(typeRemainder));
 
   // -- mint mark ---------------------------------------------------------
   // Records usually hold a bare code ("D"), but accept a spelled-out mint too.
@@ -136,7 +152,9 @@ export function parseCoin(coin: CoinRecord): Signature {
     denomination: denomination?.key ?? null,
     denominationLabel: denomination?.label ?? (coin.denomination || null),
     coinTypeTokens,
-    grade: String(coin.grade ?? '').trim().toLowerCase() || null,
+    // Normalized so "MS-63", "MS 63" and "ms63" all compare equal to the
+    // "MS63" a filename would carry. See grade-parser.normalizeGrade.
+    grade: normalizeGrade(coin.grade),
     certNumbers: certNumber ? [certNumber] : [],
     certCompanies: certCompany ? [certCompany] : [],
     tokens: [...typeTokens, ...denomTokens]

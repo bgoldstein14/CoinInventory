@@ -11,6 +11,7 @@ import {
   SpotPriceResult,
   LogEntry
 } from '../types/coin.model';
+import { CoinImageRecord } from '../types/coin-image.model';
 import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
 
 // ============================================================================
@@ -118,6 +119,82 @@ export class ApiService {
     return this.http
       .delete<void>(`${this.baseUrl}/api/coins/${id}`)
       .pipe(retryTransientFailures());
+  }
+
+  // ========================================
+  // Coin Image Operations (and the ORIGINAL file behind each image)
+  // ========================================
+
+  /**
+   * Fetch the full image records for ONE coin: the displayable base64 data
+   * plus, for each one, the absolute path of the original file on the host
+   * machine (`sourcePath`, which is null when no path was ever recorded).
+   *
+   * Called lazily — only when a coin is actually being viewed. `GET /api/coins`
+   * can be asked to omit image payloads, so this is the endpoint that fills in
+   * the detail for the single coin the user is looking at.
+   *
+   * @param coinId - The coin's unique identifier
+   * @returns Observable of the coin's images, in display order
+   */
+  getCoinImages(coinId: string): Observable<CoinImageRecord[]> {
+    return this.http.get<CoinImageRecord[]>(
+      `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/images`
+    );
+  }
+
+  /**
+   * Ask the backend whether a batch of original image files still exist on
+   * disk, in ONE round trip.
+   *
+   * WHY BATCHED: a coin can easily have eight photos. Eight requests to render
+   * one sidebar is wasteful and makes the links pop in one at a time, so the
+   * endpoint takes an array and answers with a `path -> boolean` map. The
+   * server de-duplicates the list and caps it at 500 paths per request.
+   *
+   * WHY A POST for what is logically a read: the payload is a list of long
+   * Windows paths full of backslashes, colons, spaces and the occasional
+   * non-ASCII character. A JSON body has no length limit to run into and no
+   * encoding traps; a query string has both.
+   *
+   * @param paths - Absolute paths to check (max 500)
+   * @returns Observable of `{ results: { [path]: boolean } }`
+   */
+  checkImagesExist(paths: string[]): Observable<{ results: Record<string, boolean> }> {
+    return this.http.post<{ results: Record<string, boolean> }>(
+      `${this.baseUrl}/api/images/exists`,
+      { paths }
+    );
+  }
+
+  /**
+   * Build the URL that serves an ORIGINAL full-resolution image file.
+   *
+   * *** WHY THIS GOES THROUGH THE BACKEND INSTEAD OF A `file:///` LINK ***
+   *
+   * The obvious idea is to render `<a href="file:///C:/Coin Pictures/x.jpg">`.
+   * It does not work, and it fails in the most confusing possible way: Chrome
+   * and Edge BLOCK navigation from an `http://` page to a `file://` URL, and
+   * they block it SILENTLY. The user clicks, nothing happens, and there is not
+   * even an error on screen. This is a hard browser security boundary — no
+   * attribute, header or setting turns it off — because otherwise any web page
+   * could probe your local disk.
+   *
+   * So the server, which is a normal process on the user's own machine and has
+   * no such restriction, opens the file and streams it back with
+   * `Content-Disposition: inline`. The browser is then just loading an ordinary
+   * `http://` URL from the same origin, which it is perfectly happy to do in a
+   * new tab.
+   *
+   * The path is URL-encoded because it is a Windows path: it contains
+   * backslashes and almost always spaces (`\\192.168.0.10\Coin Pictures\...`),
+   * and `&` or `#` in a filename would otherwise truncate the query string.
+   *
+   * @param sourcePath - Absolute path of the original file on the host machine
+   * @returns An absolute, same-origin URL safe to put in `href`
+   */
+  imageFileUrl(sourcePath: string): string {
+    return `${this.baseUrl}/api/images/file?path=${encodeURIComponent(sourcePath)}`;
   }
 
   // ========================================
@@ -308,7 +385,7 @@ export class ApiService {
 
   /**
    * Fetch current spot prices from external API.
-   * This triggers the backend to call the metals.live API.
+   * This triggers the backend to read live COMEX/NYMEX futures prices.
    * @returns Observable with spot price result
    */
   fetchSpotPrices(): Observable<SpotPriceResult> {
@@ -367,4 +444,54 @@ export class ApiService {
       catchError(() => of(false))
     );
   }
+
+  // ========================================
+  // App Info
+  // ========================================
+
+  /**
+   * Ask the backend which folder the app itself is installed in, on the machine
+   * hosting it.
+   *
+   * *** WHY THE BROWSER HAS TO ASK ***
+   *
+   * The batch image import needs one thing a browser will never reveal: where a
+   * picked file really lives on disk. A directory picker hands JavaScript only
+   * `File.webkitRelativePath` — the path RELATIVE to the chosen folder — so the
+   * import screen has to ask the user for the front half of the path. (The full
+   * story is in services/image-import/source-path.ts.)
+   *
+   * That box used to be prefilled with a hardcoded UNC path, which was right on
+   * the developer's workstation and wrong on the host, and then with nothing at
+   * all. It is now prefilled with this endpoint's answer: the app's own folder
+   * is not where the photos are, but it IS a real path on the right machine with
+   * the right drive letter, so the user has something correct to edit instead of
+   * an empty box. Once they edit it, their choice is remembered and this value
+   * is never consulted again.
+   *
+   * *** WHY THIS OBSERVABLE NEVER ERRORS ***
+   *
+   * Same contract as `healthCheck()` above: any failure — the endpoint missing
+   * because the backend has not been rebuilt, a timeout, no server at all —
+   * emits `''` rather than propagating. This value is a cosmetic convenience,
+   * and an import screen that refused to open because it could not fetch a
+   * default would be a plainly bad trade. An empty answer simply leaves the box
+   * empty, which the screen already handles: it shows its "no folder given"
+   * warning and records no source paths.
+   *
+   * The 5-second timeout matters for the same reason. Without it a hung request
+   * would leave the box empty indefinitely with no explanation.
+   *
+   * @returns Observable that emits the host-side app folder, or '' on any failure
+   */
+  getAppFolder(): Observable<string> {
+    return this.http.get<{ appFolder?: string }>(`${this.baseUrl}/api/app-info`).pipe(
+      timeout(5000),
+      // Defensive: an old or proxied backend could answer 200 with a body that
+      // has no `appFolder`, and `undefined` must not reach the text box.
+      map(info => (typeof info?.appFolder === 'string' ? info.appFolder : '')),
+      catchError(() => of(''))
+    );
+  }
 }
+

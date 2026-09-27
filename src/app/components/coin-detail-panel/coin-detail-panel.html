@@ -30,6 +30,43 @@
 
   <app-coin-editor-form [coin]="coin()" />
 
+  <!-- ================= ORIGINAL IMAGE FILES =================
+       The database only holds a downscaled copy of each photo. This section
+       documents where the real, full-resolution file lives on the machine
+       hosting the app, and lets the user click through to it.
+
+       Each path is clickable only while the file is actually there; once it
+       has been moved or deleted the path is still listed (that is the point —
+       it records where the photo used to be) but is shown muted and is not a
+       link. See CoinImagePathLink. -->
+  @if (coin().imagePaths.length > 0) {
+    <div class="detail-image-paths">
+      <h3>Original image files</h3>
+      <!--
+        The list is rendered UNCONDITIONALLY, and that is deliberate. Each
+        CoinImagePathLink is what triggers the lazy fetch of this coin's paths,
+        and it renders nothing at all when there is no path to show. Gating the
+        list on `anyPathRecorded()` would mean no link is ever created, so the
+        fetch would never run and the answer would never change — the classic
+        chicken-and-egg. Rendering it always means the section fills itself in
+        a moment later.
+      -->
+      <div class="image-path-list">
+        @for (imagePath of coin().imagePaths; track imagePath) {
+          <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
+        }
+      </div>
+      @if (!anyPathRecorded()) {
+        <!-- Nothing on record for any of this coin's photos: imported before
+             the app started tracking locations, or added by drag-and-drop.
+             One unobtrusive sentence rather than a column of blank rows. -->
+        <p class="image-path-empty">
+          No original file locations were recorded for these photos.
+        </p>
+      }
+    </div>
+  }
+
   @if (showTransactions()) {
     <div class="detail-transactions">
       <h3>Transactions</h3>

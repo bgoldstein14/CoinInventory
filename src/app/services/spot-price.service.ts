@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+﻿import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { SpotPriceResult } from '../types/coin.model';
 import { ApiService } from './api.service';
@@ -14,7 +14,7 @@ export type { SpotPriceResult };
 /**
  * SpotPriceService manages fetching current spot prices via the backend proxy.
  *
- * Instead of calling metals.live directly, this service delegates to the backend
+ * Instead of calling a market-data API directly, this service delegates to the backend
  * API via ApiService, which handles the external API call and provides error handling.
  * This approach keeps sensitive API logic server-side and improves security.
  */
@@ -29,7 +29,7 @@ export class SpotPriceService {
    * Fetch current spot prices via the backend proxy.
    *
    * This method:
-   * - Calls the backend API to fetch spot prices (ApiService delegates to metals.live)
+   * - Calls the backend API to fetch spot prices (the backend reads COMEX/NYMEX futures)
    * - Logs the request and response
    * - Shows user notifications for success, warnings, and errors
    * - Returns spot prices with error state if the call fails
@@ -67,10 +67,11 @@ export class SpotPriceService {
       // Return a result with zero prices and the error message
       return {
         prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
-        source: 'COMEX via metals.live',
+        source: 'COMEX/NYMEX futures',
         timestamp: new Date().toISOString(),
         error: msg
       };
     }
   }
 }
+

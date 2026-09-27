@@ -1,0 +1,93 @@
+<!--
+  One unresolved photo. Nothing here is attached until the user picks a coin;
+  a card left untouched contributes nothing to the import.
+-->
+<div
+  class="resolver-card"
+  [class.resolver-card--confirmed]="row().decision === 'confirmed'"
+  [class.resolver-card--skipped]="row().decision === 'skipped'"
+>
+  <div class="resolver-head">
+    @if (thumbnailUrl()) {
+      <img [src]="thumbnailUrl()" alt="" class="resolver-thumb" loading="lazy" />
+    }
+    <div class="resolver-info">
+      <span class="resolver-filename" [title]="row().fileName">{{ row().fileName }}</span>
+
+      <!-- "Here is what I read from the name" — a bad parse is then obvious. -->
+      <span class="parsed-chips">
+        @for (chip of chips(); track chip) {
+          <span class="parsed-chip">{{ chip }}</span>
+        }
+        @if (chips().length === 0) {
+          <span class="parsed-chip parsed-chip--empty">Nothing recognised in the filename</span>
+        }
+      </span>
+
+      <span class="resolver-reason">{{ row().result.reason }}</span>
+    </div>
+    <div class="resolver-actions">
+      @if (row().decision === 'skipped') {
+        <span class="resolver-badge resolver-badge--skipped">Skipped</span>
+        <button type="button" class="secondary small-button" (click)="reset.emit()">Undo</button>
+      } @else {
+        <button type="button" class="secondary small-button" (click)="skipped.emit()">Skip</button>
+      }
+    </div>
+  </div>
+
+  @if (row().decision === 'confirmed' && row().selectedCoinId) {
+    <div class="resolver-selected">
+      <span class="resolver-badge">Will attach to</span>
+      <span class="resolver-coin">{{ selectedCoinLabel() }}</span>
+      <button type="button" class="secondary small-button" (click)="reset.emit()">Change</button>
+    </div>
+  } @else if (row().decision !== 'skipped') {
+
+    <!-- The matcher's ranked shortlist, best first. -->
+    @if (row().result.candidates.length > 0) {
+      <ul class="candidate-list">
+        @for (candidate of row().result.candidates; track candidate.coinId) {
+          <li class="candidate">
+            <div class="candidate-main">
+              <span class="candidate-name">{{ candidate.coinLabel }}</span>
+              <span class="candidate-reason">{{ candidate.reason }}</span>
+            </div>
+            <span class="candidate-score">{{ candidate.score * 100 | number: '1.0-0' }}%</span>
+            <button type="button" class="small-button" (click)="candidateChosen.emit(candidate)">
+              Use this
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    <!-- Escape hatch: none of the candidates is right, find the coin by hand. -->
+    <div class="candidate-search">
+      <label class="candidate-search-label" [attr.for]="'resolver-search-' + row().fileName">
+        {{ row().result.candidates.length > 0 ? 'Or find a different coin' : 'Find the coin' }}
+      </label>
+      <input
+        type="text"
+        [id]="'resolver-search-' + row().fileName"
+        placeholder="Type part of a coin name, e.g. morgan 1881"
+        [value]="searchTerm()"
+        (input)="onSearchInput($event)"
+      />
+      @if (searchResults().length > 0) {
+        <ul class="search-results">
+          @for (coin of searchResults(); track coin.id) {
+            <li>
+              <button type="button" class="link-button" (click)="coinAssigned.emit(coin.id)">
+                {{ coin.year }} {{ coin.coinType }} {{ coin.denomination }}
+                @if (coin.mintMark) { <span>- {{ coin.mintMark }}</span> }
+              </button>
+            </li>
+          }
+        </ul>
+      } @else if (searchTerm().length >= 2) {
+        <p class="search-empty">No coin in the inventory matches that search.</p>
+      }
+    </div>
+  }
+</div>

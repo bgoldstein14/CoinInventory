@@ -150,6 +150,89 @@ function inferCoinTypeByYear(denomination: string, year: number): string {
   return '';
 }
 
+/* ---------------------------------------------------------------------------
+ * CERTIFICATION (GRADING) COMPANIES
+ *
+ * These are the third-party grading services whose names actually appear in
+ * this collection's Quicken security names, e.g.
+ *
+ *     "1927 $20 - PCGS MS64"
+ *     "1875 20¢ - ANACS VG8"
+ *     "1886 $1 - ICG MS64DMPL"
+ *     "1909 S-VDB 1¢ - PCGS/CAC AU58"
+ *
+ * WHY THIS IS A LIST OF REGEXES AND NOT A LIST OF STRINGS
+ * A plain `securityName.includes('NGC')` would be wrong in two ways:
+ *   1. It would fire on "NGC" buried inside a longer word (the bug the
+ *      requirements call out explicitly).
+ *   2. It would be case-sensitive, and Quicken names are hand-typed.
+ *
+ * So every entry is anchored with `\b` on both sides -- a WHOLE-TOKEN match --
+ * and compiled case-insensitively. `\b` is a word boundary, meaning the
+ * position between a word character ([A-Za-z0-9_]) and anything else. That is
+ * exactly what we want here, because the separators these names actually use
+ * -- space, hyphen, slash, backslash, parenthesis -- are all NON-word
+ * characters. All of these therefore match:
+ *
+ *     "- PCGS MS64"        (space on both sides)
+ *     "-PCGS PF65"         (hyphen before)
+ *     "PCGS/CAC AU58"      (slash after)
+ *     "(CLEANED/PCGS)"     (slash before, paren after)
+ *
+ * ...while "XPCGSY" does not.
+ *
+ * ORDER MATTERS ONLY FOR CACG. It is listed FIRST so that a name reading
+ * "CACG MS65" is credited to CACG rather than to some other company that also
+ * happened to appear. (CACG cannot be confused with the CAC *sticker* -- see
+ * the CAC_STICKER_PATTERN comment below for that distinction.)
+ * ------------------------------------------------------------------------- */
+const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
+  // CAC's own grading service (a slab), NOT the CAC sticker (a sticker on
+  // someone else's slab). Deliberately first -- see note above.
+  { token: 'CACG',  pattern: /\bCACG\b/i },
+  { token: 'PCGS',  pattern: /\bPCGS\b/i },
+  { token: 'NGC',   pattern: /\bNGC\b/i },
+  { token: 'ANACS', pattern: /\bANACS\b/i },
+  { token: 'ICG',   pattern: /\bICG\b/i },
+  { token: 'SEGS',  pattern: /\bSEGS\b/i },
+  { token: 'NNC',   pattern: /\bNNC\b/i },
+];
+
+/* ---------------------------------------------------------------------------
+ * THE CAC STICKER  (`hasCacSticker`)
+ *
+ * CAC (Certified Acceptance Corporation) puts a small green sticker on a slab
+ * it agrees is solid for the grade. It is a SEPARATE thing from the grading
+ * company, and it is the single most common "extra" in this collection's
+ * Quicken names -- overwhelmingly written with a slash after the grader:
+ *
+ *     "1909 S-VDB 1¢ - PCGS/CAC AU58"
+ *     "1835 $5 - NGC/CAC XF45"
+ *     "1870 $1 - PCGS/CAC PF62+"
+ *
+ * ...but also seen in the wild as `CAC`, `CAC'd`, `CACd`, `w/CAC`, `+CAC`,
+ * `(CAC)`, and `CAC Gold` / `Gold CAC`.
+ *
+ * *** CAC  vs  CACG -- the one trap in this whole file ***
+ * `CACG` is CAC's GRADING SERVICE. A CACG-slabbed coin is not a
+ * CAC-stickered coin, so seeing "CACG" must set `certCompany = 'CACG'` and
+ * must leave `hasCacSticker` FALSE.
+ *
+ * The whole-token `\b` rule already gives us that for free, and it is worth
+ * spelling out why:
+ *   - In "CACG", the character after "CAC" is "G". Both "C" and "G" are word
+ *     characters, so there is NO word boundary between them, so `\bCAC\b`
+ *     fails to match. Correct.
+ *   - In "PCGS/CAC", the character after "CAC" is the end of the string (or a
+ *     space) and the one before it is "/", so both boundaries hold. Matches.
+ *
+ * The only form `\bCAC\b` does NOT cover on its own is `CACd` ("CAC'd" with
+ * the apostrophe dropped), because "d" is a word character -- the same reason
+ * CACG is excluded. So the optional `(?:'?d)?` group is spliced in to accept
+ * `CAC`, `CAC'd` and `CACd` while still rejecting `CACG`.
+ * ------------------------------------------------------------------------- */
+const CAC_STICKER_PATTERN = /\bCAC(?:'?d)?\b/i;
+
 /** Action codes that represent acquiring a position -- i.e. a coin entering the collection. */
 const ACQUISITION_ACTIONS = new Set([
   'buy',
@@ -343,6 +426,11 @@ export class QuickenImportService {
         year: attrs.year,
         coinType: attrs.coinType,
         grade: attrs.grade,
+        // Grading service + CAC sticker, both read out of the same security
+        // name as everything else above. `hasCacSticker` is always a real
+        // boolean so it can be bound straight to the BIT NOT NULL column.
+        certCompany: attrs.certCompany,
+        hasCacSticker: attrs.hasCacSticker,
         mintMark: attrs.mintMark,
         variety: attrs.variety,
         account: currentAccount ?? 'Unassigned',
@@ -598,9 +686,18 @@ export class QuickenImportService {
    * - Mintmark: Single letter immediately after 4-digit year with no space (e.g., "1875S" -> "S")
    * - Grade: After "-" or space, patterns like VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F,
    *          plus modifiers like AU58, MS63, CH+AU, VF/EF, VF/XF
+   * - CertCompany: Whole-token match against the known grading services
+   *          (PCGS, NGC, ANACS, ICG, SEGS, CACG, NNC)
+   * - HasCacSticker: Whole-token "CAC" (and its spelling variants), which is a
+   *          DIFFERENT thing from the CACG grading service
    * - Denomination: Pattern match to symbolic format (3CS→3CS, 20c→20¢, half→50¢, etc.)
    * - Variety: Only if explicit keywords (Type I, Type II, DDO, DDR)
    * - CoinType: Left blank (determined later by UI or enrichment)
+   *
+   * NOTE: every rule below reads the ORIGINAL `securityName`. Nothing is
+   * stripped or rewritten as we go, so the rules cannot interfere with each
+   * other. That is what keeps "PCGS MS63" yielding BOTH certCompany "PCGS"
+   * and grade "MS63" -- detecting the company never consumes the grade.
    *
    * @param securityName The security name (Y field) from Quicken
    * @returns Parsed attributes
@@ -612,6 +709,8 @@ export class QuickenImportService {
     denomination: string;
     variety: string;
     coinType: string;
+    certCompany: string;
+    hasCacSticker: boolean;
   } {
     let year = '';
     let mintMark = '';
@@ -619,6 +718,7 @@ export class QuickenImportService {
     let denomination = '';
     let variety = '';
     let coinType = '';
+    let certCompany = '';
 
     // Extract year, including an overdate suffix when present (e.g. 1862/1).
     const yearMatch = securityName.match(/^(\d{4}(?:\/\d{1,2})?)/);
@@ -636,15 +736,95 @@ export class QuickenImportService {
       }
     }
 
-    // Extract grade (after "-" or space, common patterns)
-    // Match patterns: VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F
-    // with optional modifiers: AU58, MS63, CH+AU, VF/EF, VF/XF, etc.
-    const gradeMatch = securityName.match(
-      /[-\s]((?:CH\+)?(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G)(?:\/(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|Unc|AG|VG|F|G))?(?:\d{1,2})?)\b/i
+    // Extract grade (after "-" or space).
+    //
+    // Two passes, because a single expression could not cover both cases
+    // without either missing designations or mis-parsing plain grades.
+    //
+    // PASS 1 handles a numeric grade carrying a DESIGNATION suffix:
+    //   PF65RB, PF64Cameo, PF65 Cameo, PF69DCAM, MS64DMPL, MS70-FS, MS64+
+    //
+    //   These used to come out EMPTY. The old expression ended in `\b`
+    //   immediately after the digits, and in "PF65RB" there is no word
+    //   boundary between "5" and "R" (both are word characters), so the whole
+    //   match failed and the grade was silently lost. Proof and copper coins
+    //   are overwhelmingly graded with designations, so this discarded the
+    //   grade for a large part of the collection.
+    //
+    //   The trailing `(?![A-Z0-9])` replaces `\b`: it asserts the grade is not
+    //   followed by another letter or digit. Unlike `\b` it also succeeds
+    //   after a "+" (as in MS64+), which `\b` cannot do because "+" is not a
+    //   word character.
+    //
+    // PASS 2 is the original expression, used only when pass 1 finds nothing.
+    // It keeps plain grades (XF, AU53, VF/EF, CH+AU) working exactly as
+    // before, so nothing that used to parse can regress.
+    const GRADE_CORE =
+      String.raw`(?:CH\+)?(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G)` +
+      String.raw`(?:\/(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G))?`;
+
+    // Standard numismatic designations. Longer alternatives come first so
+    // that, e.g., "CAMEO" is preferred over the shorter "CAM" and "DMPL"
+    // over "PL".
+    //   Colour (copper):  RD red, RB red-brown, BN brown
+    //   Proof surfaces:   CAMEO/CAM cameo, DCAM deep cameo, UCAM ultra cameo
+    //   Mirror:           DMPL deep mirror prooflike, DPL, PL prooflike
+    //   Strike:           FS full steps, FB full bands, FH full head,
+    //                     FBL full bell lines, FT full torch
+    const GRADE_DESIGNATIONS =
+      'DCAM|UCAM|CAMEO|CAM|DMPL|DPL|PL|RD|RB|BN|FBL|FS|FB|FH|FT';
+
+    const gradeWithDesignation = securityName.match(
+      new RegExp(
+        `[-\\s](${GRADE_CORE}\\d{1,2}(?:[-\\s]?(?:${GRADE_DESIGNATIONS}))?\\+?)(?![A-Z0-9])`,
+        'i'
+      )
     );
+
+    const gradeMatch = gradeWithDesignation ?? securityName.match(
+      new RegExp(`[-\\s](${GRADE_CORE}(?:\\d{1,2})?)\\b`, 'i')
+    );
+
     if (gradeMatch) {
-      grade = gradeMatch[1].toUpperCase();
+      // Collapse any internal separator so "PF65 Cameo" and "PF65Cameo"
+      // both normalise to the same stored value.
+      grade = gradeMatch[1].toUpperCase().replace(/[-\s]+/g, '');
     }
+
+    // -----------------------------------------------------------------------
+    // Extract the certification (grading) company.
+    //
+    // First whole-token hit wins. We store the BARE token in its canonical
+    // upper-case spelling ("pcgs" in the QIF becomes "PCGS") and nothing else:
+    // the CertCompany column is NVARCHAR(100), but the coin editor's input is
+    // capped at 10 characters, so storing something like
+    // "PCGS (with CAC sticker)" would produce a value the user cannot edit.
+    //
+    // This runs AFTER the grade above and reads the untouched security name,
+    // so a company sitting immediately before a grade -- "PCGS MS63",
+    // "ANACS VG8", "NGC PF65RB", "ANACS PF69 DCAM", "NGC PF64Cameo" -- leaves
+    // the already-extracted grade completely alone.
+    // -----------------------------------------------------------------------
+    for (const candidate of CERT_COMPANY_PATTERNS) {
+      if (candidate.pattern.test(securityName)) {
+        certCompany = candidate.token;
+        break;
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Extract the CAC sticker flag.
+    //
+    // Remember: CAC (a green sticker on someone else's slab) is NOT CACG
+    // (CAC's own grading service). The whole-token pattern is what enforces
+    // that -- "CACG" cannot match `\bCAC\b` because there is no word boundary
+    // between the "C" and the "G". See CAC_STICKER_PATTERN for the full
+    // explanation.
+    //
+    // Always a boolean, never undefined: the database column is
+    // BIT NOT NULL DEFAULT 0 and the UI renders a checkbox from it.
+    // -----------------------------------------------------------------------
+    const hasCacSticker = CAC_STICKER_PATTERN.test(securityName);
 
     // Extract variety (explicit keywords only)
     if (/Type\s*I\b/i.test(securityName)) {
@@ -714,7 +894,12 @@ export class QuickenImportService {
     // Infer coinType from explicit name keywords or denomination + year
     coinType = this.inferCoinType(securityName, denomination, year);
 
-    return { year, mintMark, grade, denomination, variety, coinType };
+    // NOTE: certCompany and hasCacSticker are deliberately NOT part of the
+    // 2-of-3 "main details" completeness rule (Year / Coin Type /
+    // Denomination) enforced in `coin-completeness.ts`. A slab label tells you
+    // who graded the coin, not what the coin is, so a row carrying only
+    // "PCGS MS64" is still an exception, exactly as before this was added.
+    return { year, mintMark, grade, denomination, variety, coinType, certCompany, hasCacSticker };
   }
 
   private inferCoinType(securityName: string, denomination: string, year: string): string {

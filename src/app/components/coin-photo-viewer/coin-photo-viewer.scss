@@ -35,6 +35,26 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 
+// ---- The original file's location, captioned under the photo ----
+// Overlaid on the bottom of the image rather than placed after it, because
+// `.photo-viewer` is a centring flex ROW — a block sibling would sit next to
+// the photo and squash it. A light, mostly-opaque chip keeps the link and the
+// muted "file is gone" colours readable against both the dark backdrop and
+// whatever the photo happens to look like.
+.photo-viewer__path {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 96px); // clear of the previous / next buttons
+  margin: 0;
+  padding: 5px 10px;
+  background: rgba(253, 250, 246, 0.94);
+  border-radius: 8px;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
 .photo-viewer__close,
 .photo-viewer__nav {
   position: absolute;

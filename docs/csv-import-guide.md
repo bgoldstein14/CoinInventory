@@ -11,12 +11,15 @@ you a screen where you match each of your columns to a coin field.
 
 The fastest ways to get started, in order:
 
-1. **Already have coins in the app?** Use **Export → CSV**. The file it
-   produces re-imports with every column matched automatically, so it doubles
-   as a perfect template.
-2. **Starting from nothing?** Open **Import → CSV** and click
-   **Download blank template**. You get a file with the correct header row and
-   two example coins to edit.
+1. **Starting from nothing?** Open **Import → CSV** and click
+   **Download blank template**. You get a file with the correct header row —
+   every column the app recognises, in order — and two example coins to edit.
+   This is the one file where *all* the columns match automatically.
+2. **Already have coins in the app?** Use **Export → CSV**. Every column
+   re-imports with its mapping matched automatically, including the **Source**
+   column that records where each coin's data originally came from — so a coin
+   that arrived from Quicken still says Quicken after a round trip, rather than
+   being relabelled as a CSV import.
 3. **Got a file from a dealer, an auction house, or another program?** Just
    import it as-is. Whatever the columns are called, you can map them by hand.
 
@@ -29,6 +32,10 @@ The fastest ways to get started, in order:
 - One coin per row after the header.
 - Quotes work the normal way: wrap a value in `"` if it contains a comma or a
   line break, and use `""` for a literal quote mark inside it.
+- **There must be at least one coin.** A file containing nothing but a header
+  row is ignored without a message, which looks like the file button did
+  nothing. Completely blank rows further down are fine — they are skipped, not
+  imported as empty coins.
 
 A minimal file is perfectly valid:
 
@@ -40,8 +47,13 @@ Mercury Dime,Dime,1916,D,VG8,$895.00
 
 ## Columns the app recognises automatically
 
-If you use these exact names, the app matches them for you. Anything else is
-left for you to map manually — which is fine, just an extra click.
+If you use these names, the app matches them for you. Anything else is left for
+you to map manually — which is fine, just an extra click.
+
+Capitalisation does not matter and neither do spaces around the name, so
+`purchase price`, `Purchase Price` and ` PURCHASE PRICE ` all match. What does
+matter is the wording: `Purchase Cost` or `Price Paid` will not be recognised,
+and you map them yourself.
 
 | Column name | What it holds |
 | --- | --- |
@@ -74,8 +86,25 @@ left for you to map manually — which is fine, just an extra click.
 **Blank cells are skipped.** An empty cell leaves that field at its default
 rather than writing an empty value over it.
 
-**Prices are cleaned up for you.** `$1,250.00` and `1250` both work. Anything
-that still is not a number becomes `0`.
+**Four columns are treated as numbers**, and the app is forgiving about how you
+write them: Purchase Price, Current Value, Sold Price and **Weight (oz)**. All
+of these work:
+
+| You write | It reads as |
+| --- | --- |
+| `$1,250.00` | 1250 |
+| `1250 USD` | 1250 |
+| `(1,250.00)` | −1250 (the way spreadsheets show a negative) |
+| `0.7734` | 0.7734 |
+| `0.7734 ozt` | 0.7734 |
+| `1/10 oz` | 0.1 |
+
+In short: currency symbols, thousands commas and a trailing unit are all
+ignored, and a fraction like `1/10` is worked out for you — useful for
+fractional-ounce gold. A cell with no number in it at all, such as `n/a`, still
+comes in as `0`.
+
+Every other column is stored as the text you typed.
 
 **Year is stored as text, not a number.** That is deliberate, so date ranges
 and type designations survive.
@@ -84,18 +113,38 @@ and type designations survive.
 
 These are real gaps, not warnings to work around:
 
-- **Five fields cannot be imported by CSV at all**: CAC sticker, tags, images,
-  and the two precious-metal fields (`PmWeightGrams` and `PmPercent`). The
-  precious-metal ones matter because **melt value is calculated from them** —
-  so a coin imported by CSV will not show a melt value until you fill those in
-  by hand in the detail panel. This also means exporting to CSV and re-importing
-  loses that data.
+- **Five things cannot be imported by CSV at all.** There is no column for any
+  of them, and no way to map one:
+  - the **CAC sticker** flag
+  - **tags**
+  - **photos**
+  - the **precious-metal weight in grams**
+  - the **precious-metal percentage** (the fineness, e.g. 90%)
+
+  The last two matter more than they look. **Melt value is calculated from the
+  precious-metal weight and percentage**, so a coin brought in by CSV shows no
+  melt value at all until you fill those two in by hand in the detail panel.
+  Note the consequence for round-tripping: exporting your collection to CSV and
+  importing it back does **not** preserve them. Nor does it preserve your tags,
+  your photos, or the CAC flag. A CSV export is a good report and a good
+  starting template; it is **not** a backup.
+
+  Also worth knowing: the general **Weight (oz)** column *can* be imported, but
+  it is the coin's total weight and is not what melt value uses. Filling it in
+  will not produce a melt value on its own.
 - **Semicolon-separated files are not supported**, only commas.
-- **Incomplete rows are not caught before import.** The Quicken (QIF) importer
-  refuses a coin unless it has at least two of Year / Coin Type / Denomination,
-  and shows you the rejects. CSV import does not do this yet — a row missing a
-  denomination will be sent to the database and rejected there, showing an
-  error rather than a helpful summary.
+- **Incomplete rows are not caught before import.** When importing from
+  Quicken, a coin is refused unless it has at least two of Year / Coin Type /
+  Denomination, and you are shown a list of exactly which records were skipped
+  and why. CSV import does not do that check — every row is sent, and a row too
+  sparse to be a real coin record is rejected by the database instead. You do
+  get a summary afterwards ("Added 40 coins, but 3 failed to save"), so nothing
+  fails silently, but it tells you *how many* failed rather than *which ones*.
+  The rejected rows also stay visible in the table until you reload, at which
+  point they disappear, because they were never actually saved.
+
+  In practice: give every coin at least two of Year, Coin Type and Denomination
+  and this will not come up.
 
 ## If an import goes wrong
 

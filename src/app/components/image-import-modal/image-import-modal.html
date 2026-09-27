@@ -1,269 +1,294 @@
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Import Images</h2>
+      <h2>Batch Import Images</h2>
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
+
+      <!-- ================= WHERE THE PHOTOS LIVE =================
+           WHY THIS BOX HAS TO EXIST AT ALL.
+
+           A browser NEVER tells a web page where a file really is on disk —
+           that is a hard security rule, not an oversight. A directory picker
+           gives us only `File.webkitRelativePath`, e.g.
+           "Business Strikes/1865 3CN - Obverse.jpg": the path RELATIVE to the
+           folder that was picked. To record a path we can later re-open, we
+           need the missing front half, and the user is the only one who knows
+           it. So they confirm it once, here, and it is remembered afterwards.
+
+           The live example below is the important part: it is built from the
+           first file actually selected, so a wrong folder is obvious BEFORE
+           the import stamps hundreds of rows with an unreachable location.
+
+           WHAT IS PREFILLED HERE, AND WHY IT IS ALMOST CERTAINLY WRONG.
+
+           The first time this screen is opened there is nothing remembered, so
+           the box is seeded with the folder THIS APP is installed in, reported
+           by the backend (GET /api/app-info). That is deliberately a starting
+           point and not a guess at where the photos are: its value is that it
+           is a genuine path on the machine that has to resolve these paths,
+           with a drive letter that machine really has. Editing it down to the
+           right folder is far easier than typing one from nothing, and once the
+           user does, that choice is saved and wins from then on. The wording
+           below has to be honest about this — a prefilled box that looks
+           authoritative but points at the program folder would be worse than an
+           empty one. -->
+      <label class="detail-field detail-field--full">
+        <span>Folder these photos live in (on the machine hosting this app)</span>
+        <input
+          type="text"
+          [value]="session.folder.value()"
+          (input)="session.folder.set($any($event.target).value)"
+          placeholder="D:\Coin Pictures"
+          spellcheck="false"
+        />
+      </label>
+      <p class="hint-text">
+        <strong>Change this to your photo folder.</strong> It starts out showing
+        where <em>this app</em> is installed &mdash; a real folder on the host, but
+        almost certainly <em>not</em> where your coin pictures are. It is only there
+        to give you the right drive and the right starting shape to edit, for
+        example <code>D:\Coin Pictures</code>. Whatever you set is remembered, so
+        you only do this once.
+      </p>
+      <p class="hint-text">
+        The folder is stored with each photo so you can click through to the
+        original full-size file later. The <strong>server</strong> opens that file,
+        not your browser &mdash; so the path has to be valid on the machine hosting
+        the app, written the way that machine sees it: a local drive letter. A drive
+        mapped only on your own PC, or a network path the host cannot reach, will
+        store fine and then report every photo as missing.
+      </p>
+      @if (session.folder.missing()) {
+        <p class="hint-text hint-text--warn">
+          With no folder given, photos are still imported but their original
+          location is not recorded, so there will be nothing to click through to.
+        </p>
+      }
+      @if (session.folder.preview(); as example) {
+        <p class="source-path-example">
+          <strong>Check this before you save.</strong> Each photo&rsquo;s location
+          will be recorded like this, and it should be a path that really exists on
+          the host:
+          <code>{{ example }}</code>
+        </p>
+      }
+
+      <!-- ================= PICK A FOLDER ================= -->
       <div class="image-import-picker">
         <label class="file-picker">
-          <input type="file" multiple webkitdirectory (change)="handleDirectorySelection($event)" />
+          <input type="file" multiple webkitdirectory (change)="session.handleDirectorySelection($event)" />
           Select image folder
         </label>
         <label class="file-picker">
-          <input type="file" multiple accept="image/*" (change)="handleDirectorySelection($event)" />
+          <input type="file" multiple accept="image/*" (change)="session.handleDirectorySelection($event)" />
           Or select individual images
         </label>
       </div>
+      <p class="hint-text">
+        Matching uses the file names only, so nothing is read off the share until
+        you confirm. Selected photos are then shrunk to 1600px before they are
+        saved &mdash; your original files are never modified.
+      </p>
 
-      @if (imageReviews().length > 0) {
-        <div class="image-import-summary">
-          <span>{{ imageReviews().length }} images found</span>
-          <span class="import-stat import-stat--matched">{{ autoMatches().length }} confident</span>
-          <span class="import-stat import-stat--review">{{ reviewMatches().length }} need your choice</span>
-          <span class="import-stat import-stat--unmatched">{{ unmatchedImages().length }} no match</span>
-          @if (outstandingCount() > 0) {
-            <span class="import-stat import-stat--outstanding">{{ outstandingCount() }} still undecided</span>
+      <!-- ================= PROGRESS ================= -->
+      @if (session.progress(); as p) {
+        <div class="import-progress" role="status">
+          <span class="import-progress-label">
+            @if (p.phase === 'matching') {
+              Matching file names&hellip; {{ p.processed }} of {{ p.total }}
+            } @else {
+              Saving&hellip; {{ p.processed }} of {{ p.total }}
+              @if (p.currentFile) { <span class="import-progress-file">{{ p.currentFile }}</span> }
+            }
+          </span>
+          <span class="import-progress-track">
+            <span
+              class="import-progress-fill"
+              [style.width.%]="p.total ? (p.processed / p.total) * 100 : 0"
+            ></span>
+          </span>
+        </div>
+      }
+
+      <!-- ================= SKIPPED-FILE REPORT =================
+           Shown before anything else so the user can see that the 343 .dng
+           files were dropped on purpose, not lost. -->
+      @if (session.filterResult(); as filter) {
+        <div class="import-filter-report">
+          <span class="filter-report-line">
+            <strong>{{ filter.accepted.length | number }}</strong> of
+            {{ filter.totalSelected | number }} selected files are displayable images.
+          </span>
+          @if (filter.skipped.length > 0) {
+            <ul class="filter-skip-list">
+              @for (tally of filter.tallies; track tally.reason) {
+                <li><strong>{{ tally.count | number }}</strong> skipped &mdash; {{ tally.reason }}</li>
+              }
+            </ul>
           }
         </div>
+      }
 
-        <!-- ================= 1. CONFIDENT MATCHES ================= -->
-        @if (autoMatches().length > 0) {
+      <!-- ================= SUMMARY (after the import ran) ================= -->
+      @if (session.summary(); as done) {
+        <div class="import-summary-panel">
+          <h3>Import finished</h3>
+          <ul>
+            <li><strong>{{ done.attached | number }}</strong> photo(s) attached across
+              <strong>{{ done.coinsTouched | number }}</strong> coin(s).</li>
+            <li><strong>{{ done.skipped | number }}</strong> not selected, so not saved.</li>
+            <li><strong>{{ done.failures.length | number }}</strong> failed.</li>
+            @if (done.originalBytes > 0) {
+              <li>
+                Shrunk {{ done.originalBytes / 1048576 | number: '1.0-1' }} MB of originals down to
+                {{ done.storedBytes / 1048576 | number: '1.0-1' }} MB stored.
+              </li>
+            }
+          </ul>
+          @if (done.failures.length > 0) {
+            <ul class="import-failure-list">
+              @for (failure of done.failures; track failure.fileName) {
+                <li>{{ failure.fileName }} &mdash; {{ failure.reason }}</li>
+              }
+            </ul>
+          }
+          <div class="modal-actions">
+            <button type="button" (click)="close()">Done</button>
+          </div>
+        </div>
+      }
+
+      @if (session.imageReviews().length > 0 && !session.summary()) {
+
+        <!-- ================= COUNTS ================= -->
+        <div class="image-import-summary">
+          <span>{{ session.imageReviews().length | number }} images</span>
+          <span class="import-stat import-stat--matched">{{ session.coinGroups().length | number }} coins matched</span>
+          <span class="import-stat import-stat--review">{{ session.reviewMatches().length | number }} need your choice</span>
+          <span class="import-stat import-stat--unmatched">{{ session.unmatchedImages().length | number }} no match</span>
+          <span class="import-stat import-stat--outstanding">{{ session.attachCount() | number }} selected to save</span>
+        </div>
+
+        <!-- ================= 1. MATCHED COINS, GROUPED ================= -->
+        @if (session.coinGroups().length > 0) {
           <div class="image-match-section">
-            <h3>Ready to attach</h3>
+            <h3>Matched coins</h3>
             <p class="section-hint">
-              The filename matched one coin on several attributes with no close runner-up.
-              These will be attached unless you reject or skip them.
+              One row per coin, weakest match first. Every photo starts selected
+              &mdash; untick anything you do not want. Open a row to see the
+              thumbnails.
             </p>
+            <div class="batch-bulk-bar">
+              <span>All coins:</span>
+              <button type="button" class="secondary small-button" (click)="session.runBulkAction('keep-obverse-reverse')">
+                Keep only Obverse + Reverse
+              </button>
+              <button type="button" class="secondary small-button" (click)="session.runBulkAction('deselect-retakes')">
+                Deselect retakes
+              </button>
+              <button type="button" class="secondary small-button" (click)="session.runBulkAction('deselect-labels')">
+                Deselect Label shots
+              </button>
+              <button type="button" class="secondary small-button" (click)="session.runBulkAction('select-all')">Select all</button>
+              <button type="button" class="secondary small-button" (click)="session.runBulkAction('deselect-all')">Deselect all</button>
+            </div>
             <div class="image-match-list">
-              @for (row of autoMatches(); track row.fileName) {
-                <div
-                  class="image-match-card"
-                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
-                  [class.image-match-card--skipped]="row.decision === 'skipped'"
-                >
-                  @if (row.thumbnailUrl) {
-                    <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
-                  }
-                  <div class="match-info">
-                    <span class="match-filename">{{ row.fileName }}</span>
-                    <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
-                    <span class="match-confidence">
-                      {{ row.confidence * 100 | number: '1.0-0' }}% confident
-                    </span>
-                    <span class="match-reason">{{ row.selectionReason }}</span>
-                    @if (parsedChips(row).length > 0) {
-                      <span class="parsed-chips">
-                        @for (chip of parsedChips(row); track chip) {
-                          <span class="parsed-chip">{{ chip }}</span>
-                        }
-                      </span>
-                    }
-                  </div>
-                  <div class="match-actions">
-                    @switch (row.decision) {
-                      @case ('skipped') {
-                        <span class="match-skipped-badge">Skipped</span>
-                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
-                      }
-                      @case ('confirmed') {
-                        <span class="match-confirmed-badge">Confirmed</span>
-                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
-                      }
-                      @default {
-                        <button type="button" class="small-button" (click)="confirmImageMatch(row.fileName)">Confirm</button>
-                        <button type="button" class="secondary small-button" (click)="rejectImageMatch(row.fileName)">Reject</button>
-                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
-                      }
-                    }
-                  </div>
-                </div>
+              @for (group of session.coinGroups(); track group.coinId) {
+                <app-coin-image-group
+                  [group]="group"
+                  [expanded]="session.isCoinGroupExpanded(group.coinId)"
+                  [thumbnailUrls]="session.thumbnailUrls()"
+                  (expandToggled)="session.toggleCoinGroup($event)"
+                  (rowToggled)="session.toggleImage($event)"
+                  (bulkAction)="session.runBulkAction($event, group.coinId)"
+                />
               }
             </div>
           </div>
         }
 
         <!-- ================= 2. NEEDS A CHOICE ================= -->
-        @if (reviewMatches().length > 0) {
+        @if (session.reviewMatches().length > 0) {
           <div class="image-match-section">
-            <h3>Needs your choice</h3>
+            <h3>Needs your choice ({{ session.reviewMatches().length | number }})</h3>
             <p class="section-hint">
-              Several coins fit the filename, or the filename did not carry enough
-              detail to be sure. Nothing here is attached until you pick a coin.
+              Several coins fit the file name, or the name did not carry enough
+              detail to be sure. Nothing here is saved until you pick a coin.
             </p>
             <div class="image-match-list">
-              @for (row of reviewMatches(); track row.fileName) {
-                <div
-                  class="image-match-card image-match-card--review image-match-card--stacked"
-                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
-                  [class.image-match-card--skipped]="row.decision === 'skipped'"
-                >
-                  <div class="match-head">
-                    @if (row.thumbnailUrl) {
-                      <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
-                    }
-                    <div class="match-info">
-                      <span class="match-filename">{{ row.fileName }}</span>
-                      <span class="parsed-chips">
-                        @for (chip of parsedChips(row); track chip) {
-                          <span class="parsed-chip">{{ chip }}</span>
-                        }
-                        @if (parsedChips(row).length === 0) {
-                          <span class="parsed-chip parsed-chip--empty">Nothing recognised in the filename</span>
-                        }
-                      </span>
-                      <span class="match-reason">{{ row.result.reason }}</span>
-                    </div>
-                    <div class="match-actions">
-                      @if (row.decision === 'skipped') {
-                        <span class="match-skipped-badge">Skipped</span>
-                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
-                      } @else {
-                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
-                      }
-                    </div>
-                  </div>
-
-                  @if (row.decision === 'confirmed' && row.selectedCoinId) {
-                    <div class="match-selected">
-                      <span class="match-confirmed-badge">Will attach to</span>
-                      <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
-                      <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Change</button>
-                    </div>
-                  } @else if (row.decision !== 'skipped') {
-                    @if (row.result.candidates.length > 0) {
-                      <ul class="candidate-list">
-                        @for (candidate of row.result.candidates; track candidate.coinId) {
-                          <li class="candidate">
-                            <div class="candidate-main">
-                              <span class="candidate-name">{{ candidate.coinLabel }}</span>
-                              <span class="candidate-reason">{{ candidate.reason }}</span>
-                            </div>
-                            <span class="candidate-score">{{ candidate.score * 100 | number: '1.0-0' }}%</span>
-                            <button type="button" class="small-button" (click)="chooseCandidate(row.fileName, candidate)">
-                              Use this
-                            </button>
-                          </li>
-                        }
-                      </ul>
-                    }
-
-                    <div class="candidate-search">
-                      <label class="candidate-search-label" [attr.for]="'search-' + row.fileName">
-                        Or find a different coin
-                      </label>
-                      <input
-                        type="text"
-                        [id]="'search-' + row.fileName"
-                        placeholder="Type part of a coin name, e.g. morgan 1881"
-                        [value]="coinSearchTerm(row.fileName)"
-                        (input)="setCoinSearch(row.fileName, $any($event.target).value)"
-                      />
-                      @if (coinSearchResults(row.fileName).length > 0) {
-                        <ul class="search-results">
-                          @for (coin of coinSearchResults(row.fileName); track coin.id) {
-                            <li>
-                              <button type="button" class="link-button" (click)="reassignImageMatch(row.fileName, coin.id)">
-                                {{ coinNameById(coin.id) }}
-                              </button>
-                            </li>
-                          }
-                        </ul>
-                      } @else if (coinSearchTerm(row.fileName).length >= 2) {
-                        <p class="search-empty">No coin in the inventory matches that search.</p>
-                      }
-                    </div>
-                  }
-                </div>
+              <!-- Paged: see PAGE_SIZE in the component for why. -->
+              @for (row of visibleReviewMatches(); track row.fileName) {
+                <app-image-match-resolver
+                  [row]="row"
+                  [chips]="session.coins.chips(row)"
+                  [searchTerm]="session.coins.term(row.fileName)"
+                  [searchResults]="session.coins.results(row.fileName)"
+                  [selectedCoinLabel]="session.coins.nameById(row.selectedCoinId)"
+                  [thumbnailUrl]="session.thumbnailFor(row.fileName)"
+                  (searchChanged)="session.coins.setTerm(row.fileName, $event)"
+                  (candidateChosen)="session.chooseCandidate(row.fileName, $event)"
+                  (coinAssigned)="session.reassignImageMatch(row.fileName, $event)"
+                  (skipped)="session.skipImage(row.fileName)"
+                  (reset)="session.resetDecision(row.fileName)"
+                />
+              }
+              @if (visibleReviewMatches().length < session.reviewMatches().length) {
+                <button type="button" class="secondary" (click)="showMoreReview()">
+                  Show more ({{ session.reviewMatches().length - visibleReviewMatches().length | number }} left)
+                </button>
               }
             </div>
           </div>
         }
 
         <!-- ================= 3. NO MATCH ================= -->
-        @if (unmatchedImages().length > 0) {
+        @if (session.unmatchedImages().length > 0) {
           <div class="image-match-section">
-            <h3>No match found</h3>
+            <h3>No match found ({{ session.unmatchedImages().length | number }})</h3>
             <p class="section-hint">
-              Nothing in the filename could be tied to a coin (for example
-              <code>IMG_2024.jpg</code>). Search for the right coin or skip the image.
+              Nothing in the file name could be tied to a coin. This is where the
+              group shots (<code>Gold Coins.JPG</code>), the non-coin items
+              (stamps, bond coupons, albums) and the camera-default names
+              (<code>IM000025.JPG</code>) end up. Search for the right coin, or
+              leave them alone &mdash; they are not selected.
             </p>
             <div class="image-match-list">
-              @for (row of unmatchedImages(); track row.fileName) {
-                <div
-                  class="image-match-card image-match-card--unmatched image-match-card--stacked"
-                  [class.image-match-card--confirmed]="row.decision === 'confirmed'"
-                  [class.image-match-card--skipped]="row.decision === 'skipped'"
-                >
-                  <div class="match-head">
-                    @if (row.thumbnailUrl) {
-                      <img [src]="row.thumbnailUrl" alt="" class="match-thumb" />
-                    }
-                    <div class="match-info">
-                      <span class="match-filename">{{ row.fileName }}</span>
-                      <span class="parsed-chips">
-                        @for (chip of parsedChips(row); track chip) {
-                          <span class="parsed-chip">{{ chip }}</span>
-                        }
-                        @if (parsedChips(row).length === 0) {
-                          <span class="parsed-chip parsed-chip--empty">Nothing recognised in the filename</span>
-                        }
-                      </span>
-                      <span class="match-reason">{{ row.result.reason }}</span>
-                    </div>
-                    <div class="match-actions">
-                      @if (row.decision === 'skipped') {
-                        <span class="match-skipped-badge">Skipped</span>
-                        <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Undo</button>
-                      } @else {
-                        <button type="button" class="secondary small-button" (click)="skipImage(row.fileName)">Skip</button>
-                      }
-                    </div>
-                  </div>
-
-                  @if (row.decision === 'confirmed' && row.selectedCoinId) {
-                    <div class="match-selected">
-                      <span class="match-confirmed-badge">Will attach to</span>
-                      <span class="match-coin">{{ coinNameById(row.selectedCoinId) }}</span>
-                      <button type="button" class="secondary small-button" (click)="resetDecision(row.fileName)">Change</button>
-                    </div>
-                  } @else if (row.decision !== 'skipped') {
-                    <div class="candidate-search">
-                      <label class="candidate-search-label" [attr.for]="'search-none-' + row.fileName">
-                        Find the coin
-                      </label>
-                      <input
-                        type="text"
-                        [id]="'search-none-' + row.fileName"
-                        placeholder="Type part of a coin name, e.g. mercury dime"
-                        [value]="coinSearchTerm(row.fileName)"
-                        (input)="setCoinSearch(row.fileName, $any($event.target).value)"
-                      />
-                      @if (coinSearchResults(row.fileName).length > 0) {
-                        <ul class="search-results">
-                          @for (coin of coinSearchResults(row.fileName); track coin.id) {
-                            <li>
-                              <button type="button" class="link-button" (click)="reassignImageMatch(row.fileName, coin.id)">
-                                {{ coinNameById(coin.id) }}
-                              </button>
-                            </li>
-                          }
-                        </ul>
-                      } @else if (coinSearchTerm(row.fileName).length >= 2) {
-                        <p class="search-empty">No coin in the inventory matches that search.</p>
-                      }
-                    </div>
-                  }
-                </div>
+              <!-- Paged, like the bucket above: there can be hundreds of these. -->
+              @for (row of visibleUnmatchedImages(); track row.fileName) {
+                <app-image-match-resolver
+                  [row]="row"
+                  [chips]="session.coins.chips(row)"
+                  [searchTerm]="session.coins.term(row.fileName)"
+                  [searchResults]="session.coins.results(row.fileName)"
+                  [selectedCoinLabel]="session.coins.nameById(row.selectedCoinId)"
+                  [thumbnailUrl]="session.thumbnailFor(row.fileName)"
+                  (searchChanged)="session.coins.setTerm(row.fileName, $event)"
+                  (candidateChosen)="session.chooseCandidate(row.fileName, $event)"
+                  (coinAssigned)="session.reassignImageMatch(row.fileName, $event)"
+                  (skipped)="session.skipImage(row.fileName)"
+                  (reset)="session.resetDecision(row.fileName)"
+                />
+              }
+              @if (visibleUnmatchedImages().length < session.unmatchedImages().length) {
+                <button type="button" class="secondary" (click)="showMoreUnmatched()">
+                  Show more ({{ session.unmatchedImages().length - visibleUnmatchedImages().length | number }} left)
+                </button>
               }
             </div>
           </div>
         }
 
+        <!-- ================= CONFIRM ================= -->
         <div class="modal-actions">
-          <button type="button" class="secondary" (click)="close()">Cancel</button>
-          <button type="button" (click)="applyConfirmedMatches()" [disabled]="attachCount() === 0">
-            Attach {{ attachCount() }} image{{ attachCount() === 1 ? '' : 's' }}
+          <button type="button" class="secondary" (click)="close()" [disabled]="session.busy()">Cancel</button>
+          <button
+            type="button"
+            (click)="session.applyConfirmedMatches()"
+            [disabled]="session.attachCount() === 0 || session.busy()"
+          >
+            Save {{ session.attachCount() | number }} photo{{ session.attachCount() === 1 ? '' : 's' }}
           </button>
         </div>
       }

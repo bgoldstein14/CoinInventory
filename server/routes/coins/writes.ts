@@ -26,6 +26,36 @@
  * 2. PUT /:id builds its UPDATE statement from ONLY the keys actually present
  *    in the request body. A previous refactor wrote every column on every save
  *    and blanked out the user's data. Do not "simplify" that filter.
+ *
+ * ------------------------------------------------------------------
+ * `imagePaths` and the new SourcePath column — what was decided and why
+ * ------------------------------------------------------------------
+ * `imagePaths` is a historical misnomer: despite the name it holds the base64
+ * IMAGE DATA, not paths. Images now also have a `sourcePath` (where the
+ * original full-resolution file lives on the host machine), and the question
+ * was how to get that through this endpoint.
+ *
+ * DECISION: `imagePaths` stays a single array and is now POLYMORPHIC — each
+ * element may be either the bare base64 string it has always been, or an
+ * object `{ imageData, sourcePath }`. It is NOT split into a second parallel
+ * `imageSourcePaths` array.
+ *
+ * Why:
+ *   - Nothing breaks. A client that keeps sending strings behaves exactly as
+ *     before, which matters because three other pieces of work depend on this
+ *     request shape and the Angular client has not migrated yet.
+ *   - An image and its source path belong to the same thing, so they travel in
+ *     the same object. Two parallel arrays can fall out of alignment (different
+ *     lengths, a skipped empty entry shifting every path by one) and that
+ *     failure would silently attach the wrong path to the wrong photo —
+ *     precisely the kind of quiet data corruption this codebase has been bitten
+ *     by before.
+ *   - One replacement semantic stays one replacement semantic: sending
+ *     `imagePaths` still means "these are now the coin's images, in this
+ *     order", with no second key that could be present or absent independently.
+ *
+ * The per-element normalisation lives in image-payload.ts, and insertImages()
+ * in write-helpers.ts is the only place that consumes it.
  */
 
 import { Router, Request, Response } from 'express';

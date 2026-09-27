@@ -12,7 +12,7 @@
 @use 'styles/base' as *;
 @use 'styles/layout' as *;
 
-// ---- Connection status bar (fixed to the bottom of the window) ----
+// ---- Connection status bar (the last row of the shell, in normal flow) ----
 
 // The status bar is the last row of the root flex column, NOT a fixed
 // overlay.

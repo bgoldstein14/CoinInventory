@@ -22,7 +22,17 @@
           @for (imagePath of coin().imagePaths; track imagePath; let i = $index) {
             <div class="image-item">
               <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
-              <span>{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+              <div class="image-item__meta">
+                <span class="image-item__label">{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+                <!--
+                  Where the ORIGINAL full-size file lives. `imagePath` above is
+                  only the downscaled copy we store in the database; this is the
+                  real photo on disk, clickable when it is still there and shown
+                  greyed out (but still readable) when it is not. Renders nothing
+                  when no path was ever recorded.
+                -->
+                <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
+              </div>
               <button type="button" class="secondary small-button" (click)="images().removeCoinImage(imagePath)">Delete</button>
             </div>
           }

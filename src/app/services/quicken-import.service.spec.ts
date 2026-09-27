@@ -967,4 +967,248 @@ T100.00
     expect(result.importedRecords[0].denomination).toBe('½¢');
     expect(result.importedRecords[1].denomination).toBe('50¢');
   });
+
+  /* =========================================================================
+   * CERTIFICATION COMPANY  +  CAC STICKER
+   *
+   * The security names used below are copied (or lightly trimmed) from the
+   * collection's real Quicken export, so these tests describe the shapes the
+   * parser genuinely has to cope with -- not invented ones.
+   *
+   * Two things are being protected here:
+   *   1. Whole-token matching. "NGC" must be its own word, never a fragment of
+   *      a longer one.
+   *   2. The CAC vs CACG distinction. CAC is a green STICKER stuck on someone
+   *      else's slab; CACG is CAC's own GRADING SERVICE. They mean different
+   *      things and must never be confused for one another.
+   * ========================================================================= */
+  describe('certification company and CAC sticker', () => {
+    /**
+     * Wraps a security name in the smallest valid QIF transaction and returns
+     * the single parsed record. Keeps each assertion below to one line instead
+     * of ten lines of QIF boilerplate.
+     */
+    function parseSecurityName(securityName: string) {
+      const service = new QuickenImportService();
+      const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY${securityName}\nT100.00\n^\n`;
+      const result = service.parse(qif);
+      // Every fixture here carries 2+ main details, so it should be imported
+      // rather than diverted to the exceptions list.
+      expect(result.importedRecords).toHaveLength(1);
+      return result.importedRecords[0];
+    }
+
+    // --- Every company token, one at a time -------------------------------
+    // PCGS / NGC / ANACS / ICG are the four that actually occur in this
+    // collection's QIF; SEGS / CACG / NNC are supported because the user
+    // owns coins from them that are not yet in the export.
+    const companyCases: { name: string; expected: string }[] = [
+      { name: '1927 $20 - PCGS MS64',   expected: 'PCGS' },
+      { name: '1904 $20 - NGC MS63',    expected: 'NGC' },
+      { name: '1898-O $1 - ANACS MS65', expected: 'ANACS' },
+      { name: '1886 $1 - ICG MS64',     expected: 'ICG' },
+      { name: '1875 20¢ - SEGS XF40',   expected: 'SEGS' },
+      { name: '1875 20¢ - CACG MS65',   expected: 'CACG' },
+      { name: '1875 20¢ - NNC AU50',    expected: 'NNC' },
+    ];
+
+    for (const testCase of companyCases) {
+      it(`reads certCompany "${testCase.expected}" from "${testCase.name}"`, () => {
+        expect(parseSecurityName(testCase.name).certCompany).toBe(testCase.expected);
+      });
+    }
+
+    it('matches a company token written in lower case', () => {
+      // Quicken security names are hand-typed, so casing is not reliable.
+      // The stored value is always the canonical upper-case token.
+      expect(parseSecurityName('1927 $20 - pcgs MS64').certCompany).toBe('PCGS');
+    });
+
+    it('matches a company token separated by a hyphen or a slash, not just a space', () => {
+      // Both of these appear verbatim in the real export.
+      expect(parseSecurityName('1908 $20-PCGS MS63').certCompany).toBe('PCGS');
+      expect(parseSecurityName('1838 Reeded 50¢-XF (CLEANED/PCGS)').certCompany).toBe('PCGS');
+    });
+
+    it('does not match NGC inside a longer word', () => {
+      // The whole-token rule's whole reason for existing: a substring search
+      // would have found "NGC" in the middle of "RINGCASE" and wrongly
+      // credited the coin to NGC.
+      const coin = parseSecurityName('1921 Morgan Dollar RINGCASE MS63');
+      expect(coin.certCompany).toBe('');
+    });
+
+    it('leaves certCompany empty and hasCacSticker false when the name names neither', () => {
+      const coin = parseSecurityName('1921 Morgan Dollar MS63');
+      expect(coin.certCompany).toBe('');
+      // Explicitly false, never undefined -- the database column is
+      // BIT NOT NULL and the UI binds a checkbox to it.
+      expect(coin.hasCacSticker).toBe(false);
+      expect(coin.hasCacSticker).not.toBeUndefined();
+    });
+
+    // --- The grade must survive an adjacent company token -----------------
+    // A grade almost always sits immediately after the company, so this is
+    // where a careless implementation (one that stripped the company out of
+    // the string, say) would eat part of the grade.
+    it('does not corrupt a grade that sits right after the company', () => {
+      expect(parseSecurityName('1927 $20 - PCGS MS64').grade).toBe('MS64');
+      expect(parseSecurityName('1875 20¢ - ANACS VG8').grade).toBe('VG8');
+      expect(parseSecurityName('1876 20¢ - PCGS/CAC XF45').grade).toBe('XF45');
+      // The designation is now captured too (see the designation tests below),
+      // and the separator is normalised away.
+      expect(parseSecurityName('1982 Israel 5 Shilling - ANACS PF69 DCAM').grade).toBe('PF69DCAM');
+    });
+
+    // --- Grade designations ------------------------------------------------
+    // Proof and copper coins are graded with a designation suffix, and these
+    // used to parse as an EMPTY grade. The old expression ended in `\b`
+    // straight after the digits, and in "PF65RB" there is no word boundary
+    // between "5" and "R", so the whole match failed and the grade was lost.
+    // The collection is full of these, so this silently discarded the grade
+    // for a large share of it.
+    it('captures numeric grades that carry a designation suffix', () => {
+      const cases: [string, string][] = [
+        ['1870 1¢ - NGC PF65RB', 'PF65RB'],            // red-brown
+        ['1867 3CS - NGC PF64Cameo', 'PF64CAMEO'],     // cameo, no separator
+        ['1867 3CS - NGC PF64 Cameo', 'PF64CAMEO'],    // cameo, spaced
+        ['1884 3CN - PCGS PF65CAM', 'PF65CAM'],
+        // "Israel" alone is not a denomination, so this fixture needs the
+        // unit spelled out to clear the 2-of-3 completeness rule the helper
+        // asserts on.
+        ['1982 Israel 5 Shilling - ANACS PF69DCAM', 'PF69DCAM'],  // deep cameo
+        ['1886 $1 - ICG MS64DMPL', 'MS64DMPL'],        // deep mirror prooflike
+        ['1938 5¢ - PCGS MS70-FS', 'MS70FS'],          // full steps
+      ];
+      for (const [name, expected] of cases) {
+        expect(parseSecurityName(name).grade, name).toBe(expected);
+      }
+    });
+
+    it('keeps the plus modifier on a grade', () => {
+      // "+" is not a word character, so the old `\b`-terminated expression
+      // dropped it. These must not regress to a bare numeric grade.
+      expect(parseSecurityName('1870 $1 - PCGS/CAC PF62+').grade).toBe('PF62+');
+      expect(parseSecurityName('1927 $20 - PCGS MS64+').grade).toBe('MS64+');
+    });
+
+    it('still parses plain grades exactly as before', () => {
+      // The fallback pass must keep every previously working form working.
+      expect(parseSecurityName('1906-S $5 - XF').grade).toBe('XF');
+      expect(parseSecurityName('1871 3CN - AU53').grade).toBe('AU53');
+      expect(parseSecurityName('1875 20¢ - VG8').grade).toBe('VG8');
+      expect(parseSecurityName('1852 3CS - CH+AU').grade).toBe('CH+AU');
+      expect(parseSecurityName('1873 3CN - VF/EF').grade).toBe('VF/EF');
+    });
+
+    it('does not invent a designation from surrounding words', () => {
+      // "(CLEANED)" and similar trailing text must not be absorbed into the
+      // grade, and must not prevent the grade from being found.
+      expect(parseSecurityName('1852 3CS ANACS AU53 (CLEANED)').grade).toBe('AU53');
+      expect(parseSecurityName('1838 Reeded 50¢-XF (CLEANED/PCGS)').grade).toBe('XF');
+    });
+
+    it('extracts exactly the same grade with or without a company token present', () => {
+      // A behaviour-independent guard: whatever the grade regex makes of
+      // these suffixes, adding the company in front must not change it.
+      // (Some of these grades -- "PF65RB", "PF64Cameo" -- the grade regex
+      // does not recognise at all today. That is a pre-existing limitation
+      // unrelated to this change; the point of the test is that the company
+      // detection neither helps nor hurts.)
+      const pairs: { withCompany: string; without: string }[] = [
+        { withCompany: '1870 1¢ - NGC PF65RB',    without: '1870 1¢ - PF65RB' },
+        { withCompany: '1867 3CS - NGC PF64Cameo', without: '1867 3CS - PF64Cameo' },
+        { withCompany: '1884 3CN - PCGS PF65CAM',  without: '1884 3CN - PF65CAM' },
+      ];
+
+      for (const pair of pairs) {
+        expect(parseSecurityName(pair.withCompany).grade)
+          .toBe(parseSecurityName(pair.without).grade);
+      }
+    });
+
+    // --- CAC sticker ------------------------------------------------------
+    // "PCGS/CAC" and "NGC/CAC" are by far the most common forms in the real
+    // export; the rest are spellings the user has used elsewhere.
+    const cacCases = [
+      '1909 S-VDB 1¢ - PCGS/CAC AU58',
+      '1835 $5 - NGC/CAC XF45',
+      '1875 20¢ - CAC XF40',
+      "1875 20¢ - PCGS XF40 CAC'd",
+      '1875 20¢ - PCGS XF40 CACd',
+      '1875 20¢ - PCGS XF40 w/CAC',
+      '1875 20¢ - PCGS XF40 +CAC',
+      '1875 20¢ - PCGS XF40 (CAC)',
+      '1875 20¢ - PCGS XF40 CAC Gold',
+      '1875 20¢ - PCGS XF40 Gold CAC',
+    ];
+
+    for (const name of cacCases) {
+      it(`sets hasCacSticker for "${name}"`, () => {
+        expect(parseSecurityName(name).hasCacSticker).toBe(true);
+      });
+    }
+
+    it('still reads the grading company when a CAC sticker is also present', () => {
+      // "PCGS/CAC" means "PCGS slab, CAC sticker" -- both facts, not one.
+      const coin = parseSecurityName('1909 S-VDB 1¢ - PCGS/CAC AU58');
+      expect(coin.certCompany).toBe('PCGS');
+      expect(coin.hasCacSticker).toBe(true);
+      expect(coin.grade).toBe('AU58');
+    });
+
+    it('treats CACG as the grading company and NOT as a CAC sticker', () => {
+      // THE trap this feature has to avoid. CACG is CAC's grading service;
+      // a CACG slab is not a CAC-stickered slab.
+      const coin = parseSecurityName('1875 20¢ - CACG MS65');
+      expect(coin.certCompany).toBe('CACG');
+      expect(coin.hasCacSticker).toBe(false);
+    });
+
+    it('sets both fields when a CACG coin also carries a CAC sticker', () => {
+      // Belt and braces: the two rules are independent, so an explicit CAC
+      // token still registers even next to CACG.
+      const coin = parseSecurityName('1875 20¢ - CACG MS65 (CAC)');
+      expect(coin.certCompany).toBe('CACG');
+      expect(coin.hasCacSticker).toBe(true);
+    });
+
+    it('does not mistake Quicken\'s "W/C" (with cents) shorthand for a CAC sticker', () => {
+      // Real name from the export: "1883 5¢ W/C-NGC PF65" means the 1883
+      // Liberty nickel WITH the word CENTS. It is not a CAC coin.
+      const coin = parseSecurityName('1883 5¢ W/C-NGC PF65');
+      expect(coin.hasCacSticker).toBe(false);
+      expect(coin.certCompany).toBe('NGC');
+    });
+
+    it('does not let a slab label alone satisfy the 2-of-3 main-detail rule', () => {
+      // Cert company and CAC are NOT main details. A row describing only the
+      // slab still has to be surfaced as an exception, exactly as before.
+      const service = new QuickenImportService();
+      const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY1943 PCGS/CAC MS65\nT100.00\n^\n`;
+
+      const result = service.parse(qif);
+
+      expect(result.importedRecords).toHaveLength(0);
+      expect(result.rejectedRecords).toHaveLength(1);
+      expect(result.rejectedRecords[0].missing).toContain('Denomination');
+      // The fields were still parsed -- they just do not count toward the rule.
+      expect(result.rejectedRecords[0].record.certCompany).toBe('PCGS');
+      expect(result.rejectedRecords[0].record.hasCacSticker).toBe(true);
+    });
+
+    it('carries both new fields through a full multi-coin parse', () => {
+      const service = new QuickenImportService();
+      const qif =
+        `!Type:Invst\nD01/15/2024\nNBuy\nY1927 $20 - PCGS MS64\nT2000.00\n^\n` +
+        `!Type:Invst\nD01/16/2024\nNBuy\nY1835 $5 - NGC/CAC XF45\nT1500.00\n^\n` +
+        `!Type:Invst\nD01/17/2024\nNBuy\nY1921 Morgan Dollar MS63\nT50.00\n^\n`;
+
+      const result = service.parse(qif);
+
+      expect(result.importedRecords).toHaveLength(3);
+      expect(result.importedRecords.map(r => r.certCompany)).toEqual(['PCGS', 'NGC', '']);
+      expect(result.importedRecords.map(r => r.hasCacSticker)).toEqual([false, true, false]);
+    });
+  });
 });

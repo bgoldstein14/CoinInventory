@@ -53,8 +53,16 @@ export function tokenize(value: string): string[] {
  * Very light plural stripping so "dollars" == "dollar" and "cents" == "cent".
  * Only applied to words longer than 3 characters that do not end in "ss",
  * so mint marks ("s") and shorthand ("ms") survive untouched.
+ *
+ * ACRONYM EXCEPTION: the grading services are not plurals. Without this guard
+ * "pcgs" became "pcg", "anacs" became "anac" and "segs" became "seg" -- none
+ * of which are in CERT_COMPANIES, so the company went unrecognised AND the
+ * mangled leftover survived as fake "coin type" evidence, making any two
+ * PCGS-graded coins look slightly alike. Real filenames hit this constantly:
+ * "1870 $1 - PCGS PF62CAM- Obverse.jpg".
  */
 export function singularize(token: string): string {
+  if (CERT_COMPANIES.has(token)) return token;
   if (token.length > 3 && token.endsWith('s') && !token.endsWith('ss')) {
     return token.slice(0, -1);
   }

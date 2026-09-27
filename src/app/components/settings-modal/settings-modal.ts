@@ -88,12 +88,24 @@ export class SettingsModal {
       isActive: true
     })));
 
+    // MERGE, don't replace. StorageKeys.AppSettings is a single shared object
+    // and this modal is not its only writer — the batch image import saves the
+    // photo base folder into it too (see
+    // services/image-import/import-base-folder.ts). Writing a freshly built
+    // object here would silently delete that folder, so the stored value is
+    // read back and only the fields this screen owns are overwritten.
+    void this.saveAppSettings();
+    this.closed.emit();
+  }
+
+  /** Read-modify-write of the shared preferences object. See saveSettings(). */
+  private async saveAppSettings(): Promise<void> {
+    const existing = await this.storageService.get<AppSettings>(StorageKeys.AppSettings);
     const settings: AppSettings = {
+      ...(existing ?? {}),
       showTransactionsInDetails: this.showTransactionsInDetails()
     };
-
-    this.storageService.set(StorageKeys.AppSettings, settings);
-    this.closed.emit();
+    await this.storageService.set(StorageKeys.AppSettings, settings);
   }
 
   // ===================== Categories =====================

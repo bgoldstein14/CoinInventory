@@ -1,0 +1,73 @@
+<!--
+  One coin's proposed photos.
+
+  The header is always rendered; the thumbnail grid only when `expanded()` is
+  true, because each <img> pulls a multi-megabyte JPEG off the share.
+-->
+<div class="coin-group" [class.coin-group--empty]="group().selectedCount === 0">
+
+  <!-- ---------- Header: coin, counts, expand toggle ---------- -->
+  <button
+    type="button"
+    class="coin-group-header"
+    (click)="expandToggled.emit(group().coinId)"
+    [attr.aria-expanded]="expanded()"
+  >
+    <span class="coin-group-caret">{{ expanded() ? '▾' : '▸' }}</span>
+    <span class="coin-group-name">{{ group().coinLabel }}</span>
+    <span class="coin-group-count">
+      {{ group().selectedCount }} of {{ group().rows.length }} photo{{ group().rows.length === 1 ? '' : 's' }} selected
+    </span>
+  </button>
+
+  <!-- ---------- Bulk tick-box controls for THIS coin ----------
+       Shown whether or not the group is expanded: the whole point is that the
+       user can thin out a 10-photo coin without ever opening it. -->
+  <div class="coin-group-bulk">
+    <button type="button" class="secondary small-button" (click)="bulkAction.emit('keep-obverse-reverse')">
+      Keep only Obverse + Reverse
+    </button>
+    @if (hasRetakes()) {
+      <button type="button" class="secondary small-button" (click)="bulkAction.emit('deselect-retakes')">
+        Deselect retakes
+      </button>
+    }
+    @if (hasLabels()) {
+      <button type="button" class="secondary small-button" (click)="bulkAction.emit('deselect-labels')">
+        Deselect Label shots
+      </button>
+    }
+    <button type="button" class="secondary small-button" (click)="bulkAction.emit('select-all')">All</button>
+    <button type="button" class="secondary small-button" (click)="bulkAction.emit('deselect-all')">None</button>
+  </div>
+
+  <!-- ---------- Thumbnails, grouped by side ---------- -->
+  @if (expanded()) {
+    @for (section of sections(); track section.side) {
+      <div class="coin-group-section">
+        <span class="coin-group-section-label">{{ section.label }}</span>
+        <div class="coin-group-thumbs">
+          @for (row of section.rows; track row.fileName) {
+            <label class="photo-tile" [class.photo-tile--off]="!row.selected">
+              <input
+                type="checkbox"
+                [checked]="row.selected"
+                (change)="rowToggled.emit(row.fileName)"
+                [attr.aria-label]="'Include ' + row.fileName"
+              />
+              @if (thumbnailFor(row)) {
+                <!-- loading="lazy" so a long list only decodes what is visible. -->
+                <img [src]="thumbnailFor(row)" alt="" class="photo-tile-img" loading="lazy" />
+              } @else {
+                <span class="photo-tile-img photo-tile-img--placeholder">No preview</span>
+              }
+              <span class="photo-tile-caption">{{ caption(row) }}</span>
+              <span class="photo-tile-file" [title]="row.fileName">{{ row.fileName }}</span>
+              <span class="photo-tile-size">{{ fileSize(row) }}</span>
+            </label>
+          }
+        </div>
+      </div>
+    }
+  }
+</div>

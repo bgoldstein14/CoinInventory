@@ -7,14 +7,18 @@
  *
  *   reads.ts   GET  /            GET    /:id
  *   writes.ts  POST /            PUT    /:id          DELETE /:id
- *   images.ts  POST /:id/images  DELETE /:id/images/:imageId
+ *   images.ts  GET  /:id/images  POST   /:id/images   DELETE /:id/images/:imageId
+ *
+ * The list query that GET / uses lives in list-query.ts (imported by reads.ts)
+ * rather than being a router of its own — it is SQL and row assembly, not
+ * routing.
  *
  * The mount ORDER below deliberately matches the order the handlers were
  * declared in when they all lived in one file. Express matches routes in
  * registration order, and although these particular patterns do not overlap
- * (`/:id` is one path segment, `/:id/images` is two), keeping the order
- * identical means this reorganisation cannot possibly change which handler
- * answers a given request.
+ * (`/:id` is one path segment, `/:id/images` is two — so reads.ts's `GET /:id`
+ * can never swallow `GET /:id/images`), keeping the order identical means this
+ * reorganisation cannot possibly change which handler answers a given request.
  */
 
 import { Router } from 'express';

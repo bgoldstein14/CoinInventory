@@ -50,13 +50,26 @@ import { matchOneImage } from './image-matching/match-decider';
  *   matching-thresholds.ts -- every tuning number and why it has that value.
  *   reference-tables.ts    -- the coin dictionaries: denominations, mints,
  *                             stop words, camera prefixes, grading services.
+ *   filename-vocabulary.ts -- the NOISE dictionaries: side words, photo
+ *                             qualifiers, grade words, non-coin words.
  *   text-tokens.ts         -- shared token plumbing (tokenize, sequence
  *                             search, small string helpers).
  *   coin-signature.ts      -- stage 1 for coin RECORDS, plus the `Signature`
  *                             shape both sides are reduced to.
- *   filename-parser.ts     -- stage 1 for FILENAMES (the paranoid half).
+ *   filename-parser.ts     -- stage 1 for FILENAMES (the paranoid half); it
+ *                             orchestrates the six readers below.
+ *   year-mint-parser.ts    -- "1875-CC", "1875CC", "1906-S" (and refusing
+ *                             "1873 - CLOSED").
+ *   denomination-units.ts  -- "$20", "50<cent>", "20-cent": numbers that
+ *                             carry a UNIT. Read the header; it explains the
+ *                             single most important parsing rule here.
+ *   grade-parser.ts        -- "Choice VF", "PF64Cameo", "XF-AU", "VF+".
+ *   photo-markers.ts       -- "- Obverse 2", "- Photo", "- Small".
+ *   catalog-refs.ts        -- ancients: "Sear 6819", "RIC 34", "67-68 CE".
+ *   non-coin-detector.ts   -- "Gold Coins", "Stamp", "Type Set", "Coin_026".
  *   match-scorer.ts        -- stage 2, the 0..1 score for one pair.
- *   match-decider.ts       -- stage 3, the three safety gates.
+ *   match-decider.ts       -- stage 3, the three safety gates (plus the
+ *                             non-coin veto that runs before them).
  *
  * They export plain functions rather than classes, so this service stays
  * stateless and can still be built with a bare `new ImageMatchingService()`

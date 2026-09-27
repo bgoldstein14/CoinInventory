@@ -27,6 +27,22 @@ export const DB_BINDINGS = {
   imageId: sql.Int,                   // CoinImages.ImageId    INT IDENTITY
   sortOrder: sql.Int,                 // CoinImages.SortOrder  INT
 
+  /**
+   * CoinImages.SourcePath  NVARCHAR(400) NULL
+   *
+   * The absolute path of the ORIGINAL full-resolution file on the machine that
+   * hosts the app. ImageData holds a downscaled base64 copy for display; this
+   * records where the real photo lives, so the UI can link to it (via
+   * GET /api/images/file) and can grey the link out when the file has moved.
+   *
+   * 400 characters is comfortably above Windows' traditional 260-character
+   * MAX_PATH. As everywhere in this file, the binding length must match the
+   * column exactly: shorter silently truncates, longer makes SQL Server raise
+   * error 8152. A path longer than 400 therefore surfaces as an HTTP 400 via
+   * classifyDbError() rather than being quietly cut in half.
+   */
+  imageSourcePath: sql.NVarChar(400),
+
   // ----- CoinTags -----------------------------------------------------
   tag: sql.NVarChar(100),             // CoinTags.Tag          NVARCHAR(100)
 

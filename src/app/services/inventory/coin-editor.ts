@@ -5,6 +5,7 @@ import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
 import { CoinChangeTracker, valuesEqual } from './coin-change-tracker';
 import { CoinDraftRegistry } from './coin-draft-registry';
+import { imageSourcePaths } from '../image-source-paths';
 import { firstValueFrom } from 'rxjs';
 
 /* ===========================================================================
@@ -188,7 +189,10 @@ export class CoinEditor {
 
     this.drafts.markCreating(coinId);
 
-    firstValueFrom(this.apiService.createCoin(record))
+    // `withSourcePaths` keeps any known original-file path on the images. For a
+    // brand new coin there usually is none, but the create path funnels through
+    // the same helper so the two writes can never disagree.
+    firstValueFrom(this.apiService.createCoin(this.withSourcePaths(record)))
       .then(() => this.onDraftCreated(coinId, record))
       .catch((error) => this.onDraftCreateFailed(coinId, error));
   }
@@ -311,9 +315,49 @@ export class CoinEditor {
 
   /** Send a partial-update PUT and wire up the success/failure bookkeeping. */
   private sendCoinUpdate(coinId: string, payload: Partial<CoinRecord>): void {
-    firstValueFrom(this.apiService.updateCoin(coinId, payload))
+    firstValueFrom(this.apiService.updateCoin(coinId, this.withSourcePaths(payload)))
       .then(() => this.onCoinUpdateSaved(coinId, payload))
       .catch((error) => this.onCoinUpdateFailed(coinId, error));
+  }
+
+  /**
+   * Attach each image's ORIGINAL FILE PATH to an outgoing `imagePaths` array.
+   *
+   * WHY THIS EXISTS — and why it is a fix, not a feature
+   * ----------------------------------------------------
+   * `PUT /api/coins/:id` REPLACES a coin's image set: it deletes the rows and
+   * re-inserts whatever `imagePaths` contains. The backend accepts two forms
+   * for each entry (see server/routes/coins/image-payload.ts) — a bare base64
+   * string, which stores `SourcePath NULL`, or `{ imageData, sourcePath }`.
+   *
+   * The app keeps `imagePaths` as plain strings, because that array is bound
+   * straight to `<img [src]>` in several components. So without this step,
+   * every operation that sends the array — re-ordering a photo, deleting one,
+   * the batch import appending more — would rewrite every OTHER image on the
+   * coin as a bare string and silently erase its recorded path. Doing the
+   * conversion here, in the single place all of those writes funnel through,
+   * means a path survives all of them once it is known.
+   *
+   * ONLY the `imagePaths` key is ever touched. The payload still carries
+   * exactly the fields the change tracker marked dirty and nothing else — the
+   * partial-update guarantee is about WHICH fields are sent, and that is
+   * unchanged here.
+   *
+   * When no path is known for any of the images, the payload is returned
+   * completely untouched, so the plain-string form the server has always
+   * received stays the normal case.
+   */
+  private withSourcePaths(payload: Partial<CoinRecord>): Partial<CoinRecord> {
+    const imagePaths = payload.imagePaths;
+    if (!Array.isArray(imagePaths) || imagePaths.length === 0) return payload;
+    if (!imageSourcePaths.hasAnyPathFor(imagePaths)) return payload;
+
+    // The cast is the one place the two shapes meet. `CoinRecord.imagePaths` is
+    // `string[]` for the app's own use; the wire format is deliberately wider.
+    return {
+      ...payload,
+      imagePaths: imageSourcePaths.enrich(imagePaths) as unknown as string[]
+    };
   }
 
   /** The server accepted the change: promote it into the confirmed snapshot. */

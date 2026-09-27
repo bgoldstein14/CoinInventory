@@ -6,11 +6,15 @@
  *
  * Route modules:
  *   routes/health.ts   — GET /api/health, the launcher's readiness probe
+ *   routes/app-info.ts — GET /api/app-info, where the app itself is installed
  *   routes/coins/      — Coin CRUD + image management (mounted at /api/coins)
  *   routes/lookups/    — Categories, Metal Contents, Coin Sets, Denominations,
  *                        Mint Marks (mounted at /api)
  *   routes/data/       — Transactions, Spot Prices, Settings, Frontend Log
  *                        (mounted at /api)
+ *   routes/images/     — Serving / existence-checking the ORIGINAL image files
+ *                        on the host's disk (mounted at /api/images)
+ *   routes/error-handler.ts — the app-wide Express error handler
  *
  * Database helpers live in the db/ folder (getPool, withDb, rowToCoin,
  * formatDate, COIN_FIELDS, DB_BINDINGS...). Start with db/index.ts — its
@@ -18,16 +22,19 @@
  */
 
 import 'dotenv/config';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
-import { logInfo, logError } from './logger';
+import { logInfo } from './logger';
 import { installProcessSafetyNet } from './process-safety';
 
 import healthRouter from './routes/health';
+import appInfoRouter from './routes/app-info';
 import coinsRouter from './routes/coins';
 import lookupsRouter from './routes/lookups';
 import dataRouter from './routes/data';
+import imagesRouter from './routes/images';
+import { globalErrorHandler } from './routes/error-handler';
 
 // Re-export getPool so tests and other consumers can still import from './server'
 export { getPool } from './db';
@@ -68,9 +75,19 @@ app.use('/api', (req, _res, next) => {
 // Health first, so the launcher's readiness probe is registered before
 // anything else — same order as when it was declared inline here.
 app.use('/api', healthRouter);
+// /api/app-info tells the browser where the app is installed on THIS machine.
+// Like /api/images below it never touches the database — it answers a question
+// about the filesystem — so it keeps working when SQL Server does not. See
+// routes/app-info.ts for why the image-import screen needs it.
+app.use('/api', appInfoRouter);
 app.use('/api/coins', coinsRouter);
 app.use('/api', lookupsRouter);
 app.use('/api', dataRouter);
+// /api/images serves the ORIGINAL full-resolution files off the host's disk.
+// It is the only router that never touches the database — see
+// routes/images/index.ts, and routes/images/file.ts for why the browser cannot
+// just open a file:// link itself.
+app.use('/api/images', imagesRouter);
 
 // ============================================================
 // Angular SPA fallback — must be LAST route
@@ -82,11 +99,11 @@ app.get('*', (_req: Request, res: Response) => {
 // ============================================================
 // Global error handler
 // ============================================================
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  logError('Unhandled error', err);
-  if (res.headersSent) return;
-  res.status(500).json({ error: 'Internal server error' });
-});
+// Lives in routes/error-handler.ts. It honours the `status` a middleware error
+// already carries instead of flattening everything to 500 — most importantly
+// body-parser's 413 "payload too large", which used to be reported as a generic
+// server error during batch image imports.
+app.use(globalErrorHandler);
 
 // ============================================================
 // Export for testing

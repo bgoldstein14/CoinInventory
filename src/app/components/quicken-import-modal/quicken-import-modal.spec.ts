@@ -66,6 +66,52 @@ describe('QuickenImportModal', () => {
     expect((emitted[0] as { category: string }).category).toBe('');
   });
 
+  /*
+   * END-TO-END: the certification company and the CAC sticker have to survive
+   * the whole trip -- security name -> parsed attributes -> QuickenImportRecord
+   * -> CoinRecord -> the object handed to ApiService.createCoin().
+   *
+   * `importQuicken()` is the last hop we can observe from a unit test: the
+   * CoinRecord it emits is exactly the body that gets POSTed to
+   * /api/coins (see coin-collection.ts addCoins(), which passes each coin
+   * straight to ApiService.createCoin()). So asserting on the emitted record
+   * is asserting on the request payload.
+   */
+  it('carries certCompany and hasCacSticker onto the imported CoinRecord', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    // "PCGS/CAC" = PCGS slab carrying a green CAC sticker -- two separate
+    // facts about the same coin.
+    modal['quickenText'].set(
+      `!Type:Invst\nD2024-02-01\nNBuy\nY1909 S-VDB 1¢ - PCGS/CAC AU58\nT1150.00\n^`
+    );
+    modal['importQuicken']();
+
+    expect(emitted).toHaveLength(1);
+    const coin = emitted[0] as { certCompany: string; hasCacSticker: boolean; grade: string };
+    expect(coin.certCompany).toBe('PCGS');
+    expect(coin.hasCacSticker).toBe(true);
+    // And the grade is untouched by the company/CAC detection.
+    expect(coin.grade).toBe('AU58');
+  });
+
+  it('emits hasCacSticker as false (never undefined) for a coin with no sticker', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nY1921 Morgan Dollar MS63\nT50.00\n^`);
+    modal['importQuicken']();
+
+    const coin = emitted[0] as { certCompany: string; hasCacSticker: boolean };
+    expect(coin.certCompany).toBe('');
+    // The backend binds this to a BIT NOT NULL column, so it must be a real
+    // boolean rather than a missing property.
+    expect(coin.hasCacSticker).toBe(false);
+  });
+
   it('selects and clears all accounts in one action', () => {
     const { modal } = createModal();
     modal['quickenAccounts'].set(['Checking', 'Savings', 'Brokerage']);
@@ -95,10 +141,12 @@ describe('QuickenImportModal', () => {
     modal['importedRecords'].set([
       { id: 'r1', denomination: 'Dime', account: 'Checking', coinType: 'Mercury',
         purchasePrice: 10, currentValue: 12, country: 'US', year: '1945', grade: 'VF-30',
-        mintMark: 'S', variety: '', notes: '', source: 'quicken' },
+        mintMark: 'S', variety: '', notes: '', source: 'quicken',
+        certCompany: '', hasCacSticker: false },
       { id: 'r2', denomination: '10 Dollar', account: 'Savings', coinType: 'Liberty Eagle',
         purchasePrice: 1800, currentValue: 1900, country: 'US', year: '1907', grade: 'MS-63',
-        mintMark: '', variety: '', notes: '', source: 'quicken' }
+        mintMark: '', variety: '', notes: '', source: 'quicken',
+        certCompany: 'PCGS', hasCacSticker: true }
     ]);
 
     const grouped = modal['groupedImportedRecords']();

@@ -38,6 +38,37 @@ import { round } from './text-tokens';
 export function matchOneImage(imagePath: string, coinSignatures: CoinSignature[]): ImageMatchResult {
   const parsed = parseFilename(imagePath);
 
+  /* ---- GATE ZERO: is this even a photo of one coin? --------------------
+   * A hard veto, checked before anything is scored. Group shots, non-coin
+   * items, containers and camera default names all land here:
+   *
+   *     Gold Coins.JPG                     a group shot
+   *     20th Century Type Set.JPG          a group shot
+   *     Stamp - 11 - 3 cent.jpg            a STAMP that contains "3 cent"
+   *     3-cent paper - Large.jpg           fractional currency, not a coin
+   *     Sovereign Proof Boxes.jpg          the box, not a coin
+   *     Coin_026.JPG                       a camera default name
+   *
+   * The first two traps are why this is a veto and not a penalty: both of
+   * those filenames carry a perfectly valid-looking denomination and would
+   * otherwise score respectably against a real Three Cent coin. Filing a
+   * stamp photo under a coin is precisely the silent mis-attachment this
+   * whole service exists to prevent, so we return 'none' and offer NO
+   * candidates -- there is nothing here to confirm.
+   */
+  if (parsed.isNonCoin) {
+    return {
+      imagePath,
+      status: 'none',
+      matchedRecordId: null,
+      confidence: 0,
+      reason: `No inventory record matched the image filename: it does not appear to show a single coin. ${parsed.nonCoinReason ?? ''}`.trim(),
+      candidates: [],
+      parsed,
+      runnerUpGap: 0
+    };
+  }
+
   // Nothing usable in the name (e.g. "IMG_2024.jpg"): do not even rank.
   // Ranking here would just surface noise and tempt the user to accept it.
   if (parsed.isEmpty || coinSignatures.length === 0) {

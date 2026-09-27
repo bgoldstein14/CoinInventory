@@ -179,6 +179,14 @@
                     <th>Denomination</th>
                     <th>Year</th>
                     <th>Grade</th>
+                    <!--
+                      Certification company ("PCGS", "NGC", ...) and the green
+                      CAC sticker, both parsed out of the Quicken security
+                      name. Shown here so the user can spot a bad parse on the
+                      preview screen instead of after the import.
+                    -->
+                    <th>Cert Co.</th>
+                    <th title="Green CAC sticker">CAC</th>
                     <th>Mint Mark</th>
                     <th>Variety</th>
                     <th>Value</th>
@@ -191,6 +199,19 @@
                       <td>{{ record.denomination || '—' }}</td>
                       <td>{{ record.year || '—' }}</td>
                       <td>{{ record.grade || '—' }}</td>
+                      <td>{{ record.certCompany || '—' }}</td>
+                      <!--
+                        A check mark only when the sticker was actually
+                        detected; an em dash otherwise, matching every other
+                        "nothing here" cell in this table.
+                      -->
+                      <td>
+                        @if (record.hasCacSticker) {
+                          <span class="cac-indicator" title="Green CAC sticker">&#10003;</span>
+                        } @else {
+                          —
+                        }
+                      </td>
                       <td>{{ record.mintMark || '—' }}</td>
                       <td>{{ record.variety || '—' }}</td>
                       <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>

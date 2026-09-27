@@ -1,11 +1,13 @@
 import { DecimalPipe } from '@angular/common';
-import { Component, inject, input, output } from '@angular/core';
+import { Component, computed, inject, input, output } from '@angular/core';
 import { CoinImagesStore } from '../../features/inventory/coin-images.store';
 import { cacGreenBeanIconPath } from '../../features/inventory/coin-icons';
+import { imageSourcePaths } from '../../services/image-source-paths';
 import { InventoryService } from '../../services/inventory.service';
 import { CoinRecord, TransactionRecord } from '../../types/coin.model';
 import { certBadgeLabel, formatDenominationDisplay, gradeBadgeClass } from '../../types/inventory-columns';
 import { CoinEditorForm } from '../coin-editor-form/coin-editor-form';
+import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link';
 
 /**
  * CoinDetailPanel — the sidebar that opens when you click "Details" on a row.
@@ -23,7 +25,7 @@ import { CoinEditorForm } from '../coin-editor-form/coin-editor-form';
  */
 @Component({
   selector: 'app-coin-detail-panel',
-  imports: [DecimalPipe, CoinEditorForm],
+  imports: [DecimalPipe, CoinEditorForm, CoinImagePathLink],
   templateUrl: './coin-detail-panel.html',
   styleUrl: './coin-detail-panel.scss'
 })
@@ -51,6 +53,25 @@ export class CoinDetailPanel {
 
   /** Exposed so the transaction form's template can coerce its text input. */
   protected readonly Number = Number;
+
+  /* ---------------------------------------------------------------------
+   * Original image files
+   * ------------------------------------------------------------------- */
+
+  /**
+   * Do we know where ANY of this coin's photos came from? Decides whether the
+   * quiet "no locations recorded" sentence is shown underneath the list.
+   *
+   * Reads the registry singleton DIRECTLY rather than through
+   * CoinImagePathsService. That is on purpose: this component is constructed in
+   * tests from a bare Injector that provides only InventoryService, so adding
+   * an injected dependency here would break them. The registry needs no
+   * injection at all (see services/image-source-paths.ts), and fetching is
+   * triggered by CoinImagePathLink, which Angular always builds properly.
+   */
+  protected readonly anyPathRecorded = computed(() =>
+    imageSourcePaths.hasAnyPathFor(this.coin().imagePaths)
+  );
 
   /**
    * Records a purchase / sale / trade / appraisal against the selected coin.

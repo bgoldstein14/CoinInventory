@@ -133,6 +133,56 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
     }
   }
 
+  /* ---- Certification company + grade ----------------------------------
+   * These two are scored as a PAIR, which is the one place in this file that
+   * departs from "one attribute, one verdict". The reason is real-world:
+   *
+   *   - "PCGS" alone is nearly worthless. Hundreds of coins in this
+   *     collection are PCGS-graded, so agreement is almost guaranteed and
+   *     tells you nothing about WHICH coin a photo shows.
+   *   - "MS63" alone is nearly worthless for the same reason -- dozens of
+   *     coins share any popular grade.
+   *   - "PCGS MS63" together is genuinely narrowing.
+   *
+   * So each contributes its (small) weight to the score independently, but
+   * they yield at most ONE strong attribute between them, and only when BOTH
+   * agree. A grade match on its own must never help clear the two-strong-
+   * attributes gate; that is what "grade alone is weak" means in practice.
+   *
+   * The usual rule still holds for each half: an attribute only enters the
+   * numerator or the denominator when BOTH sides have a value.
+   */
+  let certCompanyAgreed = false;
+  let gradeAgreed = false;
+
+  if (file.certCompanies.length > 0 && coin.certCompanies.length > 0) {
+    comparable += WEIGHTS.certCompany;
+    const hit = file.certCompanies.find(c => coin.certCompanies.includes(c));
+    if (hit) {
+      achieved += WEIGHTS.certCompany;
+      certCompanyAgreed = true;
+      agreed.push(`certification company ${hit.toUpperCase()} matches`);
+    } else {
+      disagreed.push(
+        `certification company ${file.certCompanies[0].toUpperCase()} differs from ${coin.certCompanies[0].toUpperCase()}`
+      );
+    }
+  }
+
+  if (file.grade && coin.grade) {
+    comparable += WEIGHTS.grade;
+    if (file.grade === coin.grade) {
+      achieved += WEIGHTS.grade;
+      gradeAgreed = true;
+      agreed.push(`grade ${file.grade.toUpperCase()} matches`);
+    } else {
+      disagreed.push(`grade ${file.grade.toUpperCase()} differs from ${coin.grade.toUpperCase()}`);
+    }
+  }
+
+  // One strong attribute for the PAIR, never one each.
+  if (certCompanyAgreed && gradeAgreed) strongAttributes++;
+
   // Nothing at all was comparable -> no evidence -> zero. Never a match.
   if (comparable === 0) {
     return {

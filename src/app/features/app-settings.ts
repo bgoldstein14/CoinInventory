@@ -11,4 +11,22 @@
 export interface AppSettings {
   /** When true, the coin detail panel shows the per-coin transaction history. */
   showTransactionsInDetails: boolean;
+
+  /**
+   * The folder the coin photos live in **on the machine hosting the app**,
+   * written the way that machine sees it — a local drive letter, for example
+   * `D:\Coin Pictures`. It is the server process that later opens these files,
+   * so a path that only resolves on someone's workstation is useless here: it
+   * saves cleanly and then reports every photo as missing.
+   *
+   * The batch image import needs it to rebuild each photo's ABSOLUTE path: a
+   * browser only ever hands us a path relative to the folder that was picked,
+   * never where that folder actually is. Remembering the answer means the user
+   * confirms it once rather than on every import.
+   *
+   * Optional because it has no value until the first import, and because
+   * settings objects saved by earlier versions of the app do not contain it.
+   * See services/image-import/import-base-folder.ts.
+   */
+  imageImportBaseFolder?: string;
 }

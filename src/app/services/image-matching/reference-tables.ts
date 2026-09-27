@@ -22,6 +22,8 @@
  *   ORDER MATTERS in DENOMINATION_RULES -- see the comment block above it.
  * =========================================================================== */
 
+import { PHOTO_NOISE_WORDS } from './filename-vocabulary';
+
 /* ---------------------------------------------------------------------------
  * DENOMINATION TABLE
  * ---------------------------------------------------------------------------
@@ -38,6 +40,14 @@
  *     in a filename -- they could be a price, a lot number, or part of a date.
  *     Digits only count when paired with a unit ("20 dollar") or written in
  *     the standard collector shorthand ("25c", "10c", "5c").
+ *
+ *     Read rule 2 carefully before adding anything: the rule is NOT "digits
+ *     are forbidden", it is "digits with NO UNIT ATTACHED are forbidden". A
+ *     number bound to a unit is one of the strongest signals in this
+ *     collection, which is why ['20','dollar'], ['50c'] and ['3cn'] are all
+ *     fine while ['20'], ['50'] and ['3'] would be bugs. The sign-and-hyphen
+ *     forms that tokenizing destroys ("$20", "50<cent sign>", "20-cent") are
+ *     handled one layer earlier, in denomination-units.ts.
  *
  * Eagles: Silver Eagle, Gold Eagle, Double Eagle ($20), Half Eagle ($5),
  * Quarter Eagle ($2.50) and the plain Eagle ($10) are FIVE DIFFERENT
@@ -68,6 +78,7 @@ export const DENOMINATION_RULES: readonly DenominationRule[] = [
 
   // --- dollars (specific dollar types before the generic one) ---
   { key: 'trade dollar', label: 'Trade Dollar', patterns: [['trade', 'dollar']] },
+  { key: 'three dollar', label: 'Three Dollar ($3)', patterns: [['three', 'dollar'], ['3', 'dollar']] },
   { key: 'half dollar', label: 'Half Dollar (50c)', patterns: [['half', 'dollar'], ['halfdollar'], ['50c'], ['fifty', 'cent']] },
 
   // --- minor silver / base metal ---
@@ -76,6 +87,30 @@ export const DENOMINATION_RULES: readonly DenominationRule[] = [
   { key: 'dime', label: 'Dime (10c)', patterns: [['dime'], ['10c']] },
   { key: 'twenty cent', label: 'Twenty Cent', patterns: [['twenty', 'cent'], ['20c']] },
   { key: 'nickel', label: 'Nickel (5c)', patterns: [['nickel'], ['5c'], ['five', 'cent']] },
+
+  /*
+   * THREE CENT: real filenames use the collector abbreviations "3CN" and
+   * "3CS" ("1865 3CN - Choice VF - Obverse - Photo.jpg"). Both survive
+   * tokenizing intact -- one token, three characters, so `singularize` leaves
+   * them alone -- so listing them here is all that is needed.
+   *
+   * They are separate KEYS from the generic 'three cent', with a consequence
+   * worth knowing: a filename saying "3CN" and a record saying only "Three
+   * Cent" DISAGREE and go to review rather than auto-matching. That is the
+   * cautious direction -- the nickel and the silver are different coins worth
+   * very different amounts. Both specific rules precede the generic one so
+   * the abbreviation always wins.
+   */
+  {
+    key: 'three cent nickel',
+    label: 'Three Cent Nickel (3CN)',
+    patterns: [['3cn'], ['three', 'cent', 'nickel'], ['nickel', 'three', 'cent']]
+  },
+  {
+    key: 'three cent silver',
+    label: 'Three Cent Silver (3CS)',
+    patterns: [['3cs'], ['three', 'cent', 'silver'], ['silver', 'three', 'cent'], ['trime']]
+  },
   { key: 'three cent', label: 'Three Cent', patterns: [['three', 'cent'], ['3c']] },
   { key: 'two cent', label: 'Two Cent', patterns: [['two', 'cent'], ['2c']] },
   { key: 'half cent', label: 'Half Cent', patterns: [['half', 'cent']] },
@@ -149,19 +184,65 @@ export const STOP_WORDS = new Set([
   // country noise
   'us', 'usa', 'united', 'states',
   // filler
-  'the', 'and', 'of', 'a', 'an'
+  'the', 'and', 'of', 'a', 'an',
+
+  /*
+   * Everything that describes the PHOTOGRAPH or the GRADE rather than the
+   * coin, pulled in from filename-vocabulary.ts: side words ("Obverse",
+   * "Label"), photo qualifiers ("Photo", "Orig", "Sharpened", "Small"),
+   * grade vocabulary ("VF", "Choice", "DCAM") and era markers ("BC", "CE").
+   *
+   * They are folded in HERE rather than filtered separately so that every
+   * consumer of `meaningfulTokens` -- the filename parser AND the coin-record
+   * parser -- drops them automatically and identically. If they survived,
+   * two unrelated coins would look similar merely because both filenames end
+   * in "- Obverse - Photo".
+   *
+   * Safe despite "Large Cent" and "Small Cent" being real denominations:
+   * denomination detection runs on the RAW token list before stop words are
+   * removed, so those rules still fire.
+   */
+  ...PHOTO_NOISE_WORDS
 ]);
 
 /** Camera / phone filename prefixes. A number right after one of these is a
  *  sequence number, NOT a year -- this is what stops "IMG_2024.jpg" from being
- *  read as a 2024 coin. */
+ *  read as a 2024 coin.
+ *
+ *  "im" is here because this collection's older camera produced "IM000025.JPG".
+ *
+ *  "coin" is deliberately NOT here even though "Coin_026.JPG" exists: "coin"
+ *  is an ordinary word that could legitimately precede a year ("Coin 1881
+ *  Morgan"), and rejecting that year would cost more than it saves. The
+ *  camera-default names are caught instead by non-coin-detector.ts, which
+ *  requires the WHOLE filename to be a prefix plus a number. */
 export const CAMERA_PREFIXES = new Set([
-  'img', 'image', 'dsc', 'dscn', 'dscf', 'dscd', 'pxl', 'p', 'photo', 'pic',
-  'scan', 'screenshot', 'mvimg', 'vid', 'gopr', 'pano', 'burst'
+  'img', 'image', 'im', 'dsc', 'dscn', 'dscf', 'dscd', 'pxl', 'p',
+  'photo', 'pic', 'pict', 'scan', 'screenshot', 'mvimg', 'vid', 'gopr',
+  'pano', 'burst'
 ]);
 
-/** Third-party grading services. Recognised but not used as coin-type words. */
-export const CERT_COMPANIES = new Set(['ngc', 'pcgs', 'anacs', 'icg', 'cac', 'segs', 'cacg']);
+/**
+ * Third-party grading services. Recognised but not used as coin-type words.
+ *
+ * On its own a cert company is WEAK evidence -- hundreds of coins in one
+ * collection are "PCGS". Paired with a matching grade it becomes strong; see
+ * the combination rule in match-scorer.ts.
+ */
+export const CERT_COMPANIES = new Set([
+  'ngc', 'pcgs', 'anacs', 'icg', 'cac', 'cacg', 'segs', 'nnc'
+]);
 
-/** Grade shorthand, e.g. ms63, au50, pf70, xf45, vf20, pr69dcam. */
-export const GRADE_PATTERN = /^(ms|pf|pr|sp|au|xf|ef|vf|vg|ag|fr|po|g|f)-?(\d{1,2})(dcam|cam|ucam|rd|rb|bn|fb|fs|fh|bl)?$/;
+/**
+ * Grade shorthand as a WHOLE TOKEN, e.g. ms63, au50, pf70, xf45, vf20,
+ * pf65rb, pf64cameo, pr69dcam.
+ *
+ * Used to keep grade tokens out of the coin-type evidence. The richer grade
+ * forms that tokenizing destroys -- "VF+", "XF-AU", "Choice VF" -- are read
+ * separately by grade-parser.ts, which works on the raw filename.
+ *
+ * The designation group is ordered LONGEST FIRST so "cameo" is never matched
+ * as "cam" with a stray "eo" left over.
+ */
+export const GRADE_PATTERN =
+  /^(ms|pf|pr|sp|au|xf|ef|vf|vg|ag|fr|po|g|f)-?(\d{1,2})(dcameo|cameo|dcam|ucam|cam|dpl|pl|rd|rb|bn|fb|fs|fh|bl|star)?$/;
