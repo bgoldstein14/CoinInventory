@@ -1,12 +1,33 @@
-<div class="modal-backdrop" (click)="closed.emit()">
+<!-- Every exit routes through close(), not closed.emit(), so that hand-typed
+     prices are saved exactly once however the user leaves: backdrop click,
+     the × button, or Done. See the class comment in spot-price-modal.ts. -->
+<div class="modal-backdrop" (click)="close()">
   <div class="modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <h2>Spot Prices</h2>
-      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
+      <!-- The old wording here said "coins with weight and metal content will
+           show melt values automatically", which was wrong twice over: melt
+           values did not appear at all (the grid column was a stub), and the
+           field it named was wrong. Melt is worked out from PM Weight (g) —
+           the weight of the PURE precious metal — NOT from the gross Weight
+           (g) field, which includes the alloy. A coin can have a gross
+           weight recorded and still show no melt value.
+
+           (That gross field was labelled "Weight (oz)" when this note was
+           written. It is grams now — see migrations/008-weight-to-grams.sql —
+           so the two fields no longer differ in unit, only in what they
+           measure. The distinction above is unchanged and still the point:
+           sharing a unit makes them easier to compare and no harder to mix
+           up.) -->
       <p class="hint-text">
-        Fetch live COMEX spot prices or enter manually. Coins with weight and metal content will show melt values automatically.
+        Fetch live COMEX spot prices or type them in. Any coin with a
+        <strong>PM Weight (g)</strong> and a <strong>Metal Content</strong> of gold,
+        silver, platinum or copper then shows a melt value in the grid and in its
+        details panel. Prices are saved, so they are still here next time you open
+        the app — they do not refresh on their own.
       </p>
       <div class="spot-fetch-bar">
         <button type="button" class="fetch-btn" (click)="fetchSpotPrices()" [disabled]="spotPriceFetching()">
@@ -16,16 +37,27 @@
             Fetch COMEX Prices
           }
         </button>
-        @if (spotPriceSource()) {
-          <span class="spot-source">{{ spotPriceSource() }}</span>
+        @if (savedSource()) {
+          <span class="spot-source">{{ savedSource() }}</span>
         }
-        @if (spotPriceTimestamp()) {
-          <span class="spot-timestamp">Updated: {{ spotPriceTimestamp() | date:'short' }}</span>
+        @if (savedAt()) {
+          <span class="spot-timestamp">Updated: {{ savedAt() | date:'short' }}</span>
         }
         @if (spotPriceError()) {
           <span class="spot-error">{{ spotPriceError() }}</span>
         }
       </div>
+
+      <!-- Tells the user WHICH problem they have. An empty price table and a
+           collection of base-metal coins both produce a grid full of "—", but
+           only one of them is fixed by pressing the button above. -->
+      @if (noPricesYet()) {
+        <p class="spot-empty-note">
+          No spot prices have been loaded yet, so every melt value currently reads
+          “—”. Press <strong>Fetch COMEX Prices</strong> above, or type prices in
+          below, and they will fill in straight away.
+        </p>
+      }
       <div class="spot-price-form">
         <label>
           <span>Gold ($/oz)</span>
@@ -45,7 +77,7 @@
         </label>
       </div>
       <div class="modal-actions">
-        <button type="button" (click)="closed.emit()">Done</button>
+        <button type="button" (click)="close()">Done</button>
       </div>
     </div>
   </div>

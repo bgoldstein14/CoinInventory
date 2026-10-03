@@ -1,17 +1,63 @@
 // Styles for the Settings dialog. Moved here from `app.scss`.
 @use '../../styles/controls' as *;
+@use '../../styles/modal' as *;
 
 // Not part of the original markup, and the dialog is position: fixed — keep
 // the host element out of the layout.
 :host { display: contents; }
 
-// NOTE (deliberate, not an oversight): this dialog uses the `.modal-backdrop`
-// / `.modal` / `.modal-header` class names, but `app.scss` never imported
-// `styles/_modal.scss`, so those classes have had no styling here for as long
-// as this markup has lived in app.html. That behaviour is preserved exactly by
-// this extraction. Adding `@use '../../styles/modal' as *;` above would give
-// the dialog the same chrome as the other modals — a one-line change, left out
-// on purpose so this refactor changes nothing visually.
+// ---------------------------------------------------------------------------
+// WHY THE MODAL PARTIAL IS IMPORTED ABOVE (it used to be deliberately absent)
+// ---------------------------------------------------------------------------
+// This dialog has always used the `.modal-backdrop` / `.modal` / `.modal-header`
+// class names, but nothing ever supplied their styles: the markup originally
+// lived in app.html, and `app.scss` never imported `styles/_modal.scss`. When
+// the dialog was extracted into this component the omission was carried across
+// intentionally, so that the refactor changed nothing visually. A comment here
+// recorded that and called the fix "a one-line change, left out on purpose".
+//
+// The consequence was not cosmetic. With no `.modal-backdrop` rule the dialog
+// had no fixed positioning, no dimmed overlay and no card chrome at all — it
+// rendered inline in the page, so there was nothing to tell the user they had
+// moved into a separate window. That is exactly what the owner reported. The
+// import is now in place, and the rules below build a deliberately emphatic
+// focused-window treatment on top of it.
+// ---------------------------------------------------------------------------
+
+// A darker overlay than the shared default (which is rgba(20, 14, 8, 0.5)).
+// The Settings dialog is the one modal that edits app-wide reference data
+// rather than a single coin, so pushing the page further back is warranted:
+// the contrast is what makes "you are somewhere else now" read at a glance.
+.modal-backdrop {
+  background: rgba(20, 14, 8, 0.62);
+}
+
+// The "meaningful border" the owner asked for.
+//
+// Three cues layered on purpose, because a border alone is easy to miss
+// against a light page:
+//   1. a solid 2px edge in the app's primary accent brown (the same colour as
+//      the primary button gradient's dark stop), so it reads as deliberate
+//      chrome rather than a stray outline;
+//   2. a soft outer glow in the same hue, which separates the card from the
+//      dimmed page without the muddiness of a larger drop shadow; and
+//   3. a deeper drop shadow than the shared default, lifting the card further
+//      off the page.
+.modal {
+  border: 2px solid #8e5b2d;
+  box-shadow:
+    0 0 0 6px rgba(142, 91, 45, 0.16),
+    0 26px 70px rgba(20, 10, 0, 0.34);
+}
+
+// An accent bar across the top of the header, tying the header to the border
+// and giving the dialog an unmistakable "title bar" edge. The radius is 2px
+// tighter than the shared `.modal-header` (18px) so the bar sits inside the
+// 2px border instead of poking through its rounded corners.
+.modal-header {
+  border-top: 4px solid #8e5b2d;
+  border-radius: 16px 16px 0 0;
+}
 
 // ---- Settings body ----
 
@@ -34,24 +80,238 @@
   gap: 12px;
 }
 
+// The `color` here was #ddd, a near-white grey. That dated from when this
+// markup lived in app.html with no modal chrome behind it; now that the dialog
+// is a white card it was light grey text on white, effectively invisible. Both
+// label colours are now the app's dark brown.
 .settings-list-grid label {
   display: flex;
   flex-direction: column;
   gap: 6px;
   font-size: 0.8rem;
-  color: #ddd;
-}
-
-.settings-list-grid textarea {
-  min-height: 110px;
-  resize: vertical;
+  color: #3b2a14;
 }
 
 .checkbox-label {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #ddd;
+  color: #3b2a14;
+}
+
+// ---- The "add one" row ----
+// Input and Add button side by side, the input taking whatever is left. It had
+// no rule at all, so the two stacked at full width and each list header took
+// three lines instead of one.
+.settings-inline-add {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+
+  input {
+    flex: 1;
+    min-width: 0;        // lets the input shrink inside the grid track
+    font-size: 0.78rem;
+    padding: 3px 7px;
+    border: 1px solid #d9c7a5;
+    border-radius: 7px;
+  }
+}
+
+// ---- The removable value chips ----
+//
+// These had NO styling whatsoever, so every value rendered as a full-size
+// default browser button on its own line. With five lists on screen that is
+// what the owner described as clogging up the screen.
+//
+// Three things fix it: a small font, tight padding, and `flex-wrap` so the
+// values flow across the available width instead of stacking. A chip is now
+// roughly a third the height of the button it was.
+.settings-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+
+  // Caps a long list (there are 38 seeded denominations) so one list cannot
+  // push the Save button off the bottom of the dialog.
+  max-height: 132px;
+  overflow-y: auto;
+}
+
+.chip-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  font-size: 0.72rem;
+  font-family: inherit;
+  line-height: 1.5;
+  color: #3b2a14;
+  background: #f0e8dc;
+  border: 1px solid #d9c7a5;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+  // The × is a removal affordance, so it stays quiet until the chip is
+  // hovered rather than competing with the value itself.
+  span {
+    color: #8a7a63;
+    font-size: 0.8em;
+    transition: color 0.12s ease;
+  }
+
+  // Clicking a chip DELETES it, so hover shifts to the warning palette used
+  // elsewhere in the app. Without this the chip looks like a filter toggle and
+  // the removal comes as a surprise.
+  &:hover {
+    background: #fbe9e7;
+    border-color: #e0b4ac;
+    color: #8a2c22;
+
+    span { color: #8a2c22; }
+  }
+
+  &:focus-visible {
+    outline: 2px solid #8e5b2d;
+    outline-offset: 1px;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ---- Maintenance section ----
+//
+// The one block in this dialog that changes COIN RECORDS rather than the
+// reference lists the dropdowns are built from. It is set apart on purpose:
+// a rule-off above it and a tinted, inset panel around the action itself, so
+// that "backfill several hundred coins" cannot be mistaken for one more chip
+// list. Everything here reuses the dialog's existing palette (#3b2a14 text,
+// #d9c7a5 borders, the #8e5b2d accent) so it reads as part of the same card.
+// ---------------------------------------------------------------------------
+
+.settings-maintenance {
+  border-top: 1px solid #e3d6bf;
+  padding-top: 14px;
+}
+
+.maintenance-action {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+  background: #faf5ec;
+  border: 1px solid #e3d6bf;
+  border-left: 3px solid #8e5b2d;   // the accent edge, matching the dialog border
+  border-radius: 8px;
+}
+
+.maintenance-heading {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #3b2a14;
+}
+
+// Body copy, kept small and muted so the two explanatory paragraphs do not
+// outweigh the dialog's actual controls.
+.maintenance-explainer {
+  margin: 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #6b5a40;
+  max-width: 68ch;
+
+  strong { color: #3b2a14; }
+}
+
+// ---- The preview: the counts the user is being asked to confirm ----
+
+.maintenance-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.maintenance-counts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 0.78rem;
+  color: #3b2a14;
+
+  // The headline number of each line, sized up so the three counts can be
+  // compared at a glance rather than read as prose.
+  strong {
+    display: inline-block;
+    min-width: 2.2em;
+    font-size: 0.92rem;
+  }
+}
+
+// "N coins examined" — the total the three counts add up to. Quieter than the
+// counts themselves, and separated, because it is a cross-check rather than
+// one of the outcomes.
+.maintenance-total {
+  margin-top: 3px;
+  padding-top: 5px;
+  border-top: 1px dashed #e3d6bf;
+  font-size: 0.74rem;
+  color: #8a7a63;
+}
+
+.maintenance-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+// ---- Progress and result ----
+
+.maintenance-progress {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #3b2a14;
+}
+
+// The coin currently being written. Monospaced-ish spacing would jitter as the
+// label changes, so it is simply dimmed and pushed away from the count.
+.maintenance-current {
+  margin-left: 6px;
+  color: #8a7a63;
+}
+
+.maintenance-result {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  font-size: 0.78rem;
+  color: #3b2a14;
+
+  p { margin: 0; }
+}
+
+// Failures use the same warning palette as the chip hover state, so "something
+// went wrong" reads the same way everywhere in this dialog.
+.maintenance-failed {
+  color: #8a2c22;
+  font-weight: 600;
+}
+
+.maintenance-failures {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.74rem;
+  color: #8a2c22;
+
+  // A backfill over a flaky connection could fail on many coins; cap the list
+  // so it cannot push the Save button off the bottom of the dialog.
+  max-height: 110px;
+  overflow-y: auto;
 }
 
 // ---- Responsive & print ----

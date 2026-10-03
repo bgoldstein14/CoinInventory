@@ -2,6 +2,7 @@ import { Injectable, computed, signal, inject } from '@angular/core';
 import {
   CoinRecord,
   SpotPrices,
+  SpotPriceMeta,
   TransactionRecord,
   Denomination,
   MintMarkOption
@@ -16,16 +17,27 @@ import { CoinCollection } from './inventory/coin-collection';
 import { LookupManager } from './inventory/lookup-manager';
 import { TransactionManager } from './inventory/transaction-manager';
 import { ConnectionManager } from './inventory/connection-manager';
+// The one-time "fill in the missing precious-metal data" maintenance pass.
+// The inference itself is shared with the Quicken import — see pm-fill.ts.
+import {
+  PmBackfillOutcome,
+  PmBackfillPlan,
+  PmBackfillProgress,
+  planPmBackfill,
+  runPmBackfill
+} from './pm-backfill';
 import {
   computeMeltValue,
+  describeMeltValue,
   distinctCategories,
   distinctCountries,
-  distinctDealers,
   distinctSources,
+  hasAnySpotPrice,
   sumCurrentValue,
   sumProfit,
   sumPurchasePrice
 } from './inventory/inventory-metrics';
+import { firstValueFrom } from 'rxjs';
 
 const defaultSpotPrices: SpotPrices = { gold: 0, silver: 0, platinum: 0, copper: 0 };
 
@@ -70,6 +82,13 @@ export class InventoryService {
   readonly transactions = signal<TransactionRecord[]>([]);
   readonly spotPrices = signal<SpotPrices>({ ...defaultSpotPrices });
 
+  /**
+   * Provenance of the last SAVED set of prices. Filled in at start-up from
+   * the database (see ConnectionManager.hydrate) and again after every
+   * successful save. All-null means the SpotPrices table has never had a row.
+   */
+  readonly spotPriceMeta = signal<SpotPriceMeta>({ source: null, fetchedAt: null, prices: null });
+
   readonly connecting = signal(false);
   readonly connected = signal(false);
   readonly connectionError = signal<string | null>(null);
@@ -97,7 +116,18 @@ export class InventoryService {
 
   readonly inventorySources = computed(() => distinctSources(this.inventory()));
 
-  readonly inventoryDealers = computed(() => distinctDealers(this.inventory()));
+  // NOTE: an `inventoryDealers` computed sat here. It was removed with the
+  // coin-level dealer field. Nothing ever read it: the dealer filter was a
+  // free-text input, not a dropdown fed from this list.
+
+  /**
+   * True once we have at least one non-zero spot price in memory.
+   *
+   * The UI uses this to tell two very different "—" cells apart: a coin with
+   * no precious metal (nothing to be done) versus the whole price table being
+   * empty (one press of Fetch away from every melt figure appearing).
+   */
+  readonly hasSpotPrices = computed(() => hasAnySpotPrice(this.spotPrices()));
 
   readonly selectedCoinTransactions = computed(() => {
     const coinId = this.selectedCoinId();
@@ -173,6 +203,8 @@ export class InventoryService {
     denominations: this.denominations,
     mintMarks: this.mintMarks,
     metalContents: this.metalContents,
+    spotPrices: this.spotPrices,
+    spotPriceMeta: this.spotPriceMeta,
     coins: this.coins,
     apiService: this.apiService,
     logger: this.logger,
@@ -272,6 +304,64 @@ export class InventoryService {
     this.editor.updateCoin(coinId, updates);
   }
 
+  /**
+   * Apply an edit and write it immediately, resolving once the server has
+   * accepted it.
+   *
+   * FOR BULK MAINTENANCE PASSES ONLY — not for anything the user is typing
+   * into. The debounce that `updateCoin` applies is per coin, so a loop over
+   * several hundred coins would fire several hundred PUTs simultaneously one
+   * second later. This variant has no timer, so a caller can await each write
+   * in turn and know every coin was written exactly once.
+   *
+   * @see CoinEditor.updateCoinNow for the full reasoning, including why it
+   *      deliberately does not cancel a pending debounced write.
+   * @throws when the coin is an unsaved draft, or when the PUT fails
+   */
+  updateCoinNow(coinId: string, updates: Partial<CoinRecord>): Promise<Partial<CoinRecord>> {
+    return this.editor.updateCoinNow(coinId, updates);
+  }
+
+  // ==========================================================================
+  // Maintenance — the one-time precious-metal backfill
+  // ==========================================================================
+
+  /**
+   * Work out which coins are missing alloy data that can be inferred, without
+   * changing anything. See pm-backfill.ts for what each count means.
+   *
+   * Unsaved draft rows are excluded via `isDraftCoin`, because there is no
+   * database row to update yet.
+   */
+  planPmBackfill(): PmBackfillPlan {
+    return planPmBackfill(this.inventory(), (coinId) => this.drafts.isUnsaved(coinId));
+  }
+
+  /**
+   * Write a plan produced by `planPmBackfill`, one coin at a time.
+   *
+   * Sequential and awaited on purpose — see `runPmBackfill`'s comment, and
+   * `CoinEditor.updateCoinNow`, for why a `for` loop over the ordinary
+   * debounced `updateCoin` would be the wrong tool.
+   */
+  async runPmBackfill(
+    plan: PmBackfillPlan,
+    onProgress?: (progress: PmBackfillProgress) => void
+  ): Promise<PmBackfillOutcome> {
+    const outcome = await runPmBackfill(
+      plan,
+      (coinId, updates) => this.updateCoinNow(coinId, updates).then(() => undefined),
+      onProgress
+    );
+
+    this.logger.info(
+      `PM backfill: filled ${outcome.filled} of ${outcome.attempted} coins ` +
+      `(${outcome.fieldsWritten} fields written, ${outcome.failed} failed)`
+    );
+
+    return outcome;
+  }
+
   // ==========================================================================
   // Transactions (buy / sell history attached to a coin)
   // ==========================================================================
@@ -288,13 +378,195 @@ export class InventoryService {
   // Spot prices and melt value
   // ==========================================================================
 
+  /**
+   * Put new prices in memory. Every melt figure on screen re-calculates at
+   * once, because they all read this signal.
+   *
+   * *** THIS DELIBERATELY DOES NOT SAVE ANYTHING. ***
+   * POST /api/spot-prices is an INSERT into a price-history table, not an
+   * update — one row per call, for ever. The spot price modal calls this from
+   * `(ngModelChange)`, i.e. on EVERY KEYSTROKE: typing "2650" into the gold
+   * box fires it four times. Saving from here would write four history rows
+   * for one price, and a user who nudges the field with the arrow keys could
+   * add dozens. So persistence lives in commitSpotPrices() below, which only
+   * deliberate actions call.
+   */
   updateSpotPrices(prices: SpotPrices): void {
     this.spotPrices.set(prices);
   }
 
+  /**
+   * Write the prices currently in memory to the database as a new history row.
+   *
+   * CALL THIS ONLY FROM A DELIBERATE USER ACTION. There are exactly two, both
+   * in SpotPriceModalComponent:
+   *   1. a successful "Fetch COMEX Prices" — the user asked for fresh prices
+   *      and got them, so that is a moment worth recording; and
+   *   2. closing the modal after hand-editing a price — one row for the whole
+   *      editing session, written when the user is finished, not while they
+   *      are still typing.
+   * See updateSpotPrices() above for why the obvious place (the setter) is the
+   * wrong place.
+   *
+   * Two guards stop pointless rows even so:
+   *   - identical prices to the last row we saved -> skipped. Pressing Fetch
+   *     twice in a minute, or opening and closing the modal after an
+   *     accidental edit that was undone, should not grow the table.
+   *   - all four prices zero -> skipped. That is the "we know nothing" state,
+   *     and recording it would make the next start-up load zeros over the top
+   *     of a perfectly good earlier row.
+   *
+   * Never throws, and never blocks the UI: a failed save is logged and
+   * mentioned once, and the prices stay usable in memory for this session.
+   *
+   * @param source - provenance label stored with the row, e.g.
+   *                 "COMEX/NYMEX futures via Yahoo Finance" or "Manual entry"
+   * @returns true if a row was actually written
+   */
+  async commitSpotPrices(source: string): Promise<boolean> {
+    const prices = { ...this.spotPrices() };
+    const alreadySaved = this.spotPriceMeta().prices;
+
+    if (alreadySaved && samePrices(alreadySaved, prices)) {
+      this.logger.info('Spot prices unchanged since the last save — no new history row written');
+      return false;
+    }
+
+    if (!hasAnySpotPrice(prices)) {
+      this.logger.info('Spot prices are all zero — nothing worth saving');
+      return false;
+    }
+
+    try {
+      await firstValueFrom(this.apiService.saveSpotPrices({ ...prices, source }));
+      this.spotPriceMeta.set({ source, fetchedAt: new Date().toISOString(), prices });
+      this.logger.info(`Saved spot prices (${source}): Au=$${prices.gold} Ag=$${prices.silver}`);
+      return true;
+    } catch (error) {
+      // Non-fatal on purpose. The prices are already in memory and every melt
+      // value on screen is already correct; all that is lost is the ability to
+      // reload them after a restart.
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn('Failed to save spot prices', msg);
+      this.notificationService.showWarning(
+        'Spot prices could not be saved — they will work for now but will be lost when the app restarts.'
+      );
+      return false;
+    }
+  }
+
+  /**
+   * Refresh spot prices from live COMEX/NYMEX, automatically, once the app
+   * has finished starting up. Fire-and-forget: callers do not await it.
+   *
+   * ---------------------------------------------------------------------
+   * WHY IT RUNS AFTER HYDRATION RATHER THAN DURING IT
+   * ---------------------------------------------------------------------
+   * This is the only outbound call to the public internet the app makes, and
+   * it goes through a corporate network. It can be slow, it can hang, it can
+   * be blocked outright. None of that is allowed to come between the user and
+   * a working screen, so it is started AFTER hydrate() has resolved and lands
+   * whenever it lands. Until it does, the melt values are already populated
+   * from the prices hydrate() read back out of the database — which is the
+   * nice property of doing it in this order: melt is never blank while we
+   * wait on the network, it merely gets more current a moment later.
+   *
+   * ---------------------------------------------------------------------
+   * WHY IT DOES NOT USE SpotPriceService
+   * ---------------------------------------------------------------------
+   * SpotPriceService.fetchSpotPrices() — what the modal's Fetch button calls —
+   * reports failure with `showError`, and error toasts in this app are STICKY
+   * (see NotificationService: info and warning auto-dismiss, error does not).
+   * That is exactly right for a button the user pressed and is waiting on. It
+   * is exactly wrong for something that happens by itself: on a machine with
+   * no internet it would greet the owner with a permanent red toast on every
+   * single launch. So the automatic path talks to ApiService directly and
+   * stays quiet — a log line and nothing else. The manual button's loud
+   * behaviour is deliberately left alone.
+   *
+   * ---------------------------------------------------------------------
+   * WHAT A FAILURE MUST NOT DO
+   * ---------------------------------------------------------------------
+   * It must not wipe the prices we loaded from the database. Note that the
+   * backend answers 200 with ZEROED prices and an `error` field when the
+   * upstream is unreachable, rather than failing the request — so "it
+   * succeeded" is not `!threw`, it is `no error field AND at least one
+   * non-zero price`. Storing a zeroed result would blank every melt value in
+   * the app, which is the precise opposite of what this feature is for.
+   *
+   * ---------------------------------------------------------------------
+   * HOW OFTEN IT RUNS
+   * ---------------------------------------------------------------------
+   * At most once SUCCESSFULLY per app session. A failed attempt does not burn
+   * the budget, so if start-up failed because the backend was down and the
+   * user then presses "Retry connection", they get the fetch they missed.
+   * Repeated retries after a success do nothing. One successful fetch writes
+   * exactly one history row (via commitSpotPrices, which additionally skips a
+   * save whose numbers match the row already on disk — so a launch that
+   * fetches the same prices as last time adds nothing at all).
+   *
+   * Never throws.
+   *
+   * @returns true only if live prices were fetched AND applied
+   */
+  async autoRefreshSpotPrices(): Promise<boolean> {
+    if (this.autoSpotPriceFetchSucceeded || this.autoSpotPriceFetchInFlight) return false;
+    this.autoSpotPriceFetchInFlight = true;
+
+    try {
+      const result = await firstValueFrom(this.apiService.fetchSpotPrices());
+
+      // Graceful-degradation shape: 200 OK, zeroed prices, `error` set.
+      if (result?.error) {
+        this.logger.warn(`Automatic spot price fetch returned no prices: ${result.error}`);
+        return false;
+      }
+
+      const prices = result?.prices;
+      if (!prices || !hasAnySpotPrice(prices)) {
+        // Defensive: an all-zero "success" tells us nothing and must not
+        // overwrite good prices loaded from the database.
+        this.logger.warn('Automatic spot price fetch returned all-zero prices — keeping the saved ones');
+        return false;
+      }
+
+      this.updateSpotPrices(prices);
+      this.logger.info('Spot prices refreshed automatically at start-up');
+
+      // A successful automatic fetch is every bit as deliberate as pressing
+      // the button, so it persists and becomes the "last retrieved prices"
+      // the next launch reads back.
+      await this.commitSpotPrices(result.source || 'COMEX/NYMEX futures');
+
+      this.autoSpotPriceFetchSucceeded = true;
+      return true;
+    } catch (error) {
+      // No internet, blocked proxy, backend not up yet. Completely non-fatal:
+      // the app already works and the saved prices are already in place.
+      const msg = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn('Automatic spot price fetch failed — using saved prices', msg);
+      return false;
+    } finally {
+      this.autoSpotPriceFetchInFlight = false;
+    }
+  }
+
+  /** Guards for autoRefreshSpotPrices — see its comment for the policy. */
+  private autoSpotPriceFetchInFlight = false;
+  private autoSpotPriceFetchSucceeded = false;
+
   /** What a coin's precious metal is worth today, or null if unknowable. */
   meltValue(coin: CoinRecord): number | null {
     return computeMeltValue(coin, this.spotPrices());
+  }
+
+  /**
+   * A sentence explaining a coin's melt figure — above all, explaining WHY it
+   * is a dash when it is one. Used as a tooltip in the grid and the detail
+   * panel so "no prices fetched yet" never masquerades as "no precious metal".
+   */
+  meltValueHint(coin: CoinRecord): string {
+    return describeMeltValue(coin, this.spotPrices());
   }
 
   // ==========================================================================
@@ -340,4 +612,12 @@ export class InventoryService {
   removeMintMark(id: number): Promise<void> {
     return this.lookups.removeMintMark(id);
   }
+}
+
+/** Do two price sets hold exactly the same four numbers? */
+function samePrices(a: SpotPrices, b: SpotPrices): boolean {
+  return a.gold === b.gold
+    && a.silver === b.silver
+    && a.platinum === b.platinum
+    && a.copper === b.copper;
 }

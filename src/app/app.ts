@@ -111,7 +111,7 @@ export class App {
     protected readonly inventoryService: InventoryService,
     csvService: CsvService
   ) {
-    this.filters = new InventoryFilterStore(inventoryService);
+    this.filters = new InventoryFilterStore(inventoryService, storageService);
     this.columns = new InventoryColumnsStore(storageService);
     this.selection = new InventorySelectionStore(inventoryService, this.filters);
     this.images = new CoinImagesStore(inventoryService);
@@ -234,16 +234,42 @@ export class App {
       // Fresh coin list — make sure something sensible is selected again.
       this.defaultSelectionInitialized = false;
       this.syncDefaultSelection();
+      // If the automatic start-up price fetch never got its chance (start-up
+      // failed, so there was no "finished starting up" moment), this is that
+      // moment. The call guards itself against running twice, so a user who
+      // presses Retry five times still gets at most one successful fetch.
+      void this.inv.autoRefreshSpotPrices();
     }
   }
 
   private async hydrateFromStorage(): Promise<void> {
     try {
       await this.inv.hydrate();
+
+      // ---- Finished starting up: refresh spot prices from live COMEX ----
+      //
+      // NOT awaited, and that is the whole point. hydrate() has resolved, so
+      // the coins are on screen and the app is usable; this call goes out to
+      // the public internet and may be slow, blocked or simply hang. Awaiting
+      // it would put a third-party web service between the owner and his coin
+      // list. It lands when it lands.
+      //
+      // It is also placed AFTER hydrate() rather than inside it so the
+      // ordering is right: hydrate() has already applied the prices saved in
+      // the database, so every melt value is populated immediately and this
+      // merely makes them more current. A failed fetch changes nothing.
+      //
+      // `void` marks "deliberately not awaited". Safe because
+      // autoRefreshSpotPrices() never throws — see its comment.
+      void this.inv.autoRefreshSpotPrices();
     } catch {
       // Database connection failed — connectionError signal is already set,
       // UI will show the error state (including a "Retry connection" button).
       // App still loads with an empty inventory.
+      //
+      // No automatic price fetch here: start-up did not finish, and prices
+      // without a coin list are no use. The "Retry connection" handler above
+      // picks it up if the user gets the backend going.
     }
     this.syncDefaultSelection();
 
@@ -253,6 +279,7 @@ export class App {
     }
 
     await this.columns.restoreFromStorage();
+    await this.filters.restoreFromStorage();
   }
 
   /**

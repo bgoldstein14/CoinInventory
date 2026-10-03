@@ -79,8 +79,47 @@
             </div>
           </div>
         }
+        <!-- Rows that could not be imported.
+             A coin needs at least two of Year / Coin Type / Denomination to be
+             identifiable, and the backend refuses one with no denomination
+             outright. Rather than import such a row and leave it stranded in
+             the grid with no database record behind it, it is listed here with
+             the reason. The dialog stays open so this is actually read. -->
+        @if (csvExceptions().length > 0) {
+          <div class="csv-exceptions">
+            <h3>Not imported &mdash; too little detail ({{ csvExceptions().length }})</h3>
+            <p class="csv-exceptions-summary">
+              Imported {{ importedCount() }}
+              {{ importedCount() === 1 ? 'coin' : 'coins' }}.
+              <!-- Say so when the import worked out metal / composition /
+                   purity / weight that the file itself did not carry. Values
+                   that WERE in the file are never replaced. -->
+              @if (enrichedCount() > 0) {
+                Metal, composition and weight were filled in automatically on
+                {{ enrichedCount() }} of them from the reference tables;
+                anything your file supplied was left exactly as you wrote it.
+              }
+              The rows below were skipped because a coin needs at least two of
+              <strong>Year</strong>, <strong>Coin Type</strong> and
+              <strong>Denomination</strong>. Fix them in your file, or map the
+              missing columns above, and import again.
+            </p>
+            <ul class="csv-exception-list">
+              @for (exception of csvExceptions(); track exception.rowNumber) {
+                <li>
+                  <span class="csv-exception-row">Row {{ exception.rowNumber }}</span>
+                  <span class="csv-exception-summary">{{ exception.summary }}</span>
+                  <span class="csv-exception-missing">{{ exception.missing }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
         <div class="modal-actions">
-          <button type="button" class="secondary" (click)="close()">Cancel</button>
+          <button type="button" class="secondary" (click)="close()">
+            {{ csvExceptions().length > 0 ? 'Done' : 'Cancel' }}
+          </button>
           <button type="button" (click)="importCsv()">Import {{ csvPreviewCount() }} rows</button>
         </div>
       }

@@ -42,11 +42,28 @@ export class InventoryColumnsStore {
    *
    * Guard rail: the table would be unreadable with zero columns, so if the user
    * unticks the last one we keep it ticked instead.
+   *
+   * WHY THE SORT MATTERS (this used to be a real, visible bug)
+   * ---------------------------------------------------------
+   * This method used to append a newly ticked column with `[...next, column]`,
+   * i.e. onto the END of the visible list. So ticking "Cert" put it at the far
+   * RIGHT of the grid, not in its canonical position — and because the result
+   * is persisted, that end-of-list order was then written to IndexedDB.
+   *
+   * (It happened to straighten itself out on the next page load, because
+   * restoreFromStorage() re-sorts. But "my change only appears after a reload"
+   * is indistinguishable from "my change did not work", so we sort here too.)
+   *
+   * Sorting on REMOVAL as well is deliberate: it costs nothing and it means a
+   * legacy out-of-order array read from storage gets straightened out by the
+   * first toggle, rather than being carried around for the rest of the session.
    */
   toggleColumn(column: InventoryColumn): void {
     const next = this.visibleInventoryColumns();
     const exists = next.includes(column);
-    const updated = exists ? next.filter(c => c !== column) : [...next, column];
+    const updated = this.sortIntoCanonicalOrder(
+      exists ? next.filter(c => c !== column) : [...next, column]
+    );
     const safeUpdated = updated.length > 0 ? updated : [column];
     this.visibleInventoryColumns.set(safeUpdated);
     this.persistVisibleColumns(safeUpdated);
@@ -58,12 +75,41 @@ export class InventoryColumnsStore {
    * Anything unrecognised in storage (a column that has since been renamed or
    * removed) is discarded by normalizeVisibleColumns(), so a stale saved value
    * can never break the table.
+   *
+   * IMPORTANT, because it is the thing you would worry about when re-ordering
+   * columns: the saved value IS an ordered array, but its order is NOT trusted.
+   * normalizeVisibleColumns() throws the stored sequence away and re-derives it
+   * from `inventoryColumnOrder`. The stored array is therefore only ever read
+   * as a SET ("which columns did I tick?"), never as an order. That is what
+   * makes a change to the canonical order take effect for an existing user on
+   * their very next load, with no migration and no version stamp on the key.
    */
   async restoreFromStorage(): Promise<void> {
     const storedColumns = await this.storage.get<InventoryColumn[]>(StorageKeys.VisibleColumns);
     if (Array.isArray(storedColumns) && storedColumns.length > 0) {
       this.visibleInventoryColumns.set(this.normalizeVisibleColumns(storedColumns));
     }
+  }
+
+  /**
+   * Put a list of columns into canonical (`inventoryColumnOrder`) order and
+   * drop any duplicates.
+   *
+   * This is the ONE place the visible list's order is decided, so the grid can
+   * never drift away from the column picker. It does not add or remove columns
+   * — callers decide membership, this decides sequence.
+   *
+   * Anything not in the canonical list sorts to the end rather than being
+   * dropped; removing unknown entries is normalizeVisibleColumns()'s job, and
+   * doing it in two places would mean two subtly different answers.
+   */
+  private sortIntoCanonicalOrder(columns: InventoryColumn[]): InventoryColumn[] {
+    const order = new Map(inventoryColumnOrder.map((column, index) => [column, index]));
+    return [...new Set(columns)].sort((left, right) => {
+      const leftIndex = order.get(left) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = order.get(right) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
   }
 
   /**
@@ -75,17 +121,13 @@ export class InventoryColumnsStore {
    *    "1916" and "D" split apart by other columns is confusing.
    */
   normalizeVisibleColumns(columns: InventoryColumn[]): InventoryColumn[] {
-    const order = new Map(inventoryColumnOrder.map((column, index) => [column, index]));
     const valid = [...new Set(columns.filter((column): column is InventoryColumn => inventoryColumnOrder.includes(column)))];
 
     if (valid.length === 0) return [...defaultVisibleColumns];
 
-    const preferred = [...new Set([...defaultVisibleColumns, ...valid])];
-    preferred.sort((left, right) => {
-      const leftIndex = order.get(left) ?? Number.MAX_SAFE_INTEGER;
-      const rightIndex = order.get(right) ?? Number.MAX_SAFE_INTEGER;
-      return leftIndex - rightIndex;
-    });
+    // Note the sort: whatever order the caller (i.e. IndexedDB) handed us is
+    // discarded here and rebuilt from inventoryColumnOrder.
+    const preferred = this.sortIntoCanonicalOrder([...defaultVisibleColumns, ...valid]);
 
     const withYear = preferred.includes('year') ? preferred : ['year', ...preferred];
     const withMintMark = withYear.includes('mintMark') ? withYear : [...withYear];

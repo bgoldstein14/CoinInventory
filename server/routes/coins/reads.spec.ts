@@ -5,6 +5,15 @@
  * The mock rows below use the CamelCase SQL Server column names on purpose:
  * translating those into the camelCase JSON the Angular app expects is exactly
  * what rowToCoin() in db/row-mappers.ts is being tested for here.
+ *
+ * The mssql mock answers queries IN CALL ORDER, so the number of queued
+ * recordsets must match the number of queries the handler runs:
+ *
+ *   GET /api/coins      ->  1. coins   2. images   3. image counts
+ *   GET /api/coins/:id  ->  1. coin    2. images
+ *
+ * Both sequences used to carry a tags query at the end. The tag feature was
+ * removed, so each is one query shorter now.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -25,16 +34,16 @@ beforeEach(() => {
 describe('GET /api/coins', () => {
   it('returns an empty array when no coins exist', async () => {
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [] })  // coins
-      .mockResolvedValueOnce({ recordset: [] })  // images
-      .mockResolvedValueOnce({ recordset: [] }); // tags
+      .mockResolvedValueOnce({ recordset: [] })  // 1. coins
+      .mockResolvedValueOnce({ recordset: [] })  // 2. images
+      .mockResolvedValueOnce({ recordset: [] }); // 3. image counts
 
     const res = await request(app).get('/api/coins');
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 
-  it('returns coins with images and tags joined', async () => {
+  it('returns coins with images joined', async () => {
     // Mock data uses CamelCase database column names (CoinId, Denomination, CoinType, etc.)
     const coinRow = {
       CoinId: 'abc-123',
@@ -57,7 +66,6 @@ describe('GET /api/coins', () => {
       HasCacSticker: true,
       SoldPrice: null,
       SoldDate: null,
-      Dealer: 'Heritage',
       Weight: 0.7734,
       MetalContent: 'Silver',
       CoinSet: null,
@@ -66,9 +74,9 @@ describe('GET /api/coins', () => {
     };
 
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [coinRow] })
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageData: 'data:image/png;base64,abc' }] })
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', Tag: 'key-date' }] });
+      .mockResolvedValueOnce({ recordset: [coinRow] })                                              // 1. coins
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageData: 'data:image/png;base64,abc' }] }) // 2. images
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageCount: 1 }] });                // 3. image counts
 
     const res = await request(app).get('/api/coins');
     expect(res.status).toBe(200);
@@ -82,8 +90,12 @@ describe('GET /api/coins', () => {
     expect(coin.grade).toBe('MS-65');
     expect(coin.hasCacSticker).toBe(true);
     expect(coin.imagePaths).toEqual(['data:image/png;base64,abc']);
-    expect(coin.tags).toEqual(['key-date']);
-    expect(coin.dealer).toBe('Heritage');
+    // The tag feature is gone, so the key must not come back at all.
+    expect(coin).not.toHaveProperty('tags');
+    // The coin-level dealer field is gone too, so the key must not come back
+    // even if an old database still has the column. (Transaction rows keep
+    // their own dealer; that is served by GET /api/transactions.)
+    expect(coin).not.toHaveProperty('dealer');
     expect(coin.weight).toBe(0.7734);
     expect(coin.metalContent).toBe('Silver');
     expect(coin.pmWeightGrams).toBe(24.06);
@@ -99,7 +111,7 @@ describe('GET /api/coins/:id', () => {
     expect(res.status).toBe(404);
   });
 
-  it('returns a single coin with images and tags', async () => {
+  it('returns a single coin with its images', async () => {
     // Mock data uses CamelCase database column names
     const coinRow = {
       CoinId: 'xyz-789',
@@ -122,16 +134,14 @@ describe('GET /api/coins/:id', () => {
       HasCacSticker: 0,
       SoldPrice: null,
       SoldDate: null,
-      Dealer: null,
       Weight: null,
       MetalContent: null,
       CoinSet: null,
     };
 
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [coinRow] })
-      .mockResolvedValueOnce({ recordset: [] })
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'xyz-789', Tag: 'rare' }] });
+      .mockResolvedValueOnce({ recordset: [coinRow] }) // 1. coin
+      .mockResolvedValueOnce({ recordset: [] });       // 2. images
 
     const res = await request(app).get('/api/coins/xyz-789');
     expect(res.status).toBe(200);
@@ -140,6 +150,12 @@ describe('GET /api/coins/:id', () => {
     expect(res.body.year).toBe('1909');
     expect(res.body.hasCacSticker).toBe(false);
     expect(res.body.imagePaths).toEqual([]);
-    expect(res.body.tags).toEqual(['rare']);
+    expect(res.body).not.toHaveProperty('tags');
+
+    // Exactly two queries, and neither of them touches the dropped table.
+    expect(mockRequest.query).toHaveBeenCalledTimes(2);
+    for (const call of mockRequest.query.mock.calls) {
+      expect(call[0] as string).not.toContain('CoinTags');
+    }
   });
 });

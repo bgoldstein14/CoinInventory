@@ -78,10 +78,29 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
   },
   soldPrice:     { column: 'SoldPrice',     sqlType: sql.Decimal(12, 2) },
   soldDate:      { column: 'SoldDate',      sqlType: sql.NVarChar(30),  maxLength: 30, normalize: normalizeTextDate },
-  dealer:        { column: 'Dealer',        sqlType: sql.NVarChar(200), maxLength: 200 },
-  weight:        { column: 'Weight',        sqlType: sql.Decimal(10, 4) },
+  // A `dealer -> Dealer NVARCHAR(200)` binding sat here. Coins.Dealer was
+  // dropped (migration 006), so the binding went with it. Because both the
+  // INSERT in POST /api/coins and the UPDATE in PUT /api/coins/:id are
+  // generated from THIS map, deleting the entry removes the column from both
+  // statements and changes nothing about how any other field is written. A
+  // request body that still carries a stray `dealer` key is simply ignored:
+  // there is no entry for it, so it never reaches the generated SQL.
+  //
+  // Transactions.Dealer is a DIFFERENT column and still exists -- its binding
+  // is `transactionDealer` in db/bindings.ts. Do not remove that one.
+  // The coin's GROSS weight, in GRAMS. It was troy ounces until migration 008
+  // (008-weight-to-grams.sql) multiplied the stored values by 31.1034768; the
+  // column type did not change, only the unit, so nothing here needed editing
+  // except this comment -- which is precisely why the comment matters.
+  //
+  // DECIMAL(12,5) to match the five decimals the editor shows. Widened from
+  // (10,4) by migration 004, alongside pmWeightGrams below.
+  weight:        { column: 'Weight',        sqlType: sql.Decimal(12, 5) },
   metalContent:  { column: 'MetalContent',  sqlType: sql.NVarChar(50),  maxLength: 50 },
-  pmWeightGrams: { column: 'PmWeightGrams', sqlType: sql.Decimal(10, 4) },
+  // DECIMAL(12,5) to match the five decimals the editor shows. Widened from
+  // (10,4) by migration 004; a parameter narrower than its column rounds the
+  // user's value away without any error.
+  pmWeightGrams: { column: 'PmWeightGrams', sqlType: sql.Decimal(12, 5) },
   pmPercent:     { column: 'PmPercent',     sqlType: sql.Decimal(5, 2) },
   coinSet:       { column: 'CoinSet',       sqlType: sql.NVarChar(100), maxLength: 100 },
 };

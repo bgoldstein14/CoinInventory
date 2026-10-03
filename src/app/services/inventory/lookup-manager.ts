@@ -9,11 +9,13 @@ import { firstValueFrom } from 'rxjs';
  * LookupManager
  * ---------------------------------------------------------------------------
  * WHAT THIS FILE OWNS
- *   The four "reference lists" the inventory picks values from:
- *     * categories   (database-backed: added/removed on the server)
- *     * coin sets    (local only — see the note on addCoinSet)
- *     * denominations (database-backed lookup table)
- *     * mint marks   (database-backed lookup table)
+ *   The four "reference lists" the inventory picks values from, all four of
+ *   them database-backed: added and removed on the server as well as locally.
+ *     * categories
+ *     * coin sets     (was local-only until it turned out that lost data —
+ *                      see the long note above addCoinSet)
+ *     * denominations
+ *     * mint marks
  *
  * WHY IT IS ITS OWN FILE
  *   These four follow the same shape over and over — read the list, add an
@@ -91,19 +93,63 @@ export class LookupManager {
   /* =========================================================================
    * Coin sets
    * -------------------------------------------------------------------------
-   * These two are local-only on purpose: a coin set exists because some coin
-   * references it, so it is saved as part of the coin, not as its own row.
+   * THESE USED TO BE LOCAL-ONLY, AND THAT WAS A BUG
+   *
+   * The old comment here claimed the omission was deliberate: "a coin set
+   * exists because some coin references it, so it is saved as part of the coin,
+   * not as its own row." That reasoning does not survive contact with the rest
+   * of the system:
+   *
+   *   * there IS a CoinSets table, with `/api/coin-sets` GET/POST/DELETE routes
+   *     behind `ApiService.getCoinSets` / `createCoinSet` / `deleteCoinSet`;
+   *   * hydration already READS from it (see ConnectionManager.hydrate, which
+   *     calls getCoinSets and only falls back to deriving the list from the
+   *     coins when that call fails); and
+   *   * the UI offers "Add set" with no coin attached, which under a
+   *     derive-from-coins model cannot persist at all.
+   *
+   * So the write path was the only half missing. The user would add a set, see
+   * it appear, reload, and find it gone — because the next hydration replaced
+   * the local list with the database's, which had never been told. An empty set
+   * created ahead of filing coins into it vanished every single time.
+   *
+   * Both methods now mirror the category pattern above exactly: update the
+   * signal immediately so the UI stays responsive, then persist in the
+   * background and report a failure rather than silently diverging from the
+   * database.
    * ======================================================================= */
 
   addCoinSet(name: string): void {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
     const current = this.coinSets();
-    if (!current.includes(name)) {
-      this.coinSets.set([...current, name].sort());
-    }
+    // Nothing to do if we already have it. Returning early also stops a
+    // duplicate POST, which the backend would reject as a primary-key clash.
+    if (current.includes(trimmed)) return;
+
+    this.coinSets.set([...current, trimmed].sort());
+
+    firstValueFrom(this.apiService.createCoinSet(trimmed))
+      .then(() => this.logger.info(`Persisted coin set to database: ${trimmed}`))
+      .catch((error) => {
+        this.logger.error(`Failed to persist coin set "${trimmed}" to database`, describeHttpError(error));
+        this.notificationService.showError(`Failed to save set "${trimmed}" to database`);
+      });
   }
 
   removeCoinSet(name: string): void {
-    this.coinSets.set(this.coinSets().filter(s => s !== name));
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    this.coinSets.set(this.coinSets().filter(s => s !== trimmed));
+
+    firstValueFrom(this.apiService.deleteCoinSet(trimmed))
+      .then(() => this.logger.info(`Deleted coin set from database: ${trimmed}`))
+      .catch((error) => {
+        this.logger.error(`Failed to delete coin set "${trimmed}" from database`, describeHttpError(error));
+        this.notificationService.showError(`Failed to delete set "${trimmed}" from database`);
+      });
   }
 
   /* =========================================================================

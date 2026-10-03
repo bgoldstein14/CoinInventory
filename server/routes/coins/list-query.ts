@@ -90,8 +90,13 @@ export function shouldIncludeImages(rawParam: unknown): boolean {
  * QUERY ORDER IS PART OF THE CONTRACT of this function — the spec files drive
  * the mssql mock by queueing one response per `query()` call, in order:
  *
- *   includeImages = true   ->  1. coins   2. images   3. tags   4. image counts
- *   includeImages = false  ->  1. coins   2. tags     3. image counts
+ *   includeImages = true   ->  1. coins   2. images   3. image counts
+ *   includeImages = false  ->  1. coins   2. image counts
+ *
+ * (There used to be a tags query sitting between the images and the counts.
+ * The tag feature was removed, so the sequence is one query shorter than it was
+ * and everything after the images step shifted down a number. If you are
+ * cross-referencing an older commit or comment, that is why the numbers differ.)
  *
  * (The images query is genuinely skipped when it is not needed; that skip is
  * the whole point of the flag.)
@@ -127,18 +132,7 @@ export async function loadCoinList(
     }
   }
 
-  // ----- 3. Tags --------------------------------------------------------
-  const tagsResult = await db.request().query(
-    'SELECT CoinId, Tag FROM CoinTags ORDER BY Tag'
-  );
-  const tagsByCoinId = new Map<string, string[]>();
-  for (const t of tagsResult.recordset) {
-    const coinId = t['CoinId'] as string;
-    if (!tagsByCoinId.has(coinId)) tagsByCoinId.set(coinId, []);
-    tagsByCoinId.get(coinId)!.push(t['Tag'] as string);
-  }
-
-  // ----- 4. imageCount: the COUNT(*) aggregate -------------------------
+  // ----- 3. imageCount: the COUNT(*) aggregate -------------------------
   //
   // This is the cheap half of the fix, and it is cheap precisely BECAUSE the
   // work happens inside SQL Server:
@@ -163,13 +157,12 @@ export async function loadCoinList(
     imageCountByCoinId.set(row['CoinId'] as string, Number(row['ImageCount'] ?? 0));
   }
 
-  // ----- 5. Stitch it all together -------------------------------------
+  // ----- 4. Stitch it all together -------------------------------------
   return coinsResult.recordset.map((row: Record<string, unknown>) => {
     const coinId = row['CoinId'] as string;
 
     const coin: Record<string, unknown> = {
       ...rowToCoin(row),
-      tags: tagsByCoinId.get(coinId) ?? [],
       // A coin with no image rows is simply absent from the GROUP BY result,
       // so default to 0 rather than undefined — the frontend wants a number.
       imageCount: imageCountByCoinId.get(coinId) ?? 0,

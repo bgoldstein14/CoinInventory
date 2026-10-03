@@ -1,11 +1,9 @@
 import { DecimalPipe } from '@angular/common';
 import { Component, computed, inject, input, output } from '@angular/core';
 import { CoinImagesStore } from '../../features/inventory/coin-images.store';
-import { cacGreenBeanIconPath } from '../../features/inventory/coin-icons';
 import { imageSourcePaths } from '../../services/image-source-paths';
 import { InventoryService } from '../../services/inventory.service';
 import { CoinRecord, TransactionRecord } from '../../types/coin.model';
-import { certBadgeLabel, formatDenominationDisplay, gradeBadgeClass } from '../../types/inventory-columns';
 import { CoinEditorForm } from '../coin-editor-form/coin-editor-form';
 import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link';
 
@@ -46,10 +44,16 @@ export class CoinDetailPanel {
   readonly deleteRequested = output<void>();
 
   // --- Constants and pure formatters the template calls ---
-  protected readonly cacGreenBeanIconPath = cacGreenBeanIconPath;
-  protected formatDenominationDisplay = formatDenominationDisplay;
-  protected gradeBadgeClass = gradeBadgeClass;
-  protected certBadgeLabel = certBadgeLabel;
+  //
+  // Four things used to be exposed here and all four are gone, because the
+  // header elements that called them were removed as redundant with the editor
+  // below: `formatDenominationDisplay` (used by the <h2> heading), and
+  // `gradeBadgeClass`, `certBadgeLabel` and `cacGreenBeanIconPath` (used by the
+  // grade / cert / CAC summary badges).
+  //
+  // All four still exist and are still used — by the inventory grid, where
+  // there is no form alongside them and the coloured pill and green-bean icon
+  // are doing real work. They were only ever imported here for the header.
 
   /** Exposed so the transaction form's template can coerce its text input. */
   protected readonly Number = Number;
@@ -72,6 +76,10 @@ export class CoinDetailPanel {
   protected readonly anyPathRecorded = computed(() =>
     imageSourcePaths.hasAnyPathFor(this.coin().imagePaths)
   );
+
+  /* ---------------------------------------------------------------------
+   * Valuation summary
+   * ------------------------------------------------------------------- */
 
   /**
    * Records a purchase / sale / trade / appraisal against the selected coin.

@@ -8,7 +8,6 @@ import { CoinRecord } from '../types/coin.model';
  */
 function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   return {
-    id: overrides.id,
     denomination: '',
     year: '',
     coinType: '',
@@ -25,7 +24,6 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
     currentValue: 0,
     notes: '',
     imagePaths: [],
-    tags: [],
     source: 'manual',
     ...overrides
   };

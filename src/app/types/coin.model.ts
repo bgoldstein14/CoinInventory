@@ -8,6 +8,43 @@
  * - Changed 'type' to 'coinType' for clarity
  * - Changed 'grade' from union type to freeform string (supports any grading standard)
  * - Added 'pmWeightGrams' and 'pmPercent' for precious metal tracking
+ * - Removed 'tags' (see below)
+ * - Removed 'dealer' (see below)
+ *
+ * ABOUT THE REMOVED 'tags' FIELD
+ * ------------------------------
+ * There used to be a `tags: string[]` here, backed by a CoinTags table in SQL
+ * Server and a "Tags" column in the grid. It was plumbed end to end EXCEPT for
+ * one thing: there was never any way to type a tag in. The editor had no input,
+ * bulk edit did not offer it, and neither importer could set one, so every coin
+ * carried an empty array and the grid column could only ever render a dash.
+ * Rather than build the missing UI the whole concept was dropped.
+ *
+ * Older JSON exports still contain a `tags` array. That is harmless: the import
+ * normaliser in services/inventory/coin-factory.ts simply does not copy the key
+ * across, so an old file still loads without error.
+ *
+ * ABOUT THE REMOVED 'dealer' FIELD
+ * -------------------------------
+ * There used to be a `dealer?: string` here — "who this coin came from" — backed
+ * by a Coins.Dealer column, an editor input, a grid column, a free-text filter
+ * and a CSV column. The owner asked for it to go: the same information is
+ * already recorded, per event and more precisely, on the TRANSACTION rows
+ * (see TransactionRecord.dealer further down this file), so the coin-level copy
+ * was a second, weaker answer to a question that was already answered.
+ *
+ * ***********************************************************************
+ * *** TransactionRecord.dealer IS A DIFFERENT FIELD AND IT STAYS. ***
+ * A coin-level dealer said "this coin came from Heritage". A transaction-level
+ * dealer says "THIS purchase, on this date, for this amount, was with
+ * Heritage" — which survives a coin being bought from one dealer and later
+ * sold to another. Only the coin-level one was removed. If you are grepping
+ * for `dealer` to finish a cleanup, check which of the two you have found.
+ * ***********************************************************************
+ *
+ * Older JSON and CSV exports still contain a `dealer` column/key. That is
+ * harmless for the same reason the old `tags` arrays are: nothing copies the key
+ * across any more, so an old file still loads, just without that value.
  */
 export interface CoinRecord {
   id: string;
@@ -27,12 +64,24 @@ export interface CoinRecord {
   currentValue: number;
   notes: string;
   imagePaths: string[];
-  tags: string[];
   source: 'manual' | 'quicken' | 'import' | 'csv';
   hasCacSticker?: boolean;
   soldPrice?: number;
   soldDate?: string;
-  dealer?: string;
+  /**
+   * The coin's GROSS weight — the whole coin, alloy included — in GRAMS.
+   *
+   * It was in TROY OUNCES until the switch recorded in
+   * `server/migrations/008-weight-to-grams.sql`, which multiplied every
+   * stored value by 31.1034768. Grams was chosen so that this and
+   * `pmWeightGrams` below share a unit: the two fields measure different
+   * things (gross coin vs. pure metal inside it) and having them in
+   * different units as well made them easy to confuse — which is exactly
+   * the mistake behind the melt-value bug written up in the README.
+   *
+   * NOT used to compute melt value. That is `pmWeightGrams` only; see
+   * `computeMeltValue` in services/inventory/inventory-metrics.ts.
+   */
   weight?: number;
   metalContent?: string;
   coinSet?: string;
@@ -81,8 +130,47 @@ export interface QuickenImportRecord {
   country: string;
   notes: string;
   source: 'quicken';
-  pmWeightGrams?: number; // Precious metal weight in grams
-  pmPercent?: number; // Precious metal purity percentage
+  /* -------------------------------------------------------------------------
+   * THE FIVE ALLOY / WEIGHT FIELDS.
+   *
+   * All five come from ONE function -- `composePmFields` in pm-fill.ts, which
+   * is also what the CSV import and the Settings > Maintenance backfill call,
+   * so the three paths cannot drift. It has two sources, in a fixed order:
+   *
+   *   1. the REFERENCE TABLE (pm-reference.ts), keyed on country +
+   *      denomination + YEAR. When it has a row, it fills all five at once, so
+   *      they can never disagree with each other.
+   *   2. failing that, the COARSE METAL INFERENCE (metal-inference.ts), which
+   *      answers "what metal is this?" from the coin type, the denomination
+   *      and the series name. It can only ever fill `metalContent`; the other
+   *      four stay undefined, because knowing a US $20 is gold says nothing
+   *      about how many grams of gold are in this particular one, nor what
+   *      the whole coin weighs.
+   *
+   * All five are optional and are left UNDEFINED -- not zero, not empty string
+   * -- whenever nothing determines them, because a blank the user can see and
+   * fix beats a guess that silently produces a wrong melt value.
+   *
+   * `metalContent` and `composition` were added when the import used to fill
+   * in only the two PM numbers, which is why the editor's Metal and
+   * Composition fields came up empty on every imported coin. `weight` is the
+   * most recent addition, for the same reason: the gross weights existed only
+   * in prose comments in pm-reference.ts, so nothing could read them.
+   * ---------------------------------------------------------------------- */
+  /** Canonical Metal value for the editor dropdown: "Gold", "Silver", "Clad", ... */
+  metalContent?: string;
+  /** Free-text alloy description, e.g. "90% Gold, 10% Copper". */
+  composition?: string;
+  /** PURE precious metal weight in grams (NOT the coin's gross weight). */
+  pmWeightGrams?: number;
+  /** Alloy fineness as a percentage (90 = 90% fine). */
+  pmPercent?: number;
+  /**
+   * The WHOLE COIN's gross weight in GRAMS -- alloy included, the figure a
+   * scale reads. Maps straight onto `CoinRecord.weight`, which counts GRAMS
+   * from migration 008 onward. Undefined when nothing determines it.
+   */
+  weight?: number;
 }
 
 export interface ImageMatchCandidate {
@@ -268,6 +356,16 @@ export interface TransactionRecord {
   type: 'purchase' | 'sale' | 'trade' | 'appraisal';
   date: string;
   amount: number;
+  /**
+   * Who this ONE transaction was with — the seller on a purchase, the buyer on
+   * a sale, the appraiser on an appraisal.
+   *
+   * KEEP. This is NOT the `dealer` field that was removed from CoinRecord
+   * above. That one was a single "where did this coin come from" string on the
+   * coin itself; this one belongs to an individual dated, priced event, so a
+   * coin bought from one dealer and sold to another records both correctly.
+   * It is backed by the Transactions.Dealer column, which is untouched.
+   */
   dealer: string;
   notes: string;
 }
@@ -337,6 +435,53 @@ export interface SpotPriceResult {
   source: string;       // Where the prices came from, e.g. "COMEX/NYMEX futures via Yahoo Finance"
   timestamp: string;    // ISO timestamp of the fetch
   error?: string;       // Present when the fetch failed; prices will be zeroed
+}
+
+/**
+ * The newest row of the SpotPrices history table — what
+ * `GET /api/spot-prices/latest` answers with.
+ *
+ * NOT the same thing as SpotPriceResult above, and the difference matters:
+ *
+ *   SpotPriceResult   comes from GET /spot-prices/FETCH, which calls out to
+ *                     COMEX/NYMEX live and touches no database at all.
+ *   LatestSpotPrices  comes from GET /spot-prices/LATEST, which reads back the
+ *                     last set of prices we SAVED. This is what the app loads
+ *                     at start-up so melt values survive a restart.
+ *
+ * `fetchedAt` is the field to test for "has anything ever been saved?". When
+ * the SpotPrices table is empty the route still answers 200, with every price
+ * zeroed and BOTH `source` and `fetchedAt` null — see
+ * server/routes/data/spot-prices.ts. So a null `fetchedAt` means "no row",
+ * never "a row whose prices happened to be zero".
+ */
+export interface LatestSpotPrices extends SpotPrices {
+  /** Where the saved prices came from, or null when no row exists yet. */
+  source: string | null;
+  /** ISO timestamp of the saved row, or null when no row exists yet. */
+  fetchedAt: string | null;
+}
+
+/**
+ * What the app knows about the newest set of spot prices that has actually
+ * been WRITTEN to the database, as opposed to the ones sitting in memory.
+ *
+ * Held alongside `spotPrices` on InventoryService, for two reasons:
+ *  - `source` / `fetchedAt` let the UI say "Updated: 3 Oct, 14:02 (COMEX)"
+ *    after a restart, instead of looking like nothing has ever happened;
+ *  - `prices` is the snapshot InventoryService.commitSpotPrices() compares
+ *    against, so saving the same four numbers twice does not add a second
+ *    identical row to a table that only ever grows.
+ *
+ * All three null means the SpotPrices table has never had a row in it.
+ */
+export interface SpotPriceMeta {
+  /** Provenance label of the saved row, or null if nothing has been saved. */
+  source: string | null;
+  /** ISO timestamp of the saved row, or null if nothing has been saved. */
+  fetchedAt: string | null;
+  /** The exact prices in that saved row, or null if nothing has been saved. */
+  prices: SpotPrices | null;
 }
 
 // ===========================================================================

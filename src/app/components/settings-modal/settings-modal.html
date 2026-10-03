@@ -32,7 +32,6 @@
                 </button>
               }
             </div>
-            <textarea [ngModel]="categoryListText()" (ngModelChange)="updateCategoryListText($event)"></textarea>
           </label>
           <label>
             <span>Denominations</span>
@@ -47,7 +46,6 @@
                 </button>
               }
             </div>
-            <textarea [ngModel]="denominationListText()" (ngModelChange)="updateDenominationListText($event)"></textarea>
           </label>
           <label>
             <span>Mint marks</span>
@@ -62,7 +60,6 @@
                 </button>
               }
             </div>
-            <textarea [ngModel]="mintMarkListText()" (ngModelChange)="updateMintMarkListText($event)"></textarea>
           </label>
           <label>
             <span>Metal content</span>
@@ -77,8 +74,171 @@
                 </button>
               }
             </div>
-            <textarea [ngModel]="metalContentListText()" (ngModelChange)="updateMetalContentListText($event)"></textarea>
           </label>
+          <!-- Sets / Albums. Same shape as the four lists above: type-and-Add,
+               plus clickable chips to remove.
+
+               These are the values offered by the "Set / Album" picker in the
+               coin detail panel. They were previously only editable from the
+               Categories & Sets dialog, and changes there did not survive a
+               reload because the add/remove path never reached the database.
+               Both halves of that are fixed — see LookupManager.addCoinSet. -->
+          <label>
+            <span>Sets / Albums</span>
+            <div class="settings-inline-add">
+              <input
+                type="text"
+                [ngModel]="coinSetDraft()"
+                (ngModelChange)="coinSetDraft.set($event)"
+                (keydown.enter)="addCoinSet()"
+                placeholder="Add set or album"
+                aria-label="Add set or album"
+              />
+              <button type="button" class="secondary small-button" (click)="addCoinSet()">Add</button>
+            </div>
+            <div class="settings-chip-list">
+              @for (coinSet of inv.coinSets(); track coinSet) {
+                <button type="button" class="chip-button" (click)="removeCoinSet(coinSet)" [title]="'Remove ' + coinSet">
+                  {{ coinSet }} <span aria-hidden="true">×</span>
+                </button>
+              }
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <!-- =====================================================================
+           MAINTENANCE
+
+           Deliberately set apart from the reference lists above by its own
+           rule-off border, because it is a different KIND of thing: the lists
+           change what the dropdowns offer, this changes the coin records
+           themselves. Burying it among the chips would make a four-hundred-row
+           rewrite look like one more thing to type into.
+           ================================================================== -->
+      <div class="settings-group settings-maintenance">
+        <h3>Maintenance</h3>
+
+        <div class="maintenance-action">
+          <div class="maintenance-heading">Backfill precious-metal data</div>
+          <p class="maintenance-explainer">
+            Fills in <strong>Metal Content</strong>, <strong>Composition</strong>,
+            <strong>PM %</strong> and <strong>PM Weight (g)</strong> for coins that are
+            missing them, working the values out from each coin's country,
+            denomination and year — the same inference the Quicken import uses.
+            Melt value is calculated from PM Weight and Metal Content, so coins
+            added before that inference existed show no melt figure until this is run.
+          </p>
+          <p class="maintenance-explainer">
+            It only ever fills blanks: anything you have already entered is left
+            exactly as it is. Coins whose alloy cannot be determined from the date
+            alone — a 1942 nickel, a 1982 cent, a 1971-78 Eisenhower dollar — are
+            skipped rather than guessed at, because a wrong purity would silently
+            produce a wrong melt value.
+          </p>
+
+          <!-- STATE 1: idle. Nothing has been previewed or run. -->
+          @if (!backfillPlan() && !backfillRunning() && !backfillOutcome()) {
+            <button type="button" class="secondary small-button" (click)="previewPmBackfill()">
+              Preview changes
+            </button>
+          }
+
+          <!-- STATE 2: previewed. Counts, then an explicit confirm. -->
+          @if (backfillPlan(); as plan) {
+            <div class="maintenance-preview">
+              <ul class="maintenance-counts">
+                <li>
+                  <strong>{{ plan.fillableCount }}</strong>
+                  {{ plan.fillableCount === 1 ? 'coin can be filled in' : 'coins can be filled in' }}
+                </li>
+                <li>
+                  <strong>{{ plan.alreadyCompleteCount }}</strong> already have their data
+                  (nothing to add)
+                </li>
+                <li>
+                  <strong>{{ plan.undeterminedCount }}</strong> cannot be determined — left alone
+                </li>
+                @if (plan.skippedDraftCount > 0) {
+                  <li>
+                    <strong>{{ plan.skippedDraftCount }}</strong> not saved to the database yet —
+                    skipped
+                  </li>
+                }
+                <li class="maintenance-total">{{ plan.totalScanned }} coins examined</li>
+              </ul>
+
+              @if (plan.fillableCount === 0) {
+                <p class="maintenance-explainer">
+                  Nothing to do — every coin either already has its data or cannot be
+                  determined from its date and denomination.
+                </p>
+                <div class="maintenance-buttons">
+                  <button type="button" class="secondary small-button" (click)="cancelPmBackfill()">
+                    Close
+                  </button>
+                </div>
+              } @else {
+                <div class="maintenance-buttons">
+                  <button
+                    type="button"
+                    class="small-button"
+                    [disabled]="backfillRunning()"
+                    (click)="confirmPmBackfill()"
+                  >
+                    Fill in {{ plan.fillableCount }}
+                    {{ plan.fillableCount === 1 ? 'coin' : 'coins' }}
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary small-button"
+                    [disabled]="backfillRunning()"
+                    (click)="cancelPmBackfill()"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Live progress. One coin is written at a time, so this is a real
+               count of completed writes, not an animation. -->
+          @if (backfillProgress(); as progress) {
+            <p class="maintenance-progress" role="status">
+              Saving {{ progress.processed }} of {{ progress.total }}…
+              @if (progress.currentLabel) {
+                <span class="maintenance-current">{{ progress.currentLabel }}</span>
+              }
+            </p>
+          }
+
+          <!-- STATE 3: done. What actually changed. -->
+          @if (backfillOutcome(); as outcome) {
+            <div class="maintenance-result" role="status">
+              <p>
+                Filled in <strong>{{ outcome.filled }}</strong>
+                {{ outcome.filled === 1 ? 'coin' : 'coins' }}
+                ({{ outcome.fieldsWritten }}
+                {{ outcome.fieldsWritten === 1 ? 'field' : 'fields' }} written).
+              </p>
+              @if (outcome.failed > 0) {
+                <p class="maintenance-failed">
+                  {{ outcome.failed }} could not be saved:
+                </p>
+                <ul class="maintenance-failures">
+                  @for (failure of outcome.failures; track failure.coinId) {
+                    <li>{{ failure.label }} — {{ failure.reason }}</li>
+                  }
+                </ul>
+              }
+              <div class="maintenance-buttons">
+                <button type="button" class="secondary small-button" (click)="previewPmBackfill()">
+                  Preview again
+                </button>
+              </div>
+            </div>
+          }
         </div>
       </div>
 

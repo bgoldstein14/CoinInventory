@@ -1,24 +1,20 @@
 <aside class="panel detail-panel">
+  <!-- The header is now nothing but the action buttons.
+
+       Three things used to sit on its left and all three were removed as
+       redundant, in two passes:
+
+         * a "Selected coin" eyebrow and an <h2> repeating coin type and
+           denomination; and
+         * a summary row of badges for grade, certification and CAC.
+
+       Every one of those values is an editable field in the form immediately
+       below, so the header was restating, in a form you could not correct,
+       what is already on screen a row or two down. The grade pill and the
+       green-bean icon still appear where they genuinely add something: the
+       inventory grid, where there is no form and you are scanning many coins
+       at once. -->
   <div class="detail-header">
-    <div>
-      <p class="eyebrow">Selected coin</p>
-      <!-- Display coin type + denomination as the heading (name field removed) -->
-      <h2>{{ coin().coinType || 'Untitled' }} {{ formatDenominationDisplay(coin().denomination) }}</h2>
-      <div class="detail-badges">
-        @if (coin().grade) {
-          <span [class]="gradeBadgeClass(coin().grade)">{{ coin().grade }}</span>
-        }
-        @if (certBadgeLabel(coin()); as certLabel) {
-          <span class="badge badge--cert">{{ certLabel }}</span>
-        }
-        @if (coin().hasCacSticker) {
-          <span class="cac-bean-badge">
-            <img [src]="cacGreenBeanIconPath" alt="" class="cac-bean" />
-            CAC
-          </span>
-        }
-      </div>
-    </div>
     <div class="detail-header-actions">
       <button type="button" class="secondary small-button" [disabled]="!images().canOpenImageGallery(coin())" (click)="images().openImageGallery()">
         {{ images().showImageGallery() ? 'Hide images' : 'Show images' }}

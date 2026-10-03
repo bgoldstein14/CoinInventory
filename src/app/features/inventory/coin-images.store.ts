@@ -116,6 +116,87 @@ export class CoinImagesStore {
     this.inv.updateCoin(coin.id, { imagePaths: coin.imagePaths.filter(p => p !== imagePath) });
   }
 
+  // ===================== Choosing the grid thumbnail ("main photo") =========
+
+  /**
+   * Is this image the one the main grid shows as the coin's thumbnail?
+   *
+   * The grid's Photo column renders `coin.imagePaths[0]` (see
+   * InventoryTable.primaryImage), so "the main photo" is simply "position 0".
+   * The gallery uses this to tick the current one and disable its button, so
+   * the user can SEE which photo is the main one rather than having to guess.
+   */
+  isMainImage(imagePath: string): boolean {
+    const coin = this.selectedCoin;
+    if (!coin || coin.imagePaths.length === 0) return false;
+    return coin.imagePaths[0] === imagePath;
+  }
+
+  /**
+   * Make the chosen photo the one shown in the main grid.
+   *
+   * ---------------------------------------------------------------------
+   * WHY THIS IS A RE-ORDER AND NOT A NEW "IsPrimary" DATABASE COLUMN
+   * ---------------------------------------------------------------------
+   * The data model already answers this question. Every row in `CoinImages`
+   * carries a `SortOrder`; `GET /api/coins/:id/images` returns them
+   * `ORDER BY SortOrder`; and the grid thumbnail is the FIRST image in that
+   * list. So "this photo is the main one" is already expressible as "this
+   * photo is at SortOrder 0" — the information has nowhere else it could
+   * live, and there is no second place for it to disagree with itself.
+   *
+   * Adding an `IsPrimary` flag instead would mean: a schema migration, a new
+   * invariant ("exactly one row per coin has it set") that nothing enforces,
+   * and a brand-new way for the gallery order and the grid thumbnail to drift
+   * apart. Moving the chosen image to the front of `imagePaths` needs none of
+   * that — the server rewrites SortOrder from the array index when it
+   * re-inserts the rows, so array position IS SortOrder.
+   *
+   * A pleasant side effect: the gallery and the full-screen viewer list the
+   * photos in the same order, so the main photo also becomes the first one you
+   * see when you open the viewer.
+   *
+   * ---------------------------------------------------------------------
+   * WHY WE SEND ONLY `imagePaths`, AND WHY SOURCE PATHS SURVIVE
+   * ---------------------------------------------------------------------
+   * `PUT /api/coins/:id` REPLACES a coin's entire image set: it deletes every
+   * CoinImages row and re-inserts the array it was given. Two consequences:
+   *
+   *   1. The request must carry ONLY the image field. `InventoryService
+   *      .updateCoin` takes a Partial<CoinRecord> and CoinEditor PUTs just the
+   *      changed keys, so passing `{ imagePaths }` keeps the write atomic —
+   *      no other field of the coin is touched or at risk.
+   *
+   *   2. Each image also has an optional `sourcePath` (where the ORIGINAL
+   *      full-resolution file lives on disk). An entry sent as a bare string
+   *      is re-inserted with `SourcePath NULL`, so a naive re-order would
+   *      silently erase the recorded location of EVERY photo on the coin —
+   *      exactly the kind of quiet data loss this project has been bitten by
+   *      before. We avoid it by going through `inv.updateCoin`, because
+   *      CoinEditor.withSourcePaths() re-attaches the known paths to the
+   *      outgoing array (see services/image-source-paths.ts). That is why this
+   *      method must NOT call the API directly: the single funnel is the
+   *      protection.
+   */
+  setMainImage(imagePath: string): void {
+    const coin = this.selectedCoin;
+    if (!coin) return;
+
+    const index = coin.imagePaths.indexOf(imagePath);
+
+    // Unknown image, or it is already the main one. Doing nothing is important
+    // rather than merely tidy: a no-op PUT would still delete and re-insert
+    // every image row on the server for no reason at all.
+    if (index <= 0) return;
+
+    // Move it to the front, leaving every other photo in its existing relative
+    // order. `filter` (rather than splice) keeps the original array untouched —
+    // it is the one bound to the screen.
+    const reordered = [imagePath, ...coin.imagePaths.filter(p => p !== imagePath)];
+
+    this.inv.updateCoin(coin.id, { imagePaths: reordered });
+  }
+
   // ===================== Private helpers =====================
 
   private async addDroppedFiles(files: File[]): Promise<void> {

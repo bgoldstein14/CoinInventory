@@ -6172,3 +6172,1032 @@ Error: ENOENT: no such file or directory, stat 'D:\Documents\Development\Coin In
 TypeError: fetch failed
 [2026-09-26T21:44:51.711Z] [INFO] POST /log
 [2026-09-26T21:44:51.712Z] [WARN] [frontend] Spot price fetch returned error: fetch failed
+[2026-10-03T15:28:50.795Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T15:28:50.797Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T15:29:00.134Z] [INFO] POST /log
+[2026-10-03T15:29:00.135Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T15:29:00.137Z] [INFO] GET /coins
+[2026-10-03T15:29:00.137Z] [INFO] Fetching all coins with tags and image counts (includeImages=true)
+[2026-10-03T15:29:00.138Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T15:29:00.228Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T15:29:00.273Z] [INFO] Retrieved 53 coins
+[2026-10-03T15:29:00.278Z] [INFO] POST /log
+[2026-10-03T15:29:00.279Z] [INFO] [frontend] Successfully loaded 53 coins from database
+[2026-10-03T15:29:00.279Z] [INFO] GET /categories
+[2026-10-03T15:29:00.280Z] [INFO] Fetching categories
+[2026-10-03T15:29:00.282Z] [INFO] GET /coin-sets
+[2026-10-03T15:29:00.282Z] [INFO] Fetching coin sets
+[2026-10-03T15:29:00.283Z] [INFO] GET /transactions
+[2026-10-03T15:29:00.283Z] [INFO] Fetching transactions
+[2026-10-03T15:29:00.284Z] [INFO] GET /mintmarks
+[2026-10-03T15:29:00.284Z] [INFO] Fetching active mint marks
+[2026-10-03T15:29:00.287Z] [INFO] GET /denominations
+[2026-10-03T15:29:00.288Z] [INFO] Fetching active denominations
+[2026-10-03T15:29:00.288Z] [INFO] GET /metalcontents
+[2026-10-03T15:29:00.288Z] [INFO] Fetching metal contents
+[2026-10-03T15:29:00.324Z] [INFO] POST /log
+[2026-10-03T15:29:00.325Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T15:29:24.746Z] [INFO] POST /log
+[2026-10-03T15:29:24.746Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T15:29:24.749Z] [INFO] GET /coins
+[2026-10-03T15:29:24.749Z] [INFO] Fetching all coins with tags and image counts (includeImages=true)
+[2026-10-03T15:29:24.761Z] [INFO] Retrieved 53 coins
+[2026-10-03T15:29:24.864Z] [INFO] POST /log
+[2026-10-03T15:29:24.864Z] [INFO] [frontend] Successfully loaded 53 coins from database
+[2026-10-03T15:29:24.866Z] [INFO] GET /categories
+[2026-10-03T15:29:24.867Z] [INFO] Fetching categories
+[2026-10-03T15:29:24.868Z] [INFO] GET /coin-sets
+[2026-10-03T15:29:24.869Z] [INFO] Fetching coin sets
+[2026-10-03T15:29:24.870Z] [INFO] GET /transactions
+[2026-10-03T15:29:24.870Z] [INFO] GET /denominations
+[2026-10-03T15:29:24.870Z] [INFO] Fetching active denominations
+[2026-10-03T15:29:24.871Z] [INFO] Fetching transactions
+[2026-10-03T15:29:24.873Z] [INFO] GET /mintmarks
+[2026-10-03T15:29:24.873Z] [INFO] Fetching active mint marks
+[2026-10-03T15:29:24.875Z] [INFO] GET /metalcontents
+[2026-10-03T15:29:24.875Z] [INFO] Fetching metal contents
+[2026-10-03T15:29:24.913Z] [INFO] POST /log
+[2026-10-03T15:29:24.913Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T15:36:56.523Z] [INFO] POST /categories
+[2026-10-03T15:36:56.524Z] [INFO] Adding category: Early Proofs
+[2026-10-03T15:36:56.525Z] [INFO] POST /coins
+[2026-10-03T15:36:56.526Z] [INFO] Creating new coin 03362179-e9be-485b-8ba6-c21fb7035a0f
+[2026-10-03T15:36:56.578Z] [INFO] POST /coins
+[2026-10-03T15:36:56.578Z] [INFO] Creating new coin 8337419a-b0ac-4091-8bac-72a9877fc6d8
+[2026-10-03T15:36:56.579Z] [INFO] POST /coins
+[2026-10-03T15:36:56.579Z] [INFO] Creating new coin 25e21d16-5837-436c-9ea9-79f9100555b6
+[2026-10-03T15:36:56.579Z] [INFO] POST /coins
+[2026-10-03T15:36:56.580Z] [INFO] Creating new coin 8dd45163-a171-482e-92c9-03933464f4f2
+[2026-10-03T15:36:56.580Z] [INFO] POST /coins
+[2026-10-03T15:36:56.580Z] [INFO] Creating new coin 3732fe2b-5e8f-49d5-91ea-161f0ca0239c
+[2026-10-03T15:36:56.589Z] [INFO] POST /coins
+[2026-10-03T15:36:56.590Z] [INFO] Creating new coin 31572e48-ecb0-43f5-b2f1-9c3ce2f4c24f
+[2026-10-03T15:36:56.614Z] [INFO] Coin 25e21d16-5837-436c-9ea9-79f9100555b6 created successfully
+[2026-10-03T15:36:56.616Z] [INFO] Coin 8337419a-b0ac-4091-8bac-72a9877fc6d8 created successfully
+[2026-10-03T15:36:56.616Z] [INFO] Coin 31572e48-ecb0-43f5-b2f1-9c3ce2f4c24f created successfully
+[2026-10-03T15:36:56.617Z] [INFO] Coin 3732fe2b-5e8f-49d5-91ea-161f0ca0239c created successfully
+[2026-10-03T15:36:56.617Z] [INFO] Coin 03362179-e9be-485b-8ba6-c21fb7035a0f created successfully
+[2026-10-03T15:36:56.618Z] [INFO] POST /coins
+[2026-10-03T15:36:56.618Z] [INFO] Creating new coin c54d4d5f-3c63-4543-badb-294dd61ae3b5
+[2026-10-03T15:36:56.619Z] [INFO] POST /coins
+[2026-10-03T15:36:56.619Z] [INFO] Creating new coin 9efe62e3-36c8-4c44-8a0d-c860d28b993f
+[2026-10-03T15:36:56.620Z] [INFO] POST /coins
+[2026-10-03T15:36:56.620Z] [INFO] Creating new coin acbdf88d-901a-4240-8be7-68ebc0f51e91
+[2026-10-03T15:36:56.621Z] [INFO] Coin 8dd45163-a171-482e-92c9-03933464f4f2 created successfully
+[2026-10-03T15:36:56.621Z] [INFO] POST /coins
+[2026-10-03T15:36:56.622Z] [INFO] Creating new coin f7885249-1d30-45f0-ae14-fb2130b4c7d3
+[2026-10-03T15:36:56.622Z] [INFO] POST /coins
+[2026-10-03T15:36:56.622Z] [INFO] Creating new coin 0d20f060-2761-46b6-bc04-981f55cfcafd
+[2026-10-03T15:36:56.623Z] [INFO] POST /coins
+[2026-10-03T15:36:56.624Z] [INFO] Creating new coin 351976c9-9be7-44ed-a9c8-f416b20ca01c
+[2026-10-03T15:36:56.630Z] [INFO] Coin c54d4d5f-3c63-4543-badb-294dd61ae3b5 created successfully
+[2026-10-03T15:36:56.632Z] [INFO] POST /coins
+[2026-10-03T15:36:56.632Z] [INFO] Creating new coin 20f5b000-7224-48a7-9798-d9bb18fd3f4e
+[2026-10-03T15:36:56.633Z] [INFO] Coin 9efe62e3-36c8-4c44-8a0d-c860d28b993f created successfully
+[2026-10-03T15:36:56.634Z] [INFO] Coin acbdf88d-901a-4240-8be7-68ebc0f51e91 created successfully
+[2026-10-03T15:36:56.635Z] [INFO] POST /coins
+[2026-10-03T15:36:56.635Z] [INFO] Creating new coin f2956c5f-ece4-4f89-a9b1-2c8ecebd3d79
+[2026-10-03T15:36:56.636Z] [INFO] Coin 351976c9-9be7-44ed-a9c8-f416b20ca01c created successfully
+[2026-10-03T15:36:56.636Z] [INFO] Coin 0d20f060-2761-46b6-bc04-981f55cfcafd created successfully
+[2026-10-03T15:36:56.637Z] [INFO] Coin f7885249-1d30-45f0-ae14-fb2130b4c7d3 created successfully
+[2026-10-03T15:36:56.637Z] [INFO] POST /coins
+[2026-10-03T15:36:56.638Z] [INFO] Creating new coin 6f645656-ad05-4a8c-aedf-71e58c3bbc94
+[2026-10-03T15:36:56.638Z] [INFO] POST /coins
+[2026-10-03T15:36:56.639Z] [INFO] Creating new coin c7f1c6b2-ced4-4b55-b6da-9478854a8405
+[2026-10-03T15:36:56.642Z] [INFO] Coin 20f5b000-7224-48a7-9798-d9bb18fd3f4e created successfully
+[2026-10-03T15:36:56.644Z] [INFO] Coin 6f645656-ad05-4a8c-aedf-71e58c3bbc94 created successfully
+[2026-10-03T15:36:56.644Z] [INFO] Coin f2956c5f-ece4-4f89-a9b1-2c8ecebd3d79 created successfully
+[2026-10-03T15:36:56.645Z] [INFO] Coin c7f1c6b2-ced4-4b55-b6da-9478854a8405 created successfully
+[2026-10-03T15:36:57.065Z] [INFO] POST /log
+[2026-10-03T15:36:57.066Z] [INFO] [frontend] Persisted category to database: Early Proofs
+[2026-10-03T15:36:57.092Z] [INFO] POST /log
+[2026-10-03T15:36:57.093Z] [INFO] [frontend] Successfully added 16 coins to database
+[2026-10-03T15:39:07.741Z] [INFO] PUT /coins/f7885249-1d30-45f0-ae14-fb2130b4c7d3
+[2026-10-03T15:39:07.741Z] [INFO] Updating coin f7885249-1d30-45f0-ae14-fb2130b4c7d3
+[2026-10-03T15:39:07.798Z] [INFO] Coin f7885249-1d30-45f0-ae14-fb2130b4c7d3 updated successfully
+[2026-10-03T15:39:07.804Z] [INFO] POST /log
+[2026-10-03T15:39:07.804Z] [INFO] [frontend] Updated coin f7885249-1d30-45f0-ae14-fb2130b4c7d3 in database (denomination)
+[2026-10-03T15:40:08.801Z] [INFO] PUT /coins/f7885249-1d30-45f0-ae14-fb2130b4c7d3
+[2026-10-03T15:40:08.801Z] [INFO] Updating coin f7885249-1d30-45f0-ae14-fb2130b4c7d3
+[2026-10-03T15:40:08.859Z] [INFO] Coin f7885249-1d30-45f0-ae14-fb2130b4c7d3 updated successfully
+[2026-10-03T15:40:08.864Z] [INFO] POST /log
+[2026-10-03T15:40:08.864Z] [INFO] [frontend] Updated coin f7885249-1d30-45f0-ae14-fb2130b4c7d3 in database (coinType)
+[2026-10-03T15:41:29.070Z] [INFO] POST /categories
+[2026-10-03T15:41:29.071Z] [INFO] Adding category: Gold Coins
+[2026-10-03T15:41:29.072Z] [INFO] POST /coins
+[2026-10-03T15:41:29.072Z] [INFO] Creating new coin a0d09087-7991-4336-aceb-335429f3eca8
+[2026-10-03T15:41:29.073Z] [INFO] POST /coins
+[2026-10-03T15:41:29.073Z] [INFO] Creating new coin 5988850b-2d98-4ae8-b631-5672b56e88b7
+[2026-10-03T15:41:29.074Z] [INFO] POST /coins
+[2026-10-03T15:41:29.074Z] [INFO] Creating new coin bce6b155-2aee-4165-83c4-18916f043942
+[2026-10-03T15:41:29.074Z] [INFO] POST /coins
+[2026-10-03T15:41:29.075Z] [INFO] Creating new coin 2ce751d1-f29d-4877-86e6-44cceaffcbc1
+[2026-10-03T15:41:29.077Z] [INFO] POST /coins
+[2026-10-03T15:41:29.077Z] [INFO] Creating new coin 26d079a9-002d-4171-a8bf-f5990509f6ed
+[2026-10-03T15:41:29.090Z] [INFO] POST /coins
+[2026-10-03T15:41:29.090Z] [INFO] Creating new coin f65cbc9b-838b-4282-8bec-969550f9b2be
+[2026-10-03T15:41:29.091Z] [INFO] Coin a0d09087-7991-4336-aceb-335429f3eca8 created successfully
+[2026-10-03T15:41:29.092Z] [INFO] Coin 5988850b-2d98-4ae8-b631-5672b56e88b7 created successfully
+[2026-10-03T15:41:29.093Z] [INFO] Coin bce6b155-2aee-4165-83c4-18916f043942 created successfully
+[2026-10-03T15:41:29.093Z] [INFO] Coin 2ce751d1-f29d-4877-86e6-44cceaffcbc1 created successfully
+[2026-10-03T15:41:29.094Z] [INFO] Coin 26d079a9-002d-4171-a8bf-f5990509f6ed created successfully
+[2026-10-03T15:41:29.095Z] [INFO] POST /coins
+[2026-10-03T15:41:29.095Z] [INFO] Creating new coin c670681e-2101-45d4-8fdd-630ce586731e
+[2026-10-03T15:41:29.095Z] [INFO] POST /coins
+[2026-10-03T15:41:29.096Z] [INFO] Creating new coin 85508192-ffeb-4559-9a74-f3991601e316
+[2026-10-03T15:41:29.096Z] [INFO] POST /coins
+[2026-10-03T15:41:29.096Z] [INFO] Creating new coin ccecdc71-1d76-444f-82fe-4233197b56f1
+[2026-10-03T15:41:29.097Z] [INFO] POST /coins
+[2026-10-03T15:41:29.097Z] [INFO] Creating new coin d391ef5c-2192-4bc7-b02c-985c6398bb0d
+[2026-10-03T15:41:29.098Z] [INFO] POST /coins
+[2026-10-03T15:41:29.098Z] [INFO] Creating new coin 80b2f00e-13d0-4db6-bf71-abfc87bc56a1
+[2026-10-03T15:41:29.102Z] [INFO] Coin f65cbc9b-838b-4282-8bec-969550f9b2be created successfully
+[2026-10-03T15:41:29.104Z] [INFO] POST /coins
+[2026-10-03T15:41:29.105Z] [INFO] Creating new coin 3aff1b09-87e4-4f03-8368-6e93d9901723
+[2026-10-03T15:41:29.106Z] [INFO] Coin c670681e-2101-45d4-8fdd-630ce586731e created successfully
+[2026-10-03T15:41:29.107Z] [INFO] Coin ccecdc71-1d76-444f-82fe-4233197b56f1 created successfully
+[2026-10-03T15:41:29.107Z] [INFO] Coin 85508192-ffeb-4559-9a74-f3991601e316 created successfully
+[2026-10-03T15:41:29.108Z] [INFO] POST /coins
+[2026-10-03T15:41:29.108Z] [INFO] Creating new coin 845b1946-3f50-46af-988b-c7e65db9baa4
+[2026-10-03T15:41:29.110Z] [INFO] Coin d391ef5c-2192-4bc7-b02c-985c6398bb0d created successfully
+[2026-10-03T15:41:29.111Z] [INFO] Coin 80b2f00e-13d0-4db6-bf71-abfc87bc56a1 created successfully
+[2026-10-03T15:41:29.112Z] [INFO] POST /coins
+[2026-10-03T15:41:29.112Z] [INFO] Creating new coin 5171d6ce-4628-484e-9e9c-c20255116748
+[2026-10-03T15:41:29.113Z] [INFO] POST /coins
+[2026-10-03T15:41:29.113Z] [INFO] Creating new coin 8bf79316-594d-47b2-aa3d-34722b6ec081
+[2026-10-03T15:41:29.114Z] [INFO] POST /coins
+[2026-10-03T15:41:29.114Z] [INFO] Creating new coin baf20004-d065-4993-912f-97f67137fa8c
+[2026-10-03T15:41:29.115Z] [INFO] POST /coins
+[2026-10-03T15:41:29.115Z] [INFO] Creating new coin 173c26e4-9775-4e68-80ef-f7067981aaba
+[2026-10-03T15:41:29.117Z] [INFO] Coin 3aff1b09-87e4-4f03-8368-6e93d9901723 created successfully
+[2026-10-03T15:41:29.119Z] [INFO] POST /coins
+[2026-10-03T15:41:29.120Z] [INFO] Creating new coin 095f9b55-1633-4d40-b476-f58d61b3b4e8
+[2026-10-03T15:41:29.121Z] [INFO] Coin 845b1946-3f50-46af-988b-c7e65db9baa4 created successfully
+[2026-10-03T15:41:29.122Z] [INFO] POST /coins
+[2026-10-03T15:41:29.122Z] [INFO] Creating new coin 4378e650-fb7e-4fe8-a6a0-1fecdbc02a1d
+[2026-10-03T15:41:29.137Z] [INFO] Coin 8bf79316-594d-47b2-aa3d-34722b6ec081 created successfully
+[2026-10-03T15:41:29.138Z] [INFO] Coin 095f9b55-1633-4d40-b476-f58d61b3b4e8 created successfully
+[2026-10-03T15:41:29.139Z] [INFO] Coin baf20004-d065-4993-912f-97f67137fa8c created successfully
+[2026-10-03T15:41:29.139Z] [INFO] Coin 4378e650-fb7e-4fe8-a6a0-1fecdbc02a1d created successfully
+[2026-10-03T15:41:29.140Z] [INFO] POST /coins
+[2026-10-03T15:41:29.140Z] [INFO] Creating new coin 86298605-b193-4597-b849-1db3140713f6
+[2026-10-03T15:41:29.141Z] [INFO] POST /coins
+[2026-10-03T15:41:29.141Z] [INFO] Creating new coin faacb8e8-5b16-46a5-90e0-0cb5cce856ec
+[2026-10-03T15:41:29.142Z] [INFO] POST /coins
+[2026-10-03T15:41:29.142Z] [INFO] Creating new coin da8f0c06-9415-4f0d-9359-19cabfc3d746
+[2026-10-03T15:41:29.143Z] [INFO] POST /coins
+[2026-10-03T15:41:29.143Z] [INFO] Creating new coin 3f45d8c0-9f97-45e8-bc31-4263dbaea04c
+[2026-10-03T15:41:29.144Z] [INFO] Coin 5171d6ce-4628-484e-9e9c-c20255116748 created successfully
+[2026-10-03T15:41:29.145Z] [INFO] Coin 173c26e4-9775-4e68-80ef-f7067981aaba created successfully
+[2026-10-03T15:41:29.146Z] [INFO] POST /coins
+[2026-10-03T15:41:29.146Z] [INFO] Creating new coin f314e19c-724e-4e27-92e2-4bc700d849a9
+[2026-10-03T15:41:29.148Z] [INFO] POST /coins
+[2026-10-03T15:41:29.148Z] [INFO] Creating new coin 6cc0ed84-014e-4e55-9bc7-ef3d36c06e7d
+[2026-10-03T15:41:29.151Z] [INFO] Coin 86298605-b193-4597-b849-1db3140713f6 created successfully
+[2026-10-03T15:41:29.151Z] [INFO] Coin faacb8e8-5b16-46a5-90e0-0cb5cce856ec created successfully
+[2026-10-03T15:41:29.152Z] [INFO] Coin da8f0c06-9415-4f0d-9359-19cabfc3d746 created successfully
+[2026-10-03T15:41:29.153Z] [INFO] POST /coins
+[2026-10-03T15:41:29.154Z] [INFO] Creating new coin 97b9f1b8-0fb4-4985-b309-f0db7a32f7da
+[2026-10-03T15:41:29.155Z] [INFO] POST /coins
+[2026-10-03T15:41:29.155Z] [INFO] Creating new coin 09e99a8e-c1c6-4b0f-89b8-32ef573ac22f
+[2026-10-03T15:41:29.156Z] [INFO] POST /coins
+[2026-10-03T15:41:29.156Z] [INFO] Creating new coin 36ee64fa-5f95-445b-b9e0-4b81d62f9b5c
+[2026-10-03T15:41:29.158Z] [INFO] Coin f314e19c-724e-4e27-92e2-4bc700d849a9 created successfully
+[2026-10-03T15:41:29.158Z] [INFO] Coin 3f45d8c0-9f97-45e8-bc31-4263dbaea04c created successfully
+[2026-10-03T15:41:29.159Z] [INFO] Coin 6cc0ed84-014e-4e55-9bc7-ef3d36c06e7d created successfully
+[2026-10-03T15:41:29.159Z] [INFO] POST /coins
+[2026-10-03T15:41:29.160Z] [INFO] Creating new coin 5d467499-d62c-471d-a141-8c025e47d0a8
+[2026-10-03T15:41:29.161Z] [INFO] POST /coins
+[2026-10-03T15:41:29.161Z] [INFO] Creating new coin ced3e04f-d7ce-4e63-b897-e12bacd0f9b6
+[2026-10-03T15:41:29.162Z] [INFO] POST /coins
+[2026-10-03T15:41:29.163Z] [INFO] Creating new coin 5efe9552-b7fa-46c0-8d30-4a9484252bc9
+[2026-10-03T15:41:29.164Z] [INFO] Coin 97b9f1b8-0fb4-4985-b309-f0db7a32f7da created successfully
+[2026-10-03T15:41:29.165Z] [INFO] Coin 09e99a8e-c1c6-4b0f-89b8-32ef573ac22f created successfully
+[2026-10-03T15:41:29.165Z] [INFO] Coin 36ee64fa-5f95-445b-b9e0-4b81d62f9b5c created successfully
+[2026-10-03T15:41:29.166Z] [INFO] POST /coins
+[2026-10-03T15:41:29.166Z] [INFO] Creating new coin f178deba-37c1-4240-9fbe-4727ffab8798
+[2026-10-03T15:41:29.168Z] [INFO] POST /coins
+[2026-10-03T15:41:29.168Z] [INFO] Creating new coin c3c6c230-621a-4c4c-a37b-c1f469d908fb
+[2026-10-03T15:41:29.168Z] [INFO] POST /coins
+[2026-10-03T15:41:29.168Z] [INFO] Creating new coin 320cde24-e37a-4467-8569-ed0672013df3
+[2026-10-03T15:41:29.170Z] [INFO] Coin ced3e04f-d7ce-4e63-b897-e12bacd0f9b6 created successfully
+[2026-10-03T15:41:29.170Z] [INFO] Coin 5d467499-d62c-471d-a141-8c025e47d0a8 created successfully
+[2026-10-03T15:41:29.172Z] [INFO] Coin 5efe9552-b7fa-46c0-8d30-4a9484252bc9 created successfully
+[2026-10-03T15:41:29.172Z] [INFO] POST /coins
+[2026-10-03T15:41:29.172Z] [INFO] Creating new coin 134e2bb2-75cf-4727-89ff-8bdea9ce5ced
+[2026-10-03T15:41:29.173Z] [INFO] POST /coins
+[2026-10-03T15:41:29.174Z] [INFO] Creating new coin 362a8e99-0714-4082-be77-34fca71310bc
+[2026-10-03T15:41:29.174Z] [INFO] POST /coins
+[2026-10-03T15:41:29.176Z] [INFO] Coin f178deba-37c1-4240-9fbe-4727ffab8798 created successfully
+[2026-10-03T15:41:29.177Z] [INFO] Coin c3c6c230-621a-4c4c-a37b-c1f469d908fb created successfully
+[2026-10-03T15:41:29.178Z] [INFO] Coin 320cde24-e37a-4467-8569-ed0672013df3 created successfully
+[2026-10-03T15:41:29.179Z] [INFO] Coin 134e2bb2-75cf-4727-89ff-8bdea9ce5ced created successfully
+[2026-10-03T15:41:29.180Z] [INFO] Coin 362a8e99-0714-4082-be77-34fca71310bc created successfully
+[2026-10-03T15:41:29.362Z] [INFO] POST /log
+[2026-10-03T15:41:29.363Z] [INFO] [frontend] Persisted category to database: Gold Coins
+[2026-10-03T15:41:29.363Z] [INFO] POST /log
+[2026-10-03T15:41:29.363Z] [INFO] POST /log
+[2026-10-03T15:41:29.364Z] [ERROR] [frontend] Failed to create coin " 1969" (322cef72-921d-4d6b-87d2-303e1f506d5f) in database | 400 Bad Request: denomination is required
+[2026-10-03T15:41:29.364Z] [ERROR] [frontend] Failed to insert 1 of 37 coins: ? 1969
+[2026-10-03T15:41:43.776Z] [INFO] PUT /coins/322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:41:43.776Z] [INFO] Updating coin 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:41:43.778Z] [WARN] Coin not found for update: 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:41:43.783Z] [INFO] POST /log
+[2026-10-03T15:41:43.783Z] [ERROR] [frontend] Failed to update coin 322cef72-921d-4d6b-87d2-303e1f506d5f in database | 404 Not Found: Coin not found
+[2026-10-03T15:42:07.398Z] [INFO] PUT /coins/322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:07.398Z] [INFO] Updating coin 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:07.400Z] [WARN] Coin not found for update: 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:07.404Z] [INFO] POST /log
+[2026-10-03T15:42:07.405Z] [ERROR] [frontend] Failed to update coin 322cef72-921d-4d6b-87d2-303e1f506d5f in database | 404 Not Found: Coin not found
+[2026-10-03T15:42:10.366Z] [INFO] PUT /coins/322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:10.366Z] [INFO] Updating coin 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:10.367Z] [WARN] Coin not found for update: 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:10.370Z] [INFO] POST /log
+[2026-10-03T15:42:10.370Z] [ERROR] [frontend] Failed to update coin 322cef72-921d-4d6b-87d2-303e1f506d5f in database | 404 Not Found: Coin not found
+[2026-10-03T15:42:18.259Z] [INFO] DELETE /coins/322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:18.260Z] [INFO] Deleting coin 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:18.287Z] [WARN] Coin not found for deletion: 322cef72-921d-4d6b-87d2-303e1f506d5f
+[2026-10-03T15:42:18.337Z] [INFO] POST /log
+[2026-10-03T15:42:18.337Z] [ERROR] [frontend] Failed to delete coin 322cef72-921d-4d6b-87d2-303e1f506d5f from database | 404 Not Found: Coin not found
+[2026-10-03T15:42:26.213Z] [INFO] POST /log
+[2026-10-03T15:42:26.214Z] [INFO] [frontend] Added draft coin 63d4806d-ec1d-4759-a295-435895e223f2 (not saved until it has 2 of year / type / denomination)
+[2026-10-03T15:42:41.054Z] [INFO] POST /coins
+[2026-10-03T15:42:41.054Z] [INFO] Creating new coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:41.106Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 created successfully
+[2026-10-03T15:42:41.114Z] [INFO] POST /log
+[2026-10-03T15:42:41.115Z] [INFO] [frontend] Created coin 63d4806d-ec1d-4759-a295-435895e223f2 in database
+[2026-10-03T15:42:44.185Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:44.185Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:44.198Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:42:44.202Z] [INFO] POST /log
+[2026-10-03T15:42:44.202Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:42:49.323Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:49.323Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:49.336Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:42:49.341Z] [INFO] POST /log
+[2026-10-03T15:42:49.342Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:42:51.194Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:51.195Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:42:51.207Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:42:51.210Z] [INFO] POST /log
+[2026-10-03T15:42:51.211Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:01.611Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:01.611Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:01.663Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:01.669Z] [INFO] POST /log
+[2026-10-03T15:43:01.669Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (coinType)
+[2026-10-03T15:43:05.843Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:05.843Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:05.857Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:05.860Z] [INFO] POST /log
+[2026-10-03T15:43:05.861Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (grade)
+[2026-10-03T15:43:09.795Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:09.795Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:09.808Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:09.813Z] [INFO] POST /log
+[2026-10-03T15:43:09.813Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (certCompany)
+[2026-10-03T15:43:13.972Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:13.981Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:13.984Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:13.987Z] [INFO] POST /log
+[2026-10-03T15:43:13.987Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (category)
+[2026-10-03T15:43:18.344Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:18.345Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:18.397Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:18.402Z] [INFO] POST /log
+[2026-10-03T15:43:18.402Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (country)
+[2026-10-03T15:43:23.010Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:23.010Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:23.022Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:23.026Z] [INFO] POST /log
+[2026-10-03T15:43:23.026Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:26.594Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:26.594Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:26.607Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:26.612Z] [INFO] POST /log
+[2026-10-03T15:43:26.612Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:30.659Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:30.660Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:30.672Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:30.675Z] [INFO] POST /log
+[2026-10-03T15:43:30.675Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:32.774Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:32.775Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:32.789Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:32.795Z] [INFO] POST /log
+[2026-10-03T15:43:32.795Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:52.374Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:52.375Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:52.428Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:52.433Z] [INFO] POST /log
+[2026-10-03T15:43:52.434Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:43:57.486Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:57.486Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:43:57.538Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:43:57.543Z] [INFO] POST /log
+[2026-10-03T15:43:57.544Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (coinType)
+[2026-10-03T15:44:00.692Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:00.693Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:00.705Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:00.708Z] [INFO] POST /log
+[2026-10-03T15:44:00.708Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (coinType)
+[2026-10-03T15:44:18.997Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:18.997Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:19.049Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:19.053Z] [INFO] POST /log
+[2026-10-03T15:44:19.054Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (coinType)
+[2026-10-03T15:44:21.832Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:21.833Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:21.835Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:21.838Z] [INFO] POST /log
+[2026-10-03T15:44:21.838Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:44:26.801Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:26.801Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:26.813Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:26.819Z] [INFO] POST /log
+[2026-10-03T15:44:26.819Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:44:53.881Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:53.882Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:53.936Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:53.941Z] [INFO] POST /log
+[2026-10-03T15:44:53.941Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:44:58.602Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:58.603Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:44:58.615Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:44:58.618Z] [INFO] POST /log
+[2026-10-03T15:44:58.619Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (denomination)
+[2026-10-03T15:45:28.774Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:28.774Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:28.787Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:28.792Z] [INFO] POST /log
+[2026-10-03T15:45:28.793Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (purchasePrice)
+[2026-10-03T15:45:32.457Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:32.457Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:32.469Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:32.473Z] [INFO] POST /log
+[2026-10-03T15:45:32.473Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (purchasePrice)
+[2026-10-03T15:45:36.162Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:36.162Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:36.165Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:36.170Z] [INFO] POST /log
+[2026-10-03T15:45:36.171Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (purchasePrice)
+[2026-10-03T15:45:39.475Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:39.476Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:39.478Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:39.481Z] [INFO] POST /log
+[2026-10-03T15:45:39.481Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (purchasePrice)
+[2026-10-03T15:45:49.229Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:49.229Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:49.245Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:49.250Z] [INFO] POST /log
+[2026-10-03T15:45:49.250Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (metalContent)
+[2026-10-03T15:45:53.373Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:53.374Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:53.379Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:53.383Z] [INFO] POST /log
+[2026-10-03T15:45:53.383Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (composition)
+[2026-10-03T15:45:55.017Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:55.017Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:55.019Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:55.024Z] [INFO] POST /log
+[2026-10-03T15:45:55.024Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (composition)
+[2026-10-03T15:45:56.496Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:56.497Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:45:56.500Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:45:56.502Z] [INFO] POST /log
+[2026-10-03T15:45:56.503Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (composition)
+[2026-10-03T15:46:05.100Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:46:05.101Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:46:05.103Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:46:05.108Z] [INFO] POST /log
+[2026-10-03T15:46:05.108Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (composition)
+[2026-10-03T15:46:08.038Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:46:08.038Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:46:08.041Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:46:08.045Z] [INFO] POST /log
+[2026-10-03T15:46:08.045Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (pmPercent)
+[2026-10-03T15:47:09.167Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:09.167Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:09.173Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:47:09.178Z] [INFO] POST /log
+[2026-10-03T15:47:09.178Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (pmWeightGrams)
+[2026-10-03T15:47:49.847Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:49.847Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:49.851Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:47:49.856Z] [INFO] POST /log
+[2026-10-03T15:47:49.856Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (weight)
+[2026-10-03T15:47:53.960Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:53.960Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:53.963Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:47:53.966Z] [INFO] POST /log
+[2026-10-03T15:47:53.967Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (weight)
+[2026-10-03T15:47:57.796Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:57.797Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:47:57.801Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:47:57.806Z] [INFO] POST /log
+[2026-10-03T15:47:57.806Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (weight)
+[2026-10-03T15:48:03.233Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:03.233Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:03.238Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:03.244Z] [INFO] POST /log
+[2026-10-03T15:48:03.244Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (weight)
+[2026-10-03T15:48:05.698Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:05.699Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:05.701Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:05.704Z] [INFO] POST /log
+[2026-10-03T15:48:05.705Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (weight)
+[2026-10-03T15:48:09.785Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:09.785Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:09.789Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:09.793Z] [INFO] POST /log
+[2026-10-03T15:48:09.793Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (pmWeightGrams)
+[2026-10-03T15:48:23.750Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:23.751Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:23.753Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:23.758Z] [INFO] POST /log
+[2026-10-03T15:48:23.759Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (pmWeightGrams)
+[2026-10-03T15:48:33.611Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:33.612Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:33.615Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:33.619Z] [INFO] POST /log
+[2026-10-03T15:48:33.620Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (currentValue)
+[2026-10-03T15:48:35.864Z] [INFO] PUT /coins/63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:35.865Z] [INFO] Updating coin 63d4806d-ec1d-4759-a295-435895e223f2
+[2026-10-03T15:48:35.868Z] [INFO] Coin 63d4806d-ec1d-4759-a295-435895e223f2 updated successfully
+[2026-10-03T15:48:35.870Z] [INFO] POST /log
+[2026-10-03T15:48:35.871Z] [INFO] [frontend] Updated coin 63d4806d-ec1d-4759-a295-435895e223f2 in database (currentValue)
+[2026-10-03T16:07:13.962Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T16:07:13.963Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T16:07:13.980Z] [INFO] POST /log
+[2026-10-03T16:07:13.980Z] [INFO] [frontend] Fetching spot prices via backend proxy...
+[2026-10-03T16:07:14.130Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T17:13:16.412Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T17:13:16.412Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T17:13:33.342Z] [INFO] POST /log
+[2026-10-03T17:13:33.343Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T17:13:33.344Z] [INFO] GET /coins
+[2026-10-03T17:13:33.344Z] [INFO] Fetching all coins with tags and image counts (includeImages=true)
+[2026-10-03T17:13:33.345Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T17:13:33.363Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T17:13:33.384Z] [INFO] Retrieved 106 coins
+[2026-10-03T17:13:33.436Z] [INFO] POST /log
+[2026-10-03T17:13:33.437Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T17:13:33.438Z] [INFO] GET /categories
+[2026-10-03T17:13:33.438Z] [INFO] Fetching categories
+[2026-10-03T17:13:33.442Z] [INFO] GET /coin-sets
+[2026-10-03T17:13:33.443Z] [INFO] Fetching coin sets
+[2026-10-03T17:13:33.443Z] [INFO] GET /transactions
+[2026-10-03T17:13:33.444Z] [INFO] Fetching transactions
+[2026-10-03T17:13:33.446Z] [INFO] GET /denominations
+[2026-10-03T17:13:33.446Z] [INFO] Fetching active denominations
+[2026-10-03T17:13:33.446Z] [INFO] GET /mintmarks
+[2026-10-03T17:13:33.447Z] [INFO] Fetching active mint marks
+[2026-10-03T17:13:33.449Z] [INFO] GET /metalcontents
+[2026-10-03T17:13:33.449Z] [INFO] Fetching metal contents
+[2026-10-03T17:13:33.493Z] [INFO] POST /log
+[2026-10-03T17:13:33.493Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T17:13:34.052Z] [INFO] POST /log
+[2026-10-03T17:13:34.053Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T17:13:34.054Z] [INFO] GET /coins
+[2026-10-03T17:13:34.054Z] [INFO] Fetching all coins with tags and image counts (includeImages=true)
+[2026-10-03T17:13:34.072Z] [INFO] Retrieved 106 coins
+[2026-10-03T17:13:34.162Z] [INFO] POST /log
+[2026-10-03T17:13:34.163Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T17:13:34.164Z] [INFO] GET /categories
+[2026-10-03T17:13:34.164Z] [INFO] Fetching categories
+[2026-10-03T17:13:34.165Z] [INFO] GET /coin-sets
+[2026-10-03T17:13:34.165Z] [INFO] Fetching coin sets
+[2026-10-03T17:13:34.165Z] [INFO] GET /transactions
+[2026-10-03T17:13:34.166Z] [INFO] Fetching transactions
+[2026-10-03T17:13:34.166Z] [INFO] GET /denominations
+[2026-10-03T17:13:34.167Z] [INFO] Fetching active denominations
+[2026-10-03T17:13:34.169Z] [INFO] GET /mintmarks
+[2026-10-03T17:13:34.169Z] [INFO] Fetching active mint marks
+[2026-10-03T17:13:34.169Z] [INFO] GET /metalcontents
+[2026-10-03T17:13:34.170Z] [INFO] Fetching metal contents
+[2026-10-03T17:13:34.246Z] [INFO] POST /log
+[2026-10-03T17:13:34.247Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T17:14:06.121Z] [INFO] PUT /coins/BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:06.122Z] [INFO] Updating coin BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:06.139Z] [INFO] Coin BAF20004-D065-4993-912F-97F67137FA8C updated successfully
+[2026-10-03T17:14:06.145Z] [INFO] POST /log
+[2026-10-03T17:14:06.145Z] [INFO] [frontend] Updated coin BAF20004-D065-4993-912F-97F67137FA8C in database (purchasePrice)
+[2026-10-03T17:14:09.503Z] [INFO] PUT /coins/BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:09.504Z] [INFO] Updating coin BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:09.517Z] [INFO] Coin BAF20004-D065-4993-912F-97F67137FA8C updated successfully
+[2026-10-03T17:14:09.522Z] [INFO] POST /log
+[2026-10-03T17:14:09.522Z] [INFO] [frontend] Updated coin BAF20004-D065-4993-912F-97F67137FA8C in database (purchasePrice)
+[2026-10-03T17:14:10.769Z] [INFO] PUT /coins/BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:10.769Z] [INFO] Updating coin BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:14:10.782Z] [INFO] Coin BAF20004-D065-4993-912F-97F67137FA8C updated successfully
+[2026-10-03T17:14:10.785Z] [INFO] POST /log
+[2026-10-03T17:14:10.786Z] [INFO] [frontend] Updated coin BAF20004-D065-4993-912F-97F67137FA8C in database (purchasePrice)
+[2026-10-03T17:14:31.614Z] [INFO] POST /coin-sets
+[2026-10-03T17:14:31.614Z] [INFO] Adding coin set: Great Britain Minor Type Set
+[2026-10-03T17:14:31.634Z] [INFO] POST /log
+[2026-10-03T17:14:31.634Z] [INFO] [frontend] Persisted coin set to database: Great Britain Minor Type Set
+[2026-10-03T17:14:39.843Z] [INFO] POST /coin-sets
+[2026-10-03T17:14:39.843Z] [INFO] Adding coin set: Great Britain Silver Type Set
+[2026-10-03T17:14:39.899Z] [INFO] POST /log
+[2026-10-03T17:14:39.900Z] [INFO] [frontend] Persisted coin set to database: Great Britain Silver Type Set
+[2026-10-03T17:20:42.735Z] [INFO] PUT /coins/BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:20:42.735Z] [INFO] Updating coin BAF20004-D065-4993-912F-97F67137FA8C
+[2026-10-03T17:20:42.789Z] [INFO] Coin BAF20004-D065-4993-912F-97F67137FA8C updated successfully
+[2026-10-03T17:20:42.795Z] [INFO] POST /log
+[2026-10-03T17:20:42.795Z] [INFO] [frontend] Updated coin BAF20004-D065-4993-912F-97F67137FA8C in database (notes)
+[2026-10-03T18:30:24.258Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T18:30:24.259Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T18:34:08.150Z] [INFO] POST /log
+[2026-10-03T18:34:08.151Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T18:34:08.151Z] [INFO] GET /coins
+[2026-10-03T18:34:08.152Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T18:34:08.153Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T18:34:08.175Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T18:34:08.196Z] [INFO] Retrieved 106 coins
+[2026-10-03T18:34:08.244Z] [INFO] POST /log
+[2026-10-03T18:34:08.244Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T18:34:08.246Z] [INFO] GET /categories
+[2026-10-03T18:34:08.246Z] [INFO] Fetching categories
+[2026-10-03T18:34:08.247Z] [INFO] GET /coin-sets
+[2026-10-03T18:34:08.247Z] [INFO] Fetching coin sets
+[2026-10-03T18:34:08.250Z] [INFO] GET /spot-prices/latest
+[2026-10-03T18:34:08.251Z] [INFO] GET /mintmarks
+[2026-10-03T18:34:08.251Z] [INFO] Fetching active mint marks
+[2026-10-03T18:34:08.251Z] [INFO] GET /transactions
+[2026-10-03T18:34:08.252Z] [INFO] GET /denominations
+[2026-10-03T18:34:08.252Z] [INFO] Fetching active denominations
+[2026-10-03T18:34:08.253Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T18:34:08.253Z] [INFO] Fetching transactions
+[2026-10-03T18:34:08.260Z] [INFO] GET /metalcontents
+[2026-10-03T18:34:08.260Z] [INFO] Fetching metal contents
+[2026-10-03T18:34:08.306Z] [INFO] POST /log
+[2026-10-03T18:34:08.307Z] [INFO] [frontend] No saved spot prices yet — melt values stay blank until prices are fetched
+[2026-10-03T18:34:08.307Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T18:34:08.308Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T18:34:08.328Z] [INFO] POST /log
+[2026-10-03T18:34:08.330Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T18:34:08.430Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T18:34:08.434Z] [INFO] POST /log
+[2026-10-03T18:34:08.435Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T18:34:08.437Z] [INFO] POST /spot-prices
+[2026-10-03T18:34:08.437Z] [INFO] Saving spot prices: Au=$4162.3 Ag=$60.42
+[2026-10-03T18:34:08.498Z] [INFO] POST /log
+[2026-10-03T18:34:08.499Z] [INFO] [frontend] Saved spot prices (COMEX/NYMEX futures via Yahoo Finance): Au=$4162.3 Ag=$60.42
+[2026-10-03T18:34:08.935Z] [INFO] POST /log
+[2026-10-03T18:34:08.936Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T18:34:08.936Z] [INFO] GET /coins
+[2026-10-03T18:34:08.937Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T18:34:08.946Z] [INFO] Retrieved 106 coins
+[2026-10-03T18:34:09.036Z] [INFO] POST /log
+[2026-10-03T18:34:09.037Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T18:34:09.038Z] [INFO] GET /categories
+[2026-10-03T18:34:09.038Z] [INFO] Fetching categories
+[2026-10-03T18:34:09.038Z] [INFO] GET /coin-sets
+[2026-10-03T18:34:09.039Z] [INFO] Fetching coin sets
+[2026-10-03T18:34:09.039Z] [INFO] GET /transactions
+[2026-10-03T18:34:09.039Z] [INFO] GET /denominations
+[2026-10-03T18:34:09.040Z] [INFO] Fetching active denominations
+[2026-10-03T18:34:09.040Z] [INFO] Fetching transactions
+[2026-10-03T18:34:09.041Z] [INFO] GET /mintmarks
+[2026-10-03T18:34:09.041Z] [INFO] Fetching active mint marks
+[2026-10-03T18:34:09.043Z] [INFO] GET /metalcontents
+[2026-10-03T18:34:09.044Z] [INFO] Fetching metal contents
+[2026-10-03T18:34:09.047Z] [INFO] GET /spot-prices/latest
+[2026-10-03T18:34:09.047Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T18:34:09.114Z] [INFO] POST /log
+[2026-10-03T18:34:09.114Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T18:34:09.118Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T18:34:09.118Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T18:34:09.122Z] [INFO] POST /log
+[2026-10-03T18:34:09.122Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T18:34:09.133Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T18:34:09.180Z] [INFO] POST /log
+[2026-10-03T18:34:09.181Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T18:34:09.182Z] [INFO] POST /log
+[2026-10-03T18:34:09.182Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T18:43:08.355Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T18:43:08.356Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T18:43:20.424Z] [INFO] POST /log
+[2026-10-03T18:43:20.425Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T18:43:20.425Z] [INFO] GET /coins
+[2026-10-03T18:43:20.426Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T18:43:20.427Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T18:43:20.445Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T18:43:20.468Z] [INFO] Retrieved 106 coins
+[2026-10-03T18:43:20.526Z] [INFO] POST /log
+[2026-10-03T18:43:20.527Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T18:43:20.528Z] [INFO] GET /categories
+[2026-10-03T18:43:20.529Z] [INFO] Fetching categories
+[2026-10-03T18:43:20.529Z] [INFO] GET /coin-sets
+[2026-10-03T18:43:20.530Z] [INFO] Fetching coin sets
+[2026-10-03T18:43:20.532Z] [INFO] GET /transactions
+[2026-10-03T18:43:20.532Z] [INFO] GET /denominations
+[2026-10-03T18:43:20.532Z] [INFO] Fetching active denominations
+[2026-10-03T18:43:20.533Z] [INFO] GET /mintmarks
+[2026-10-03T18:43:20.533Z] [INFO] Fetching active mint marks
+[2026-10-03T18:43:20.534Z] [INFO] GET /metalcontents
+[2026-10-03T18:43:20.534Z] [INFO] Fetching metal contents
+[2026-10-03T18:43:20.535Z] [INFO] Fetching transactions
+[2026-10-03T18:43:20.542Z] [INFO] GET /spot-prices/latest
+[2026-10-03T18:43:20.543Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T18:43:20.586Z] [INFO] POST /log
+[2026-10-03T18:43:20.586Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T18:43:20.587Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T18:43:20.588Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T18:43:20.606Z] [INFO] POST /log
+[2026-10-03T18:43:20.607Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T18:43:20.704Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T18:43:20.708Z] [INFO] POST /log
+[2026-10-03T18:43:20.708Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T18:43:20.709Z] [INFO] POST /log
+[2026-10-03T18:43:20.709Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T18:43:20.884Z] [INFO] POST /log
+[2026-10-03T18:43:20.884Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T18:43:20.885Z] [INFO] GET /coins
+[2026-10-03T18:43:20.885Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T18:43:20.892Z] [INFO] Retrieved 106 coins
+[2026-10-03T18:43:20.989Z] [INFO] POST /log
+[2026-10-03T18:43:20.990Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T18:43:20.991Z] [INFO] GET /categories
+[2026-10-03T18:43:20.991Z] [INFO] Fetching categories
+[2026-10-03T18:43:20.991Z] [INFO] GET /coin-sets
+[2026-10-03T18:43:20.991Z] [INFO] Fetching coin sets
+[2026-10-03T18:43:20.992Z] [INFO] GET /transactions
+[2026-10-03T18:43:20.992Z] [INFO] GET /denominations
+[2026-10-03T18:43:20.992Z] [INFO] Fetching active denominations
+[2026-10-03T18:43:20.993Z] [INFO] Fetching transactions
+[2026-10-03T18:43:20.993Z] [INFO] GET /mintmarks
+[2026-10-03T18:43:20.994Z] [INFO] Fetching active mint marks
+[2026-10-03T18:43:20.995Z] [INFO] GET /metalcontents
+[2026-10-03T18:43:20.996Z] [INFO] Fetching metal contents
+[2026-10-03T18:43:20.999Z] [INFO] GET /spot-prices/latest
+[2026-10-03T18:43:21.000Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T18:43:21.077Z] [INFO] POST /log
+[2026-10-03T18:43:21.078Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T18:43:21.079Z] [INFO] POST /log
+[2026-10-03T18:43:21.079Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T18:43:21.079Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T18:43:21.080Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T18:43:21.100Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T18:43:21.151Z] [INFO] POST /log
+[2026-10-03T18:43:21.152Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T18:43:21.152Z] [INFO] POST /log
+[2026-10-03T18:43:21.153Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T18:43:56.254Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T18:43:56.254Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T18:43:56.257Z] [INFO] POST /log
+[2026-10-03T18:43:56.258Z] [INFO] [frontend] Fetching spot prices via backend proxy...
+[2026-10-03T18:43:56.348Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T18:43:56.351Z] [INFO] POST /log
+[2026-10-03T18:43:56.352Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:00:24.977Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T19:00:24.978Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T19:00:35.070Z] [INFO] POST /log
+[2026-10-03T19:00:35.071Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T19:00:35.072Z] [INFO] GET /coins
+[2026-10-03T19:00:35.073Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T19:00:35.073Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T19:00:35.093Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T19:00:35.115Z] [INFO] Retrieved 106 coins
+[2026-10-03T19:00:35.182Z] [INFO] POST /log
+[2026-10-03T19:00:35.182Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T19:00:35.183Z] [INFO] GET /categories
+[2026-10-03T19:00:35.184Z] [INFO] Fetching categories
+[2026-10-03T19:00:35.186Z] [INFO] GET /coin-sets
+[2026-10-03T19:00:35.186Z] [INFO] Fetching coin sets
+[2026-10-03T19:00:35.187Z] [INFO] GET /transactions
+[2026-10-03T19:00:35.190Z] [INFO] Fetching transactions
+[2026-10-03T19:00:35.191Z] [INFO] GET /denominations
+[2026-10-03T19:00:35.191Z] [INFO] Fetching active denominations
+[2026-10-03T19:00:35.192Z] [INFO] GET /mintmarks
+[2026-10-03T19:00:35.192Z] [INFO] Fetching active mint marks
+[2026-10-03T19:00:35.192Z] [INFO] GET /metalcontents
+[2026-10-03T19:00:35.192Z] [INFO] Fetching metal contents
+[2026-10-03T19:00:35.195Z] [INFO] GET /spot-prices/latest
+[2026-10-03T19:00:35.196Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T19:00:35.238Z] [INFO] POST /log
+[2026-10-03T19:00:35.238Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T19:00:35.239Z] [INFO] POST /log
+[2026-10-03T19:00:35.240Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T19:00:35.240Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T19:00:35.240Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T19:00:35.348Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T19:00:35.396Z] [INFO] POST /log
+[2026-10-03T19:00:35.396Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T19:00:35.397Z] [INFO] POST /log
+[2026-10-03T19:00:35.397Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:00:35.559Z] [INFO] POST /log
+[2026-10-03T19:00:35.559Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T19:00:35.560Z] [INFO] GET /coins
+[2026-10-03T19:00:35.560Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T19:00:35.567Z] [INFO] Retrieved 106 coins
+[2026-10-03T19:00:35.677Z] [INFO] POST /log
+[2026-10-03T19:00:35.678Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T19:00:35.679Z] [INFO] GET /categories
+[2026-10-03T19:00:35.679Z] [INFO] Fetching categories
+[2026-10-03T19:00:35.679Z] [INFO] GET /coin-sets
+[2026-10-03T19:00:35.679Z] [INFO] Fetching coin sets
+[2026-10-03T19:00:35.680Z] [INFO] GET /transactions
+[2026-10-03T19:00:35.681Z] [INFO] Fetching transactions
+[2026-10-03T19:00:35.681Z] [INFO] GET /denominations
+[2026-10-03T19:00:35.681Z] [INFO] Fetching active denominations
+[2026-10-03T19:00:35.681Z] [INFO] GET /mintmarks
+[2026-10-03T19:00:35.682Z] [INFO] Fetching active mint marks
+[2026-10-03T19:00:35.684Z] [INFO] GET /metalcontents
+[2026-10-03T19:00:35.684Z] [INFO] Fetching metal contents
+[2026-10-03T19:00:35.689Z] [INFO] GET /spot-prices/latest
+[2026-10-03T19:00:35.689Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T19:00:35.768Z] [INFO] POST /log
+[2026-10-03T19:00:35.768Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T19:00:35.769Z] [INFO] POST /log
+[2026-10-03T19:00:35.770Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T19:00:35.770Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T19:00:35.770Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T19:00:35.794Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T19:00:35.828Z] [INFO] POST /log
+[2026-10-03T19:00:35.828Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T19:00:35.829Z] [INFO] POST /log
+[2026-10-03T19:00:35.829Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:00:46.815Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T19:00:46.815Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T19:00:46.818Z] [INFO] POST /log
+[2026-10-03T19:00:46.819Z] [INFO] [frontend] Fetching spot prices via backend proxy...
+[2026-10-03T19:00:46.901Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T19:00:46.905Z] [INFO] POST /log
+[2026-10-03T19:00:46.905Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:01:04.187Z] [INFO] PUT /coins/BCE6B155-2AEE-4165-83C4-18916F043942
+[2026-10-03T19:01:04.187Z] [INFO] Updating coin BCE6B155-2AEE-4165-83C4-18916F043942
+[2026-10-03T19:01:04.203Z] [INFO] Coin BCE6B155-2AEE-4165-83C4-18916F043942 updated successfully
+[2026-10-03T19:01:04.209Z] [INFO] POST /log
+[2026-10-03T19:01:04.209Z] [INFO] [frontend] Updated coin BCE6B155-2AEE-4165-83C4-18916F043942 in database (metalContent)
+[2026-10-03T19:01:11.936Z] [INFO] PUT /coins/5988850B-2D98-4AE8-B631-5672B56E88B7
+[2026-10-03T19:01:11.937Z] [INFO] Updating coin 5988850B-2D98-4AE8-B631-5672B56E88B7
+[2026-10-03T19:01:11.989Z] [INFO] Coin 5988850B-2D98-4AE8-B631-5672B56E88B7 updated successfully
+[2026-10-03T19:01:11.994Z] [INFO] POST /log
+[2026-10-03T19:01:11.995Z] [INFO] [frontend] Updated coin 5988850B-2D98-4AE8-B631-5672B56E88B7 in database (metalContent)
+[2026-10-03T19:58:24.293Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T19:58:24.293Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T19:58:36.006Z] [INFO] GET /coins
+[2026-10-03T19:58:36.007Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T19:58:36.008Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T19:58:36.022Z] [INFO] POST /log
+[2026-10-03T19:58:36.023Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T19:58:36.035Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T19:58:36.056Z] [INFO] Retrieved 106 coins
+[2026-10-03T19:58:36.115Z] [INFO] POST /log
+[2026-10-03T19:58:36.116Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T19:58:36.117Z] [INFO] GET /categories
+[2026-10-03T19:58:36.118Z] [INFO] Fetching categories
+[2026-10-03T19:58:36.119Z] [INFO] GET /transactions
+[2026-10-03T19:58:36.119Z] [INFO] GET /coin-sets
+[2026-10-03T19:58:36.120Z] [INFO] Fetching coin sets
+[2026-10-03T19:58:36.120Z] [INFO] Fetching transactions
+[2026-10-03T19:58:36.122Z] [INFO] GET /denominations
+[2026-10-03T19:58:36.122Z] [INFO] Fetching active denominations
+[2026-10-03T19:58:36.123Z] [INFO] GET /mintmarks
+[2026-10-03T19:58:36.124Z] [INFO] Fetching active mint marks
+[2026-10-03T19:58:36.124Z] [INFO] GET /metalcontents
+[2026-10-03T19:58:36.124Z] [INFO] Fetching metal contents
+[2026-10-03T19:58:36.129Z] [INFO] GET /spot-prices/latest
+[2026-10-03T19:58:36.132Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T19:58:36.170Z] [INFO] POST /log
+[2026-10-03T19:58:36.171Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T19:58:36.171Z] [INFO] POST /log
+[2026-10-03T19:58:36.171Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T19:58:36.172Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T19:58:36.172Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T19:58:36.310Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T19:58:36.314Z] [INFO] POST /log
+[2026-10-03T19:58:36.314Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T19:58:36.315Z] [INFO] POST /log
+[2026-10-03T19:58:36.315Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:58:36.628Z] [INFO] POST /log
+[2026-10-03T19:58:36.629Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T19:58:36.629Z] [INFO] GET /coins
+[2026-10-03T19:58:36.630Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T19:58:36.638Z] [INFO] Retrieved 106 coins
+[2026-10-03T19:58:36.734Z] [INFO] POST /log
+[2026-10-03T19:58:36.735Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T19:58:36.736Z] [INFO] GET /categories
+[2026-10-03T19:58:36.736Z] [INFO] Fetching categories
+[2026-10-03T19:58:36.737Z] [INFO] GET /coin-sets
+[2026-10-03T19:58:36.737Z] [INFO] Fetching coin sets
+[2026-10-03T19:58:36.737Z] [INFO] GET /transactions
+[2026-10-03T19:58:36.737Z] [INFO] GET /denominations
+[2026-10-03T19:58:36.738Z] [INFO] Fetching active denominations
+[2026-10-03T19:58:36.738Z] [INFO] Fetching transactions
+[2026-10-03T19:58:36.739Z] [INFO] GET /mintmarks
+[2026-10-03T19:58:36.739Z] [INFO] Fetching active mint marks
+[2026-10-03T19:58:36.742Z] [INFO] GET /metalcontents
+[2026-10-03T19:58:36.742Z] [INFO] Fetching metal contents
+[2026-10-03T19:58:36.746Z] [INFO] GET /spot-prices/latest
+[2026-10-03T19:58:36.746Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T19:58:36.818Z] [INFO] POST /log
+[2026-10-03T19:58:36.818Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T19:58:36.819Z] [INFO] POST /log
+[2026-10-03T19:58:36.820Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T19:58:36.820Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T19:58:36.820Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T19:58:36.845Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T19:58:36.891Z] [INFO] POST /log
+[2026-10-03T19:58:36.892Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T19:58:36.892Z] [INFO] POST /log
+[2026-10-03T19:58:36.893Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T19:59:45.464Z] [INFO] POST /denominations
+[2026-10-03T19:59:45.464Z] [INFO] Creating denomination: 8 Reales (US)
+[2026-10-03T19:59:45.517Z] [INFO] Denomination created with ID: 39
+[2026-10-03T19:59:45.522Z] [INFO] POST /log
+[2026-10-03T19:59:45.522Z] [INFO] [frontend] Created denomination: 8 Reales
+[2026-10-03T20:00:03.366Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:03.367Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:03.426Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:03.431Z] [INFO] POST /log
+[2026-10-03T20:00:03.432Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (country)
+[2026-10-03T20:00:06.094Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:06.094Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:06.108Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:06.111Z] [INFO] POST /log
+[2026-10-03T20:00:06.112Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (metalContent)
+[2026-10-03T20:00:11.650Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:11.650Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:11.656Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:11.661Z] [INFO] POST /log
+[2026-10-03T20:00:11.661Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (pmPercent)
+[2026-10-03T20:00:16.933Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:16.933Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:16.947Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:16.952Z] [INFO] POST /log
+[2026-10-03T20:00:16.952Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (weight)
+[2026-10-03T20:00:18.267Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:18.267Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:18.271Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:18.274Z] [INFO] POST /log
+[2026-10-03T20:00:18.274Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (weight)
+[2026-10-03T20:00:24.556Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:24.556Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:24.569Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:24.575Z] [INFO] POST /log
+[2026-10-03T20:00:24.576Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (pmWeightGrams)
+[2026-10-03T20:00:32.718Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:32.718Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:32.772Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:32.778Z] [INFO] POST /log
+[2026-10-03T20:00:32.778Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (pmWeightGrams)
+[2026-10-03T20:00:34.597Z] [INFO] PUT /coins/08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:34.597Z] [INFO] Updating coin 08569E56-A859-4793-92B5-290C47321A59
+[2026-10-03T20:00:34.613Z] [INFO] Coin 08569E56-A859-4793-92B5-290C47321A59 updated successfully
+[2026-10-03T20:00:34.617Z] [INFO] POST /log
+[2026-10-03T20:00:34.618Z] [INFO] [frontend] Updated coin 08569E56-A859-4793-92B5-290C47321A59 in database (pmWeightGrams)
+[2026-10-03T20:05:11.804Z] [INFO] PUT /coins/054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:11.804Z] [INFO] Updating coin 054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:11.858Z] [INFO] Coin 054E0D6A-9588-4F35-B851-057B6AAEC778 updated successfully
+[2026-10-03T20:05:11.863Z] [INFO] POST /log
+[2026-10-03T20:05:11.864Z] [INFO] [frontend] Updated coin 054E0D6A-9588-4F35-B851-057B6AAEC778 in database (denomination)
+[2026-10-03T20:05:34.916Z] [INFO] PUT /coins/054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:34.917Z] [INFO] Updating coin 054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:34.969Z] [INFO] Coin 054E0D6A-9588-4F35-B851-057B6AAEC778 updated successfully
+[2026-10-03T20:05:34.974Z] [INFO] POST /log
+[2026-10-03T20:05:34.974Z] [INFO] [frontend] Updated coin 054E0D6A-9588-4F35-B851-057B6AAEC778 in database (weight)
+[2026-10-03T20:05:38.270Z] [INFO] PUT /coins/054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:38.271Z] [INFO] Updating coin 054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:38.284Z] [INFO] Coin 054E0D6A-9588-4F35-B851-057B6AAEC778 updated successfully
+[2026-10-03T20:05:38.287Z] [INFO] POST /log
+[2026-10-03T20:05:38.287Z] [INFO] [frontend] Updated coin 054E0D6A-9588-4F35-B851-057B6AAEC778 in database (pmWeightGrams)
+[2026-10-03T20:05:46.935Z] [INFO] PUT /coins/054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:46.935Z] [INFO] Updating coin 054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:46.948Z] [INFO] Coin 054E0D6A-9588-4F35-B851-057B6AAEC778 updated successfully
+[2026-10-03T20:05:46.953Z] [INFO] POST /log
+[2026-10-03T20:05:46.953Z] [INFO] [frontend] Updated coin 054E0D6A-9588-4F35-B851-057B6AAEC778 in database (pmWeightGrams)
+[2026-10-03T20:05:58.538Z] [INFO] PUT /coins/054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:58.539Z] [INFO] Updating coin 054E0D6A-9588-4F35-B851-057B6AAEC778
+[2026-10-03T20:05:58.593Z] [INFO] Coin 054E0D6A-9588-4F35-B851-057B6AAEC778 updated successfully
+[2026-10-03T20:05:58.599Z] [INFO] POST /log
+[2026-10-03T20:05:58.600Z] [INFO] [frontend] Updated coin 054E0D6A-9588-4F35-B851-057B6AAEC778 in database (variety)
+[2026-10-03T20:08:19.764Z] [INFO] Coin Inventory server listening on http://localhost:3000
+[2026-10-03T20:08:19.765Z] [INFO] Database: localhost / CoinInventory
+[2026-10-03T20:08:28.428Z] [INFO] POST /log
+[2026-10-03T20:08:28.429Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T20:08:28.430Z] [INFO] GET /coins
+[2026-10-03T20:08:28.430Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T20:08:28.431Z] [INFO] Connecting to SQL Server at localhost/CoinInventory (attempt 1/3)...
+[2026-10-03T20:08:28.449Z] [INFO] Connected to SQL Server successfully (pool generation 1)
+[2026-10-03T20:08:28.470Z] [INFO] Retrieved 106 coins
+[2026-10-03T20:08:28.526Z] [INFO] POST /log
+[2026-10-03T20:08:28.527Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T20:08:28.527Z] [INFO] GET /categories
+[2026-10-03T20:08:28.528Z] [INFO] Fetching categories
+[2026-10-03T20:08:28.530Z] [INFO] GET /coin-sets
+[2026-10-03T20:08:28.530Z] [INFO] Fetching coin sets
+[2026-10-03T20:08:28.533Z] [INFO] GET /transactions
+[2026-10-03T20:08:28.534Z] [INFO] GET /denominations
+[2026-10-03T20:08:28.534Z] [INFO] Fetching active denominations
+[2026-10-03T20:08:28.536Z] [INFO] Fetching transactions
+[2026-10-03T20:08:28.538Z] [INFO] GET /mintmarks
+[2026-10-03T20:08:28.538Z] [INFO] Fetching active mint marks
+[2026-10-03T20:08:28.539Z] [INFO] GET /metalcontents
+[2026-10-03T20:08:28.539Z] [INFO] Fetching metal contents
+[2026-10-03T20:08:28.540Z] [INFO] GET /spot-prices/latest
+[2026-10-03T20:08:28.542Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T20:08:28.598Z] [INFO] POST /log
+[2026-10-03T20:08:28.599Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T20:08:28.600Z] [INFO] POST /log
+[2026-10-03T20:08:28.600Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T20:08:28.600Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T20:08:28.601Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T20:08:28.755Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T20:08:28.809Z] [INFO] POST /log
+[2026-10-03T20:08:28.810Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T20:08:28.811Z] [INFO] GET /coins
+[2026-10-03T20:08:28.811Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T20:08:28.817Z] [INFO] Retrieved 106 coins
+[2026-10-03T20:08:28.919Z] [INFO] POST /log
+[2026-10-03T20:08:28.920Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T20:08:28.921Z] [INFO] GET /categories
+[2026-10-03T20:08:28.921Z] [INFO] Fetching categories
+[2026-10-03T20:08:28.922Z] [INFO] GET /coin-sets
+[2026-10-03T20:08:28.922Z] [INFO] Fetching coin sets
+[2026-10-03T20:08:28.922Z] [INFO] GET /transactions
+[2026-10-03T20:08:28.922Z] [INFO] GET /mintmarks
+[2026-10-03T20:08:28.923Z] [INFO] Fetching active mint marks
+[2026-10-03T20:08:28.923Z] [INFO] GET /denominations
+[2026-10-03T20:08:28.923Z] [INFO] Fetching active denominations
+[2026-10-03T20:08:28.924Z] [INFO] Fetching transactions
+[2026-10-03T20:08:28.927Z] [INFO] GET /metalcontents
+[2026-10-03T20:08:28.928Z] [INFO] Fetching metal contents
+[2026-10-03T20:08:28.932Z] [INFO] GET /spot-prices/latest
+[2026-10-03T20:08:28.932Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T20:08:29.008Z] [INFO] POST /log
+[2026-10-03T20:08:29.008Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T20:08:29.009Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T20:08:29.009Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T20:08:29.011Z] [INFO] POST /log
+[2026-10-03T20:08:29.012Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T20:08:29.025Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T20:08:29.063Z] [INFO] POST /log
+[2026-10-03T20:08:29.063Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T20:08:29.064Z] [INFO] POST /log
+[2026-10-03T20:08:29.064Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T20:11:39.215Z] [INFO] GET /coins
+[2026-10-03T20:11:39.215Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T20:11:39.217Z] [INFO] POST /log
+[2026-10-03T20:11:39.217Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T20:11:39.228Z] [INFO] Retrieved 106 coins
+[2026-10-03T20:11:39.241Z] [INFO] POST /log
+[2026-10-03T20:11:39.242Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T20:11:39.243Z] [INFO] GET /categories
+[2026-10-03T20:11:39.243Z] [INFO] Fetching categories
+[2026-10-03T20:11:39.245Z] [INFO] GET /coin-sets
+[2026-10-03T20:11:39.245Z] [INFO] Fetching coin sets
+[2026-10-03T20:11:39.245Z] [INFO] GET /transactions
+[2026-10-03T20:11:39.246Z] [INFO] Fetching transactions
+[2026-10-03T20:11:39.249Z] [INFO] GET /denominations
+[2026-10-03T20:11:39.249Z] [INFO] Fetching active denominations
+[2026-10-03T20:11:39.249Z] [INFO] GET /mintmarks
+[2026-10-03T20:11:39.250Z] [INFO] Fetching active mint marks
+[2026-10-03T20:11:39.250Z] [INFO] GET /metalcontents
+[2026-10-03T20:11:39.250Z] [INFO] Fetching metal contents
+[2026-10-03T20:11:39.252Z] [INFO] GET /spot-prices/latest
+[2026-10-03T20:11:39.255Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T20:11:39.309Z] [INFO] POST /log
+[2026-10-03T20:11:39.309Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T20:11:39.310Z] [INFO] POST /log
+[2026-10-03T20:11:39.310Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T20:11:39.310Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T20:11:39.311Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T20:11:39.400Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T20:11:39.404Z] [INFO] POST /log
+[2026-10-03T20:11:39.404Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T20:11:39.405Z] [INFO] POST /log
+[2026-10-03T20:11:39.405Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written
+[2026-10-03T20:16:42.963Z] [INFO] GET /coins
+[2026-10-03T20:16:42.964Z] [INFO] Fetching all coins with image counts (includeImages=true)
+[2026-10-03T20:16:42.965Z] [INFO] POST /log
+[2026-10-03T20:16:42.965Z] [INFO] [frontend] Starting inventory hydration
+[2026-10-03T20:16:42.975Z] [INFO] Retrieved 106 coins
+[2026-10-03T20:16:43.004Z] [INFO] POST /log
+[2026-10-03T20:16:43.005Z] [INFO] [frontend] Successfully loaded 106 coins from database
+[2026-10-03T20:16:43.005Z] [INFO] GET /categories
+[2026-10-03T20:16:43.005Z] [INFO] Fetching categories
+[2026-10-03T20:16:43.009Z] [INFO] GET /coin-sets
+[2026-10-03T20:16:43.009Z] [INFO] Fetching coin sets
+[2026-10-03T20:16:43.010Z] [INFO] GET /transactions
+[2026-10-03T20:16:43.011Z] [INFO] Fetching transactions
+[2026-10-03T20:16:43.012Z] [INFO] GET /denominations
+[2026-10-03T20:16:43.012Z] [INFO] Fetching active denominations
+[2026-10-03T20:16:43.012Z] [INFO] GET /metalcontents
+[2026-10-03T20:16:43.012Z] [INFO] Fetching metal contents
+[2026-10-03T20:16:43.013Z] [INFO] GET /mintmarks
+[2026-10-03T20:16:43.013Z] [INFO] Fetching active mint marks
+[2026-10-03T20:16:43.014Z] [INFO] GET /spot-prices/latest
+[2026-10-03T20:16:43.015Z] [INFO] Fetching latest spot prices from database
+[2026-10-03T20:16:43.073Z] [INFO] POST /log
+[2026-10-03T20:16:43.073Z] [INFO] [frontend] Loaded saved spot prices (Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491)
+[2026-10-03T20:16:43.074Z] [INFO] POST /log
+[2026-10-03T20:16:43.074Z] [INFO] [frontend] Database hydration complete
+[2026-10-03T20:16:43.075Z] [INFO] GET /spot-prices/fetch
+[2026-10-03T20:16:43.075Z] [INFO] Fetching spot prices from COMEX/NYMEX futures...
+[2026-10-03T20:16:43.164Z] [INFO] Spot prices fetched: Au=$4162.3 Ag=$60.42 Pt=$1700 Cu=$0.4491/ozt
+[2026-10-03T20:16:43.168Z] [INFO] POST /log
+[2026-10-03T20:16:43.169Z] [INFO] [frontend] Spot prices refreshed automatically at start-up
+[2026-10-03T20:16:43.169Z] [INFO] POST /log
+[2026-10-03T20:16:43.170Z] [INFO] [frontend] Spot prices unchanged since the last save — no new history row written

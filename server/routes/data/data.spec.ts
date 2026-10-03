@@ -138,6 +138,69 @@ describe('POST /api/spot-prices', () => {
     expect(res.status).toBe(201);
     expect(res.body.id).toBe(1);
   });
+
+  // ----------------------------------------------------------------
+  // "A zero is not a price"
+  // ----------------------------------------------------------------
+  // A precious metal never trades at zero, so a zero means "no price". This
+  // endpoint is the one place that matters most, because /spot-prices/latest
+  // reads the newest row back and the client applies it at start-up: a single
+  // all-zero row would blank every melt value on every subsequent launch.
+
+  it('refuses an all-zero price set without touching the database', async () => {
+    const res = await request(app)
+      .post('/api/spot-prices')
+      .send({ gold: 0, silver: 0, platinum: 0, copper: 0 });
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/zero/i);
+    // The important half: no INSERT was attempted.
+    expect(mockRequest.query).not.toHaveBeenCalled();
+  });
+
+  it('refuses a body with no prices at all', async () => {
+    // Missing is no more a price than zero is, and Number(undefined) is NaN
+    // rather than 0, so this needs its own check.
+    const res = await request(app).post('/api/spot-prices').send({});
+
+    expect(res.status).toBe(400);
+    expect(mockRequest.query).not.toHaveBeenCalled();
+  });
+
+  it('refuses non-numeric junk the same way', async () => {
+    const res = await request(app)
+      .post('/api/spot-prices')
+      .send({ gold: 'n/a', silver: null, platinum: '', copper: undefined });
+
+    expect(res.status).toBe(400);
+    expect(mockRequest.query).not.toHaveBeenCalled();
+  });
+
+  it('ACCEPTS a partial set where only one metal has a price', async () => {
+    // Deliberately all-zero and not any-zero. The four metals are fetched as
+    // independent symbols, so silver succeeding while platinum fails is
+    // normal, and a user may only care about gold. The zeros simply mean "no
+    // price for that metal".
+    mockRequest.query.mockResolvedValueOnce({
+      recordset: [{ SpotPriceId: 2, FetchedAt: '2024-03-01T12:00:00Z' }],
+    });
+
+    const res = await request(app)
+      .post('/api/spot-prices')
+      .send({ gold: 2400, silver: 0, platinum: 0, copper: 0 });
+
+    expect(res.status).toBe(201);
+    expect(mockRequest.query).toHaveBeenCalled();
+  });
+
+  it('refuses a negative set, which is no more a price than zero', async () => {
+    const res = await request(app)
+      .post('/api/spot-prices')
+      .send({ gold: -1, silver: -2, platinum: 0, copper: 0 });
+
+    expect(res.status).toBe(400);
+    expect(mockRequest.query).not.toHaveBeenCalled();
+  });
 });
 
 // ============================================================

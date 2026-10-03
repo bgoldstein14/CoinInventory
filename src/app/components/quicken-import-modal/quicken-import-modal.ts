@@ -4,7 +4,6 @@ import { FormsModule } from '@angular/forms';
 import { InventoryService } from '../../services/inventory.service';
 import {
   QuickenImportService,
-  QuickenParseResult,
   QuickenRejectedRecord
 } from '../../services/quicken-import.service';
 import { CoinRecord, QuickenImportRecord } from '../../types/coin.model';
@@ -34,15 +33,27 @@ export class QuickenImportModal {
    * "exceptions" list -- never silently discarded.
    */
   protected readonly rejectedRecords = signal<QuickenRejectedRecord[]>([]);
-  /**
-   * Security names the user has explicitly chosen to import anyway.
+  /* -------------------------------------------------------------------------
+   * THERE IS NO "IMPORT ANYWAY" ESCAPE HATCH, AND THERE MUST NOT BE ONE.
    *
-   * We key overrides by security name rather than record id because every
-   * re-parse generates fresh `crypto.randomUUID()` ids -- a record id would
-   * stop matching the moment the user pressed Preview again. The security
-   * name is the stable identity of the QIF row.
-   */
-  protected readonly overriddenSecurities = signal<string[]>([]);
+   * This modal used to keep an `overriddenSecurities` list letting the user
+   * force a record that fails the 2-of-3 rule into the import. It looked like
+   * it worked and did not:
+   *
+   *   - the coin appeared in the grid, so the user thought it had saved;
+   *   - but the backend rejects a coin with no denomination outright --
+   *         400 {"error":"denomination is required"}
+   *     -- so no database row was ever created;
+   *   - every later edit then targeted an id the server had never heard of,
+   *     which is the "errors when trying to update the details" the owner
+   *     reported.
+   *
+   * The rule is now simply: THE UI MUST NEVER OFFER TO CREATE A COIN THE
+   * BACKEND WOULD REFUSE. A record that fails the check is reported in the
+   * exceptions panel -- with its raw security name and everything the parser
+   * did manage to read, so the user can fix the Quicken name and re-import --
+   * and that is the only outcome available.
+   * ---------------------------------------------------------------------- */
   protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
   protected readonly selectedAccounts = signal<string[]>([]);
@@ -101,61 +112,14 @@ export class QuickenImportModal {
    */
   private refreshPreview(text: string = this.quickenText()): QuickenImportRecord[] {
     const result = this.quickenImportService.parse(text, this.selectedAccounts());
-    const { imported, rejected } = this.applyDetailOverrides(result);
-    const filtered = this.applyQifFilters(imported);
+    const filtered = this.applyQifFilters(result.importedRecords);
 
     this.importedRecords.set(filtered);
     this.skippedRecords.set(result.skippedRecords); // Sold/transferred coins
-    this.rejectedRecords.set(rejected); // Not enough detail to import
+    this.rejectedRecords.set(result.rejectedRecords); // Not enough detail to import
     this.quickenWarnings.set(result.warnings);
 
     return filtered;
-  }
-
-  /**
-   * Moves any exception the user has chosen to override out of the rejected
-   * list and into the import list.
-   */
-  private applyDetailOverrides(result: QuickenParseResult): {
-    imported: QuickenImportRecord[];
-    rejected: QuickenRejectedRecord[];
-  } {
-    const overridden = this.overriddenSecurities();
-    if (overridden.length === 0) {
-      return { imported: result.importedRecords, rejected: result.rejectedRecords };
-    }
-
-    const imported = [...result.importedRecords];
-    const rejected: QuickenRejectedRecord[] = [];
-    for (const exception of result.rejectedRecords) {
-      if (overridden.includes(exception.securityName)) {
-        imported.push(exception.record);
-      } else {
-        rejected.push(exception);
-      }
-    }
-    return { imported, rejected };
-  }
-
-  /** User pressed "Import anyway" on an exception row. */
-  protected overrideException(securityName: string): void {
-    if (!this.overriddenSecurities().includes(securityName)) {
-      this.overriddenSecurities.set([...this.overriddenSecurities(), securityName]);
-    }
-    this.refreshPreview();
-  }
-
-  /** User changed their mind about an overridden exception. */
-  protected undoOverride(securityName: string): void {
-    this.overriddenSecurities.set(
-      this.overriddenSecurities().filter(name => name !== securityName)
-    );
-    this.refreshPreview();
-  }
-
-  /** Security names the user has forced into the import, for the UI to list. */
-  protected overriddenSecurityNames(): string[] {
-    return this.overriddenSecurities();
   }
 
   protected previewImport(): void {
@@ -173,9 +137,6 @@ export class QuickenImportModal {
       const text = new TextDecoder('windows-1252').decode(buffer);
       this.quickenText.set(text);
       this.selectedAccounts.set([]);
-      // A brand new file means any overrides from the previous file no longer
-      // apply -- clear them so nothing is imported behind the user's back.
-      this.overriddenSecurities.set([]);
       this.refreshQuickenAccounts();
 
       this.refreshPreview(text);
@@ -187,9 +148,8 @@ export class QuickenImportModal {
   protected importQuicken(): void {
     this.importing.set(true);
     // Re-parse rather than trusting the preview signal: the import list is
-    // rebuilt from the same choke point that enforces the detail rule, so an
-    // under-detailed coin cannot reach the inventory unless it was explicitly
-    // overridden.
+    // rebuilt from the same choke point that enforces the 2-of-3 detail rule,
+    // so an under-detailed coin cannot reach the inventory by any route.
     const filtered = this.refreshPreview();
 
     const newCoins: CoinRecord[] = filtered.map((record): CoinRecord => ({
@@ -207,19 +167,29 @@ export class QuickenImportModal {
       certNumber: '',
       variety: record.variety,
       mintMark: record.mintMark,
-      composition: '',
+      // Composition and metalContent are now worked out during the parse from
+      // country + denomination + year (see pm-reference.ts). They used to be
+      // hard-coded blank here, which is why every imported coin arrived with
+      // an empty Metal and Composition no matter what it was.
+      composition: record.composition ?? '',
       purchaseDate: record.purchaseDate ?? '',
       purchasePrice: record.purchasePrice,
       currentValue: record.currentValue,
       notes: record.notes,
-      imagePaths: [], tags: [],
+      imagePaths: [],
       source: 'quicken',
       // Green CAC sticker, also parsed from the security name (e.g.
       // "PCGS/CAC AU58"). Kept as a plain boolean -- the backend binds this
       // to a BIT NOT NULL column, so `undefined` must never reach it.
       hasCacSticker: record.hasCacSticker,
+      metalContent: record.metalContent,
       pmWeightGrams: record.pmWeightGrams,
-      pmPercent: record.pmPercent
+      pmPercent: record.pmPercent,
+      // The coin's GROSS weight in grams, worked out during the parse from
+      // the same reference row as the four fields above. Left undefined --
+      // never 0 -- when the table has no weight for that issue, so the editor
+      // shows an honest dash rather than a weightless coin.
+      weight: record.weight
     }));
 
     this.imported.emit(newCoins);

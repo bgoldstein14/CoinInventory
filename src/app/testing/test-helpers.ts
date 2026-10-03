@@ -46,6 +46,14 @@ export function createMockDependencies() {
       prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
       source: '', timestamp: ''
     })),
+    // The shape GET /api/spot-prices/latest answers with when the SpotPrices
+    // table is empty: zeros, and BOTH provenance fields null. That null
+    // `fetchedAt` is what tells ConnectionManager "nothing saved yet — leave
+    // the in-memory defaults alone", so it is the right default for tests.
+    getLatestSpotPrices: vi.fn(() => of({
+      gold: 0, silver: 0, platinum: 0, copper: 0, source: null, fetchedAt: null
+    })),
+    saveSpotPrices: vi.fn(() => of(undefined)),
     postLog: vi.fn(() => of({})),
     healthCheck: vi.fn(() => of({})),
   } as unknown as ApiService;

@@ -70,6 +70,17 @@
                   }
                 } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
                   <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
+                } @else if (column === 'meltValue') {
+                  <!-- Melt gets its own branch for ONE reason: the tooltip.
+                       The number itself is still produced by the shared pure
+                       formatter below (that is what the third argument is
+                       for); all this branch adds is a `title` saying why the
+                       cell is a dash when it is one. Without it, "no spot
+                       prices have ever been fetched" — which one press of
+                       Fetch would fix for the whole grid — looks exactly like
+                       "this coin is base metal", which nothing can fix.
+                       See InventoryService.meltValueHint. -->
+                  <span [title]="inv.meltValueHint(coin)">{{ formatInventoryCell(coin, column, inv.spotPrices()) }}</span>
                 } @else {
                   {{ formatInventoryCell(coin, column) }}
                 }

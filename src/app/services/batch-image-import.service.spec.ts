@@ -22,7 +22,7 @@ function coin(overrides: Partial<CoinRecord>): CoinRecord {
     id: 'c1', denomination: '', year: '', coinType: '', category: '', country: 'USA',
     grade: '', certCompany: '', certNumber: '', variety: '', mintMark: '',
     composition: '', purchaseDate: '', purchasePrice: 0, currentValue: 0, notes: '',
-    imagePaths: [], tags: [], source: 'manual',
+    imagePaths: [], source: 'manual',
     ...overrides
   };
 }

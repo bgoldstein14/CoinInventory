@@ -102,17 +102,24 @@
 
       <!--
         Exceptions: coins the parser could read but refused to import because
-        fewer than 2 of Year / Coin Type / Denomination were present. These are
-        always shown, never silently dropped, and each row can be forced into
-        the import with "Import anyway".
+        fewer than 2 of Year / Coin Type / Denomination were present.
+
+        These are always SHOWN and never silently dropped -- that reporting is
+        the whole point of the panel. What they cannot be is imported. There
+        used to be an "Import anyway" button here; it produced a row in the
+        grid that the backend had never saved (it rejects a coin with no
+        denomination with 400 "denomination is required"), so every later edit
+        failed against an id that did not exist. The fix for a row landing
+        here is to fix its name in Quicken and re-import, not to force it in.
       -->
       @if (rejectedRecords().length > 0) {
         <div class="exception-list" role="region" aria-label="Import exceptions">
           <h3>Exceptions — not imported ({{ rejectedRecords().length }})</h3>
           <p class="hint-text">
             A coin needs at least 2 of Year, Coin Type and Denomination to be imported.
-            These rows did not qualify. Use “Import anyway” if you want one regardless —
-            you can fill in the missing details after importing.
+            These rows did not qualify, so they were left out. Everything the parser
+            could read is shown below — edit the security name in Quicken, export
+            again, and they will come through.
           </p>
           <table class="exception-table">
             <thead>
@@ -122,7 +129,6 @@
                 <th>Coin Type</th>
                 <th>Denomination</th>
                 <th>Reason</th>
-                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -133,35 +139,10 @@
                   <td>{{ exception.record.coinType || '—' }}</td>
                   <td>{{ exception.record.denomination || '—' }}</td>
                   <td>{{ exception.reason }}</td>
-                  <td>
-                    <button
-                      type="button"
-                      class="secondary small-button"
-                      (click)="overrideException(exception.securityName)"
-                    >
-                      Import anyway
-                    </button>
-                  </td>
                 </tr>
               }
             </tbody>
           </table>
-        </div>
-      }
-
-      @if (overriddenSecurityNames().length > 0) {
-        <div class="override-list">
-          <h3>Imported despite missing details ({{ overriddenSecurityNames().length }})</h3>
-          <ul>
-            @for (securityName of overriddenSecurityNames(); track securityName) {
-              <li>
-                <code>{{ securityName }}</code>
-                <button type="button" class="secondary small-button" (click)="undoOverride(securityName)">
-                  Undo
-                </button>
-              </li>
-            }
-          </ul>
         </div>
       }
 
@@ -189,6 +170,18 @@
                     <th title="Green CAC sticker">CAC</th>
                     <th>Mint Mark</th>
                     <th>Variety</th>
+                    <!--
+                      Country, Metal and PM % are worked out from the coin's
+                      country, denomination and YEAR (pm-reference.ts). They
+                      are shown here because they are deliberately left blank
+                      whenever the combination does not pin the alloy down --
+                      seeing the dash on the preview is how the user knows to
+                      fill it in rather than discovering a wrong melt value
+                      later.
+                    -->
+                    <th>Country</th>
+                    <th title="Metal / Composition">Metal</th>
+                    <th title="Precious metal purity">PM %</th>
                     <th>Value</th>
                   </tr>
                 </thead>
@@ -214,6 +207,9 @@
                       </td>
                       <td>{{ record.mintMark || '—' }}</td>
                       <td>{{ record.variety || '—' }}</td>
+                      <td>{{ record.country || '—' }}</td>
+                      <td [title]="record.composition || ''">{{ record.metalContent || '—' }}</td>
+                      <td>{{ record.pmPercent !== undefined ? record.pmPercent + '%' : '—' }}</td>
                       <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>
                     </tr>
                   }

@@ -1,10 +1,14 @@
 /**
  * routes/coins/write-helpers.ts — the shared write-path plumbing for coins.
  *
- * Creating a coin and updating a coin both have to insert the coin's images
- * and tags, and both have to unwind their transaction correctly when something
- * goes wrong. Those three pieces live here so the CRUD handlers stay readable
- * and so the two paths can never drift apart.
+ * Creating a coin and updating a coin both have to insert the coin's images,
+ * and both have to unwind their transaction correctly when something goes
+ * wrong. Those two pieces live here so the CRUD handlers stay readable and so
+ * the two paths can never drift apart.
+ *
+ * There was a third helper, `insertTags()`. The tag feature was removed — no
+ * part of the app could ever create a tag — and the CoinTags table goes with it
+ * (see migrations/005-drop-coin-tags.sql).
  *
  * `safeRollback()` in particular is load-bearing: it is the reason a failed
  * save still reports the error that actually caused the failure.
@@ -69,17 +73,5 @@ export async function insertImages(transaction: sql.Transaction, coinId: string,
       .query(
         'INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) VALUES (@coinId, @imageData, @sortOrder, @sourcePath)'
       );
-  }
-}
-
-/**
- * Inserts the tag rows for a coin. Shared by POST / and PUT /:id.
- */
-export async function insertTags(transaction: sql.Transaction, coinId: string, tags: string[]): Promise<void> {
-  for (const tag of tags) {
-    await new sql.Request(transaction)
-      .input('coinId', DB_BINDINGS.coinId, coinId)
-      .input('tag', DB_BINDINGS.tag, tag)
-      .query('INSERT INTO CoinTags (CoinId, Tag) VALUES (@coinId, @tag)');
   }
 }

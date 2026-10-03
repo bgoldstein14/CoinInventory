@@ -19,7 +19,7 @@ import sql from 'mssql';
  * Grouped by table so a schema change has one obvious place to land.
  */
 export const DB_BINDINGS = {
-  /** Coins.CoinId / CoinImages.CoinId / CoinTags.CoinId / Transactions.CoinId */
+  /** Coins.CoinId / CoinImages.CoinId / Transactions.CoinId */
   coinId: sql.NVarChar(36),
 
   // ----- CoinImages ---------------------------------------------------
@@ -43,8 +43,8 @@ export const DB_BINDINGS = {
    */
   imageSourcePath: sql.NVarChar(400),
 
-  // ----- CoinTags -----------------------------------------------------
-  tag: sql.NVarChar(100),             // CoinTags.Tag          NVARCHAR(100)
+  // (There was a `tag: sql.NVarChar(100)` binding here for CoinTags.Tag. The
+  // tag feature and its table were removed — see migrations/005-drop-coin-tags.sql.)
 
   // ----- Transactions -------------------------------------------------
   transactionId: sql.NVarChar(36),    // TransactionId         UNIQUEIDENTIFIER (bound as text)

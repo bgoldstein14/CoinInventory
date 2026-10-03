@@ -135,7 +135,24 @@ you so.
 - **Database migrations are not applied by the launcher.** If your database
   already contains coins, apply the outstanding scripts in
   `server/migrations/` by hand — see the migrations section of
-  `server/README.md`. Re-running `server/setup-database.sql` is **not** an
+  `server/README.md`. There are seven scripts, `002` through `008`; `002` and
+  `003` have been applied, and **`004` through `008` are still
+  outstanding** (widening the weight columns, dropping the `CoinTags` table,
+  dropping `Coins.Dealer`, filling in metal content and composition, and
+  converting `Coins.Weight` from troy ounces to grams). Apply them in
+  numerical order — `008` reads values that `007` writes.
+
+  **`008` is the one that matters if you delay it.** The others are cleanup or
+  fill-in, and nothing breaks while they are pending. `008` is different: the
+  application has already been relabelled to say the gross weight is in grams,
+  but the stored numbers are still troy ounces until the script runs, so every
+  weight on screen reads as roughly a thirty-first of its real value. It is
+  also the only script that must not be run twice — it guards itself with a
+  marker row in `AppSettings`, and its header explains why at length. Read
+  that header before running it.
+
+  Startup will not apply any of them for you. Re-running
+  `server/setup-database.sql` is **not** an
   upgrade path: it drops every table before recreating them, so it is only for
   building an empty database.
 - There used to be two separate launchers, one here and one in the project

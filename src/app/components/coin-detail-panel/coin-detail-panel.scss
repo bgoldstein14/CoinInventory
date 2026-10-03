@@ -22,22 +22,26 @@
   min-height: 0;
 }
 
+// The header holds only the action buttons now. It used to carry, on its left,
+// an eyebrow, an <h2> of coin type + denomination, and a row of grade / cert /
+// CAC badges — all of which restated fields the editor shows directly below,
+// so all of them were removed.
+//
+// Consequences of those removals, handled here:
+//  - the `h2 { ... }` and `.detail-badges` rules are gone with their elements;
+//  - `justify-content` is `flex-end` rather than `space-between`. With nothing
+//    on the left, `space-between` has only one child to place and would pin
+//    the buttons to the LEFT edge, which is not where they were or belong;
+//  - the `min-height` is gone too. It existed to stop the header collapsing on
+//    a coin with no badges, so the panel did not jump as you clicked between
+//    coins. With the badges removed the row is always exactly button height,
+//    so there is nothing left to vary.
 .detail-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
+  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
   margin-bottom: 10px;
-
-  h2 { font-size: 0.94rem; margin: 0; word-break: break-word; }
-}
-
-.detail-badges {
-  display: flex;
-  gap: 6px;
-  margin-top: 6px;
-  flex-wrap: wrap;
-  align-items: center;
 }
 
 .detail-header-actions {

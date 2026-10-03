@@ -10,25 +10,56 @@ This README doubles as the project's living plan. Keep it current as features la
 
 Two steps, in this order. Neither is optional — the app will look broken without them.
 
-**1. Run the outstanding SQL migrations.** `server/setup-database.sql` is the build-from-scratch script and it **DROPS every table**, so it must never be run against a database that has your coins in it. Schema changes to a live database live in `server/migrations/` instead, as small guarded scripts that are safe to run twice. Two are outstanding:
+**1. Run the outstanding SQL migrations.** `server/setup-database.sql` is the build-from-scratch script and it **DROPS every table**, so it must never be run against a database that has your coins in it. Schema changes to a live database live in `server/migrations/` instead, as small guarded scripts that are safe to run twice. There are now eight. **002 and 003 have already been run on this database; 004 through 008 are outstanding** and must be run in that order:
 
 ```powershell
 cd C:\Users\BR651094\source\dev
-sqlcmd -S localhost -d CoinInventory -E -i server\migrations\002-add-image-source-path.sql
-sqlcmd -S localhost -d CoinInventory -E -i server\migrations\003-multiple-images-per-coin.sql
+sqlcmd -S localhost -d CoinInventory -E -i server\migrations\004-widen-weight-precision.sql
+sqlcmd -S localhost -d CoinInventory -E -i server\migrations\005-drop-coin-tags.sql
+sqlcmd -S localhost -d CoinInventory -E -i server\migrations\006-drop-coin-dealer.sql
+sqlcmd -S localhost -d CoinInventory -E -i server\migrations\007-infer-coin-metal-data.sql
+sqlcmd -S localhost -d CoinInventory -E -i server\migrations\008-weight-to-grams.sql
 ```
 
-Substitute whatever `DB_SERVER` in `server/.env` says for `localhost` (for a named instance that is something like `-S "BRUCE_PC\SQLEXPRESS"`). `-E` means "use my Windows login", which is the easy path; if `server/.env` has `DB_USER`/`DB_PASSWORD` filled in and you would rather use that SQL login, swap `-E` for `-U CoinApp -P <password>`. Each script prints a line saying what it did, and 003 prints a short summary of the `CoinImages` table at the end. You can equally open either file in SQL Server Management Studio or Azure Data Studio with the `CoinInventory` database selected and press Execute.
+| Script | What it does | Status |
+| --- | --- | --- |
+| `002-add-image-source-path.sql` | Adds `CoinImages.SourcePath` | already run |
+| `003-multiple-images-per-coin.sql` | Deterministic `SortOrder`, new covering index | already run |
+| `004-widen-weight-precision.sql` | `Coins.Weight` and `Coins.PmWeightGrams` from `DECIMAL(10,4)` to `DECIMAL(12,5)` | **outstanding** |
+| `005-drop-coin-tags.sql` | Drops the `CoinTags` table — the tag feature is gone | **outstanding** |
+| `006-drop-coin-dealer.sql` | Drops `IX_Coins_Dealer`, then the `Coins.Dealer` column | **outstanding** |
+| `007-infer-coin-metal-data.sql` | Fills in `MetalContent`, `Composition`, `PmWeightGrams` and `PmPercent` from what each row already implies | **outstanding** |
+| `008-weight-to-grams.sql` | Converts `Coins.Weight` from troy ounces to **grams**, then derives the gross weights 007 has made derivable | **outstanding** |
 
-Running them twice is harmless — every step is guarded and the second run prints "nothing to do" for each one. If you have already run 002, 003 will see the column and skip that step. If you have *not* run 002, 003 adds the column itself, so 003 alone is sufficient.
+**The order is not a suggestion for 008.** It reads `PmWeightGrams` and `PmPercent` to fill in blank gross weights, and 007 is what populates those, so running 008 first leaves most of that work undone. Getting it wrong is recoverable — just run 008 again after 007; it skips the conversion and completes the fill.
 
-**2. Restart the app.** The API server caches query plans, and 003 replaces the index those plans were built against. Close the launcher window and start it again.
+Substitute whatever `DB_SERVER` in `server/.env` says for `localhost` (for a named instance that is something like `-S "BRUCE_PC\SQLEXPRESS"`). `-E` means "use my Windows login", which is the easy path; if `server/.env` has `DB_USER`/`DB_PASSWORD` filled in and you would rather use that SQL login, swap `-E` for `-U CoinApp -P <password>`. Each script prints a line saying what it did; 003 prints a summary of the `CoinImages` table, 004 prints the resulting shape of both weight columns, and 006 prints a confirmation that `Coins.Dealer` is gone and `Transactions.Dealer` is untouched. You can equally open any of them in SQL Server Management Studio or Azure Data Studio with the `CoinInventory` database selected and press Execute.
 
-If you skip step 1, the batch image import will fail on the `SourcePath` column and no photo will show a source path.
+Running any of them twice is harmless — every step is guarded and the second run prints "nothing to do". Three guards are worth knowing about specifically:
 
-## Current state (as of 2026-09-26)
+- **008 is the one migration that is NOT self-describing, and it is the most dangerous script in the folder.** It changes no column, no index and no type — it rewrites the *values* in `Coins.Weight`, multiplying each by 31.1034768 so that the column means grams instead of troy ounces. Because the column's shape is identical before and after, and because 0.7734 and 24.05582 are both perfectly plausible weights, **nothing in the database can reveal whether it has already run**. And running it twice multiplies twice: a Morgan dollar would go from 24 g to 748 g, which still looks like a number rather than a bug. So 008 records that it ran by writing a marker row into `AppSettings` (`SettingKey = 'migration-008-weight-grams'`), commits that marker in the same transaction as the conversion so it can never lag behind, and skips the conversion entirely if it finds it. It also snapshots the whole column into `Coins_Weight_TroyOz_Backup` first — every row, `NULL`s included — and the file's header gives the two statements that restore from it. **Do not delete the marker** unless you have genuinely restored from that backup.
+- **005 refuses to drop `CoinTags` if there is anything in it.** No version of this application could ever create a tag, so rows in that table came from somewhere else — a manual insert, a restored backup, an experiment — and the script will not destroy them unseen. Instead it prints the `SELECT` that shows you what is in there, the `SELECT * INTO CoinTags_Backup` that copies it, and the `DROP TABLE` to run once you are satisfied. Leaving the table in place costs nothing in the meantime; the app does not read or write it at all any more.
+- **006 is scoped to the `Coins` table at every step.** `setup-database.sql` declares a `Dealer NVARCHAR(200) NULL` column on *two* tables, and `Transactions.Dealer` is still in active use. Every statement in 006 names `Coins` explicitly and every catalog lookup is scoped with `OBJECT_ID('Coins')`, because a bare search for a column called "Dealer" would hit both and silently delete a working feature.
 
-The application is functioning end-to-end. The previous round of work was a large refactor driven by a real production crash. Since then the work has been about photos: many photos per coin, knowing where each original file lives, and importing a 4.2 GB folder of them without killing the browser tab. The COMEX spot-price fetch was also found to be silently dead and was replaced.
+**2. Restart the app.** The API server caches query plans, and these migrations change the columns and indexes those plans were built against. Close the launcher window and start it again.
+
+If you skip 004, the fifth decimal place the coin editor shows for Weight and PM Weight is silently rounded away on save. 005 and 006 are cleanup — the application has already stopped using both the tags table and the coin-level dealer column, so nothing breaks if you delay them, but the database will keep an unused table and an unused column until you run them.
+
+**If you skip 008, the application actively lies.** The coin editor, the inventory grid and the CSV export have all been relabelled to say grams, but the numbers in the column are still troy ounces until the script runs — so every weight on screen reads as about a thirty-first of what it really is, with nothing to indicate it. This is the one outstanding migration whose absence is worse than cosmetic.
+
+## Current state (as of 2026-10-03)
+
+The application is functioning end-to-end. An earlier round of work was a large refactor driven by a real production crash. The round after that was about photos: many photos per coin, knowing where each original file lives, and importing a 4.2 GB folder of them without killing the browser tab. The COMEX spot-price fetch was also found to be silently dead and was replaced.
+
+**The most recent round was about the data being right and the forms being usable**, and it turned up one genuinely serious arithmetic bug along the way. In rough order of how much they mattered:
+
+- **Every melt value in the app was understated** — about 10% on US 90% gold and silver, and 60% on a 40% silver Kennedy half. `computeMeltValue` applied purity a second time to a figure that was already the pure-metal weight. See "Spot prices and melt value".
+- **Three reference weights in `pm-reference.ts` were simply factually wrong**, including a 1965-70 Kennedy half recorded as holding twice the silver it does.
+- **Four input bugs in the coin editor**, each of which made a field either unusable or lossy: numeric boxes that reformatted while you typed, an "Other" box that destroyed itself on the first keystroke, a denomination dropdown showing country headings with nothing under them, and a Settings dialog that rendered inline with no backdrop.
+- **Coin sets were never saved.** Add one, reload, it was gone.
+- **QIF import now works out what a coin is made of** from year + type + denomination, and the "import anyway" override that produced unsaveable coins was removed.
+- **CSV import now applies the same 2-of-3 completeness rule as QIF import.**
+- **Two fields were retired**: `tags` (which never had any way to enter one) and the coin-level `dealer` (redundant with `Transactions.Dealer`).
 
 **The crash and its fix.** The symptom was: edit a coin after a pause, get "Failed to update coin", refresh the browser and it still fails, and only restarting the whole app recovers. The database was fine — the *backend process was dying*. `server/db.ts` created an mssql `ConnectionPool` but never attached an `'error'` listener to it. `ConnectionPool` extends Node's `EventEmitter`, and an `EventEmitter` with zero `'error'` listeners **throws when `'error'` is emitted**. That throw happened inside a tedious socket callback where nothing could catch it, so it became an uncaught exception and killed the Express process. Nothing appeared in `app.log` because the process died before any logging ran.
 
@@ -38,7 +69,7 @@ The fix is a `pool.on('error', ...)` listener attached *before* `connect()` is c
 - There was no single-flight guard on connect. The Angular app fires roughly seven API calls in parallel on load, and each one saw "no pool" and opened a competing one. Concurrent callers now share one connect attempt, and a generation counter stops a late failure from tearing down a pool that was created after it.
 - A per-request `SELECT 1` health check could close the pool while other requests were still using it. It is gone.
 
-**Parameter types were wrong too.** Several mssql bindings did not match `server/setup-database.sql`, which silently truncates data when the parameter is shorter than the column and raises SQL error 8152 when it is longer. `Year` was bound as `NVarChar(10)` against an `NVARCHAR(50)` column, `Dealer` at 255 against a 200-char column, and `PurchaseDate`/`SoldDate` as `sql.Date` against `NVARCHAR(30)` text columns. `server/db/coin-fields.ts` is now the single source of truth for the Coins table and `server/db/bindings.ts` for every other table, and `server/db/coin-fields.spec.ts` checks them against the SQL script.
+**Parameter types were wrong too.** Several mssql bindings did not match `server/setup-database.sql`, which silently truncates data when the parameter is shorter than the column and raises SQL error 8152 when it is longer. `Year` was bound as `NVarChar(10)` against an `NVARCHAR(50)` column, the coin-level `Dealer` at 255 against a 200-char column (that column has since been removed entirely — see the coin data model below), and `PurchaseDate`/`SoldDate` as `sql.Date` against `NVARCHAR(30)` text columns. `server/db/coin-fields.ts` is now the single source of truth for the Coins table and `server/db/bindings.ts` for every other table, and `server/db/coin-fields.spec.ts` checks them against the SQL script.
 
 **Crashes are now visible.** `server/process-safety.ts` installs `unhandledRejection` and `uncaughtException` handlers at module load, so a fatal error lands in `server/logs/app.log` instead of ending the process silently.
 
@@ -48,7 +79,7 @@ The status bar was part of the same problem and changed at the same time — see
 
 **Spot prices were silently broken.** See "Spot prices and melt value". The short version: the free API the app called had been discontinued, and because the route answers 200 with zeroed prices on failure, nothing ever surfaced an error — the prices just sat at $0 forever.
 
-The regression suite is passing: **516 frontend tests across 30 files** and **135 server tests across 15 files**.
+The regression suite is passing: **836 frontend tests across 41 files** and **154 server tests across 16 files**.
 
 ## Architecture
 
@@ -58,7 +89,7 @@ The UI is organized around the principle that the inventory table *is* the appli
 
 1. **Header** — title and the toolbar
 2. **Toolbar** — action buttons (Add Coin, Import, Export, Settings)
-3. **Filter bar** — search, category filter, and a collapsible advanced panel for grade, value range, source, country, coin set, dealer
+3. **Filter bar** — search, category filter, and a collapsible advanced panel for grade, value range, source, country, coin set
 4. **Main content grid** — inventory table (full width) + detail sidebar (shown when a coin is selected)
 5. **Bulk edit bar** — fixed bottom bar when coins are multi-selected
 6. **Modal dialogs** — Quicken import, CSV import, image import, category management, reports, spot prices, settings
@@ -106,6 +137,24 @@ Two components exist only to keep the image-import modal's template from running
 
 Each child component uses Angular's `inject()` pattern and `output()` to communicate back to the parent.
 
+**`CoinEditorForm` has two helper modules sitting beside it**, both plain classes/functions with no Angular injection. The reason is always the same in this project: `CoinEditorForm` takes a required signal `input()`, which means constructing it needs `TestBed` and a DOM, and this test suite runs under plain Node. Anything worth testing therefore has to be liftable out of the component.
+
+| File | What it owns |
+| --- | --- |
+| `coin-editor-form/custom-option-mode.ts` | "The user picked **Other**" as a piece of state, independent of the field's value — see "The 'Other' boxes" below |
+| `coin-editor-form/denomination-countries.ts` | Which `<optgroup>` headings the denomination dropdown shows, derived from the data rather than hard-coded |
+
+### Directives (`src/app/directives/`)
+
+One directive, and it exists to fix a bug rather than to add a feature.
+
+| File | What it is |
+| --- | --- |
+| `numeric-field.ts` | `NumericField` — the `appNumericField` directive, applied to every number box in the coin editor |
+| `numeric-field-format.ts` | `formatNumericValue` / `parseNumericInput` — the pure parse/format pair, kept separate so it is testable without a DOM |
+
+See "Typing in a number box" under Features for the failure it fixes and the one rule that must not be broken.
+
 ### State stores (`src/app/features/`)
 
 These are plain classes created with `new`, not Angular services. They hold the state that more than one component needs, so the root component no longer has to act as a message bus between siblings.
@@ -135,12 +184,16 @@ What is left under `src/app/styles/` is only the genuinely shared material:
 | --- | --- |
 | `_base.scss` | Host element, page background, resets |
 | `_layout.scss` | Shell, topbar, main content grid |
-| `_controls.scss` | Buttons, badges, file pickers, the eyebrow caption, box-sizing reset |
+| `_controls.scss` | Buttons, badges, file pickers, the box-sizing reset — and `.eyebrow`, which is now effectively dead; see below |
 | `_panel.scss` | The white rounded card shared by the inventory table and the detail sidebar |
 | `_field.scss` | `.detail-field` — a small caption sitting directly above its control |
 | `_modal.scss` | Shared modal backdrop and chrome |
 
 `app.scss` uses `base` and `layout`, plus the status bar and the database error banner. Each component imports whichever of `controls`, `panel`, `field` and `modal` it needs via `@use`.
+
+**`.eyebrow` is worth a note, because it is now a rule with no reachable markup.** The small uppercase caption above a heading used to appear in two places: the app header in `app.html`, and the detail panel's "Selected coin" header. The detail panel header was stripped when the redundant heading and badge rows were removed (see "Coin editor layout" below), so the only `.eyebrow` left in any template is `<p class="eyebrow">Numismatic portfolio</p>` in `app.html` — and `app.scss` does not `@use 'styles/controls'`, so that element is rendering unstyled. It is listed under "Known gaps" rather than quietly deleted, because the fix is a judgement call (either drop the rule or add the one-line `@use`) and the owner should make it.
+
+`styles/_field.scss` is unaffected by any of this and is still shared by two components.
 
 `_field.scss` is the newest of these and it exists for the usual reason: two components now render `.detail-field` — the coin editor form and the add-transaction row in the detail sidebar — and Angular's style scoping means a rule written in one cannot reach the other's template, so each has to `@use` it. The rule was promoted out of `coin-editor-form.scss` when the transaction row was given real labels; that row previously used `placeholder` text as its only label ("Amount", "Dealer", "Notes"), which disappears the moment you start typing and is skipped by some screen readers. Component-specific width and layout modifiers deliberately stay in the component that uses them — only the base look is shared.
 
@@ -160,12 +213,13 @@ What is left under `src/app/styles/` is only the genuinely shared material:
 | `LoggingService` | Sends frontend log lines to `POST /api/log` so they interleave with server logs |
 | `NotificationService` | Toast messages (info/warning auto-dismiss, errors are sticky) |
 | `GlobalErrorHandler` | Angular `ErrorHandler` — logs unhandled errors and shows a toast |
-| `coin-completeness.ts` | The 2-of-3 completeness rule, shared by QIF import and the manual "Add coin" path |
+| `coin-completeness.ts` | The 2-of-3 completeness rule, shared by **all three** coin-creating paths: QIF import, CSV import and the manual "Add coin" path |
+| `coin-countries.ts` | Reading a country and a foreign denomination out of a Quicken security name |
 | `image-source-paths.ts` | `ImageSourcePathRegistry` — the side table mapping a displayed image to its original file's path |
-| `pm-reference.ts` | Precious-metal weight and purity lookup for melt values |
+| `pm-reference.ts` | "What is this coin made of?" — the composition table behind both melt values and the QIF importer's alloy prefill |
 | `http-utils.ts` | `resolveApiBaseUrl` / `describeHttpError`, dependency-free so `LoggingService` can use them without dragging `HttpClient` into the test module graph |
 
-Note that `coin-completeness.ts`, `image-source-paths.ts`, `pm-reference.ts` and `http-utils.ts` are plain modules, not `@Injectable` services. `ImageSourcePathRegistry` in particular is deliberately *not* injectable: `InventoryService` has to stay constructible from an injection context providing only `ApiService`, `LoggingService` and `NotificationService`, which is how every existing test builds it, and a fourth injected dependency would break all of them. The class has no dependencies of its own, so a module-level singleton gives the same shared-instance guarantee with none of the wiring.
+Note that `coin-completeness.ts`, `coin-countries.ts`, `image-source-paths.ts`, `pm-reference.ts` and `http-utils.ts` are plain modules, not `@Injectable` services. `ImageSourcePathRegistry` in particular is deliberately *not* injectable: `InventoryService` has to stay constructible from an injection context providing only `ApiService`, `LoggingService` and `NotificationService`, which is how every existing test builds it, and a fourth injected dependency would break all of them. The class has no dependencies of its own, so a module-level singleton gives the same shared-instance guarantee with none of the wiring.
 
 Three services were large enough to split into folders of focused helpers:
 
@@ -193,6 +247,7 @@ Three services were large enough to split into folders of focused helpers:
 | `server/db/row-mappers.ts` | SQL row to JSON for the Angular app |
 | `server/migrations/` | Guarded, idempotent schema changes for a database that already has data in it |
 | `server/routes/health.ts` | `GET /api/health` — the launcher's readiness probe |
+| `server/routes/app-info.ts` | `GET /api/app-info` — one host-local fact the browser cannot know; see below |
 | `server/routes/coins/` | `index`, `reads`, `writes`, `write-helpers`, `images`, `image-payload`, `list-query` — mounted at `/api/coins` |
 | `server/routes/images/` | `index`, `file`, `exists`, `allowed-types` — mounted at `/api/images` |
 | `server/routes/lookups/` | `categories`, `coin-sets`, `denominations`, `metal-contents`, `mint-marks` — mounted at `/api` |
@@ -206,6 +261,8 @@ Three services were large enough to split into folders of focused helpers:
 
 `routes/images/` is worth a note because it is unlike everything else in this backend: neither endpoint touches the database or the connection pool at all. `withDb()` and `sendDbError()` make no appearance there. They are about files on disk, which is why they live outside `/api/coins`.
 
+`routes/app-info.ts` is the other router that never touches the database, and it exists for one small job. The batch image import screen has to ask the user for the absolute folder their photos live in, because the browser refuses to tell it (see "The base-folder input"). Starting that box empty is unhelpful, and the old prefill was worse: it hard-coded `\\192.168.0.10\Coin Pictures`, which is how the library is reachable from the *developer's* workstation, not from the machine hosting the app. A path valid on the wrong machine is the single most expensive mistake that screen can make, because it does not fail loudly — it stamps every imported row with a location that resolves to nothing. So the prefill is now something only the server can know and that is guaranteed to be host-local: the folder the app itself is installed in. It is very probably not where the photos are, and the screen says so — but it is the right shape, on the right machine, with the right drive letter, and the user edits it down from there. Once they do, the choice is remembered and this endpoint's answer is never consulted again. Deliberately independent of SQL Server, too: the import screen must open even when the database is down, and a cosmetic default is never worth failing a page load over.
+
 `routes/error-handler.ts` also fixes a real bug. It used to be four lines ending in an unconditional `res.status(500).json({ error: 'Internal server error' })`, which threw away information the error was already carrying. `express.json()` is configured with `limit: '50mb'`, and when a request body exceeds it, body-parser rejects the request with a `PayloadTooLargeError` that already has `status: 413` set on it. During a batch photo import that mattered: the real problem is "that batch of images is too big, send fewer at a time", which the user can act on, but what they saw was a generic server error suggesting the server itself was broken.
 
 ## Features
@@ -213,18 +270,110 @@ Three services were large enough to split into folders of focused helpers:
 ### Inventory management
 
 - Inventory table with photo thumbnails, color-coded grade badges (mint/proof green, circulated blue, worn gold, ungraded gray), certification badges (purple), and CAC green bean accent icons
-- Free-text search across name, denomination, type, country, grade, certification, variety, mint mark, notes, dealer, coin set, and tags
+- Free-text search across name, denomination, type, country, grade, certification, variety, mint mark, notes, and coin set
 - Category filter, coin set filter, and sortable column headers (click to sort, click again to reverse)
-- Advanced filters: grade prefix, value range (min/max), source, country, coin set, dealer
+- Advanced filters: grade prefix, value range (min/max), source, country, coin set
 - Collapsible column visibility picker (show/hide any tracked field)
 - Sticky detail sidebar for the selected coin with inline editing of all fields
 - Add / delete coins directly from the toolbar
 - Export the full inventory as downloadable JSON, and re-import a previously exported file
 - Selected row gets a left-border accent treatment for clear visual feedback
 
+**Column order lives in exactly one place**, `inventoryColumnOrder` in `src/app/types/inventory-columns.ts`, and it must stay the only place it is written down. Two things read it: the "Columns" tick-box panel lists its options in that order, and `InventoryColumnsStore` sorts the visible column list into that order, which is what the table's `<th>`/`<td>` sequence follows. Re-ordering the template instead would make the two disagree, and you would end up with a tick-box panel whose order does not match the grid.
+
+Two changes to that array:
+
+- **Cert now sits immediately before Grade** (owner request). It used to sit between Variety and the since-removed Dealer column. The slab's certification and the grade printed on that slab are one idea, so they read as a pair. Despite the column's key being `certNumber`, the cell renders a badge built from the company *and* the number — "PCGS #12345678" — falling back to just the company when no number is recorded.
+- **The `tags` and `dealer` columns are gone**, each with a comment in the array saying so and why, so the removals are not quietly re-added.
+
+**Choosing which photo the grid shows.** The Photo column renders `coin.imagePaths[0]`, and the image gallery now has a **"Set as main"** button per photo that moves the chosen one to the front of that array.
+
+This needed no migration and no new column, which is the point worth recording. The data model already answers the question: every `CoinImages` row carries a `SortOrder`, `GET /api/coins/:id/images` returns them `ORDER BY SortOrder`, and the grid thumbnail is the first image in that list — so "this photo is the main one" is already expressible as "this photo is at `SortOrder` 0". The information has nowhere else it could live, so there is no second place for it to disagree with itself. Adding an `IsPrimary` flag instead would have meant a schema migration, a new invariant ("exactly one row per coin has it set") that nothing enforces, and a fresh way for the gallery order and the grid thumbnail to drift apart. A pleasant side effect of doing it by re-ordering: the gallery and the full-screen viewer list photos in the same order, so the main photo is also the first one you see when you open the viewer.
+
+Two guards in `CoinImagesStore.setMainImage`:
+
+- If the image is unknown or already at position 0 it does **nothing**. That is important rather than merely tidy — `PUT /api/coins/:id` replaces a coin's whole image set, so a no-op PUT would still delete and re-insert every image row on the server for no reason.
+- It goes through `inv.updateCoin({ imagePaths })` and must **never** call the API directly. The PUT re-inserts whatever array it is given, and an entry sent as a bare string comes back with `SourcePath NULL` — so a naive re-order would silently erase the recorded original-file location of every photo on the coin. `CoinEditor.withSourcePaths()` re-attaches the known paths on the way out. The single funnel *is* the protection. See "Where each photo came from".
+
 The detail entry fields no longer carry placeholder/watermark text — `coin-editor-form.html` has zero `placeholder` attributes in it now. Every field has a real caption above it instead, which is what `_field.scss` is for. Placeholder-as-label reads fine until you start typing, at which point the only thing telling you what the box was for disappears — and some screen readers skip it entirely.
 
 The Cert Company input was widened at the same time, because at its old width it clipped the final letter of "ANACS". It used to carry an inline `width: 7.5ch`; the rule now lives in `.detail-field--cert-company` in `coin-editor-form.scss` at `12ch`. Two things made `7.5ch` too narrow: `ch` is the width of the digit "0", but grader names are uppercase letters, which are wider; and the global `box-sizing: border-box` meant that width had to cover the input's 7px horizontal padding and 1px border on each side as well as the text.
+
+### Coin editor layout
+
+The form was rearranged so that the fields you read together sit together.
+
+- **Row 1 is the coin's identity**: Year, Coin Type, Denomination, Mint mark. Coin Type moved up here from the Grade row because it is the field people read first. To make room, Denomination and Mint mark were narrowed and the sidebar was widened — `minmax(0, 1fr) 420px` instead of `360px`, in `styles/_layout.scss`. The four column widths are set once on `.detail-editor__row--top` in `coin-editor-form.scss` rather than as four per-field `max-width`s, so they are one decision instead of four that have to be kept in step.
+- **Certification company moved onto the Grade line**, in front of the grade, because the two are read as one phrase: "PCGS MS64". The certification *number* deliberately stayed down with the other reference data further below — it is a long opaque string that nobody reads at a glance.
+- **The detail panel header is now nothing but the action buttons** (Show images / Close / Delete). The eyebrow, the `<h2>` repeating coin type and denomination, and the row of grade/cert/CAC badges were all removed as redundant — see the CAC section for the reasoning.
+
+### Typing in a number box
+
+**The bug.** Every numeric input in the editor was wired like this:
+
+```html
+[ngModel]="formatMoneyInput(coin().purchasePrice)"
+(ngModelChange)="updateSelectedCoin('purchasePrice', parseMoneyInput($event))"
+```
+
+Read the round trip carefully, because the failure is not obvious. You type `1`; `ngModelChange` fires and the coin is updated; the coin signal changes, so `[ngModel]` is re-evaluated; `formatMoneyInput(1)` returns `"$1.00"`, which is *not* the text you typed; `ngModel` writes that back into the box, and the browser parks the caret at the end of the replaced text. After one keystroke you are stranded after the decimals and can only append digits there. The owner's description was exact: the fields "allow a numeral to be entered but then automatically format and force the user to enter numerals at the end of the decimal places."
+
+**Why one directive and not five fixes.** The bug is not in any one field, it is in the *binding shape*, and that shape had been copy-pasted onto every numeric input. Fixing them one at a time would leave the next numeric field someone adds broken again, because the obvious thing to copy would still be the broken pattern. A directive was chosen over a wrapper component because it keeps the `<input>` in the template (so the `.detail-field` label/grid CSS keeps working untouched), it does not introduce an element that would have to be taught about `maxlength`, `inputmode`, `aria-label`, `disabled` and the rest, and because the thing being fixed — focus, blur, caret — *is* element behaviour, which is what directives are for.
+
+**The rule that must not be broken:** while the input has focus, **nothing writes to `element.value`**. That single rule is what keeps the caret still. There is deliberately exactly one assignment to `element.value` in `numeric-field.ts`, with exactly two callers, both of which only run when the field is not focused. Note also that the directive does **not** use `ngModel` at all — `ngModel`'s own model-to-view write is half of the original problem — so it drives the input directly.
+
+Two smaller decisions inside it are load-bearing:
+
+- The effect reads *every* input signal before the focus guard. An Angular effect only tracks the signals it actually read on its last run, so bailing out early would quietly unsubscribe it from `value`, and the box would stop updating when you selected a different coin.
+- The directive emits on `input` and **never on blur**. The coin editor sends a one-field PUT per emit, and a blur-triggered emit would write a field the user never touched. Widening the save payload is a class of bug this project has been bitten by before.
+
+The fields using it, and at what precision:
+
+| Field | Decimals | Prefix | Thousands separators |
+| --- | --- | --- | --- |
+| Weight (g) | 5 | — | no |
+| PM Weight (g) | 5 | — | no |
+| PM % | 2 | — | no |
+| Purchase Price | 2 | `$` | yes |
+| Current Value | 2 | `$` | yes |
+
+The five decimals on the two weight fields are what migration 004 exists to support — the columns were `DECIMAL(10,4)` and silently rounded the fifth digit away on save, so the form was promising precision the database would not keep.
+
+**Why Weight kept five decimals when it moved to grams.** Grams are a coarser unit than troy ounces — one gram is about 1/31st of an ounce — so the obvious move when migration 008 changed the unit was to trim the editor to three or four places. It was kept at five for three reasons. Its sibling `PM Weight (g)` shows five, and two gram figures sitting next to each other at different precisions read as different kinds of number rather than as two measurements you can divide into one another. The column behind it is `DECIMAL(12,5)`, which is exactly what migration 004 widened it to so the form would stop promising precision the database would not keep — trimming the form now would re-open that gap from the other side. And the planned troy-ounce readout (see "Planned next steps") wants five ounce decimals, one step of which is 0.000311 g: a gram value rounded to three places cannot reproduce that fifth ounce digit, so trimming would cost precision that is about to be wanted back. The **inventory grid** is a different question and did go down, from four decimals to three, matching the `PM Weight (g)` column beside it — in a dense scanning view a tenth of a milligram is noise.
+
+Parsing is **not** reimplemented here. `parseNumericInput` delegates to `parseNumericCell` from `src/app/services/csv/numeric-cell.ts`, the same parser CSV import uses, so `$1,250`, `26.73 g` and `1/10` behave in the editor exactly as they do on import. (Note the trap that comes with the unit change: the parser reads the number and discards whatever unit follows it, so typing `0.7734 ozt` into the gram Weight box records 0.7734 **grams**. The parser was deliberately left unit-blind — it is shared with the three money fields, and making a cell's meaning depend on text the parser is otherwise designed to throw away would be worse.) Duplicating it would mean two parsers that drift apart. It does add one thing on top: an empty box parses to `null`, not `0`, because "the user selected all, pressed delete, and is about to type a new number" must not look the same as a deliberate zero — otherwise the box fights the user by snapping back to `0.00` mid-edit.
+
+### The "Other" boxes on Denomination and Mint mark
+
+**The bug: you could type exactly one character.** Both fields are `<select>`s with a trailing "Other" option that is supposed to reveal a free-text box. That was implemented by storing a sentinel string *in the coin field itself*:
+
+```html
+<option value="__OTHER__">Other</option>
+...
+@if (coin().denomination === '__OTHER__') { <input ... /> }
+```
+
+The value was being used to remember a UI choice, and that breaks in three separate ways:
+
+- **Typing.** The first character you type replaces the denomination with that character. `'__OTHER__'` is gone, the `@if` is now false, and the box you are typing into is destroyed mid-keystroke. The owner's report was "only one letter/number can be typed and then the box goes away".
+- **Reloading.** A saved custom denomination such as "Trade Dollar" is a real value, not the sentinel, so the `@if` is false and the box never reopens. The coin comes back looking as though it has no denomination at all.
+- **Saving.** Pick Other, click away without typing, and the literal string `__OTHER__` is written to the database as the coin's denomination.
+
+**The fix** is in `src/app/components/coin-editor-form/custom-option-mode.ts`: "this field is in custom mode" becomes its own boolean signal, completely independent of the field's value. The sentinel survives only as the `<option>`'s value attribute — a token the `<select>` needs so it has something to report when Other is clicked — and is translated away the instant it reaches the component. `stripCustomSentinel()` is a last line of defence so it can never be persisted even by a future careless call. The free-text box is then bound straight to the coin field like any other text input, and typing cannot close it because typing does not touch the signal.
+
+**The subtle part is when custom mode may be re-derived.** On load you want to infer it from the value ("this denomination is not one of the options, so it must be custom"). The tempting implementation is a `computed()` or an unguarded `effect()` over the coin signal. Do not: the coin signal changes identity on *every* field edit, so that derivation would re-run while the user is typing, and the moment they typed something matching a real option — `$1`, say — custom mode would flip to false and the box would vanish under their hands. That is the original bug wearing a different hat. So `syncForCoin()` is guarded by the coin id and runs once per coin, when a *different* coin is loaded. A second guard covers an empty option list: that means the lookup tables have not come back from the server yet, and deriving then would decide every non-blank value is custom.
+
+One `CustomOptionMode` instance per field rather than two bespoke pairs of signals, so Denomination and Mint mark cannot drift apart — the bug was reported for Denomination but was identical for Mint mark.
+
+Mint mark's option reads "Other…" with an ellipsis rather than "Other", because the mint mark lookup table contains a genuine mint mark whose label is literally "Other" (the catch-all for oddities like O/S). The ellipsis is what distinguishes "type your own" from that real code.
+
+### The denomination dropdown's country headings
+
+**The bug: the dropdown showed country headings with nothing under them.** The template looped a hard-coded `['US', 'GB']` and, inside each group, filtered the denominations down to those whose `country` matched. The Settings dialog had been stamping every denomination with `country: 'United States'`, which matches neither `'US'` nor `'GB'`, so both groups emptied out and all that was left was two labels. The owner reported it as the dropdown "doesn't list anything but the countries".
+
+The mirror-image failure was live too: the Categories & Sets dialog offers `'CA'` when adding a denomination, and `'CA'` was not in the hard-coded pair, so such a denomination could be created and then never appear anywhere.
+
+`denominationCountriesOf()` in `src/app/components/coin-editor-form/denomination-countries.ts` derives the headings from the data instead, which makes both failures impossible by construction: a group exists if and only if some active denomination belongs to it, so there can never be an empty heading and never an entry with no heading to live under. Inactive denominations are excluded because the template does not render them either — counting them would be the empty-heading bug all over again. Blank countries are dropped rather than becoming a nameless group (a denomination with no country is then unreachable from this dropdown, which is a real if unlikely gap, but an untitled `<optgroup>` would be a worse answer). US sorts first because this is overwhelmingly a US collection; everything else follows alphabetically.
 
 ### Multi-select and bulk edit
 
@@ -239,8 +388,59 @@ The Cert Company input was widened at the same time, because at its old width it
 
 - Manual spot price entry for gold, silver, platinum, copper
 - One-click fetch, proxied through the backend (`GET /api/spot-prices/fetch`)
-- Per-coin melt value calculation based on metal content and weight (troy oz)
-- Melt value displayed in the detail panel valuation summary
+- Per-coin melt value calculation from the coin's **pure** precious-metal weight (`pmWeightGrams`) and the spot price for its metal
+- Shown in the grid's **Melt Value** column and in a valuation line at the top of the detail panel, next to the coin's Current Value
+- Prices **persist across restarts** and a live fetch runs **once, automatically, after start-up finishes**
+
+**Where the prices live, and the one trap in saving them.** `POST /api/spot-prices` is an INSERT into a price *history* table — it writes a new row every single time it is called. The price boxes in the modal are bound with `(ngModelChange)`, which fires per keystroke, so saving from the price setter would have written one row per character typed. The design that avoids that:
+
+| Method | What it does | Called from |
+| --- | --- | --- |
+| `InventoryService.updateSpotPrices()` | In-memory only. Every melt figure on screen recalculates instantly. | Every keystroke, freely |
+| `InventoryService.commitSpotPrices(source)` | Writes **one** history row | Deliberate actions only: a successful fetch, and closing the modal after hand-edits |
+
+`commitSpotPrices` additionally refuses a save whose four numbers match the row already on disk, and refuses an all-zero set.
+
+At start-up, `ConnectionManager.hydrate()` reads the newest saved row via `GET /api/spot-prices/latest` as part of its non-fatal `Promise.allSettled` lookup phase, so a dead price lookup can never stop the app from starting; a failure leaves the defaults and warns. Once hydration has resolved, `App` fires `InventoryService.autoRefreshSpotPrices()` **without awaiting it** — the saved prices are already applied, so melt is never blank while the network is in play, and a failed fetch changes nothing. That path deliberately bypasses `SpotPriceService` and talks to `ApiService` directly, because `SpotPriceService` reports failure with a **sticky** error toast, which is right for a button the user pressed and wrong for something that happens by itself on every launch.
+
+**A zero is not a price — it is the absence of one.** No metal trades at zero, so throughout the app a `0` is handled exactly as a `null` would be: a zeroed fetch result is a failed fetch and is never applied, an all-zero set is never POSTed, an all-zero row read back from the database is ignored rather than believed, and `computeMeltValue` returns `null` (rendered `—`, never `$0.00`) for any metal whose price is `<= 0`. Partial data is fine and common — the four symbols are fetched independently upstream — so a set with a real gold price and a zero platinum price is perfectly good, and platinum simply has no price in it.
+
+**Telling the two kinds of em-dash apart.** A melt cell reading `—` because nobody has ever fetched prices is two clicks from being fixed; one reading `—` because the coin is base metal is not fixable at all. `InventoryService.meltValueHint(coin)` produces a tooltip that says which, naming the field that is actually missing (**PM Weight (g)**, not the gross **Weight (g)** field, which melt does not use), and the spot price modal shows a note while no prices have been loaded.
+
+**How melt value is actually computed, because the obvious guess is wrong.** The whole sum is:
+
+```
+(pmWeightGrams / 31.1035) * spotPricePerTroyOunce
+```
+
+That is it. Purity does **not** appear, and the coin's gross `weight` does not appear either. The two weight fields on a coin measure different things in different units and confusing them is exactly the bug described below:
+
+| Field | What it holds | Unit |
+| --- | --- | --- |
+| `weight` | the coin's **gross** weight | grams |
+| `pmWeightGrams` | the weight of the **pure precious metal** in it | grams |
+
+**Both are grams now, and that is a recent change.** `weight` held **troy ounces** until `server/migrations/008-weight-to-grams.sql` multiplied every stored value by 31.1034768. The owner had been reading the field as grams all along; when the contradiction with the schema comment ("Gross weight in troy ounces") was put to him he chose to move the column rather than correct his reading, so that the two fields can be compared and divided without a conversion in the reader's head. Note that they still measure **different things** — a whole coin versus the pure metal inside it — so sharing a unit removes one of the two ways to confuse them, not both. The decisive one is that **melt value uses `pmWeightGrams` and nothing else**, which was as true before the unit change as after it: the conversion touched no input to `computeMeltValue`, so every melt value in the app reads identically either side of migration 008.
+
+`pm-reference.ts` states this outright and gives the worked example: a 1927 $20 Saint-Gaudens weighs 33.436 g and is 90% gold, so its `pmWeightGrams` is 30.09 — which *is* the 0.9675 oz AGW the trade quotes. The purity has already been applied in getting to that number.
+
+**The bug: every melt value in the app was understated.** `computeMeltValue` used to end with
+
+```
+(pmWeight / GRAMS_PER_TROY_OZ) * (pmPct / 100) * spotPerOz
+```
+
+— discounting by purity a second time. 30.09 g × 0.90 again gives 0.871 oz for a coin that holds 0.9675 oz. The error is exactly the purity factor, so it was **about 10% low on US 90% gold and silver and about 60% low on a 40% silver Kennedy half**. Nothing about the output looked wrong; it was a plausible number that was simply too small, which is the worst kind of arithmetic bug. The fix is in `src/app/services/inventory/inventory-metrics.ts` and the reasoning is written into the function's header so it cannot be "corrected" back.
+
+A second, smaller change came with it: **`pmPercent` is no longer required for a melt value to be produced.** It is not an input to the arithmetic any more, so demanding it would refuse an answer for a coin whose pure weight and metal are both known — a .999 bullion round recorded without a percentage, say. `pmPercent` stays on the record because it is genuinely useful information (it is what "90% Silver" means, and it is how `pmWeightGrams` was derived in the first place) — it just must not appear in this calculation.
+
+**Three reference weights in `pm-reference.ts` were factually wrong** and were corrected at the same time. These were data errors, not code errors, and they produced wrong melt values on top of the wrong formula:
+
+| Entry | Was | Is | Why |
+| --- | --- | --- | --- |
+| US `50¢`, 1965-1970 (Kennedy half) | 9.20 g of silver | **4.60 g** | The 40% silver clad half weighs 11.50 g gross; 11.50 × 0.40 = 4.60 g = 0.1479 oz ASW. The old figure was the number you get by forgetting that it is 40% and not 80% |
+| GB `Shilling`, 1920-1946 | the sterling pure weight | **2.83 g** | The 50% entries had been given the 92.5% sterling figures. Gross weight was unchanged across 1920 — only the fineness moved — so the correct pure weight is gross × 0.50: 5.66 × 0.50 |
+| GB `Florin`, 1920-1946 | the sterling pure weight | **5.66 g** | Same mistake, same correction: 11.31 × 0.50 |
 
 **The fetch was broken, and here is why it was invisible.** The old implementation called `https://api.metals.live/v1/spot`. That free API has been discontinued: the hostname still resolves (to a CloudFront address) but the TLS connection is refused, so every fetch failed. Because the route deliberately answers 200 with zeroed prices rather than erroring, the app showed nothing wrong — the prices simply stayed at $0 forever, which is what the user reported as "the COMEX PM prices fetch does not work".
 
@@ -259,12 +459,36 @@ Three things about that file are load-bearing:
 - **A missing or non-numeric price is a FAILURE, never a zero.** Anything that is not a finite number greater than zero is reported as a failed metal and listed in the response's `failed` array, so the user is told which ones are missing instead of being shown a zero as though it were a real price. Zero-as-a-price is the exact failure mode that hid the dead API for so long.
 - **Every symbol is fetched independently**, with a 10-second timeout each, so one dead symbol cannot take the other three down with it. The endpoint is undocumented, so it is treated as best-effort. The base URL can be overridden with the **`SPOT_PRICE_BASE_URL`** environment variable if it ever needs swapping without a code change.
 
+**One thing to know before you go looking for the number on screen: nothing currently displays it.** `InventoryService.meltValue(coin)` is correct and tested, but it has no caller in any template. The inventory grid *has* a "Melt Value" column, and its formatter in `src/app/types/inventory-columns.ts` is still a stub carrying a `TODO` — it returns an em-dash for every coin, whether or not the coin has a pure weight and a metal. So the arithmetic described above is right, and the fix above is real, but the result is not yet reachable from the UI. This is recorded under "Known gaps" as the next obvious thing to finish.
+
 ### Category and coin set administration (modal)
 
 - Add or remove category names from the managed list
 - Add or remove named coin sets
 - Quicken-imported coins default their category to the Quicken account name
 - Removing a category does not touch coins already assigned to it
+
+**Coin sets were never actually saved, and the old comment in the code defended it.** `addCoinSet` / `removeCoinSet` in `src/app/services/inventory/lookup-manager.ts` only updated a signal. The comment claimed the omission was deliberate — "a coin set exists because some coin references it, so it is saved as part of the coin, not as its own row" — and that reasoning does not survive contact with the rest of the system:
+
+- there **is** a `CoinSets` table, with `GET`/`POST`/`DELETE /api/coin-sets` routes behind `ApiService.getCoinSets` / `createCoinSet` / `deleteCoinSet`;
+- hydration already **reads** from it (`ConnectionManager.hydrate` calls `getCoinSets` and only falls back to deriving the list from the coins when that call fails); and
+- the UI offers "Add set" with no coin attached, which under a derive-from-coins model cannot persist at all.
+
+So the write path was the only half missing. The user would add a set, watch it appear, reload, and find it gone — because the next hydration replaced the local list with the database's, which had never been told. An empty set created ahead of filing coins into it vanished every single time. Both methods now mirror the category pattern exactly: update the signal immediately so the UI stays responsive, then persist in the background and report a failure rather than silently diverging from the database. `addCoinSet` returns early on a name it already has, which also stops a duplicate POST the backend would reject as a primary-key clash. `coin-set-persistence.spec.ts` pins it.
+
+### Settings dialog
+
+The Settings dialog now owns the reference lists, and three things changed about it today.
+
+**It added a Sets / Albums list**, the same type-and-Add shape as the four lists already there, with clickable chips to remove. These are the values offered by the "Set / Album" picker in the coin detail panel. They were previously only editable from the Categories & Sets dialog, and changes there did not survive a reload — see the coin-set persistence note above. Both halves of that are now fixed.
+
+**The five bulk-edit `<textarea>`s were deleted** — one per reference list (categories, denominations, mint marks, metal content, and the newly added sets/albums). Each let you edit a whole list as lines of text and re-save it. They read as a power-user convenience and were in fact lossy: a reference record is not a string. A denomination row carries a `denominationId`, a `country` and an `isActive` flag as well as its label; a mint mark carries an id and a description. Rebuilding one of those from a line of text means inventing values for everything the line does not carry — which is exactly how every denomination ended up stamped `country: 'United States'`, which is in turn what emptied the coin editor's country-grouped dropdown (see "The denomination dropdown's country headings"). One bulk-edit box therefore broke a dropdown two components away, silently, and the connection was not obvious from either end. Add-one and remove-one cannot do that: they only ever create a record with real values or delete a record by its real id.
+
+A secondary benefit: the textareas were the subject of a long-standing accessibility defect. Each shared a `<label>` with an `<input>` that came first, and HTML labels only the *first* labelable descendant, so the textareas were unnamed. Deleting them removed the defect along with the feature. Each of the five remaining inputs sits inside its own `<label>` with a caption `<span>`, and the Sets / Albums one additionally carries an explicit `aria-label`.
+
+**The dialog now imports the shared modal styles and has a distinct focus border.** It has always used the `.modal-backdrop` / `.modal` / `.modal-header` class names, but nothing ever supplied their styles: the markup originally lived in `app.html`, and `app.scss` never imported `styles/_modal.scss`. When the dialog was extracted into a component the omission was carried across intentionally so the refactor would change nothing visually, and a comment recorded that as a deliberate choice.
+
+The consequence was not cosmetic. With no `.modal-backdrop` rule the dialog had no fixed positioning, no dimmed overlay and no card chrome at all — it rendered inline in the page, so nothing told the user they had moved into a separate window. That is what the owner reported. `settings-modal.scss` now has the `@use`, plus a deliberately emphatic focused-window treatment on top of it: a darker-than-default overlay (this is the one modal that edits app-wide reference data rather than a single coin, so pushing the page further back is warranted), and a solid 2px edge in the app's primary accent brown. The chips were restyled more compactly at the same time.
 
 ### Transactions
 
@@ -281,7 +505,13 @@ Three things about that file are load-bearing:
 
 ### Coin data model (`src/app/types/coin.model.ts`)
 
-Each `CoinRecord` tracks: denomination, year, coin type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, sold price, sold date, dealer, coin set, metal content, weight, precious-metal weight in grams, precious-metal purity percent, free-text notes, image paths, tags, a `source` marker (`manual` / `quicken` / `csv` / `import`), and `hasCacSticker`.
+Each `CoinRecord` tracks: denomination, year, coin type, category, country, grade, certification company, certification number, variety, mint mark, composition, purchase date, purchase price, current value, sold price, sold date, coin set, metal content, gross weight in grams, precious-metal weight in grams, precious-metal purity percent, free-text notes, image paths, a `source` marker (`manual` / `quicken` / `csv` / `import`), and `hasCacSticker`.
+
+**`weight` used to be in troy ounces.** It is the coin's gross weight — the whole coin, alloy included — and it was the one field in the model measured in a different unit from everything around it. `server/migrations/008-weight-to-grams.sql` converted the stored data (× 31.1034768) and the label now says `Weight (g)` everywhere it appears: the editor, the grid, the CSV export and the blank template. Nothing about the *type* changed, only the meaning, which is why the migration has to carry an `AppSettings` marker row rather than inspect the schema — see "Do this after pulling this change". `pmWeightGrams` was already grams and was not touched.
+
+There was also a `tags: string[]` field, backed by a `CoinTags` table and a Tags column in the grid. It was removed. The reason is worth recording, because the shape of the mistake is easy to repeat: tags were plumbed through every layer *except* any way to enter one. The table existed, the API read and wrote it, search looked inside it and the grid had a formatter for it — but the editor had no input, bulk edit did not offer the field, and neither importer could set one, so every code path that created a coin hard-coded an empty list. The column could only ever show a dash. Rather than build the missing UI, the concept was dropped. Older JSON exports still contain the key; importing one of those still works. The mechanism is worth spelling out because it is easy to break by accident: `normalizeImportedCoins` in `services/inventory/coin-factory.ts` spreads whatever keys the file happened to contain and then overwrites the handful it cares about, so a stray `tags` key simply rides along as an inert extra property — TypeScript never sees it (the value arrives as parsed JSON at runtime, not as a checked literal), nothing reads it, and no validation step rejects unknown keys. What *would* break it is rebuilding the object from an explicit field list **and** adding a schema check that rejects unknown keys. If that ever happens, make `tags` an explicitly ignored key rather than an error — importing an old backup must not fail. `coin-factory.spec.ts` pins it. Existing databases are cleaned up by `server/migrations/005-drop-coin-tags.sql`.
+
+There was also a `dealer?: string` field — who the coin came from — backed by a `Coins.Dealer` column, an editor input, a Dealer grid column, a "Search dealers" box in the advanced filter panel, a bulk-edit option and a Dealer column in the CSV import/export. It was removed at the owner's request. Unlike tags it was a real, working field; it was simply redundant. The same information is already recorded per event on the **transaction** rows, and recorded better: a coin-level string can only say "this coin is associated with Heritage", while a transaction says "the purchase on 2024-01-15, for $150, was with Heritage" — and can say something different about the sale two years later. **Transactions keep their own `dealer` field; only the coin-level one is gone.** Older CSV and JSON exports still contain a Dealer column; importing one still works, the column simply has nothing to map onto and is ignored. Existing databases are cleaned up by `server/migrations/006-drop-coin-dealer.sql`, which must drop `IX_Coins_Dealer` before it can drop the column.
 
 `imagePaths` is still a `string[]` of `data:` URLs, deliberately. Widening it to an array of objects was considered and rejected: it is bound directly to `<img [src]>` in four places (the gallery, the photo viewer, the table thumbnail, the report) and it is one of the fields the change tracker diffs, and a mistake in the change-tracking path is how the user previously lost data. The original file paths therefore live in a side table instead — see "Where each photo came from" below.
 
@@ -289,7 +519,9 @@ Each `CoinRecord` tracks: denomination, year, coin type, category, country, grad
 
 ### CAC "green bean" accent
 
-CAC stickers a coin already graded by PCGS/NGC as meeting a tighter quality bar within its stated grade. `hasCacSticker` is a layered accent on top of `certCompany`/`certNumber`. The accent image lives at `public/CACGreenBean-trimmed.png` and renders inline in the table, in the detail panel badge row, and as a checkbox toggle in the editor.
+CAC stickers a coin already graded by PCGS/NGC as meeting a tighter quality bar within its stated grade. `hasCacSticker` is a layered accent on top of `certCompany`/`certNumber`. The accent image lives at `public/CACGreenBean-trimmed.png` and renders in two places: inline in the inventory table, and as a checkbox toggle in the coin editor.
+
+It used to render in a third — a badge row in the detail panel header, alongside summary badges for grade and certification. That whole header was removed. Every value it showed is an editable field in the form immediately below it, so the header was restating, in a form you could not correct, what was already on screen a row or two down. The grade pill and the green bean still appear where they genuinely earn their place: the inventory grid, where there is no form and you are scanning many coins at once.
 
 ### Quicken (QIF) import (modal)
 
@@ -323,7 +555,7 @@ They are regexes rather than plain `includes()` checks for two reasons: a substr
 
 **The 2-of-3 rule.** A coin must carry at least two of the three main details — Year, Coin Type, Denomination — before it is allowed into the inventory. A record described by a year alone is not a coin, it is a fragment, and the backend rejects it anyway with `400 {"error":"denomination is required"}`.
 
-The rule now lives in its own shared module, **`src/app/services/coin-completeness.ts`**, because the manual "Add coin" path needs exactly the same judgement as the QIF importer. It exports:
+The rule now lives in its own shared module, **`src/app/services/coin-completeness.ts`**, because all three coin-creating paths need exactly the same judgement: the QIF importer, the CSV importer and the manual "Add coin" path. It exports:
 
 | Export | What it is |
 | --- | --- |
@@ -334,11 +566,49 @@ The rule now lives in its own shared module, **`src/app/services/coin-completene
 | `hasEnoughCoinDetail(record)` | The boolean verdict |
 | `describeMissingCoinDetail(record)` | Human-readable "what's missing" text for the UI |
 
-`quicken-import.service.ts` re-exports the same symbols so its own unchanged tests still work, and `coin-draft-registry.ts` uses `hasEnoughCoinDetail` / `describeMissingCoinDetail` to decide when a newly added coin is legal enough to POST.
+`quicken-import.service.ts` re-exports the same symbols so its own unchanged tests still work; `coin-draft-registry.ts` uses `hasEnoughCoinDetail` / `describeMissingCoinDetail` to decide when a newly added coin is legal enough to POST; and `csv-import-modal.ts` imports the same two functions directly.
+
+The rule is also applied in exactly **one** place per importer, on purpose. In the QIF parser there is deliberately no "is this detailed enough?" test in the mid-loop filtering any more, only in the final assembly loop, so that no code path can reach `importedRecords` without passing it. The previous version tested `!year && !denomination` mid-loop, which only rejected coins missing *both* fields, and then bolted on a regex for bare "1934"-style names.
 
 The check is deliberately strict about what counts as "present": placeholder values like `-`, `0`, `n/a`, `none`, `unknown` and `other` are treated as blank, because a naive truthiness test accepted all of them. That set is `PLACEHOLDER_DETAIL_VALUES`, which is module-private — you go through `isCoinDetailPresent()` rather than reading the set directly.
 
-Coins that fail the rule are not silently dropped mid-loop. They appear in an **"Exceptions — not imported"** panel showing the raw QIF security name, what the parser *was* able to read, and which details were missing, and each one can be individually overridden and imported anyway.
+Coins that fail the rule are not silently dropped. They appear in an **"Exceptions — not imported"** panel showing the raw QIF security name, what the parser *was* able to read, and which details were missing. The fix for a row landing there is to correct its name in Quicken and export again.
+
+**The "Import anyway" override is gone, and must stay gone.** The modal used to keep an `overriddenSecurities` list letting the user force a failing record into the import. It looked like it worked and did not: the coin appeared in the grid, so the user believed it had saved — but the backend rejects a coin with no denomination outright with `400 {"error":"denomination is required"}`, so no database row was ever created, and every later edit then targeted an id the server had never heard of. That is the "errors when trying to update the details" the owner reported. The rule now is simply: **the UI must never offer to create a coin the backend would refuse.** The whole mechanism — the state, both handlers and the styling — was deleted, and `quicken-import-modal.spec.ts` asserts that `overrideException`, `undoOverride` and `applyDetailOverrides` are all `undefined`, so it cannot be reintroduced by accident.
+
+**What the coin is made of is now inferred too.** The QIF importer pre-fills four editor fields — Metal, Composition, PM % and PM weight — from a single `lookupCoinAlloy(denomination, year, country, metalHint)` call against the reference table in `src/app/services/pm-reference.ts`. All four come from that one lookup, so they can never disagree with each other: either we know what the coin is made of and fill all four, or we know nothing and fill none.
+
+The year is doing most of the work. A 1964 quarter is 90% silver and a 1965 quarter has none, and the only difference between them is the date. The table is organised by country, then metal, then chronologically, and year ranges within one country + denomination **never overlap** — where two standards met, the boundary year is assigned to one side and the reasoning is written in a comment.
+
+**The governing principle is: when in doubt, answer nothing.** This project already follows that rule for image matching, and here it has a sharper justification —
+
+> A wrong purity silently produces a wrong melt value. A blank field is visible and the user can fix it.
+
+So wherever a year/denomination combination genuinely had two different alloys in circulation, the table has **no entry at all** and the lookup returns `null`. Each gap is marked with a `*** DELIBERATE GAP ***` comment:
+
+| Left blank | Why guessing is worse |
+| --- | --- |
+| **1942 Jefferson nickel** | Nickel was a strategic war material, so from October 1942 the five-cent piece was struck in a silver alloy instead. *Both* compositions were struck during 1942, and the only reliable way to tell them apart is the large mint mark above Monticello — which a Quicken security name does not carry. Guessing here is a 35-percentage-point error |
+| **1982 Lincoln cent** | The cent switched from 95% copper bronze to copper-plated zinc partway through 1982. Both exist with the same date and the same design; they are told apart by weighing them (3.11 g vs 2.50 g) |
+| **1971-1978 Eisenhower dollar** | Business strikes are copper-nickel clad; the collector issues sold by the Mint are 40% silver. Same date, same design, nothing in a security name separates them |
+
+Two further kinds of ambiguity are handled in code rather than by omission:
+
+- **An ambiguous `$1`.** Two entries can match the same denomination and year while naming *different* metals — the classic case is "$1" in 1849-1889, when the US struck both a silver dollar and a gold dollar. The lookup refuses to choose and returns `null`, **unless** the caller passes a `metalHint`, because the security name said "Gold" or "G$1" out loud. The importer reads that hint from the name and passes it through.
+- **1992-and-later silver proof dimes and quarters.** Silver proof-set issues resumed in 1992 at the old 90% standard, and they are indistinguishable from the clad ones by year alone. Rather than omit them, those rows carry `requiresHint: true`, which makes them **invisible unless the caller supplies a matching metal hint**. So a plain "1998 25¢" gets the clad answer, and a "1998 25¢ Silver Proof" gets the silver one. The effect is the same as a gap for every name that does not say "silver": nothing is guessed.
+
+**Foreign country and denomination detection** (`src/app/services/coin-countries.ts`) is the other new reading taken from the security name. The parser used to hard-code `country: 'United States'` on every row, and its denomination table only understood US face values. That is right for 43 of the 44 coins in this collection and wrong for the 44th — `Y1969 Peru 100 Soles - NGC MS64` parsed with a Year and nothing else, failed the 2-of-3 rule and landed in the exceptions list. With the country and denomination both read it now imports on two of three, with Coin Type legitimately blank.
+
+It keeps the same principle as the image matcher's `denomination-units.ts` — *a bare number means nothing; a number bound to a unit means a lot* — but applies it to a world-coinage vocabulary that file deliberately does not have. There is no overlap between "100 Soles" and "$20", so nothing is duplicated.
+
+The conservatism rule is applied to currency units specifically:
+
+- **A unit may imply a country only when it has exactly one issuer.** "Soles" is Peru; nowhere else has ever struck a Sol. Rand and Pond are South Africa, Forint is Hungary, Zlotych is Poland, Yen is Japan, and so on — those carry `impliesCountry`.
+- **A shared unit reads the denomination but leaves the country blank.** "20 Francs" could be France, Belgium, Switzerland or Luxembourg; "50 Pesos" could be Mexico, Chile, Colombia or Argentina. The denomination is unambiguous and is recorded; the country is left alone unless the name says it outright. Guessing "Mexico" for an Argentine coin would quietly attach the wrong melt reference to it, which is the exact failure mode this project keeps trying to avoid.
+
+The country name list is deliberately broad — this is a gold collection and world gold turns up everywhere — but every entry was checked against one question: *could this word appear in a US coin's name?* Several nearly could, and those carry guards. `Panama` only counts when "Pacific" does not follow, because the 1915-S Panama-Pacific commemoratives are US coins. `Spanish` only counts when "Trail" does not follow, because of the 1935 Old Spanish Trail half dollar. `India` is written `\bindia\b` so "Indian Head" and "Indian Princess" cannot match. `Colombia` is listed only with an 'o', because the US Columbian Exposition half is spelled with a 'u'. And **Guinea is omitted entirely** — the Guinea is an English gold coin, so "1760 Guinea" means the coin, not the African republic.
+
+The canonical country spellings must match the `country` values in `pm-reference.ts` ("Great Britain", not "UK"), or a correctly recognised country would silently lose its precious-metal lookup.
 
 ### CSV import (modal)
 
@@ -380,21 +650,29 @@ A header auto-maps if it matches either the label or the field name, case-insens
 | Purchase Price | `purchasePrice` | Numeric — see below |
 | Current Value | `currentValue` | Numeric — see below |
 | Notes | `notes` | |
-| Dealer | `dealer` | |
 | Set | `coinSet` | |
 | Metal Content | `metalContent` | |
-| Weight (oz) | `weight` | Numeric — a unit suffix or a fraction is fine |
+| Weight (g) | `weight` | Numeric, in **grams** — a unit suffix is tolerated but not checked |
 | Sold Price | `soldPrice` | Numeric — see below |
 | Sold Date | `soldDate` | |
 | Source | `source` | Validated against `manual` / `quicken` / `import` / `csv` |
 
+**The `Weight (oz)` header from older exports no longer maps, deliberately.** `autoMapHeaders()` matches a header against each field's key or its label, so a file exported before migration 008 arrives with its weight column **unmapped** and nothing from it is imported. Two alternatives were considered and rejected. Mapping it straight onto `weight` would import a Morgan dollar as 0.7734 *grams* — the exact 31x understatement the migration exists to prevent, reintroduced through the back door and completely silent. Recognising the old header and multiplying by 31.1034768 on the way in is arithmetically right but makes a cell's meaning depend on the text above it, which nobody expects: a user who had already converted their spreadsheet to grams but left the heading alone would get every weight multiplied by 31 instead, and the importer has no way to tell the two files apart. An unmapped column is visible on the mapping screen and costs one dropdown selection to fix; a silent 31x error in either direction is not recoverable. This is the same precedent the removed `Dealer` column set — an unrecognised column is ignored rather than guessed at. `docs/csv-import-guide.md` tells the user what to do about it.
+
 **Value handling**
 
 - Empty cells are skipped entirely, leaving the field at its default rather than writing a blank.
-- The four numeric fields go through `parseNumericCell()` in `src/app/services/csv/numeric-cell.ts`, which tolerates a currency symbol, thousands commas, a trailing unit (`0.7734 ozt`), a simple fraction (`1/10 oz` → `0.1`) and a parenthesised negative (`(1,250.00)` → `-1250`). A cell with no number in it at all still becomes `0`.
+- The four numeric fields go through `parseNumericCell()` in `src/app/services/csv/numeric-cell.ts`, which tolerates a currency symbol, thousands commas, a trailing unit (`26.73 g`), a simple fraction (`1/10` → `0.1`) and a parenthesised negative (`(1,250.00)` → `-1250`). A cell with no number in it at all still becomes `0`.
+- **The unit suffix is discarded, never checked**, which is a sharper edge now that Weight is grams: `0.7734 ozt` in the weight column imports as 0.7734 *grams*, and the fraction rule — written for fractional-ounce gold — turns `1/10 oz` into a tenth of a *gram*. The parser was left unit-blind on purpose; it is shared with the three money fields and the alternative is a cell whose meaning depends on text the parser is designed to throw away. The blank template no longer offers a fractional-ounce example, and the user-facing guide warns about both forms.
 - Imported coins get a freshly generated id. `source` is honoured if a `Source` column is present and holds a recognised value; otherwise it defaults to `csv`.
 
-**A fixed bug worth not reintroducing.** Those four fields used to be parsed with `Number(value.replace(/[$,]/g, '')) || 0`. `Number()` returns `NaN` unless the *entire* string is numeric, and `|| 0` then turned that `NaN` into a zero — so `0.7734 ozt`, `1/10 oz` and `1250 USD` all imported as **0**, silently. Weight was the worst affected, both because a troy-ounce figure invites its unit and because melt value is derived from weight. `numeric-cell.spec.ts` pins every one of those cases.
+**A fixed bug worth not reintroducing.** Those four fields used to be parsed with `Number(value.replace(/[$,]/g, '')) || 0`. `Number()` returns `NaN` unless the *entire* string is numeric, and `|| 0` then turned that `NaN` into a zero — so `0.7734 ozt`, `1/10 oz` and `1250 USD` all imported as **0**, silently. Weight was the worst affected, because a weight figure invites its unit and people habitually type one. `numeric-cell.spec.ts` pins every one of those cases. (The original write-up of this bug added "and because melt value is derived from weight" — that part was wrong and is corrected here so it is not repeated: melt uses `pmWeightGrams`, which CSV cannot import at all.)
+
+**The 2-of-3 completeness rule now applies here too.** It used to be QIF-only, and that inconsistency was not harmless. `importCsv()` was `addCoins(rows.map(mapRowToCoin))` — every row, no questions asked. The backend rejects a coin with no denomination, so such a row became an in-memory record with no database row behind it: it showed up in the grid, and then every edit to it failed against an id the server had never seen. That is the same symptom the owner reported on the QIF side and asked to be made impossible — the code should simply not import something it cannot identify.
+
+So the modal now maps every row, imports only those carrying at least two of Year / Coin Type / Denomination, and reports the rest in a **"Not imported — too little detail"** panel. Each entry gives the row number as the user sees it (1-based, header excluded), a short label built from whichever of the three fields *were* read, and which details were missing. When nothing identifying was mapped at all the label falls back to the row's first non-empty cell, which usually means the mapping itself is wrong and is the most useful thing to show.
+
+**The dialog stays open when anything was refused**, and closes immediately when nothing was. That asymmetry is deliberate: a clean import stays a single click, but a toast that disappears is not an adequate way to tell someone which lines of their file were skipped. The summary above the list also says how many coins *did* import, so the panel is a complete account of the run rather than only its failures. The Cancel button relabels itself "Done" once there is a report to read.
 
 **Minimal example**
 
@@ -403,6 +681,8 @@ Coin Type,Denomination,Year,Mint Mark,Grade,Purchase Price
 Morgan Dollar,Dollar,1881,S,MS63,"$1,250.00"
 Mercury Dime,Dime,1916,D,VG8,$895.00
 ```
+
+Each of those rows carries all three main details, so both import. A row with only a year in it does not, and will be listed in the exceptions panel instead.
 
 **Known limitations** — see "Known gaps and rough edges" near the bottom of this file; the CSV limitations are listed there with everything else.
 
@@ -574,7 +854,7 @@ Enriching every outgoing array from one place means a path, once known, survives
 
 #### SQL Server backend (`server/`)
 
-The coin collection lives in SQL Server. A separate Express/TypeScript backend provides the REST API. The schema is created and seeded from `server/setup-database.sql`, which defines the canonical tables for coins, images, tags, categories, denominations, mint marks, metal contents, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
+The coin collection lives in SQL Server. A separate Express/TypeScript backend provides the REST API. The schema is created and seeded from `server/setup-database.sql`, which defines the canonical tables for coins, images, categories, denominations, mint marks, metal contents, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
 
 **`setup-database.sql` drops every table before creating it, so it is only for an empty or disposable database.** Changes to a database that already has coins in it go in `server/migrations/` instead, as numbered scripts following two rules: guard every statement so re-running the file is harmless (there is no migration-tracking table in this project, so "safe to run twice" is what takes its place), and never drop or rewrite a column that holds user data. The numbering starts at 002 because `setup-database.sql` is effectively migration 001 — the baseline every delta is measured against.
 
@@ -582,14 +862,22 @@ The coin collection lives in SQL Server. A separate Express/TypeScript backend p
 | --- | --- |
 | `002-add-image-source-path.sql` | Adds `CoinImages.SourcePath NVARCHAR(400) NULL`, guarded by a `COL_LENGTH` check |
 | `003-multiple-images-per-coin.sql` | Adds `SourcePath` if 002 was never run, renumbers duplicate `SortOrder` values per coin, and replaces `IX_CoinImages_CoinId` with `IX_CoinImages_CoinId_SortOrder`. Prints a summary of the table when it finishes |
+| `004-widen-weight-precision.sql` | `Coins.Weight` and `Coins.PmWeightGrams` from `DECIMAL(10,4)` to `DECIMAL(12,5)`, so the five decimals the editor shows are the five the database keeps |
+| `005-drop-coin-tags.sql` | Drops the `CoinTags` table — but only if it is empty |
+| `006-drop-coin-dealer.sql` | Drops `IX_Coins_Dealer`, then the `Coins.Dealer` column. `Transactions.Dealer` is a different column and is untouched |
 
 003 repeats 002's column deliberately: the two changes ship together, and a database that got the index but not the column would be a confusing half state. Run them in order if you have not run either; run 003 alone if you prefer.
+
+**Why 004 widens to `(12,5)` rather than `(10,5)`.** `DECIMAL(p,s)` splits `p` total digits into `s` after the point and `p-s` before it. The old `(10,4)` allowed six digits ahead of the point; keeping `p` at 10 while raising `s` to 5 would leave only five, which *narrows* the integer side — a stored value of 100000 or more would fail the conversion and abort the `ALTER`. Going to `(12,5)` raises the integer capacity to seven instead, which makes this a pure widening that cannot fail on any existing row, and the extra digits are free: `(10,4)` and `(12,5)` occupy the same 9-byte storage class. Increasing both precision and scale is a widening conversion, so SQL Server rewrites each value in place rather than needing a table rebuild.
+
+**Why 006 has to drop an index first.** `setup-database.sql` creates `CREATE INDEX IX_Coins_Dealer ON Coins (Dealer);`, and SQL Server refuses to drop a column an index depends on — "The object 'IX_Coins_Dealer' is dependent on column 'Dealer'." The script therefore finds every index on `Coins` whose key includes `Dealer` and drops it by name, rather than hard-coding `DROP INDEX IX_Coins_Dealer`, so that an index added later under a different name does not make the migration fail.
 
 **API endpoints**
 
 | Group | Endpoints |
 | --- | --- |
 | Health | `GET /api/health` |
+| App info | `GET /api/app-info` — host-local facts the browser cannot know; used to prefill the image importer's base-folder box |
 | Coins | `GET /api/coins`, `GET /api/coins/:id`, `POST /api/coins`, `PUT /api/coins/:id`, `DELETE /api/coins/:id` |
 | Coin images | `GET /api/coins/:id/images`, `POST /api/coins/:id/images`, `DELETE /api/coins/:id/images/:imageId` |
 | Original image files | `GET /api/images/file?path=`, `POST /api/images/exists` |
@@ -672,7 +960,7 @@ Then open the local URL shown in the Angular CLI output (commonly `http://localh
 
 ## Current database and startup notes
 
-- **Run the outstanding migrations in `server/migrations/`** — see the section at the top of this file. Everything to do with photo source paths and reliable image ordering depends on them.
+- **Run the outstanding migrations in `server/migrations/`** — 004, 005 and 006; see the section at the top of this file. 002 and 003 (photo source paths and reliable image ordering) have already been run. 004 is the one with a user-visible consequence: without it the fifth decimal place the editor shows for Weight and PM Weight is rounded away on save.
 - Category, denomination, mint-mark, and metal-content reference data are database-backed and seeded via `server/setup-database.sql` rather than hard-coded runtime seed logic.
 - Metal content values are repaired and persisted in the database, and `Other` is avoided unless the data truly does not fit a known value.
 - The SQL configuration is read from `server/.env` by `server/db/config.ts`, with handling for named instances.
@@ -698,16 +986,20 @@ A stale `dist/` is worth taking seriously here: `npm start` runs `node dist/serv
 ## Test
 
 ```powershell
-# Frontend — 516 tests across 30 files
+# Frontend — 836 tests across 41 files
 npm test
 
-# Server — 135 tests across 15 files
+# Server — 154 tests across 16 files
 cd server && npm test
 ```
 
 The frontend suite runs as **`vitest run --root src`** (that is what `npm test` expands to). On Windows, when the project sits at or near a drive root, Vitest 4.x has a path-resolution problem that makes it find zero test files; pointing `--root` at `src` works around it. Run it that way rather than a bare `npx vitest run`.
 
-Server specs sit next to the code they cover — `db/connection.spec.ts`, `db/coin-fields.spec.ts`, `routes/coins/reads.spec.ts`, `routes/coins/writes.spec.ts`, `routes/coins/images.spec.ts`, `routes/coins/images-post.spec.ts`, `routes/coins/image-payload.spec.ts`, `routes/coins/list-query.spec.ts`, `routes/images/images.spec.ts`, `routes/lookups/lookups.spec.ts`, `routes/data/data.spec.ts`, `routes/data/spot-price-source.spec.ts`, `routes/db-error-response.spec.ts`, `routes/error-handler.spec.ts` — and they all share `server/test-support/mssql-mock.ts`. `server.spec.ts` covers the app wiring and the health endpoint. `db/connection.spec.ts` includes the regression test for the crash — it emits `'error'` on the pool and asserts the process survives.
+Server specs sit next to the code they cover — `db/connection.spec.ts`, `db/coin-fields.spec.ts`, `routes/app-info.spec.ts`, `routes/coins/reads.spec.ts`, `routes/coins/writes.spec.ts`, `routes/coins/images.spec.ts`, `routes/coins/images-post.spec.ts`, `routes/coins/image-payload.spec.ts`, `routes/coins/list-query.spec.ts`, `routes/images/images.spec.ts`, `routes/lookups/lookups.spec.ts`, `routes/data/data.spec.ts`, `routes/data/spot-price-source.spec.ts`, `routes/db-error-response.spec.ts`, `routes/error-handler.spec.ts` — and they all share `server/test-support/mssql-mock.ts`. `server.spec.ts` covers the app wiring and the health endpoint. `db/connection.spec.ts` includes the regression test for the crash — it emits `'error'` on the pool and asserts the process survives.
+
+**A recurring shape in the frontend specs is worth knowing about before you add one.** This suite runs under plain Node, with `jsdom` only for the specs that genuinely need a DOM, and a component taking a required signal `input()` cannot be constructed without `TestBed`. So the pattern throughout is to lift the decision out of the component into a plain class or pure function beside it and test *that*: `custom-option-mode.spec.ts`, `denomination-countries.spec.ts`, `numeric-field-format.spec.ts`, `coin-images-main-photo.spec.ts`, `image-path-display.spec.ts` and `selection-rules` are all this. It is why `numeric-field.ts` (which touches a real `<input>`) and `numeric-field-format.ts` (which does the arithmetic and string work) are two files: the half that can silently corrupt a coin's price or weight is the half that is covered.
+
+`coin-set-persistence.spec.ts` and `export-import-round-trip.spec.ts` are regression pins for two bugs that were invisible until a reload: a coin set that was never written to the database, and an export column that could not be mapped back on import.
 
 ## Troubleshooting
 
@@ -745,16 +1037,20 @@ You should see the connection attempt logged, then `Coin Inventory server listen
 
 **Every photo's path is plain text with no link at all.** That is the `unknown` state, and it means the existence check itself did not come back — almost always because the backend is unreachable. Check `/api/health` first; the paths will become links again once it answers.
 
-**No photo shows a path.** You probably have not run the migrations. See the top of this file.
+**No photo shows a path.** You probably have not run migrations 002 and 003, which add `CoinImages.SourcePath`. See the top of this file.
+
+**The fifth decimal of a weight disappears when you save.** You have not run migration 004. The columns were `DECIMAL(10,4)` and the editor shows five decimals, so the fifth digit was rounded away on the way into the database: type `0.12345`, reopen the coin, read `0.1235`.
 
 ## Known gaps and rough edges
 
 Documented honestly so they are not rediscovered as surprises.
 
-- **`app.scss` never imports `styles/_modal.scss`.** `_modal.scss` is where `.modal-backdrop` (`position: fixed; inset: 0`), `.modal`, `.modal--wide`, `.modal-header` and `.modal-close` are defined. Six modals `@use` it themselves — CSV import, category, spot price, report, image import, Quicken import — but the **Settings dialog** and the **image gallery** do not, even though their markup uses those exact class names. So both may render without a backdrop or fixed positioning. A comment at each site (`settings-modal.scss` and `coin-image-gallery.scss`) records that this is deliberately preserved behaviour rather than an oversight: the classes had no styling for as long as the markup lived in `app.html`, and the extraction into components changed nothing visually on purpose. The fix is a one-line `@use '../../styles/modal' as *;` in each. (The full-screen photo viewer is *not* affected — it defines its own fixed backdrop.)
-- **CSV import does not apply the 2-of-3 completeness rule.** QIF import requires at least two of Year / Coin Type / Denomination; CSV import does not, so an under-specified row is sent to the backend and rejected there with `400 {"error":"denomination is required"}`.
-- **Several fields cannot be imported from CSV at all**, because they are not in the mappable list: `hasCacSticker`, `tags`, `imagePaths`, and — worth noting — `pmWeightGrams` and `pmPercent`, which melt-value calculations depend on. A CSV round-trip therefore loses CAC flags and precious-metal weights, so a CSV export is a good report and a good starting template but **not** a backup. (The `Source` column *is* now importable, so provenance does survive a round trip; `exportCsv()` derives its columns from `CSV_MAPPABLE_FIELDS`, which makes an exportable-but-unimportable column structurally impossible. `export-import-round-trip.spec.ts` asserts it.)
-- **One input still uses placeholder-as-label.** Just one, in the bulk edit bar: `<input #bulkValue type="text" placeholder="New value" />`, with no wrapping `<label>`, no `aria-label` and no caption span. The rest of the app has been cleaned up — the Settings modal's four inputs each sit inside a `<label>` with a caption span, the category modal's five all carry an explicit `aria-label`, and the coin editor form has no `placeholder` attributes at all. Two related but different defects are worth knowing about while you are in there: the `<select #bulkField>` next to that input has no accessible name either (it carries no `placeholder`, so it is not the same gap), and the Settings modal's four `<textarea>` elements share a `<label>` with an `<input>` that comes first — and HTML labels only the *first* labelable descendant, so those textareas end up unnamed.
+- **Melt value is computed correctly but is not displayed anywhere.** This is the most actionable item on this list. `InventoryService.meltValue(coin)` works and is tested, but it has no caller in any template. The inventory grid has a "Melt Value" column whose formatter in `src/app/types/inventory-columns.ts` is still a stub carrying a `TODO` — it returns an em-dash for every coin regardless of whether the coin has a pure weight and a metal. The spot price modal tells the user that "coins with weight and metal content will show melt values automatically", which is currently not true. The fix is to hand the formatter the spot prices (or move the cell to a component that can reach `InventoryService`) and call the existing function. Note the `TODO` comment there still describes the **old, wrong** formula, applying `pmPercent` a second time — do not implement what it says; see "Spot prices and melt value".
+- **The image gallery never imports `styles/_modal.scss`.** `_modal.scss` is where `.modal-backdrop` (`position: fixed; inset: 0`), `.modal`, `.modal--wide`, `.modal-header` and `.modal-close` are defined. Every modal `@use`s it now except the **image gallery**, whose markup uses those exact class names, so it may render without a backdrop or fixed positioning. The comment in `coin-image-gallery.scss` records that this is preserved behaviour rather than an oversight: the classes had no styling for as long as the markup lived in `app.html`, and the extraction into components changed nothing visually on purpose. The fix is a one-line `@use '../../styles/modal' as *;`. (This was the same gap the **Settings dialog** had, and there it turned out not to be cosmetic at all — see "Settings dialog". That is the reason to treat the gallery's version as a live bug rather than a quirk. The full-screen photo viewer is *not* affected; it defines its own fixed backdrop.)
+- **`.eyebrow` is styled but unreachable.** The rule lives in `styles/_controls.scss`. The only markup still using it is `<p class="eyebrow">Numismatic portfolio</p>` in `app.html`, and `app.scss` does not `@use 'styles/controls'` — so that caption renders with no styling at all. The other user of the class, the detail panel's "Selected coin" header, was deleted. Either add the `@use` to `app.scss` or drop both the rule and the markup; it is a one-line change either way, but which way is the owner's call.
+- **`server/schema.sql` is dead and should be deleted.** It is a legacy, superseded schema file that **contradicts** `server/setup-database.sql`: it issues `CREATE DATABASE CoinInventory`, uses lower-case table names (`coins`), and describes a structure nothing in the app matches. Nothing references it — `setup-database.sql` is the real build-from-scratch script and `server/migrations/` holds every delta. The danger is purely that someone opens it believing it is current and runs it. Deleting it is the whole fix.
+- **Several fields cannot be imported from CSV at all**, because they are not in the mappable list: `hasCacSticker`, `imagePaths`, and — worth noting — `pmWeightGrams` and `pmPercent`, which melt-value calculations depend on. A CSV round-trip therefore loses CAC flags and precious-metal weights, so a CSV export is a good report and a good starting template but **not** a backup. (The `Source` column *is* importable, so provenance survives a round trip; `exportCsv()` derives its columns from `CSV_MAPPABLE_FIELDS` via `exportColumns()`, which makes an exportable-but-unimportable column structurally impossible. `export-import-round-trip.spec.ts` asserts it. That derivation is also what removed the Dealer column from the importer, the export *and* the blank template in one edit when the field was retired.)
+- **One input still uses placeholder-as-label.** Just one, in the bulk edit bar: `<input #bulkValue type="text" placeholder="New value" />`, with no wrapping `<label>`, no `aria-label` and no caption span. Placeholder-as-label reads fine until you start typing, at which point the only thing telling you what the box was for disappears — and some screen readers skip it entirely. The rest of the app is clean: the Settings dialog's **five** inputs each sit inside a `<label>` with a caption `<span>` (and the Sets / Albums one also carries an explicit `aria-label`), the category modal's inputs all carry an explicit `aria-label`, the advanced filter panel's inputs sit inside `<label>`s with caption spans and use their placeholders only for *examples* (`e.g. MS, VF, AU`, `$0`, `$∞`) rather than as the label, the toolbar search box has an `aria-label`, and `coin-editor-form.html` has no `placeholder` attributes at all. One related but different defect is worth fixing while you are in there: the `<select #bulkField>` next to that input has no accessible name either — it carries no `placeholder`, so it is not the same gap, but it is the same omission. (A previous version of this note described four unnamed `<textarea>` elements in the Settings dialog. Those textareas were the bulk-edit boxes and have been deleted; see "Settings dialog".)
 - **`GET /api/transactions` does `SELECT *`** including an `NVARCHAR(MAX)` Notes column, with no row bound and no pagination. Fine at the current size, but it will be the first thing to feel slow.
 - **`GET /api/coins` still returns `imagePaths` by default.** That is a temporary compatibility shim. The intent is for the default to flip to `includeImages=false` once the client is migrated to fetch images per coin, so the main list stops shipping the full base64 for every coin up front.
 - **`GET /api/coins/:id` returns `imagePaths` as a flat string array with no source paths.** Source paths come from `GET /api/coins/:id/images`, which is what `CoinImagePathsService` calls; the single-coin read has not been widened.
@@ -767,13 +1063,34 @@ Documented honestly so they are not rediscovered as surprises.
 
 The server already supports it and the client already has a per-coin image fetch (`CoinImagePathsService`). What remains is migrating the last readers of `imagePaths` on the list endpoint and then changing the default, so loading the inventory stops shipping every coin's base64.
 
-### 2. Certification company logos for PCGS, NGC, and ANACS
+### 2. Two small cleanups already identified
+
+Both are described in "Known gaps and rough edges" and both are a few minutes' work:
+
+- **Delete `server/schema.sql`.** It is a dead legacy schema that contradicts `setup-database.sql`. Nothing references it; the only risk it carries is that somebody runs it.
+- **Fix the last placeholder-as-label**, the bulk edit bar's "New value" input, and give the `<select>` next to it an accessible name at the same time.
+
+### 3. Show the troy-ounce equivalent beside the gram weight
+
+The owner's words: *"A future update might be to show the troy ounces (up to 5 decimal places) in parentheses next to gram weight."* This is **display only** and was deliberately left out of the grams conversion rather than bolted onto the field while it was already changing.
+
+What it means in practice: the `Weight` field should read something like `30.09300 g (0.96750 ozt)`. The **gram figure stays the stored, editable value** — the ounce figure is derived for display and is never written back. The reason it is worth having at all is that grams is now what the database holds, but troy ounces is still the unit bullion is quoted, traded and advertised in, so a collector comparing a coin against a dealer's listing needs the ounce number and should not have to do the arithmetic.
+
+Everything needed to pick this up cold:
+
+- `Coins.Weight` is **grams**, as of `server/migrations/008-weight-to-grams.sql`. It is `DECIMAL(12,5)` and the editor shows all five decimals — which is partly why it kept five rather than being trimmed when the unit changed (see "Typing in a number box").
+- The constant is **31.1034768 grams per troy ounce**, i.e. `ounces = grams / 31.1034768`. It already exists in the codebase, in `server/routes/data/spot-price-source.ts`. Note that `inventory-metrics.ts` uses the rounded `31.1035` for melt value; prefer the exact figure for a displayed conversion, and consider lifting one shared constant rather than adding a third copy.
+- Five decimals on the ounce figure is what was asked for, and the gram side can support it: one step of the fifth ounce decimal is 0.000311 g, comfortably inside five gram decimals.
+- The field is `src/app/components/coin-editor-form/coin-editor-form.html`, which carries a pointer comment to this entry. The input is driven by the `appNumericField` directive, which owns `element.value` and must not be fought — the ounce text belongs **outside** the `<input>` (in the `<span>` label, or a sibling element), not inside it.
+- Consider whether the inventory grid's `Weight (g)` column wants the same treatment. It probably does not — the grid is a dense scanning view and already dropped from four decimals to three — but it is the obvious next question.
+
+### 4. Certification company logos for PCGS, NGC, and ANACS
 
 The CAC green bean accent is done. Official logos for grading companies were skipped due to trademark concerns. If revisited:
 - Would need real logo assets or custom non-trademarked badges
 - Data model needs a way to distinguish "raw / not certified" from "certified but certCompany is empty"
 
-### 3. Premium feature research
+### 5. Premium feature research
 
 Research premium coin inventory programs (PCGS CoinFacts, NGC Registry, Numismaster, etc.) and adopt the best ideas that make sense for this application.
 
@@ -784,10 +1101,25 @@ Research premium coin inventory programs (PCGS CoinFacts, NGC Registry, Numismas
 - "Raw" coin explicit visual state
 - Dashboard with charts (value over time, category breakdown)
 - Server-side de-duplication of image inserts (in the insert logic, where a duplicate can be dropped without killing the batch — *not* as a unique constraint; see migration 003)
-- Apply the 2-of-3 completeness rule on the CSV import path too
+- Make `pmWeightGrams` / `pmPercent` / `hasCacSticker` CSV-mappable, so a CSV export can be a real backup rather than only a report and a template
 
 ### Done (kept here so it is not re-planned)
 
+- **Fix the melt-value calculation** — done. `computeMeltValue` was applying purity twice to a figure that was already the pure-metal weight, understating every coin by the purity factor. Three wrong reference weights in `pm-reference.ts` were corrected at the same time.
+- **Actually show the melt value** — done, and it turned out to be the plumbing around the sum rather than the sum itself. The arithmetic had been correct and tested for some time; what was missing was everything else. Spot prices were never written to the database, never read back, and so reset to zero on every launch, so every melt cell showed an em-dash for ever. Five things changed: `ApiService.getLatestSpotPrices()` for `GET /api/spot-prices/latest`; a spot price load in the non-fatal lookup phase of `ConnectionManager.hydrate()`; saves on deliberate actions only (see "Spot prices and melt value"); a real `meltValue` formatter in the grid; and a valuation line in the detail panel. The app also fetches live COMEX prices once, automatically, after start-up has finished.
+- **Stop the number boxes reformatting while you type** — done. The `appNumericField` directive replaced the `[ngModel]="format(x)" (ngModelChange)="parse($event)"` pattern on all five numeric fields, and the one rule it enforces is that nothing writes to `element.value` while the field has focus.
+- **Fix the "Other" denomination and mint mark boxes** — done. Custom mode is its own signal in `custom-option-mode.ts` instead of a sentinel stored in the coin's own field, so typing in the box can no longer destroy it, a saved custom value reopens it, and `__OTHER__` can never be persisted.
+- **Fix the empty country headings in the denomination dropdown** — done. `denominationCountriesOf()` derives the groups from the data, so an empty heading and an ungrouped entry are both impossible by construction.
+- **Persist coin sets** — done. `LookupManager.addCoinSet` / `removeCoinSet` now write through `/api/coin-sets` instead of only touching a signal; the table, the routes and the hydration read had all existed for some time.
+- **Apply the 2-of-3 completeness rule on the CSV import path** — done. CSV import now refuses rows carrying fewer than two of Year / Coin Type / Denomination and lists them in a "Not imported — too little detail" panel, with the dialog staying open so the report is read.
+- **Remove the QIF "import anyway" override** — done. It produced coins that appeared in the grid but had never been saved, so every later edit failed against an id the server had never seen. A record failing 2-of-3 is now simply not importable; the exceptions panel still lists what was skipped and why.
+- **Infer composition on QIF import** — done. Metal, Composition, PM % and PM weight are pre-filled from year + type + denomination, with deliberate gaps where two alloys share a date and nothing in a security name tells them apart.
+- **Detect foreign countries and denominations on QIF import** — done. `coin-countries.ts`, with the rule that a currency unit may imply a country only when it has exactly one issuer.
+- **Fix the Settings dialog rendering inline** — done. It now imports the shared modal styles and has a distinct focus border; the lossy bulk-edit textareas were removed and a Sets / Albums list was added.
+- **Rework the coin editor layout** — done. Year / Coin Type / Denomination / Mint mark on the first row, Cert company on the Grade line, the redundant heading and badge rows removed, sidebar widened to 420px.
+- **Let the user choose the grid thumbnail** — done. "Set as main" in the gallery re-orders `imagePaths`, reusing `SortOrder`, so no migration was needed.
+- **Retire the `tags` field** — done. Nothing could ever create one; migration 005 drops the table.
+- **Retire the coin-level `dealer` field** — done. The same information is already recorded, better, per event on the transaction rows. Migration 006 drops the column. `Transactions.Dealer` is a different column and deliberately stays.
 - **Fix esbuild/ng serve** — resolved via the webpack builder plus the `esbuild-wasm` override in `package.json`. The app serves and builds.
 - **Wire up SQL Server backend** — done. `InventoryService` goes through `ApiService` to the Express API; IndexedDB is now only UI preferences.
 - **Batch image import** — done. Point at the photo folder, match ~2,140 files on filename alone, review grouped by coin, then read and downscale only the confirmed files, sequentially.
@@ -796,5 +1128,5 @@ Research premium coin inventory programs (PCGS CoinFacts, NGC Registry, Numismas
 - **Fix the COMEX spot-price fetch** — done. metals.live was dead; replaced with COMEX/NYMEX futures symbols, with copper correctly converted from per-pound to per-troy-ounce and failures reported instead of stored as zero.
 - **Fix the page-level scrollbar** — done. `src/styles.scss` was empty; it now carries the body reset, and the status bar became a normal flex row instead of a fixed overlay.
 - **Remove placeholder text from the detail entry fields** — done, and the Cert Company input was widened so "ANACS" fits.
-- **Share the 2-of-3 rule** — done. It lives in `src/app/services/coin-completeness.ts` and is used by both the QIF importer and the manual "Add coin" path.
+- **Share the 2-of-3 rule** — done. It lives in `src/app/services/coin-completeness.ts` and is used by all three coin-creating paths: the QIF importer, the CSV importer and the manual "Add coin" path.
 - **Stronger filename normalization for image matching** — done. The `image-matching/` folder is now fourteen focused modules — seven of them new, single-purpose parsers — plus a spec that runs against verbatim real filenames from the collection.

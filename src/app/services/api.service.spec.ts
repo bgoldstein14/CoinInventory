@@ -73,7 +73,6 @@ describe('ApiService', () => {
       currentValue: 15,
       notes: '',
       imagePaths: [],
-      tags: [],
       source: 'manual' as const,
     };
 
@@ -174,6 +173,45 @@ describe('ApiService', () => {
   it('fetchSpotPrices calls GET /api/spot-prices/fetch', () => {
     service.fetchSpotPrices();
     expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices/fetch`);
+  });
+
+  // /latest and /fetch are easy to confuse and do completely different
+  // things: /fetch calls COMEX live, /latest reads back the newest row we
+  // saved ourselves. Only the second one is what makes melt values survive a
+  // restart, so the URL is worth pinning down.
+  it('getLatestSpotPrices calls GET /api/spot-prices/latest', () => {
+    service.getLatestSpotPrices();
+    expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices/latest`);
+  });
+
+  it('getLatestSpotPrices passes the saved row straight through', async () => {
+    const row = {
+      gold: 2600, silver: 30, platinum: 950, copper: 4,
+      source: 'COMEX/NYMEX futures via Yahoo Finance',
+      fetchedAt: '2026-10-02T14:02:00.000Z'
+    };
+    mockHttpClient.get = vi.fn(() => of(row));
+
+    await expect(firstValueFrom(service.getLatestSpotPrices())).resolves.toEqual(row);
+  });
+
+  it('getLatestSpotPrices surfaces the empty-table answer unchanged', async () => {
+    // The route never 404s for an empty table — it answers 200 with zeros and
+    // two nulls. Callers rely on `fetchedAt: null` to tell "nothing saved"
+    // apart from real data, so nothing here may paper over it.
+    const empty = { gold: 0, silver: 0, platinum: 0, copper: 0, source: null, fetchedAt: null };
+    mockHttpClient.get = vi.fn(() => of(empty));
+
+    await expect(firstValueFrom(service.getLatestSpotPrices())).resolves.toEqual(empty);
+  });
+
+  it('saveSpotPrices calls POST /api/spot-prices with the provenance label', () => {
+    // Reminder for anyone adding a caller: this POST INSERTS A NEW HISTORY
+    // ROW every time. It must only be reached from a deliberate user action.
+    service.saveSpotPrices({ gold: 2600, silver: 30, platinum: 950, copper: 4, source: 'Manual entry' });
+    expect(mockHttpClient.post).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices`, {
+      gold: 2600, silver: 30, platinum: 950, copper: 4, source: 'Manual entry'
+    });
   });
 
   // --- Logging ---

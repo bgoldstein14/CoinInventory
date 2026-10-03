@@ -55,7 +55,21 @@ export class InventoryTable {
   protected gradeBadgeClass = gradeBadgeClass;
   protected certBadgeLabel = certBadgeLabel;
 
-  /** The thumbnail shown in the Photo column: a coin's first attached image. */
+  /**
+   * The thumbnail shown in the Photo column.
+   *
+   * It is simply the coin's FIRST attached image — there is no separate
+   * "primary image" flag anywhere, and deliberately so. `imagePaths` is held in
+   * display order (the server returns the rows `ORDER BY SortOrder`), so
+   * position 0 already means "this is the coin's main photo".
+   *
+   * That is what makes the gallery's "Set as main" button work: it moves the
+   * chosen photo to the front of `imagePaths`, and this method then picks it
+   * up with no further wiring. See CoinImagesStore.setMainImage.
+   *
+   * Note there is no down-scaling here: `imagePaths` already holds a downscaled
+   * copy of the original photo, and CSS (`.row-thumb`) sizes it to the row.
+   */
   protected primaryImage(coin: CoinRecord): string | null {
     return coin.imagePaths[0] ?? null;
   }

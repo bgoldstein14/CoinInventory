@@ -4,7 +4,7 @@
  * WHY THIS FILE EXISTS
  * ---------------------------------------------------------------------------
  * CSV import has four numeric fields: Purchase Price, Current Value, Sold
- * Price and Weight (oz). The original one-liner that parsed them was:
+ * Price and Weight (g). The original one-liner that parsed them was:
  *
  *     Number(value.replace(/[$,]/g, '')) || 0
  *
@@ -23,10 +23,14 @@
  *     (1,250.00)      ->  NaN  ->  0      (accounting negative)
  *
  * ...imported as ZERO, with no warning and nothing in the exceptions list.
- * Weight is the field where this bites hardest, because a troy-ounce figure is
- * meaningless without its unit and so people habitually type the unit. A coin
- * whose weight silently becomes 0 also loses its melt value, since melt is
- * computed from weight and purity.
+ * Weight is the field where this bites hardest, because a weight is meaningless
+ * without its unit and so people habitually type the unit.
+ *
+ * (Two corrections to that last paragraph as originally written, kept visible
+ * because both are easy to re-introduce. The gross Weight column is now in
+ * GRAMS, not troy ounces — see server/migrations/008-weight-to-grams.sql. And
+ * melt value is NOT computed from it: melt uses `pmWeightGrams` alone, so a
+ * weight that imports as 0 loses the gross weight and nothing else.)
  *
  * ---------------------------------------------------------------------------
  * WHAT THIS DOES INSTEAD
@@ -56,8 +60,15 @@ const CURRENCY_SYMBOLS = /[$£€¥]/g;
  * This exists specifically for bullion weights. Fractional-ounce gold is sold
  * as 1/10, 1/4 and 1/2 oz, and those are exactly the figures someone typing a
  * weight column is likely to write. Without this rule "1/10 oz" parses as 1 —
- * a tenth-ounce coin recorded as a full ounce, a tenfold overstatement of its
- * melt value.
+ * a tenth-ounce coin recorded as a full ounce.
+ *
+ * CAUTION, SINCE THE WEIGHT COLUMN BECAME GRAMS: the rule still only extracts
+ * the NUMBER and still ignores the unit, so "1/10 oz" in the Weight column now
+ * imports as 0.1 GRAMS rather than 0.1 troy ounces. The rule is unchanged on
+ * purpose — it is shared with the three money fields, and making it
+ * unit-aware would mean a cell's meaning depending on text the parser is
+ * otherwise designed to discard. The CSV guide tells users to write grams, and
+ * the blank template no longer shows a fractional-ounce example.
  */
 const SIMPLE_FRACTION = /^(\d+)\s*\/\s*(\d+)/;
 
@@ -65,8 +76,8 @@ const SIMPLE_FRACTION = /^(\d+)\s*\/\s*(\d+)/;
  * The first signed decimal number anywhere in the remaining text.
  *
  * Anchored nowhere on purpose: by this point currency and separators are gone,
- * so whatever is left around the digits is a unit ("ozt", "grams", "USD") or
- * stray whitespace, and skipping it is the whole point.
+ * so whatever is left around the digits is a unit ("g", "grams", "ozt", "USD")
+ * or stray whitespace, and skipping it is the whole point.
  */
 const FIRST_NUMBER = /-?\d*\.?\d+/;
 

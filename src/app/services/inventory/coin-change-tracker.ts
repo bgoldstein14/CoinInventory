@@ -30,9 +30,9 @@ import { CoinRecord } from '../../types/coin.model';
  * =========================================================================== */
 
 /**
- * Compare two field values. Arrays (imagePaths, tags) are compared by
- * content rather than by reference, since a new array with the same items
- * is not a real change.
+ * Compare two field values. Arrays (imagePaths) are compared by content rather
+ * than by reference, since a new array with the same items is not a real
+ * change.
  *
  * Exported because the editor needs the identical rule when deciding whether
  * an edit is even worth repainting on screen.

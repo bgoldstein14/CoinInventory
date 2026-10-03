@@ -130,3 +130,63 @@
   font-size: 0.78rem;
   color: #6a5a47;
 }
+
+// ---- Rows refused by the completeness rule ----
+// Styled as a warning block rather than an error: nothing went wrong, some
+// rows simply could not be identified as coins. The amber border is what
+// makes it read as "needs your attention" without implying failure, and it
+// deliberately stands out from the neutral mapping and preview sections above.
+.csv-exceptions {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e3cfa4;
+  border-left: 4px solid #b98748;
+  border-radius: 10px;
+  background: #fdf8ef;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+    color: #7a5b26;
+  }
+}
+
+.csv-exceptions-summary {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: #6a5a47;
+}
+
+.csv-exception-list {
+  // Capped so a badly mapped file of hundreds of rows cannot push the action
+  // buttons off the bottom of the dialog.
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+
+  li {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid #f0e4d0;
+    align-items: baseline;
+  }
+
+  li:first-child { border-top: none; }
+}
+
+.csv-exception-row {
+  color: #8a7a63;
+  font-variant-numeric: tabular-nums;
+}
+
+.csv-exception-summary {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.csv-exception-missing { color: #8a2c22; }

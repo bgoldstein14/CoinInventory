@@ -42,6 +42,21 @@
   }
 }
 
+// Shown only while every price is still zero. Deliberately an advisory
+// amber note rather than a red error: nothing is broken, the app has simply
+// never been told what metal is worth.
+.spot-empty-note {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  border: 1px solid #e6cf9a;
+  border-left: 3px solid #c79a3a;
+  border-radius: 6px;
+  background: #fdf6e6;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #6b5320;
+}
+
 .spot-price-form {
   display: grid;
   grid-template-columns: 1fr 1fr;

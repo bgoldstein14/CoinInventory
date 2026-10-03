@@ -20,7 +20,13 @@
         </div>
         <div class="image-list">
           @for (imagePath of coin().imagePaths; track imagePath; let i = $index) {
-            <div class="image-item">
+            <!--
+              `is-main` highlights the photo the main grid uses as this coin's
+              thumbnail. That is always the FIRST image in the list, because
+              the grid renders imagePaths[0] — see CoinImagesStore.setMainImage
+              for why "main photo" is stored as position rather than a flag.
+            -->
+            <div class="image-item" [class.image-item--main]="images().isMainImage(imagePath)">
               <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
               <div class="image-item__meta">
                 <span class="image-item__label">{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
@@ -33,6 +39,30 @@
                 -->
                 <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
               </div>
+              <!--
+                The per-photo "main photo" control.
+
+                It is deliberately a button that DISABLES itself (rather than
+                disappearing) on the photo that is already the main one: a
+                control that vanishes tells you nothing, whereas a greyed-out
+                button reading "Main photo" shows the current state at a
+                glance and keeps every row the same width.
+              -->
+              @if (images().isMainImage(imagePath)) {
+                <button
+                  type="button"
+                  class="secondary small-button is-main-photo"
+                  disabled
+                  title="This photo is shown in the main grid"
+                >★ Main photo</button>
+              } @else {
+                <button
+                  type="button"
+                  class="secondary small-button"
+                  title="Show this photo in the main grid"
+                  (click)="images().setMainImage(imagePath)"
+                >Set as main</button>
+              }
               <button type="button" class="secondary small-button" (click)="images().removeCoinImage(imagePath)">Delete</button>
             </div>
           }

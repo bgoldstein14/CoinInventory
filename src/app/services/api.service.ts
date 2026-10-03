@@ -9,6 +9,7 @@ import {
   TransactionRecord,
   SpotPrices,
   SpotPriceResult,
+  LatestSpotPrices,
   LogEntry
 } from '../types/coin.model';
 import { CoinImageRecord } from '../types/coin-image.model';
@@ -393,11 +394,41 @@ export class ApiService {
   }
 
   /**
+   * Read back the most recently SAVED spot prices from the database.
+   *
+   * This is the start-up counterpart to fetchSpotPrices() above. That one goes
+   * out to COMEX live; this one just reads the newest row of our own
+   * SpotPrices history table, which is what lets melt values survive a restart
+   * without hitting a third-party API every time the app opens.
+   *
+   * The route never 404s. When the table is empty it answers 200 with every
+   * price zeroed and `source`/`fetchedAt` both null, so callers should test
+   * `fetchedAt` rather than the numbers to tell "nothing saved yet" apart from
+   * "saved prices that are genuinely zero".
+   *
+   * @returns Observable of the newest saved prices plus their provenance
+   */
+  getLatestSpotPrices(): Observable<LatestSpotPrices> {
+    return this.http.get<LatestSpotPrices>(`${this.baseUrl}/api/spot-prices/latest`);
+  }
+
+  /**
    * Save spot prices to the database.
-   * @param prices - Spot prices for gold, silver, platinum, copper
+   *
+   * *** THIS INSERTS A NEW HISTORY ROW EVERY TIME IT IS CALLED. ***
+   * There is no update-in-place; POST /api/spot-prices is an INSERT (see
+   * server/routes/data/spot-prices.ts). That is by design — the table is a
+   * price history — but it means this method must only ever be reached from a
+   * DELIBERATE user action, never from a signal change or a keystroke.
+   * InventoryService.commitSpotPrices() is the only caller and it exists
+   * precisely to enforce that; read its comment before adding another.
+   *
+   * @param prices - Spot prices for gold, silver, platinum, copper, plus an
+   *                 optional `source` label recording where they came from
+   *                 (e.g. "COMEX/NYMEX futures via Yahoo Finance", "Manual entry")
    * @returns Observable that completes when save is done
    */
-  saveSpotPrices(prices: SpotPrices): Observable<void> {
+  saveSpotPrices(prices: SpotPrices & { source?: string }): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/spot-prices`, prices);
   }
 

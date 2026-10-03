@@ -28,10 +28,54 @@ export const CSV_MAPPABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'purchasePrice', label: 'Purchase Price' },
   { key: 'currentValue', label: 'Current Value' },
   { key: 'notes', label: 'Notes' },
-  { key: 'dealer', label: 'Dealer' },
+  // A `{ key: 'dealer', label: 'Dealer' }` entry sat here. The coin-level
+  // dealer field was removed, and because this one list drives the importer's
+  // auto-mapping, the Export -> CSV columns AND the blank template, deleting it
+  // here removes the Dealer column from all three at once. An older file that
+  // still carries a Dealer column simply has no field to map it onto now, so it
+  // is left unmapped and ignored -- the rest of the row imports normally.
   { key: 'coinSet', label: 'Set' },
   { key: 'metalContent', label: 'Metal Content' },
-  { key: 'weight', label: 'Weight (oz)' },
+  // GRAMS, not troy ounces. This label was `Weight (oz)` until the gross
+  // Weight column was switched to grams (see
+  // server/migrations/008-weight-to-grams.sql). Because this one list drives
+  // three things at once -- the Export -> CSV header, the blank template, and
+  // the importer's auto-mapping -- changing the label here changes all three.
+  //
+  // *** OLD EXPORTS WILL NOT AUTO-MAP, AND THAT IS THE INTENDED BEHAVIOUR. ***
+  //
+  // autoMapHeaders() matches a header against each field's key or its label,
+  // case-insensitively. A file exported before this change has a column headed
+  // `Weight (oz)`, which now matches neither `weight` nor `Weight (g)`, so it
+  // arrives at the mapping screen UNMAPPED. (A header of plain `Weight` still
+  // maps, via the key.)
+  //
+  // Two alternatives were considered and rejected:
+  //
+  //   Recognise `Weight (oz)` and map it straight onto `weight`.
+  //     This is the worst option available. The numbers under that header are
+  //     troy ounces, so it would import a Morgan dollar as 0.7734 GRAMS -- a
+  //     31x understatement that looks entirely plausible, silently, with no
+  //     warning anywhere. It is the exact failure the migration exists to
+  //     prevent, reintroduced through the back door.
+  //
+  //   Recognise `Weight (oz)` and multiply by 31.1034768 on the way in.
+  //     Arithmetically right, and still rejected: it makes the meaning of a
+  //     cell depend on the text in the header, which nobody expects. Somebody
+  //     who has already converted their spreadsheet to grams but left the old
+  //     header alone would get every weight multiplied by 31 instead, and
+  //     there is no way for the importer to tell the two files apart. A
+  //     silent 31x error in either direction is worse than a column the user
+  //     has to look at.
+  //
+  // Leaving it unmapped is the honest option, and the cost is small and
+  // visible: the mapping screen shows the column with no field chosen, and the
+  // user either picks `Weight (g)` by hand (if the numbers are already grams)
+  // or fixes the numbers first. Nothing else about the row is affected -- the
+  // rest of it imports normally. This is the same precedent the removed
+  // `Dealer` column set above: an unrecognised column is ignored, loudly
+  // enough to be noticed on the mapping screen, rather than guessed at.
+  { key: 'weight', label: 'Weight (g)' },
   { key: 'soldPrice', label: 'Sold Price' },
   { key: 'soldDate', label: 'Sold Date' },
   // `Source` is here so that Export -> CSV actually round-trips.
@@ -127,7 +171,6 @@ export class CsvService {
       currentValue: 0,
       notes: '',
       imagePaths: [],
-      tags: [],
       source: 'csv',
       hasCacSticker: false
     };
@@ -139,8 +182,8 @@ export class CsvService {
 
       if (field === 'purchasePrice' || field === 'currentValue' || field === 'soldPrice' || field === 'weight') {
         // parseNumericCell tolerates the decoration people actually type -- a
-        // unit on a weight ("0.7734 ozt"), a fractional ounce ("1/10 oz"), a
-        // currency word, an accounting negative. The previous
+        // unit on a weight ("26.73 g"), a fraction ("1/10"), a currency word,
+        // an accounting negative. The previous
         // `Number(v.replace(/[$,]/g,'')) || 0` turned every one of those into
         // a silent 0. See csv/numeric-cell.ts.
         (coin as unknown as Record<string, unknown>)[field] = parseNumericCell(value);
@@ -226,7 +269,8 @@ export class CsvService {
 
     // Two realistic rows so the expected shape of each column is obvious --
     // especially that Year is text (so "1878-S" is legal), that prices may
-    // carry currency formatting, and that a weight may carry its unit.
+    // carry currency formatting, and that a weight is in grams and may carry
+    // its unit.
     //
     // Keyed by field rather than written as positional arrays. The arrays that
     // used to live here had to be kept in the same order and length as
@@ -240,8 +284,12 @@ export class CsvService {
         certCompany: 'PCGS', certNumber: '12345678', variety: 'VAM-1A',
         mintMark: 'S', composition: '90% Silver', purchaseDate: '2024-03-15',
         purchasePrice: '$1,250.00', currentValue: '1400',
-        notes: 'Rainbow toning', dealer: 'Heritage Auctions',
-        coinSet: 'Morgan Set', metalContent: 'Silver', weight: '0.7734 ozt'
+        notes: 'Rainbow toning',
+        // Weight is the coin's GROSS weight in GRAMS. 26.73 g is the catalogue
+        // weight of a Morgan dollar. It carries its unit here on purpose, to
+        // show that a unit suffix is tolerated -- and, now that the column is
+        // grams, to make the unit unmissable in the one file people copy.
+        coinSet: 'Morgan Set', metalContent: 'Silver', weight: '26.73 g'
       },
       {
         coinType: 'Gold Eagle', denomination: '$5', year: '1996',
@@ -249,8 +297,17 @@ export class CsvService {
         certCompany: 'NGC', certNumber: '87654321', variety: '',
         mintMark: '', composition: '91.67% Gold', purchaseDate: '2023-11-02',
         purchasePrice: '$395.00', currentValue: '450',
-        notes: 'Fractional bullion', dealer: 'Local dealer',
-        coinSet: '', metalContent: 'Gold', weight: '1/10 oz'
+        notes: 'Fractional bullion',
+        // 3.393 g is the GROSS weight of a 1/10 oz Gold Eagle -- the coin
+        // contains 1/10 troy oz (3.110 g) of gold, but it is a 91.67% alloy,
+        // so the whole coin weighs more than its gold content.
+        //
+        // This example used to read '1/10 oz'. It was changed, and not only
+        // because the unit changed: parseNumericCell still resolves a fraction
+        // ("1/10" -> 0.1), so that cell would now quietly mean a tenth of a
+        // GRAM. The template must not demonstrate a form that is a trap in
+        // this column.
+        coinSet: '', metalContent: 'Gold', weight: '3.393'
       }
     ];
 

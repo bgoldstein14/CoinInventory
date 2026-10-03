@@ -4,7 +4,7 @@
  * Mounted (via routes/coins/index.ts) at /api/coins, so the paths below are
  * relative to that:
  *
- *   POST   /      -> POST   /api/coins       create a coin (+ images, tags)
+ *   POST   /      -> POST   /api/coins       create a coin (+ images)
  *   PUT    /:id   -> PUT    /api/coins/:id   partial update of a coin
  *   DELETE /:id   -> DELETE /api/coins/:id   delete a coin (cascades)
  *
@@ -65,12 +65,12 @@ import { logInfo, logWarn } from '../../logger';
 import { withDb, COIN_FIELDS, DB_BINDINGS, normalizeCoinValue } from '../../db';
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
-import { safeRollback, insertImages, insertTags } from './write-helpers';
+import { safeRollback, insertImages } from './write-helpers';
 
 const router = Router();
 
 // ============================================================
-// POST /api/coins — create a new coin with optional images/tags
+// POST /api/coins — create a new coin with optional images
 // ============================================================
 router.post('/', async (req: Request, res: Response) => {
   const body = req.body ?? {};
@@ -124,7 +124,6 @@ router.post('/', async (req: Request, res: Response) => {
         );
 
         await insertImages(transaction, id, body.imagePaths ?? []);
-        await insertTags(transaction, id, body.tags ?? []);
 
         await transaction.commit();
       } catch (innerErr) {
@@ -205,15 +204,18 @@ router.put('/:id', async (req: Request, res: Response) => {
           await insertImages(transaction, id, body.imagePaths ?? []);
         }
 
-        // Same reasoning as images: replacement is destructive, so only do it
-        // when the key was explicitly supplied.
-        if (Object.prototype.hasOwnProperty.call(body, 'tags')) {
-          await new sql.Request(transaction)
-            .input('coinId', DB_BINDINGS.coinId, id)
-            .query('DELETE FROM CoinTags WHERE CoinId = @coinId');
-
-          await insertTags(transaction, id, body.tags ?? []);
-        }
+        // There was a matching `if (hasOwnProperty(body, 'tags'))` block here,
+        // doing DELETE FROM CoinTags followed by a re-insert. The tag feature
+        // was removed, so it went with it.
+        //
+        // Removing it changes nothing about how any OTHER field is written. It
+        // was a self-contained block guarded by its own key check, inside the
+        // same transaction as everything else: the Coins UPDATE above and the
+        // images replacement before it still run under one begin/commit, so a
+        // partial edit is still all-or-nothing. A body that still carries a
+        // stray `tags` key (an old client, or a replayed request) is simply
+        // ignored now — COIN_FIELDS has no entry for it, so it was never part
+        // of the generated UPDATE in the first place.
 
         await transaction.commit();
         return true;
@@ -237,7 +239,7 @@ router.put('/:id', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// DELETE /api/coins/:id — deletes coin (images/tags cascade)
+// DELETE /api/coins/:id — deletes coin (images cascade)
 // ============================================================
 router.delete('/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);

@@ -127,24 +127,13 @@
   code { font-family: inherit; font-weight: 600; color: #5c3a2e; }
 }
 
-.override-list {
-  margin-top: 12px;
-  background: #f3f7ef;
-  border: 1px solid #cfdec2;
-  border-radius: 10px;
-  padding: 10px 12px;
-
-  h3 { margin: 0 0 6px; color: #4a6435; font-size: 0.8rem; }
-  ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-  li {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    font-size: 0.8rem;
-  }
-  code { font-family: inherit; font-weight: 600; color: #3f5530; }
-}
+/*
+ * NOTE: `.override-list` used to live here, styling the "Imported despite
+ * missing details" panel. That panel and its "Import anyway" button have been
+ * removed -- they created coins the backend refuses to save -- so the styles
+ * went with them rather than being left orphaned. See the comment above the
+ * exceptions panel in quicken-import-modal.html.
+ */
 
 .import-preview {
   margin-top: 14px;

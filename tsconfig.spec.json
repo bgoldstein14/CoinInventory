@@ -4,7 +4,22 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": [
-      "vitest/globals"
+      "vitest/globals",
+      /*
+       * Specs run under Vitest, which runs in Node — so Node's own globals and
+       * built-in modules are genuinely available to them, unlike to the
+       * application code in tsconfig.app.json (which runs in a browser and
+       * deliberately has no "node" here).
+       *
+       * Needed because a few specs read real project files off disk rather
+       * than duplicating their contents as fixtures. sql-pm-reference-parity
+       * .spec.ts is the clearest case: it parses migration 007's generated SQL
+       * and asserts every weight, percentage and composition string in it
+       * still agrees with pm-reference.ts, which is what stops the SQL copy
+       * drifting from the TypeScript source of truth. That check is only
+       * possible if the spec can open both files.
+       */
+      "node"
     ]
   },
   "include": [

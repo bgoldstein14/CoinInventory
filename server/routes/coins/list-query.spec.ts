@@ -11,8 +11,19 @@
  *
  * Queries are satisfied IN CALL ORDER by the shared mssql mock:
  *
- *   includeImages = true   ->  1. coins   2. images   3. tags   4. image counts
- *   includeImages = false  ->  1. coins   2. tags     3. image counts
+ *   includeImages = true   ->  1. coins   2. images   3. image counts
+ *   includeImages = false  ->  1. coins   2. image counts
+ *
+ * THESE NUMBERS ARE LOAD-BEARING. `mockResolvedValueOnce` queues one answer per
+ * `query()` call with no idea which query is asking, so the Nth queued recordset
+ * is handed to the Nth query loadCoinList() happens to run. Insert or remove a
+ * query in list-query.ts and every mock after it silently answers the wrong
+ * question — a coin row would arrive where an image-count row was expected.
+ *
+ * The sequence was one longer until the tag feature was removed: it used to be
+ * coins -> images -> tags -> counts. Dropping the tags query renumbered
+ * everything after it, which is why the count query is now the 3rd call (index
+ * 2) rather than the 4th.
  *
  * The coin rows below are intentionally minimal: rowToCoin() defaults every
  * column it does not find, so only CoinId matters for these assertions.
@@ -42,8 +53,7 @@ describe('GET /api/coins — imageCount', () => {
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [COIN_A, COIN_B] })                    // 1. coins
       .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageData: 'x' }] }) // 2. images
-      .mockResolvedValueOnce({ recordset: [] })                                  // 3. tags
-      // 4. the aggregate. coin-b has no image rows at all, so SQL's GROUP BY
+      // 3. the aggregate. coin-b has no image rows at all, so SQL's GROUP BY
       // simply does not return a row for it — the handler must default it to 0.
       .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 4 }] });
 
@@ -58,16 +68,15 @@ describe('GET /api/coins — imageCount', () => {
 
   it('counts with a SQL aggregate rather than by fetching the image rows', async () => {
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })
-      .mockResolvedValueOnce({ recordset: [] })
-      .mockResolvedValueOnce({ recordset: [] })
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 2 }] });
+      .mockResolvedValueOnce({ recordset: [COIN_A] })                             // 1. coins
+      .mockResolvedValueOnce({ recordset: [] })                                   // 2. images
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 2 }] }); // 3. counts
 
     await request(app).get('/api/coins');
 
-    // The 4th query is the count. It must be a COUNT(*) GROUP BY — if someone
-    // ever replaces it with a SELECT of the rows, this fails loudly.
-    const countQuery = mockRequest.query.mock.calls[3]?.[0] as string;
+    // The 3rd query (index 2) is the count. It must be a COUNT(*) GROUP BY — if
+    // someone ever replaces it with a SELECT of the rows, this fails loudly.
+    const countQuery = mockRequest.query.mock.calls[2]?.[0] as string;
     expect(countQuery).toContain('COUNT(*)');
     expect(countQuery).toContain('GROUP BY CoinId');
     expect(countQuery).not.toContain('ImageData');
@@ -76,12 +85,11 @@ describe('GET /api/coins — imageCount', () => {
 
 describe('GET /api/coins — includeImages', () => {
   it('omits imagePaths entirely when includeImages=false', async () => {
-    // Only three queries now: the image-payload query is skipped, which is the
+    // Only two queries now: the image-payload query is skipped, which is the
     // whole point of the flag.
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })                            // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', Tag: 'key-date' }] }) // 2. tags
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 3 }] }); // 3. counts
+      .mockResolvedValueOnce({ recordset: [COIN_A] })                              // 1. coins
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 3 }] }); // 2. counts
 
     const res = await request(app).get('/api/coins?includeImages=false');
 
@@ -89,10 +97,9 @@ describe('GET /api/coins — includeImages', () => {
     expect(res.body[0]).not.toHaveProperty('imagePaths');
     // The useful metadata survives, so the UI can still show "3 photos".
     expect(res.body[0].imageCount).toBe(3);
-    expect(res.body[0].tags).toEqual(['key-date']);
 
-    // Three queries, not four — no image payload was ever read.
-    expect(mockRequest.query).toHaveBeenCalledTimes(3);
+    // Two queries, not three — no image payload was ever read.
+    expect(mockRequest.query).toHaveBeenCalledTimes(2);
     for (const call of mockRequest.query.mock.calls) {
       expect(call[0] as string).not.toContain('SELECT CoinId, ImageData');
     }
@@ -102,7 +109,6 @@ describe('GET /api/coins — includeImages', () => {
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [COIN_A] })
       .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageData: 'data:image/png;base64,abc' }] })
-      .mockResolvedValueOnce({ recordset: [] })
       .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 1 }] });
 
     const res = await request(app).get('/api/coins');
@@ -115,13 +121,30 @@ describe('GET /api/coins — includeImages', () => {
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [COIN_A] })
       .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageData: 'yes' }] })
-      .mockResolvedValueOnce({ recordset: [] })
       .mockResolvedValueOnce({ recordset: [] });
 
     const res = await request(app).get('/api/coins?includeImages=true');
 
     expect(res.status).toBe(200);
     expect(res.body[0].imagePaths).toEqual(['yes']);
+  });
+
+  it('never queries the dropped CoinTags table', async () => {
+    // The tag feature is gone, table and all. If a stray tags query came back,
+    // it would both fail against the real database (the table no longer exists
+    // after migration 005) and shift every later mock answer by one.
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [COIN_A] })
+      .mockResolvedValueOnce({ recordset: [] })
+      .mockResolvedValueOnce({ recordset: [] });
+
+    const res = await request(app).get('/api/coins');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0]).not.toHaveProperty('tags');
+    for (const call of mockRequest.query.mock.calls) {
+      expect(call[0] as string).not.toContain('CoinTags');
+    }
   });
 });
 

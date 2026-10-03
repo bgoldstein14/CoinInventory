@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
 import { App } from './app';
 import { CoinDetailPanel } from './components/coin-detail-panel/coin-detail-panel';
+import { formatMeltValue } from './types/inventory-columns';
 import { parseDenominationValue } from './features/inventory/denomination-sort';
 import { CsvService } from './services/csv.service';
 import { InventoryService } from './services/inventory.service';
@@ -57,6 +58,7 @@ function createDetailPanelFor(inv: InventoryService): CoinDetailPanel {
   return runInInjectionContext(injector, () => new CoinDetailPanel());
 }
 
+
 /**
  * Builds a complete CoinRecord for tests that drive InventoryService directly
  * (i.e. by calling `inv.inventory.set([...])` rather than going through the UI).
@@ -67,7 +69,7 @@ function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
     category: 'Silver', country: 'United States', grade: 'MS65', certCompany: '',
     certNumber: '', variety: '', mintMark: 'P', composition: '',
     purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: '',
-    imagePaths: [], tags: [], source: 'manual', hasCacSticker: false,
+    imagePaths: [], source: 'manual', hasCacSticker: false,
     ...overrides
   };
 }
@@ -99,7 +101,7 @@ describe('App', () => {
 
     try {
       const { inv, mockApiService } = createTestInventoryService();
-      inv.inventory.set([{ id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver', country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P', composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: '', imagePaths: [], tags: [], source: 'manual', hasCacSticker: false }]);
+      inv.inventory.set([{ id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver', country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P', composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: '', imagePaths: [], source: 'manual', hasCacSticker: false }]);
 
       inv.updateCoin('coin-1', { year: '2024' });
       inv.updateCoin('coin-1', { year: '2025' });
@@ -123,7 +125,7 @@ describe('App', () => {
 
     try {
       const { inv, mockApiService } = createTestInventoryService();
-      inv.inventory.set([{ id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver', country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P', composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: 'Existing', imagePaths: [], tags: [], source: 'manual', hasCacSticker: false }]);
+      inv.inventory.set([{ id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver', country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P', composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: 'Existing', imagePaths: [], source: 'manual', hasCacSticker: false }]);
 
       inv.updateCoin('coin-1', { year: '2024', notes: 'Existing' });
       inv.updateCoin('coin-1', { year: '2025' });
@@ -263,12 +265,16 @@ describe('App', () => {
     }
   });
 
-  it('treats array fields (imagePaths, tags) as changed by content, not identity', async () => {
+  // `imagePaths` is now the ONLY array field on a coin. This test used to use
+  // `tags` for its second half; tags were removed (nothing could ever set one),
+  // so both halves are expressed with imagePaths instead. The rule being
+  // protected is unchanged: arrays are compared by CONTENT, not by identity.
+  it('treats array fields (imagePaths) as changed by content, not identity', async () => {
     vi.useFakeTimers();
 
     try {
       const { inv, mockApiService } = createTestInventoryService();
-      inv.inventory.set([makeCoin({ imagePaths: [], tags: ['silver'] })]);
+      inv.inventory.set([makeCoin({ imagePaths: [] })]);
 
       // A new array with new content IS a change...
       inv.updateCoin('coin-1', { imagePaths: ['data:image/png;base64,AAA'] });
@@ -279,8 +285,10 @@ describe('App', () => {
         imagePaths: ['data:image/png;base64,AAA']
       });
 
-      // ...but a different array object with identical content is NOT.
-      inv.updateCoin('coin-1', { tags: ['silver'] });
+      // ...but a DIFFERENT array object holding identical content is NOT. Note
+      // this is a freshly-built array literal, so reference equality would say
+      // "changed" and wrongly fire a second save.
+      inv.updateCoin('coin-1', { imagePaths: ['data:image/png;base64,AAA'] });
       await vi.advanceTimersByTimeAsync(1000);
       expect(mockApiService.updateCoin).toHaveBeenCalledTimes(1);
     } finally {
@@ -597,7 +605,15 @@ describe('App', () => {
     const exported = JSON.stringify(app['inv'].inventory());
     expect(exported).toContain('Mercury');
 
-    // Updated CoinRecord structure: no 'name', 'type' -> 'coinType', year is string
+    // Updated CoinRecord structure: no 'name', 'type' -> 'coinType', year is string.
+    //
+    // The `tags: ['test']` below is DELIBERATE and must stay. Tags were removed
+    // from CoinRecord, but the user's older JSON exports still contain the key,
+    // and importing one of those backups has to keep working. This object is
+    // serialised to text and fed through importInventoryData exactly as a file
+    // from disk would be, so the extra key is simply ignored. (The focused
+    // regression tests for that live in
+    // services/inventory/coin-factory.spec.ts.)
     const replacement = [{
       id: 'new-1', denomination: 'Dollar', year: '2024', coinType: 'Test',
       category: 'Imported Category', country: 'United States', grade: 'MS65',
@@ -647,13 +663,21 @@ describe('App', () => {
   });
 
   it('starts with the first visible item selected', () => {
+    // "First visible" depends on the sort, so the fixture has to make the
+    // order unambiguous under the DEFAULT sort. That default is Year
+    // ascending (it used to be Coin Type, which is why this test previously
+    // distinguished its coins by 'Alpha' and 'Zebra'), so the years are what
+    // decide the order here.
     const app = createApp();
-    const coin1 = addTestCoin(app, { denomination: 'Quarter', coinType: 'Zebra' });
-    const coin2 = addTestCoin(app, { denomination: 'Dime', coinType: 'Alpha' });
+    const coin1 = addTestCoin(app, { denomination: 'Quarter', year: '1999' });
+    const coin2 = addTestCoin(app, { denomination: 'Dime', year: '1935' });
 
     expect(app['inv'].selectedCoinId()).toBe(coin2.id);
     expect(app.selectedCoin?.id).toBe(coin2.id);
     expect(app['filters'].filteredInventory()[0].id).toBe(coin2.id);
+    // Guard the premise: coin1 really is the later year, so the assertion
+    // above is about sorting rather than insertion order.
+    expect(app['filters'].filteredInventory()[1].id).toBe(coin1.id);
   });
 
   // The category-maintenance half of this test moved to
@@ -676,12 +700,14 @@ describe('App', () => {
 
   it('falls back to inventory-derived categories when the API returns no category list', async () => {
     const { inv, storage, mockApiService } = createTestInventoryService();
-    mockApiService.getCoins = vi.fn(() => of([{
-      id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington', category: 'Silver',
-      country: 'United States', grade: 'MS65', certCompany: '', certNumber: '', variety: '', mintMark: 'P',
-      composition: '', purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15, notes: '',
-      imagePaths: [], tags: [], source: 'manual', hasCacSticker: false
-    }]));
+    // Built via makeCoin() rather than as a bare literal: `source` is a union
+    // ('manual' | 'quicken' | 'import' | 'csv'), and an inline object widens
+    // it to plain `string`, which then fails to satisfy CoinRecord.
+    mockApiService.getCoins = vi.fn(() => of([makeCoin({
+      id: 'coin-1', denomination: 'Quarter', year: '2024', coinType: 'Washington',
+      category: 'Silver', grade: 'MS65', mintMark: 'P',
+      purchaseDate: '2024-01-01', purchasePrice: 10, currentValue: 15
+    })]));
     mockApiService.getCategories = vi.fn(() => of([]));
 
     const app = new App(storage, inv, new CsvService());
@@ -966,7 +992,7 @@ describe('App', () => {
 
   it('includes the full known metal-content options', async () => {
     const app = createApp();
-    await app.ready;
+    await app['ready'];
 
     expect(app['inv'].metalContents()).toEqual(expect.arrayContaining([
       'Gold', 'Silver', 'Platinum', 'Copper', 'Nickel', 'Bronze', 'Steel', 'Clad', 'Other'
@@ -1029,15 +1055,9 @@ describe('App', () => {
     expect(app['filters'].filteredInventory()[0].coinSet).toBe('Set A');
   });
 
-  it('filters by dealer', () => {
-    const app = createApp();
-    addTestCoin(app, { denomination: 'Eagle', dealer: 'Heritage' });
-    addTestCoin(app, { denomination: 'Dollar', dealer: 'Stack' });
-
-    app['filters'].dealerFilter.set('heritage');
-    expect(app['filters'].filteredInventory()).toHaveLength(1);
-    expect(app['filters'].filteredInventory()[0].dealer).toBe('Heritage');
-  });
+  // NOTE: a 'filters by dealer' test sat here, covering the advanced panel's
+  // "Search dealers" box. The coin-level dealer field, its filter signal and
+  // that input were all removed, so there is nothing left to assert.
 
   // --- Valuation ---
 
@@ -1063,15 +1083,36 @@ describe('App', () => {
     const app = createApp();
     app['inv'].updateSpotPrices({ ...app['inv'].spotPrices(), gold: 2000 });
 
-    // Melt value now uses pmWeightGrams and pmPercent instead of weight
-    // pmWeightGrams: 15.55175 grams (exactly 0.5 troy oz), pmPercent: 90 (90% gold)
+    // pmWeightGrams is the PURE metal weight, so 15.55175 g is exactly half a
+    // troy ounce OF GOLD -- not half an ounce of alloy that is 90% gold.
     const coin = addTestCoin(app, {
       metalContent: 'Gold',
       pmWeightGrams: 15.55175,
       pmPercent: 90
     });
-    // Expected: (15.55175 / 31.1035) * (90 / 100) * 2000 = 0.5 * 0.9 * 2000 = 900
-    expect(app['inv'].meltValue(coin)).toBeCloseTo(900, 1);
+
+    // Expected: (15.55175 / 31.1035) * 2000 = 0.5 * 2000 = 1000.
+    //
+    // This asserted 900 until the double-discount bug was fixed: the old
+    // formula applied pmPercent a second time, even though pmWeightGrams had
+    // already had purity baked into it. See computeMeltValue for the full
+    // explanation. 900 is the value for a coin holding 0.45 oz of gold, which
+    // is not what this fixture describes.
+    expect(app['inv'].meltValue(coin)).toBeCloseTo(1000, 1);
+  });
+
+  it('still values a coin whose purity percentage was never recorded', () => {
+    // Purity is not an input to the melt arithmetic, so its absence must not
+    // suppress the answer when the pure weight and the metal are both known.
+    const app = createApp();
+    app['inv'].updateSpotPrices({ ...app['inv'].spotPrices(), silver: 30 });
+
+    const bullion = addTestCoin(app, {
+      metalContent: 'Silver',
+      pmWeightGrams: 31.1035
+    });
+
+    expect(app['inv'].meltValue(bullion)).toBeCloseTo(30, 1);
   });
 
   it('returns null melt value when weight or metal is missing', () => {
@@ -1085,6 +1126,141 @@ describe('App', () => {
     // Missing metalContent
     const noMetal = addTestCoin(app, { pmWeightGrams: 15.5175, pmPercent: 90 });
     expect(app['inv'].meltValue(noMetal)).toBeNull();
+  });
+
+  it('explains WHY a melt value is missing, so a dash is never ambiguous', () => {
+    // A "—" because nobody has ever fetched prices is two clicks from being
+    // fixed; a "—" because the coin is base metal is not fixable at all. The
+    // hint has to tell them apart, otherwise the feature just looks broken.
+    const app = createApp();
+
+    const silver = addTestCoin(app, { metalContent: 'Silver', pmWeightGrams: 31.1035 });
+    expect(app['inv'].meltValueHint(silver)).toContain('no spot prices have been loaded yet');
+
+    app['inv'].updateSpotPrices({ gold: 2600, silver: 30, platinum: 950, copper: 4 });
+    expect(app['inv'].meltValueHint(silver)).toContain('current spot price');
+
+    const clad = addTestCoin(app, { metalContent: 'Clad', pmWeightGrams: 5.67 });
+    expect(app['inv'].meltValueHint(clad)).toContain('not a precious metal');
+
+    // Names the field that is actually missing — PM Weight, not gross Weight.
+    const noWeight = addTestCoin(app, { metalContent: 'Silver' });
+    expect(app['inv'].meltValueHint(noWeight)).toContain('PM Weight');
+  });
+
+  it('shows the melt value in the editor, and a dash when it cannot', () => {
+    // Melt is displayed in the coin editor's pricing row, directly after
+    // Value, rather than in a summary block at the top of the detail panel —
+    // "$412.63" on its own says little, but beside what the coin is valued at
+    // it answers whether the coin is worth more than the metal in it.
+    const { inv, storage } = createTestInventoryService();
+    void new App(storage, inv, new CsvService());
+    inv.updateSpotPrices({ gold: 2600, silver: 30, platinum: 950, copper: 4 });
+
+    const coin = makeCoin({ id: 'melt-1', metalContent: 'Silver', pmWeightGrams: 31.1035 });
+    inv.inventory.set([coin]);
+    inv.selectCoin('melt-1');
+
+    // Asserted through the two pieces the editor's `meltValueDisplay`
+    // computed is composed of, rather than by constructing CoinEditorForm.
+    // That component cannot be built here: its constructor calls `effect()`,
+    // which needs a full environment injector, and its `coin` is a required
+    // signal input needing TestBed.createComponent — both of which want a DOM
+    // this suite does not have. The computed itself is a one-line composition
+    // of exactly these two calls, so this covers the behaviour that matters.
+    const selected = inv.selectedCoin()!;
+    // Exactly one troy ounce of pure silver at $30.
+    expect(formatMeltValue(inv.meltValue(selected))).toBe('$30.00');
+
+    // A base-metal coin reads "—", never "$0.00": unknown is not worthless.
+    const clad = makeCoin({ id: 'melt-2', metalContent: 'Clad', pmWeightGrams: 5.67 });
+    expect(formatMeltValue(inv.meltValue(clad))).toBe('—');
+  });
+
+  // --- Automatic COMEX fetch once start-up has finished ---
+
+  it('refreshes spot prices from COMEX once start-up has finished', async () => {
+    const { inv, storage, mockApiService } = createTestInventoryService();
+    (mockApiService.getCoins as any).mockReturnValue(of([makeCoin()]));
+    (mockApiService.fetchSpotPrices as any).mockReturnValue(of({
+      prices: { gold: 2700, silver: 33, platinum: 1000, copper: 5 },
+      source: 'COMEX/NYMEX futures via Yahoo Finance',
+      timestamp: '2026-10-03T09:00:00.000Z'
+    }));
+
+    const app = new App(storage, inv, new CsvService());
+    await app['hydrateFromStorage']();
+    // The fetch is deliberately NOT awaited by start-up, so let the
+    // microtask queue drain before asserting on its effects.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(inv.spotPrices()).toEqual({ gold: 2700, silver: 33, platinum: 1000, copper: 5 });
+    expect(mockApiService.saveSpotPrices).toHaveBeenCalledTimes(1);
+  });
+
+  it('still finishes starting up when the automatic COMEX fetch fails', async () => {
+    // No internet, blocked proxy, dead upstream. The app must come up exactly
+    // as if nothing had been attempted — and with the prices it loaded from
+    // the database still in place, since those are the whole point.
+    const { inv, storage, mockApiService, mockNotification } = createTestInventoryService();
+    (mockApiService.getCoins as any).mockReturnValue(of([makeCoin()]));
+    (mockApiService.getLatestSpotPrices as any).mockReturnValue(of({
+      gold: 2600, silver: 30, platinum: 950, copper: 4,
+      source: 'COMEX/NYMEX futures via Yahoo Finance', fetchedAt: '2026-10-02T14:02:00.000Z'
+    }));
+    (mockApiService.saveSpotPrices as any).mockClear();
+    (mockApiService.fetchSpotPrices as any).mockReturnValue(
+      throwError(() => new Error('getaddrinfo ENOTFOUND'))
+    );
+
+    const app = new App(storage, inv, new CsvService());
+    await expect(app['hydrateFromStorage']()).resolves.toBeUndefined();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(inv.connected()).toBe(true);
+    expect(inv.inventory()).toHaveLength(1);
+    // Saved prices survive the failed refresh.
+    expect(inv.spotPrices()).toEqual({ gold: 2600, silver: 30, platinum: 950, copper: 4 });
+    expect(mockApiService.saveSpotPrices).not.toHaveBeenCalled();
+    // Error toasts in this app are STICKY. A failed automatic fetch must
+    // never leave one, or a machine with no internet gets a permanent red
+    // banner on every single launch.
+    expect(mockNotification.showError).not.toHaveBeenCalled();
+  });
+
+  it('does not attempt the automatic fetch when start-up itself failed', async () => {
+    const { inv, storage, mockApiService } = createTestInventoryService();
+    (mockApiService.getCoins as any).mockReturnValue(throwError(() => new Error('ECONNREFUSED')));
+
+    const app = new App(storage, inv, new CsvService());
+    await app['hydrateFromStorage']();
+    await Promise.resolve();
+
+    expect(mockApiService.fetchSpotPrices).not.toHaveBeenCalled();
+
+    // ...but the retry that finally connects does get it, because THAT is
+    // when start-up actually finished.
+    (mockApiService.getCoins as any).mockReturnValue(of([makeCoin()]));
+    (mockApiService.fetchSpotPrices as any).mockReturnValue(of({
+      prices: { gold: 2700, silver: 33, platinum: 1000, copper: 5 },
+      source: 'COMEX', timestamp: ''
+    }));
+    await app['retryConnection']();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockApiService.fetchSpotPrices).toHaveBeenCalledTimes(1);
+
+    // Pressing Retry again does not fetch a second time: at most one
+    // successful automatic fetch per session.
+    await app['retryConnection']();
+    await Promise.resolve();
+    expect(mockApiService.fetchSpotPrices).toHaveBeenCalledTimes(1);
   });
 
   // --- Transactions ---
@@ -1124,18 +1300,24 @@ describe('App', () => {
 
   // --- Column formatting ---
 
-  it('formats dealer and coinSet columns', () => {
+  // Was 'formats dealer and coinSet columns'. The dealer column is gone; the
+  // coinSet half of the assertion is all that remains.
+  it('formats the coinSet column', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { dealer: 'Heritage', coinSet: 'Morgan Set' });
-    expect(formatInventoryCell(coin, 'dealer')).toBe('Heritage');
+    const coin = addTestCoin(app, { coinSet: 'Morgan Set' });
     expect(formatInventoryCell(coin, 'coinSet')).toBe('Morgan Set');
   });
 
+  // `weight` is the coin's GROSS weight in GRAMS. It used to be troy ounces,
+  // and this test used to assert '0.7734' -- the troy-ounce weight of a Morgan
+  // dollar, at the four decimals the grid showed then. 26.73 g is the SAME
+  // coin expressed the new way, and the grid now shows three decimals to match
+  // the PM Weight (g) column beside it. See migrations/008-weight-to-grams.sql.
   it('formats sold price and weight columns', () => {
     const app = createApp();
-    const coin = addTestCoin(app, { soldPrice: 250, weight: 0.7734 });
+    const coin = addTestCoin(app, { soldPrice: 250, weight: 26.73 });
     expect(formatInventoryCell(coin, 'soldPrice')).toBe('$250.00');
-    expect(formatInventoryCell(coin, 'weight')).toBe('0.7734');
+    expect(formatInventoryCell(coin, 'weight')).toBe('26.730');
   });
 
   // --- onQuickenImported ---
@@ -1148,7 +1330,7 @@ describe('App', () => {
       category: 'Coins', country: 'US', grade: 'Unknown',
       certCompany: '', certNumber: '', variety: '', mintMark: '',
       composition: '', purchaseDate: '2024-01-01', purchasePrice: 12.50,
-      currentValue: 12.50, notes: '', imagePaths: [], tags: [],
+      currentValue: 12.50, notes: '', imagePaths: [],
       source: 'quicken', hasCacSticker: false
     }];
 

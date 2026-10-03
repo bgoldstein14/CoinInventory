@@ -123,6 +123,108 @@ export class CoinEditor {
     this.tracker.schedulePendingWrite(coinId, SAVE_DEBOUNCE_MS, () => this.flushCoinUpdate(coinId));
   }
 
+  /**
+   * Apply an edit and write it RIGHT NOW, resolving when the server has
+   * accepted it.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THIS EXISTS ALONGSIDE `updateCoin`
+   * ---------------------------------------------------------------------------
+   * `updateCoin` above is built for a human typing: it repaints instantly and
+   * waits a second in case more keystrokes follow, so "Quarter" produces one
+   * PUT rather than seven. That debounce is kept in a Map keyed by coin id, so
+   * it is PER COIN, not global.
+   *
+   * That is exactly right for typing and exactly wrong for a bulk maintenance
+   * pass. A loop calling `updateCoin` for four hundred coins would set four
+   * hundred independent timers inside one tick; nothing would be coalesced and
+   * nothing would be lost, but one second later all four hundred PUTs would
+   * leave at once. There would be no way to show progress, no way to say which
+   * ones failed, and a corporate network and a SQL Server would both be
+   * entitled to object.
+   *
+   * So this method does the same minimal-diff write with the timer taken out:
+   * paint, record, send, await. A caller can then loop over it sequentially and
+   * know that each coin was written exactly once before the next one starts.
+   *
+   * ---------------------------------------------------------------------------
+   * WHAT IT DELIBERATELY DOES NOT DO
+   * ---------------------------------------------------------------------------
+   * It does NOT cancel a debounced write that the user's typing may already
+   * have queued for this coin. Cancelling would be the tidier-looking choice
+   * and it would throw away whatever they just typed. Letting that timer fire
+   * on its own is harmless: by the time it does, our fields are no longer
+   * marked dirty, so it sends only the user's own fields. The worst case — the
+   * timer firing while our request is still in flight — resends the identical
+   * alloy values, which is a duplicate, not a loss. Between "might duplicate a
+   * write" and "might lose a write", this app always picks the former.
+   *
+   * It also does NOT show a toast on failure. A bulk caller would get one
+   * sticky error per failed coin; it rejects instead so the caller can report
+   * a single summary. The dirty flags are left in place exactly as the
+   * debounced path leaves them, so the user re-typing the value still retries.
+   *
+   * @param coinId - id of the coin to update
+   * @param updates - the field(s) to write. Keys set to `undefined` are
+   *                  ignored, and only fields that actually differ from the
+   *                  server-confirmed state are sent.
+   * @returns the payload that was sent (empty when there was nothing to do)
+   * @throws when the coin is a local draft (no server row to update), or when
+   *   the PUT itself fails
+   */
+  async updateCoinNow(coinId: string, updates: Partial<CoinRecord>): Promise<Partial<CoinRecord>> {
+    const proposed = Object.fromEntries(
+      Object.entries(updates).filter(([, value]) => value !== undefined)
+    ) as Partial<CoinRecord>;
+
+    if (Object.keys(proposed).length === 0) return {};
+
+    const liveCoin = this.inventory().find(c => c.id === coinId);
+    if (!liveCoin) {
+      throw new Error(`Coin ${coinId} is not in the inventory`);
+    }
+
+    // A draft has never reached the database, so there is no row to PUT to and
+    // a request would 404. Creating it instead is not this method's job (and
+    // would be a surprising thing for a maintenance pass to do), so this is an
+    // error the caller is expected to avoid by filtering drafts out first.
+    if (this.drafts.isUnsaved(coinId)) {
+      throw new Error(`Coin ${coinId} has not been saved to the database yet`);
+    }
+
+    // Same order as the debounced path: snapshot what the server confirmed
+    // BEFORE repainting, or the snapshot captures the new value and the diff
+    // comes out empty.
+    const confirmed = this.tracker.confirmedSnapshot(coinId);
+    this.paintOptimistically(coinId, liveCoin, proposed);
+    this.tracker.recordEdit(coinId, proposed, confirmed);
+
+    // Build the body from `proposed` and NOT from the tracker's dirty set.
+    // The dirty set may also hold fields the user is midway through typing,
+    // and a maintenance pass must send its own fields and only its own.
+    const payload: Record<string, unknown> = {};
+    for (const key of Object.keys(proposed) as (keyof CoinRecord)[]) {
+      // Skip anything the server already holds — no point in a no-op write.
+      if (confirmed && valuesEqual(confirmed[key], proposed[key])) continue;
+      payload[key] = proposed[key];
+    }
+    if (Object.keys(payload).length === 0) return {};
+
+    const body = payload as Partial<CoinRecord>;
+
+    try {
+      await firstValueFrom(this.apiService.updateCoin(coinId, this.withSourcePaths(body)));
+    } catch (error) {
+      // Log it here (so the app log records every failure individually) but
+      // re-throw rather than toast, and leave the dirty flags alone.
+      this.logger.error(`Failed to update coin ${coinId} in database`, describeHttpError(error));
+      throw error instanceof Error ? error : new Error(describeHttpError(error));
+    }
+
+    this.onCoinUpdateSaved(coinId, body);
+    return body;
+  }
+
   /* =========================================================================
    * DRAFT COINS — the first-ever save
    * ======================================================================= */
@@ -166,6 +268,46 @@ export class CoinEditor {
    * Everything is re-checked here rather than trusted from when the timer was
    * scheduled, because a full second of typing (or a delete) can happen in
    * between.
+   *
+   * ---------------------------------------------------------------------------
+   * WHY THE ALLOY / WEIGHT INFERENCE IS *NOT* RUN HERE
+   * ---------------------------------------------------------------------------
+   * Every IMPORT path (QIF, CSV, the Settings backfill) works out Metal,
+   * Composition, PM %, PM weight and gross Weight from the coin's country,
+   * denomination and year — see services/pm-fill.ts. This method is the
+   * obvious-looking fourth place to do it: it is the exact moment a
+   * hand-typed row stops being a sketch and becomes a database record, the
+   * user has not typed for a second, and the 2-of-3 detail rule has already
+   * passed. It was considered, and deliberately not done. Three reasons, in
+   * increasing order of seriousness:
+   *
+   *   1. THE RECORD IS NOT FINISHED. An import sees a complete description
+   *      and acts on it once. A hand-typed row is observed MID-SENTENCE. A
+   *      user who has typed "1879" and "$1" and is reaching for the Coin Type
+   *      box has described a coin this table reads as ambiguous — and if they
+   *      then change the denomination to "$20", nothing re-runs, because the
+   *      row is no longer a draft. They would be left holding an inferred
+   *      value that is now WRONG and that they never typed. The governing
+   *      rule of this whole feature (pm-reference.ts, top of file) is that a
+   *      visible blank beats a silently wrong number; firing here would
+   *      manufacture exactly the silently wrong number it exists to avoid.
+   *
+   *   2. IT WOULD HAVE TO WRITE INTO FIELDS THE USER MAY BE INSIDE. To show
+   *      the inferred values the live `inventory` signal has to be repainted,
+   *      and the coin editor's inputs are bound to it. Changing the value of
+   *      a control while the caret is in it is a defect this project has
+   *      already had once (see the header of
+   *      components/coin-editor-form/custom-option-mode.ts, where a box was
+   *      being destroyed mid-keystroke).
+   *
+   *   3. THERE IS ALREADY A GOOD ANSWER. Settings > Maintenance runs the
+   *      identical inference over the whole inventory, with a preview, a
+   *      count, and a moment the USER picks — which is the right shape for a
+   *      record whose author is still composing it.
+   *
+   * If this is ever revisited, the shape to aim for is an explicit action
+   * ("fill in metal and weight for this coin") on the detail panel rather
+   * than anything automatic on a timer.
    */
   private createDraftCoin(coinId: string): void {
     const liveCoin = this.inventory().find(c => c.id === coinId);

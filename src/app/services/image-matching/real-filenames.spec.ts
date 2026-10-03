@@ -23,11 +23,10 @@ const service = () => new ImageMatchingService();
 /** A CoinRecord with sensible blanks, so each case states only what it needs. */
 function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   return {
-    id: overrides.id,
     denomination: '', year: '', coinType: '', category: '', country: 'United States',
     grade: '', certCompany: '', certNumber: '', variety: '', mintMark: '',
     composition: '', purchaseDate: '', purchasePrice: 0, currentValue: 0,
-    notes: '', imagePaths: [], tags: [], source: 'manual',
+    notes: '', imagePaths: [], source: 'manual',
     ...overrides
   };
 }

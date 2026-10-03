@@ -219,7 +219,7 @@ describe('BatchImportSession — base folder', () => {
       category: 'Silver', country: 'United States', grade: 'MS64', certCompany: '',
       certNumber: '', variety: '', mintMark: '', composition: '',
       purchaseDate: '', purchasePrice: 0, currentValue: 0, notes: '',
-      imagePaths: [], tags: [], source: 'manual'
+      imagePaths: [], source: 'manual'
     }]);
 
     await selectFiles(session, [

@@ -226,32 +226,120 @@ describe('QuickenImportModal', () => {
     expect((emitted[0] as { coinType: string }).coinType).toBe('Morgan');
   });
 
-  it('lets the user override an exception and import it anyway', () => {
+  /*
+   * THE "IMPORT ANYWAY" OVERRIDE IS GONE, AND MUST STAY GONE.
+   *
+   * It used to let the user force a record that fails the 2-of-3 rule into
+   * the import. The coin appeared in the grid but was never saved -- the
+   * backend rejects a coin with no denomination outright
+   * (400 {"error":"denomination is required"}) -- so every later edit failed
+   * against an id the server had never heard of. The two tests that used to
+   * sit here asserted that broken behaviour worked.
+   *
+   * The replacement rule: THE UI MUST NEVER OFFER TO CREATE A COIN THE
+   * BACKEND WOULD REFUSE.
+   */
+  it('offers no way to force an excepted coin into the import', () => {
+    const { modal } = createModal();
+    const surface = modal as unknown as Record<string, unknown>;
+
+    // The whole override mechanism -- the state, both handlers and the
+    // accessor the template used -- is removed, not merely hidden.
+    expect(surface['overriddenSecurities']).toBeUndefined();
+    expect(surface['overrideException']).toBeUndefined();
+    expect(surface['undoOverride']).toBeUndefined();
+    expect(surface['overriddenSecurityNames']).toBeUndefined();
+    expect(surface['applyDetailOverrides']).toBeUndefined();
+  });
+
+  it('keeps an excepted coin out of the import no matter how often it is re-previewed', () => {
     const { modal } = createModal();
     let emitted: unknown[] = [];
     modal.imported.subscribe(coins => { emitted = coins; });
 
     modal['quickenText'].set(mixedQif);
     modal['previewImport']();
-    modal['overrideException']('1943 Steel');
-
-    // The override survives the re-parse that Preview/Import perform.
-    expect(modal['rejectedRecords']()).toHaveLength(0);
-    expect(modal['importedRecords']()).toHaveLength(2);
-
+    modal['previewImport']();
     modal['importQuicken']();
-    expect(emitted).toHaveLength(2);
+
+    expect(modal['rejectedRecords']()).toHaveLength(1);
+    expect(emitted).toHaveLength(1);
+    expect((emitted[0] as { coinType: string }).coinType).toBe('Morgan');
   });
 
-  it('puts an overridden coin back into the exception list when undone', () => {
+  it('still reports the excepted coin in full so the user can act on it', () => {
+    // Removing the escape hatch must not remove the REPORTING -- the panel
+    // is the part the owner asked for and it is load-bearing.
     const { modal } = createModal();
     modal['quickenText'].set(mixedQif);
     modal['previewImport']();
-    modal['overrideException']('1943 Steel');
-    modal['undoOverride']('1943 Steel');
 
-    expect(modal['importedRecords']()).toHaveLength(1);
-    expect(modal['rejectedRecords']()).toHaveLength(1);
+    const exception = modal['rejectedRecords']()[0];
+    expect(exception.securityName).toBe('1943 Steel');
+    expect(exception.record.year).toBe('1943');
+    expect(exception.missing).toEqual(expect.arrayContaining(['Coin Type', 'Denomination']));
+    expect(exception.reason).toContain('Only 1 of 3 required details found');
+  });
+
+  /* -------------------------------------------------------------------------
+   * THE 1969 PERU 100 SOLES, END TO END.
+   *
+   * This is the record the owner reported as the only one that would not
+   * import. The proof that the country and denomination fixes actually work
+   * is that it now comes through the NORMAL path -- with the override gone,
+   * there is no other path it could be using.
+   * ---------------------------------------------------------------------- */
+  const peruQif =
+    `!Account\nNGold Coins\n^\n` +
+    `!Type:Invst\nD12/15/2023\nNBuy\nY1969 Peru 100 Soles - NGC MS64\nI3,199\nQ1\nT3,199.00\nM1.3544 ounces of gold\n^`;
+
+  it('imports the 1969 Peru 100 Soles through the normal path', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    modal['quickenText'].set(peruQif);
+    modal['refreshQuickenAccounts']();
+    modal['importQuicken']();
+
+    // Not an exception any more.
+    expect(modal['rejectedRecords']()).toHaveLength(0);
+    expect(emitted).toHaveLength(1);
+
+    const coin = emitted[0] as {
+      year: string; denomination: string; coinType: string; country: string;
+      composition: string; metalContent?: string; pmPercent?: number; pmWeightGrams?: number;
+    };
+    expect(coin.year).toBe('1969');
+    expect(coin.denomination).toBe('100 Soles');
+    expect(coin.country).toBe('Peru');
+    // Blank Coin Type is the accepted outcome: Year + Denomination already
+    // satisfy the 2-of-3 rule.
+    expect(coin.coinType).toBe('');
+    // And the alloy fields the import used to leave empty.
+    expect(coin.metalContent).toBe('Gold');
+    expect(coin.composition).toBe('90% Gold, 10% Copper');
+    expect(coin.pmPercent).toBe(90);
+    expect(coin.pmWeightGrams).toBeCloseTo(42.13, 2);
+  });
+
+  it('carries Metal and Composition onto an imported US coin as well', () => {
+    const { modal } = createModal();
+    let emitted: unknown[] = [];
+    modal.imported.subscribe(coins => { emitted = coins; });
+
+    modal['quickenText'].set(`!Type:Invst\nD2024-02-01\nNBuy\nY1927 $20 - PCGS MS64\nT2000.00\n^`);
+    modal['importQuicken']();
+
+    const coin = emitted[0] as {
+      composition: string; metalContent?: string; pmPercent?: number; pmWeightGrams?: number;
+    };
+    // These four used to arrive blank on every single imported coin --
+    // `composition` was hard-coded to '' in this component.
+    expect(coin.metalContent).toBe('Gold');
+    expect(coin.composition).toBe('90% Gold, 10% Copper');
+    expect(coin.pmPercent).toBe(90);
+    expect(coin.pmWeightGrams).toBeCloseTo(30.09, 2);
   });
 
   it('keeps net-quantity filtering working alongside the detail rule', () => {

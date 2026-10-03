@@ -34,7 +34,12 @@ export function rowToCoin(row: Record<string, unknown>): Record<string, unknown>
     hasCacSticker: row['HasCacSticker'] === true || row['HasCacSticker'] === 1,
     soldPrice: row['SoldPrice'] ?? undefined,
     soldDate: row['SoldDate'] ?? undefined,
-    dealer: row['Dealer'] ?? undefined,
+    // `dealer: row['Dealer']` used to be here. Coins.Dealer was dropped, so the
+    // key is no longer emitted at all. (The transactions mapper in
+    // routes/data/transactions.ts still reads a `Dealer` column -- that is
+    // Transactions.Dealer, a different column, and it stays.)
+    // Gross weight, in GRAMS (troy ounces before migration 008). Same unit as
+    // pmWeightGrams below, which was the point of changing it.
     weight: row['Weight'] ?? undefined,
     metalContent: row['MetalContent'] ?? undefined,
     pmWeightGrams: row['PmWeightGrams'] ?? undefined,

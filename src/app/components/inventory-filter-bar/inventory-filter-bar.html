@@ -71,10 +71,8 @@
           }
         </select>
       </label>
-      <label>
-        <span>Dealer</span>
-        <input type="text" placeholder="Search dealers" [ngModel]="filters().dealerFilter()" (ngModelChange)="filters().dealerFilter.set($event)" />
-      </label>
+      <!-- A "Dealer" text box used to sit here. The coin-level dealer field was
+           removed, so there is nothing for it to search. -->
     </div>
   </div>
 }

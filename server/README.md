@@ -20,30 +20,80 @@ This script creates the database, tables, categories, denominations, mint marks,
 
 > **`setup-database.sql` drops every table before it creates them.** It is only for building an empty database. To change the schema of a database that already holds coins, add an idempotent script under `migrations/` instead — see `migrations/003-multiple-images-per-coin.sql` for the pattern.
 
-`setup-database.sql` is also the reference the code is checked against: `db/coin-fields.ts` and `db/bindings.ts` declare an mssql parameter type per column, and `db/coin-fields.spec.ts` asserts they match this script. **If you change a column here, change the binding too.** A parameter declared shorter than its column silently truncates the user's data; one declared longer makes SQL Server raise error 8152 and abort the statement. Both bugs were live before the refactor — `Year` was bound `NVarChar(10)` against an `NVARCHAR(50)` column, `Dealer` at 255 against a 200-char column, and `PurchaseDate`/`SoldDate` as `sql.Date` against `NVARCHAR(30)` text columns.
+`setup-database.sql` is also the reference the code is checked against: `db/coin-fields.ts` and `db/bindings.ts` declare an mssql parameter type per column, and `db/coin-fields.spec.ts` asserts they match this script. **If you change a column here, change the binding too.** A parameter declared shorter than its column silently truncates the user's data; one declared longer makes SQL Server raise error 8152 and abort the statement. Both bugs were live before the refactor — `Year` was bound `NVarChar(10)` against an `NVARCHAR(50)` column, the coin-level `Dealer` at 255 against a 200-char column, and `PurchaseDate`/`SoldDate` as `sql.Date` against `NVARCHAR(30)` text columns. **The `Dealer` one is history only — that column no longer exists.** It is kept here because it is the clearest illustration of the mismatch, not because there is anything left to fix; `Coins.Dealer` and its binding are both gone (migration `006`). `Transactions.Dealer` is a *different* column, still present and still bound, as `transactionDealer` in `db/bindings.ts`.
+
+The current shape of `Coins` reflects three recent removals/changes, so do not be surprised by what is absent: there is **no `Coins.Dealer`**, there is **no `CoinTags` table** (the tags feature is gone end to end), and `Weight` and `PmWeightGrams` are **`DECIMAL(12,5)`**, bound as `sql.Decimal(12, 5)` to match.
 
 ### Migrations — you must run these on an existing database
 
-If your `CoinInventory` database already has coins in it, **running `setup-database.sql` is not the upgrade path — it would delete them.** The schema changes live in `server/migrations/` and have to be applied by hand. There are currently two:
+> **Current status: `002` and `003` have been applied. `004`, `005`, `006`, `007` and `008` have NOT been run yet.**
+>
+> Those five are outstanding and are the most actionable item in this file. Nothing is broken while they are pending — the app does not read `CoinTags` or `Coins.Dealer` any more, so both are simply inert — but until each is applied:
+>
+> - **without `004`**, `Coins.Weight` and `Coins.PmWeightGrams` are still `DECIMAL(10,4)`, so the fifth decimal place the coin editor offers is silently rounded away on save;
+> - **without `005`**, the dead `CoinTags` table is still sitting in the database;
+> - **without `006`**, the dropped-from-the-code `Coins.Dealer` column (and `IX_Coins_Dealer`) is still there, holding values nothing can read or edit;
+> - **without `007`**, most coins still have no `MetalContent`, `Composition`, `PmWeightGrams` or `PmPercent`, so the melt-value column shows a dash for almost the whole inventory;
+> - **without `008`**, `Coins.Weight` is still in troy ounces.
+>
+> **Run `004` before `007`.** `007` writes precious-metal weights, and on an un-widened `DECIMAL(10,4)` column the fifth decimal of each one is rounded away on the way in — the exact bug `004` exists to fix, arriving through a different door. `007` detects this and prints a warning, but it does not stop.
+
+If your `CoinInventory` database already has coins in it, **running `setup-database.sql` is not the upgrade path — it would delete them.** The schema changes live in `server/migrations/` and have to be applied by hand:
 
 | File | What it does |
 | --- | --- |
 | `002-add-image-source-path.sql` | Adds `CoinImages.SourcePath` |
 | `003-multiple-images-per-coin.sql` | Re-adds `SourcePath` if absent, renumbers `SortOrder`, replaces the per-coin index |
+| `004-widen-weight-precision.sql` | Widens `Coins.Weight` and `Coins.PmWeightGrams` from `DECIMAL(10,4)` to `DECIMAL(12,5)` so they keep the fifth decimal the editor displays |
+| `005-drop-coin-tags.sql` | Removes the `CoinTags` table with the tags feature. **Stops without dropping anything if the table holds rows**, and prints what to do next |
+| `006-drop-coin-dealer.sql` | Removes the coin-level dealer field. **The index has to go first:** an index is a persisted, sorted copy of its key, so `IX_Coins_Dealer` physically *contains* `Coins.Dealer`, and SQL Server refuses the `DROP COLUMN` with Msg 5074 while it exists. So the script drops the index, then any default constraint, then the column. **Destroys data by design** — unlike `005` it never refuses; it reports how many dealer values it is about to discard and proceeds, because the owner chose to drop the field unconditionally. Does **not** touch `Transactions.Dealer`, which is a different column and stays |
+| `007-infer-coin-metal-data.sql` | Fills in `MetalContent`, `Composition`, `PmWeightGrams` and `PmPercent` for existing coins, inferred from the detail each row already carries. A **data** migration — it changes no column, only values, and only ones that are currently blank. It never overwrites, it prints a full preview (per metal, per *kind of evidence*, and what it is skipping and why) **before** it writes, and it backs every affected row up into `Coins_MetalData_Backup` first. It does **not** touch `Coins.Weight` — that is `008`. See [How `007` knows what a coin is made of](#how-007-knows-what-a-coin-is-made-of) |
+| `008-weight-to-grams.sql` | **Reinterprets `Coins.Weight` from troy ounces to grams**, multiplying every stored value by 31.1034768, then derives any still-blank gross weight as `PmWeightGrams / (PmPercent / 100)`. **Must run after `007`**, which is what populates those two inputs. **Not idempotent, and not self-describing:** the column type is identical before and after and no stored value can reveal which unit it is in, so unlike every other script here it cannot guard itself from the system catalog. It writes a marker row into `AppSettings` (`migration-008-weight-grams`) **in the same transaction as the conversion** and skips entirely if it finds one — running it twice would otherwise multiply twice. It snapshots the whole column into `Coins_Weight_TroyOz_Backup` (every row, `NULL`s included) first; the file's header gives the restore statements |
 
 Apply them in order:
 
 ```powershell
 cd server
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\002-add-image-source-path.sql
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\003-multiple-images-per-coin.sql
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\002-add-image-source-path.sql   # already applied
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\003-multiple-images-per-coin.sql # already applied
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\004-widen-weight-precision.sql   # OUTSTANDING
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\005-drop-coin-tags.sql           # OUTSTANDING
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\006-drop-coin-dealer.sql         # OUTSTANDING
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\007-infer-coin-metal-data.sql    # OUTSTANDING
+sqlcmd -S localhost -d CoinInventory -E -i .\migrations\008-weight-to-grams.sql          # OUTSTANDING
 ```
+
+Re-running `002` and `003` is harmless if you prefer to just paste the whole block — every step is guarded — but only the last five have anything left to do.
+
+**`008` is the one exception to "running it twice is harmless", and it protects itself rather than relying on you.** It rewrites values rather than schema, and multiplying a weight by 31.1034768 twice produces a number that still looks like a weight. Its `AppSettings` marker is the only thing that can tell the two states apart, so **do not delete that row** unless you have genuinely restored the originals from `Coins_Weight_TroyOz_Backup`. Read the file's header before running it.
 
 (Use your real instance name if it is not the default — e.g. `-S "BRUCE_PC\SQLEXPRESS"`. You can also just open each file in SSMS or Azure Data Studio with `CoinInventory` selected and press Execute.)
 
 Every step of every migration is guarded by an existence check, so running one twice is harmless — the second run prints "nothing to do" for each step and changes nothing. In this particular case `003` also adds `002`'s column if it is missing, so running `003` alone is sufficient — but keep the habit of applying them in sequence. **Restart the API server afterwards** so it is not holding a cached query plan built against the old index.
 
 Until `003` is applied you will see two symptoms: the image gallery can return a coin's photos in a different order on each page load, and no photo has a source-file link. The API itself keeps working either way (see the `sourcePath` note under [Coin images](#coin-images-many-photos-per-coin-coinimages)).
+
+### How `007` knows what a coin is made of
+
+`007-infer-coin-metal-data.sql` does **not** contain hand-written numismatic rules. It transcribes the alloy table out of `src/app/services/pm-reference.ts` into a temp table, and then reimplements that file's `resolveEntry` function in SQL: match on denomination and country, prefer the entry whose year range contains the coin's year, fall back to undated entries, and **answer nothing if more than one metal survives**.
+
+Copying the data that way copies the refusals for free. Every case the owner asked to be left alone is an absence or an overlap in `PM_REFERENCE_DATA` rather than a special case in the SQL — the 1942 nickel (no 1942 row), the 1982 cent, the 1971-78 Eisenhower dollar, a bare `$1` in the gold-dollar era (two rows match, one Gold and one Silver), the 1856-57 cent and the 1866-73 five-cent piece. Nobody had to list them.
+
+What the script adds over the in-app backfill is the **metal hint**. `pmFieldsToFill` in `pm-fill.ts` passes a coin's existing `MetalContent` into the lookup to break the gold-dollar/silver-dollar tie and to unhide the 1992+ silver proof issues — but on a coin whose `MetalContent` is blank there is no hint to pass, so the in-app backfill cannot resolve those coins *at all*. `007` derives a hint from the rest of the row (an explicit metal word in the coin type, a design name that only ever existed in one metal, the category) and hands that to the lookup. **So run `007` first, then the Settings backfill** — the script unlocks rows the backfill would otherwise decline forever.
+
+> **`Composition` is nearly empty in the real database, so it is not what classifies most rows.** The column only started being populated recently, on import. Almost everything predating that has it blank for the same reason `MetalContent` is blank. The composition rules are kept because they are the best evidence *when a value is there*, but **denomination, year, coin type and category do nearly all the work.** The script's preview and summary therefore break the result down **by kind of evidence**, so you can see how much of it rests on a denomination and a year versus a category name before you trust several hundred updated rows.
+
+**The duplication is tested, not trusted.** `src/app/services/sql-pm-reference-parity.spec.ts` reads both `pm-reference.ts` and the `.sql` file off disk on every `npm test` run and asserts they agree: same entries in the same order, composition strings character for character, weights to five decimal places, and — via a sweep of every denomination against every year from 1700 to 2030 — that the SQL's *resolution* matches `lookupCoinAlloy`, including everywhere it refuses. One wrong digit turns the suite red. **If you change `pm-reference.ts`, re-run the tests and regenerate the SQL block from the TypeScript rather than hand-patching it.**
+
+A few consequences worth knowing:
+
+- **`PmWeightGrams` and `PmPercent` are expected to lag the other two columns.** A bronze cent has a metal and a composition but genuinely has no precious-metal weight, and writing `0` there would be a recorded fact rather than an absence.
+- **Zero counts as a value, not a blank**, for the two numeric columns — matching `isPmFieldBlank` in `pm-fill.ts`. Only `NULL` is refilled.
+- **A row whose stored metal contradicts the lookup is skipped entirely** and listed at the end of the run, rather than having a composition written onto it that disagrees with its own metal.
+- **A `Category` can narrow the lookup but can never be the whole answer.** `metal-inference.ts` refuses to read the category at all ("a statement about the owner's filing cabinet, not about the coin"); `007` lets it act as a hint, because the reference table then has to corroborate it, but never lets it supply a metal on its own.
+- **Undo:** every changed row is copied to `Coins_MetalData_Backup` first, and both the script's own output and its header print the single `UPDATE ... FROM` statement that puts all four columns back.
+
+**Neither `007` nor its output has been executed against a database.** The *data* in it is verified by the parity spec; the *SQL* has never been run. Read the preview it prints before letting it write.
 
 ## Configuration
 
@@ -215,13 +265,14 @@ cd server
 npm test
 ```
 
-135 tests across 15 files (verified by running `npx vitest run` in `server/` — it takes about two seconds). Specs sit next to the code they cover, and all fifteen are listed here:
+154 tests across 16 files (verified by running `npx vitest run` in `server/` — it takes about two seconds). Specs sit next to the code they cover, and all sixteen are listed here:
 
 | Spec | Covers |
 | --- | --- |
 | `server.spec.ts` | App wiring and the health endpoint |
 | `db/connection.spec.ts` | Config, pool lifecycle, the crash regression, `withDb` |
 | `db/coin-fields.spec.ts` | `COIN_FIELDS` against `setup-database.sql` |
+| `routes/app-info.spec.ts` | `GET /api/app-info` — `normaliseWindowsPath`, the `APP_BASE_FOLDER` override, that the marker walk finds the project root from either depth, and that the route never touches the database |
 | `routes/coins/reads.spec.ts` | `GET /api/coins` |
 | `routes/coins/list-query.spec.ts` | `imageCount`, the `includeImages=false` switch, and `shouldIncludeImages()` |
 | `routes/coins/writes.spec.ts` | `POST` / `PUT` / `DELETE /api/coins`, `imagePaths` + `SourcePath` |

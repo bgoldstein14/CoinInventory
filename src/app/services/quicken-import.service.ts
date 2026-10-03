@@ -26,7 +26,20 @@
  */
 import { Injectable } from '@angular/core';
 import { QuickenImportRecord } from '../types/coin.model';
-import { lookupPmData } from './pm-reference';
+// `composePmFields` asks pm-reference.ts "what is this coin made of?" -- for
+// BOTH precious and base metal coins -- and hands the answer back already
+// named the way a coin record names it: Metal Content / Composition / PM % /
+// PM weight.
+//
+// It lives in its own file (pm-fill.ts) rather than inline here because the
+// Settings > Maintenance "backfill precious-metal data" action needs the
+// identical mapping to fill in the blanks on coins that pre-date this import.
+// Two hand-written copies of the same mapping is how the two paths would come
+// to disagree about the same physical coin, so there is exactly one.
+import { composePmFields } from './pm-fill';
+// Country and foreign-denomination vocabulary -- see coin-countries.ts for
+// why "1969 Peru 100 Soles" needs its own reader.
+import { detectCountry, detectForeignDenomination } from './coin-countries';
 // The 2-of-3 "is this really a coin?" rule is shared with the manual
 // add-a-coin flow — see the re-export block further down for why.
 import { checkMainCoinDetails } from './coin-completeness';
@@ -114,6 +127,11 @@ const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
   '$2.50': [
     { min: 1796, max: 1807, coinType: 'Draped Bust' },
     { min: 1808, max: 1834, coinType: 'Capped Bust' },
+    // The Classic Head years were a gap in this table, so an 1835 or 1836
+    // gold piece came out with a blank Coin Type. They are the coins struck
+    // under the Act of 1834, which cut the weight and set the fineness to
+    // 0.8992 -- see the matching year bands in pm-reference.ts.
+    { min: 1835, max: 1839, coinType: 'Classic Head' },
     { min: 1840, max: 1907, coinType: 'Coronet' },
     { min: 1908, max: 1929, coinType: 'Indian Head' },
   ],
@@ -123,6 +141,9 @@ const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
   '$5': [
     { min: 1795, max: 1807, coinType: 'Draped Bust' },
     { min: 1807, max: 1834, coinType: 'Capped Bust' },
+    // Same Classic Head gap as the quarter eagle above: this collection
+    // contains an "1835 $5 - NGC/CAC XF45" that had no Coin Type at all.
+    { min: 1835, max: 1838, coinType: 'Classic Head' },
     { min: 1839, max: 1908, coinType: 'Coronet' },
     { min: 1908, max: 1929, coinType: 'Indian Head' },
   ],
@@ -416,8 +437,46 @@ export class QuickenImportService {
 
       const purchaseDate = fields.date ? this.normalizeDate(fields.date) : '';
 
-      // Look up precious metal data based on denomination and year
-      const pmData = lookupPmData(attrs.denomination, attrs.year, 'United States');
+      /* -------------------------------------------------------------------
+       * WHAT IS IT MADE OF?
+       *
+       * The alloy follows from the country, the denomination and the YEAR --
+       * a 1964 quarter is 90% silver and a 1965 quarter has none, and the
+       * only difference between them is the date. pm-reference.ts owns all of
+       * those rules; `composePmFields` (pm-fill.ts) is the single shared
+       * adapter that renames its answer into coin-record fields, and the
+       * Settings backfill calls the very same function.
+       *
+       * `attrs.metalHint` is passed through because a handful of face values
+       * existed in two metals at once (the 1849-1889 "$1" was struck as both
+       * a silver dollar and a gold dollar). When the security name says
+       * "Gold" or "G$1" out loud, that settles it; when nothing at all does,
+       * the fields stay blank on purpose. An empty field is something the user
+       * can see and fix -- a wrong purity silently produces a wrong melt
+       * value.
+       * ----------------------------------------------------------------- */
+      const alloy = composePmFields(
+        attrs.denomination,
+        attrs.year,
+        attrs.country,
+        attrs.metalHint,
+        /* -----------------------------------------------------------------
+         * THE COARSE FALLBACK'S EXTRA EVIDENCE.
+         *
+         * The reference table is keyed on denomination + year, so an issue it
+         * carries no row for -- foreign gold, an unusual face value, a type
+         * not yet tabulated -- used to contribute NOTHING and the coin
+         * imported with all four alloy fields blank. The COIN TYPE is exactly
+         * what the owner said makes the metal obvious ("Gold Eagle",
+         * "Saint-Gaudens", "Double Eagle"), so it is handed over too.
+         *
+         * It only ever gets a turn when `lookupCoinAlloy` has already
+         * declined, and all it can add is Metal Content. There is no
+         * composition on a brand-new import, so that half is always empty
+         * here; the Settings backfill is where it earns its keep.
+         * --------------------------------------------------------------- */
+        { coinType: attrs.coinType }
+      );
 
       // Build the import record
       const record: QuickenImportRecord = {
@@ -437,11 +496,25 @@ export class QuickenImportService {
         purchaseDate,
         purchasePrice,
         currentValue: purchasePrice,
-        country: 'United States',
+        // Read from the security name when it names a country, falling back
+        // to this collection's long-standing default. See parseAttributes.
+        country: attrs.country,
         notes: fields.memo ?? '',
         source: 'quicken',
-        pmWeightGrams: pmData?.pmWeightGrams,
-        pmPercent: pmData?.pmPercent
+        // All five alloy / weight fields come from the single lookup above,
+        // so they can never disagree with each other. Three outcomes: the
+        // reference table knew the coin and all five are filled; only the
+        // coarse metal inference could answer and `metalContent` alone is
+        // filled; or neither would commit and all five stay undefined.
+        metalContent: alloy?.metalContent,
+        composition: alloy?.composition,
+        pmWeightGrams: alloy?.pmWeightGrams,
+        pmPercent: alloy?.pmPercent,
+        // The coin's GROSS weight in grams -- the whole coin, not just the
+        // precious metal in it. It comes from the same reference row as the
+        // other four, so a coin can never end up claiming 30.09 g of gold
+        // inside a planchet that weighs less than that.
+        weight: alloy?.weight
       };
 
       // Track net quantity: acquisitions add +1, dispositions add -1
@@ -711,6 +784,8 @@ export class QuickenImportService {
     coinType: string;
     certCompany: string;
     hasCacSticker: boolean;
+    country: string;
+    metalHint: string;
   } {
     let year = '';
     let mintMark = '';
@@ -837,12 +912,70 @@ export class QuickenImportService {
       variety = 'DDR';
     }
 
+    /* -----------------------------------------------------------------------
+     * COUNTRY
+     *
+     * This parser used to hard-code "United States" for every row. That was
+     * right for 43 of the 44 coins in this collection and wrong for the one
+     * that would not import:
+     *
+     *     "1969 Peru 100 Soles - NGC MS64"
+     *
+     * `detectCountry` reads a country named in the text, and failing that
+     * accepts a currency unit that can only belong to one country ("Soles"
+     * proves Peru on its own). When it finds nothing we keep the old default,
+     * because this is an American collector's export.
+     * --------------------------------------------------------------------- */
+    const country = detectCountry(securityName) || 'United States';
+
+    /* -----------------------------------------------------------------------
+     * METAL HINT
+     *
+     * A few face values existed in two metals at the same time -- above all
+     * the "$1", struck as a 26.73 g SILVER dollar and a 1.67 g GOLD dollar in
+     * the same years (1849-1889). pm-reference.ts refuses to guess between
+     * them, so when the security name settles the question we pass the answer
+     * along. Three forms appear in this collection:
+     *
+     *     "1849-O $1 Gold - ANACS XF45"       the word
+     *     "1855 G$1 - PCGS/CAC AU50"          the "G$" shorthand
+     *     "1873 Open 3 G$2.50 - ANACS AU53"   ditto
+     *
+     * *** THE TRAP ***
+     * "CAC Gold" and "Gold CAC" do NOT describe the coin's metal. They
+     * describe CAC's gold STICKER -- the tier above its usual green one --
+     * and they sit on silver coins all the time:
+     *
+     *     "1875 20¢ - PCGS XF40 CAC Gold"     a SILVER twenty-cent piece
+     *
+     * Those pairings are scrubbed before the metal words are read, or that
+     * coin would be imported as gold.
+     * --------------------------------------------------------------------- */
+    const metalHint = this.detectMetalHint(securityName);
+
     // Extract denomination (convert to symbolic format)
     const lowerName = securityName.toLowerCase();
     const yearNum = parseInt(year, 10) || 0;
 
+    /* -----------------------------------------------------------------------
+     * FOREIGN DENOMINATION -- "100 Soles", "20 Francs", "50 Pesos"
+     *
+     * Read BEFORE the US table below, but only used ahead of it when the coin
+     * is not American. The US table understands "$20" and "50¢"; it has no
+     * idea what a Sol is, which is exactly why the Peru record came out with
+     * a blank denomination and failed the 2-of-3 rule.
+     *
+     * For a US coin the foreign reader almost never fires, and if it somehow
+     * did we would rather trust the US table -- hence the country test.
+     * --------------------------------------------------------------------- */
+    const foreign = detectForeignDenomination(securityName);
+
+    // A non-US coin whose name carries a "<number> <currency unit>" reading
+    // is settled here -- "1969 Peru 100 Soles" is a 100 Soles, full stop.
+    if (foreign && country !== 'United States') {
+      denomination = foreign.denomination;
     // Explicit silver/nickel three-cent variants (words or abbreviations)
-    if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
+    } else if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
       denomination = '3CS';
     } else if (/three[\s-]?cent[\s-]?nickel|3cn\b/i.test(lowerName)) {
       denomination = '3CN';
@@ -887,22 +1020,66 @@ export class QuickenImportService {
       denomination = '1s';
     } else if (/\bpence\b|\bpenny\b.*\b(?:british|uk|gb)\b|\b(?:british|uk|gb)\b.*\bpenny\b/i.test(lowerName)) {
       denomination = '1d';
+    } else if (foreign) {
+      // Last chance: the US table recognised nothing, but the name does carry
+      // a number bound to a currency unit. This is the path a coin takes when
+      // its denomination is foreign but its name never says which country --
+      // "1915 20 Francs" gets a denomination even though France, Belgium and
+      // Switzerland all struck one and we refuse to guess which.
+      denomination = foreign.denomination;
     } else {
       denomination = '';
     }
 
-    // Infer coinType from explicit name keywords or denomination + year
-    coinType = this.inferCoinType(securityName, denomination, year);
+    // Infer coinType from explicit name keywords or denomination + year.
+    // `metalHint` matters here too: a "$1" that says Gold is a Gold Dollar,
+    // a completely different series from the silver dollar of the same date.
+    coinType = this.inferCoinType(securityName, denomination, year, metalHint);
 
     // NOTE: certCompany and hasCacSticker are deliberately NOT part of the
     // 2-of-3 "main details" completeness rule (Year / Coin Type /
     // Denomination) enforced in `coin-completeness.ts`. A slab label tells you
     // who graded the coin, not what the coin is, so a row carrying only
     // "PCGS MS64" is still an exception, exactly as before this was added.
-    return { year, mintMark, grade, denomination, variety, coinType, certCompany, hasCacSticker };
+    return {
+      year, mintMark, grade, denomination, variety, coinType, certCompany, hasCacSticker,
+      country, metalHint
+    };
   }
 
-  private inferCoinType(securityName: string, denomination: string, year: string): string {
+  /**
+   * Reads the coin's METAL out of the security name, when the name says it.
+   *
+   * Returns one of the canonical Metal values ('Gold', 'Silver', ...) or ''
+   * when the name is silent -- which is the normal case. See the long comment
+   * at the call site in `parseAttributes` for why the CAC scrub matters.
+   */
+  private detectMetalHint(securityName: string): string {
+    // Remove "CAC Gold" / "Gold CAC" (and the slashed and hyphenated
+    // spellings) BEFORE looking for a metal word. That phrase is CAC's gold
+    // sticker tier, not the coin's metal, and it appears on silver coins.
+    const scrubbed = securityName
+      .replace(/\bCAC\b\s*[-/]?\s*\bGold\b/gi, 'CAC')
+      .replace(/\bGold\b\s*[-/]?\s*\bCAC\b/gi, 'CAC');
+
+    // "G$1", "G$2.50", "G$3" -- the collector shorthand for GOLD dollar,
+    // gold quarter eagle and three-dollar gold. Four of this collection's
+    // coins are written this way.
+    if (/\bG\$/i.test(securityName)) return 'Gold';
+
+    if (/\bgold\b/i.test(scrubbed)) return 'Gold';
+    if (/\bsilver\b/i.test(scrubbed)) return 'Silver';
+    if (/\bplatinum\b/i.test(scrubbed)) return 'Platinum';
+    if (/\bpalladium\b/i.test(scrubbed)) return 'Palladium';
+    return '';
+  }
+
+  private inferCoinType(
+    securityName: string,
+    denomination: string,
+    year: string,
+    metalHint = ''
+  ): string {
     const lowerName = securityName.toLowerCase();
     const yearNum = parseInt(year, 10) || 0;
 
@@ -947,6 +1124,31 @@ export class QuickenImportService {
     if (/\bst\.\s*gaudens\b|\bsaint[\s-]?gaudens\b/i.test(lowerName)) return 'Saint-Gaudens';
 
     if (!yearNum) return '';
+
+    /* -----------------------------------------------------------------------
+     * THE GOLD DOLLAR.
+     *
+     * "$1" between 1849 and 1889 is two completely different coins: the
+     * silver dollar (Liberty Seated, then Morgan) and the Gold Dollar, a
+     * 13 mm sliver of 90% gold. The year-based table below only knows the
+     * silver series, so before this check "1849-O $1 Gold" imported as a
+     * "Liberty Seated" -- with 24 g of silver attached to it.
+     *
+     * The three Gold Dollar types:
+     *   Type 1  1849-1854  Liberty Head
+     *   Type 2  1854-1856  Indian Princess, Small Head
+     *   Type 3  1856-1889  Indian Princess, Large Head
+     *
+     * 1854 through 1856 is left BLANK on purpose: those three dates overlap
+     * two (in 1854, three) types and a Quicken name does not say which.
+     * Blank is fine -- Year and Denomination already satisfy the 2-of-3 rule,
+     * so the coin still imports and the user picks the type.
+     * --------------------------------------------------------------------- */
+    if (denomination === '$1' && metalHint === 'Gold') {
+      if (yearNum >= 1849 && yearNum <= 1853) return 'Liberty Head';
+      if (yearNum >= 1857 && yearNum <= 1889) return 'Indian Princess';
+      return '';
+    }
 
     // Year-based inference by denomination
     return inferCoinTypeByYear(denomination, yearNum);

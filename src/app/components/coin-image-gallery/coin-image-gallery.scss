@@ -45,6 +45,25 @@
   font-size: 0.8rem;
 }
 
+// The photo the main grid uses as this coin's thumbnail. Tinted and outlined
+// so you can tell which one it is without reading the buttons — the disabled
+// "★ Main photo" button says the same thing in words.
+.image-item--main {
+  border-color: #c9a227;
+  background: #fffaf0;
+  box-shadow: inset 3px 0 0 #c9a227;
+}
+
+// The disabled "already the main photo" button. `opacity` alone looked broken
+// rather than intentional, so it keeps full-contrast text and just loses the
+// pointer affordance.
+.is-main-photo[disabled] {
+  cursor: default;
+  color: #8a6d1f;
+  border-color: #e0cf9a;
+  background: #fdf4dd;
+}
+
 // The middle column of a gallery row: the "Attached image" caption stacked on
 // top of the original file's path. `min-width: 0` is what actually lets the
 // caption ellipsise — without it a flex child refuses to shrink below its

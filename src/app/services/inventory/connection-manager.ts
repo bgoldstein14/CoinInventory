@@ -2,13 +2,17 @@ import { WritableSignal } from '@angular/core';
 import {
   CoinRecord,
   Denomination,
+  LatestSpotPrices,
   MintMarkOption,
+  SpotPriceMeta,
+  SpotPrices,
   TransactionRecord
 } from '../../types/coin.model';
 import { ApiService, describeHttpError } from '../api.service';
 import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
 import { CoinCollection } from './coin-collection';
+import { hasAnySpotPrice } from './inventory-metrics';
 import { firstValueFrom } from 'rxjs';
 
 /* ===========================================================================
@@ -43,6 +47,14 @@ export interface ConnectionTargets {
   denominations: WritableSignal<Denomination[]>;
   mintMarks: WritableSignal<MintMarkOption[]>;
   metalContents: WritableSignal<string[]>;
+  /**
+   * Spot prices, loaded back from the database at start-up so melt values
+   * survive a restart. Left at their { 0, 0, 0, 0 } defaults when there is
+   * nothing saved or the lookup fails — see applySpotPrices().
+   */
+  spotPrices: WritableSignal<SpotPrices>;
+  /** Provenance of the saved prices, so the UI can show when they are from. */
+  spotPriceMeta: WritableSignal<SpotPriceMeta>;
   /** Used to install the freshly loaded coins and re-baseline change tracking. */
   coins: CoinCollection;
   apiService: ApiService;
@@ -59,9 +71,9 @@ export class ConnectionManager {
    * Two-phase on purpose:
    *   Phase 1 — the coins. If this fails we genuinely have no connection, so
    *             we mark the app disconnected and throw.
-   *   Phase 2 — the six lookup tables (categories, coin sets, transactions,
-   *             denominations, mint marks, metal contents). These are
-   *             "nice to have". Previously a single failing lookup made the
+   *   Phase 2 — the seven lookups (categories, coin sets, transactions,
+   *             denominations, mint marks, metal contents, spot prices).
+   *             These are "nice to have". Previously a single failing lookup made the
    *             whole hydration report failure and flipped `connected` back to
    *             false even though the coins had loaded perfectly. Now we use
    *             `Promise.allSettled` so each lookup succeeds or fails on its
@@ -106,6 +118,7 @@ export class ConnectionManager {
     t.metalContents.set(
       Array.isArray(loaded.metalContents) ? [...new Set(loaded.metalContents)].sort() : []
     );
+    this.applySpotPrices(loaded.spotPrices, loaded.failedLookups.includes('spot prices'));
 
     t.connecting.set(false);
 
@@ -150,7 +163,79 @@ export class ConnectionManager {
   }
 
   /**
-   * Phase 2 in detail: fetch all six lookup tables at once and unwrap each
+   * Install spot prices read back from the database.
+   *
+   * WHY THIS IS HERE AT ALL
+   * Without it the app started every session with
+   * { gold: 0, silver: 0, platinum: 0, copper: 0 }, so every melt value in the
+   * grid read "—" until the user remembered to open Spot Prices and press
+   * Fetch. The owner's requirement is that melt auto-calculates from whatever
+   * the LAST RETRIEVED prices were — they do not have to be live, they just
+   * have to still be there. That is exactly what this does.
+   *
+   * WHAT IT WILL NOT DO
+   * It will not overwrite the defaults with nothing. `latest` is null when the
+   * SpotPrices table is empty OR when the lookup failed, and in both cases the
+   * existing in-memory prices are left completely alone. Nothing here can
+   * throw, and nothing here can stop the app starting.
+   *
+   * @param latest - the newest saved row, or null (empty table / failed call)
+   * @param lookupFailed - true if the HTTP call itself failed, in which case
+   *                       loadLookupTables() has already logged and recorded
+   *                       it and the user gets the usual warning toast; we
+   *                       only avoid logging a misleading "nothing saved yet".
+   */
+  private applySpotPrices(latest: LatestSpotPrices | null, lookupFailed: boolean): void {
+    const t = this.target;
+
+    // `fetchedAt` is the reliable "is there a row?" test, not the numbers:
+    // the route answers 200 with four zeros and two nulls for an empty table.
+    if (!latest || latest.fetchedAt === null) {
+      if (!lookupFailed) {
+        t.logger.info('No saved spot prices yet — melt values stay blank until prices are fetched');
+      }
+      return;
+    }
+
+    const prices: SpotPrices = {
+      gold: toPrice(latest.gold),
+      silver: toPrice(latest.silver),
+      platinum: toPrice(latest.platinum),
+      copper: toPrice(latest.copper)
+    };
+
+    // A ZERO IS NOT A PRICE. Gold, silver, platinum and copper do not trade at
+    // zero, so an all-zero row is not data — it is the absence of data, and it
+    // must be treated exactly as an empty table is. The save path refuses to
+    // write such a row now, but one may already exist from before that guard
+    // was added (a failed fetch used to be able to persist its zeroed result).
+    // Adopting it would read permanently broken melt values back in on every
+    // launch, so it is ignored and the defaults stand. Note this is about the
+    // row as a WHOLE: a row with a real gold price and a zero platinum price
+    // is perfectly good, and platinum simply has no price in it.
+    if (!hasAnySpotPrice(prices)) {
+      t.logger.warn('Saved spot prices are all zero — ignoring them, since no metal trades at zero');
+      return;
+    }
+
+    t.spotPrices.set(prices);
+    // Record these as the already-saved set too. That stops the very first
+    // close of the spot price modal from writing a duplicate history row of
+    // numbers we only just read back out of the database — see
+    // InventoryService.commitSpotPrices().
+    t.spotPriceMeta.set({
+      source: latest.source ?? null,
+      fetchedAt: latest.fetchedAt,
+      prices
+    });
+
+    t.logger.info(
+      `Loaded saved spot prices (Au=$${prices.gold} Ag=$${prices.silver} Pt=$${prices.platinum} Cu=$${prices.copper})`
+    );
+  }
+
+  /**
+   * Phase 2 in detail: fetch all seven lookups at once and unwrap each
    * result on its own, so one bad table cannot sink the others.
    *
    * This never throws.
@@ -166,7 +251,13 @@ export class ConnectionManager {
       firstValueFrom(apiService.getTransactions()),
       firstValueFrom(apiService.getDenominations()),
       firstValueFrom(apiService.getMintMarks()),
-      firstValueFrom(apiService.getMetalContents())
+      firstValueFrom(apiService.getMetalContents()),
+      // Spot prices belong in THIS phase, not phase 1. A coin collection with
+      // no spot prices is perfectly usable (every melt cell just reads "—"),
+      // so a dead price lookup must never stop the app from starting.
+      // `allSettled` guarantees that: this entry can reject on its own and the
+      // other six still arrive.
+      firstValueFrom(apiService.getLatestSpotPrices())
     ]);
 
     const failedLookups: string[] = [];
@@ -186,9 +277,25 @@ export class ConnectionManager {
       denominations: unwrap(settled[3], 'denominations', [] as Denomination[]),
       mintMarks: unwrap(settled[4], 'mint marks', [] as MintMarkOption[]),
       metalContents: unwrap(settled[5], 'metal contents', [] as string[]),
+      // Fallback is null, not a zeroed price set: null means "we were told
+      // nothing", and applySpotPrices() reads that as "leave the defaults".
+      spotPrices: unwrap(settled[6], 'spot prices', null as LatestSpotPrices | null),
       failedLookups
     };
   }
+}
+
+/**
+ * Coerce one price out of a database row into a usable number.
+ *
+ * SQL Server DECIMAL columns can arrive as a number or, depending on
+ * precision and driver settings, as a string. Anything that is not a finite
+ * number becomes 0, which computeMeltValue() already treats as "no price for
+ * this metal" and renders as "—" — the honest answer.
+ */
+function toPrice(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
 
 /** Everything phase 2 tries to load, plus a note of what did not arrive. */
@@ -199,6 +306,8 @@ interface LoadedLookups {
   denominations: Denomination[];
   mintMarks: MintMarkOption[];
   metalContents: string[];
+  /** Newest saved prices, or null when the table is empty or the call failed. */
+  spotPrices: LatestSpotPrices | null;
   /** Friendly names of the lookups that failed, for the warning toast. */
   failedLookups: string[];
 }

@@ -78,8 +78,18 @@ describe('COIN_FIELDS matches setup-database.sql', () => {
     expect(COIN_FIELDS['certCompany'].maxLength).toBe(100);
     expect(COIN_FIELDS['mintMark'].maxLength).toBe(20);
     expect(COIN_FIELDS['source'].maxLength).toBe(50);
-    expect(COIN_FIELDS['dealer'].maxLength).toBe(200);
+    // `dealer` was one of these (bound at 255 against a 200-char column). The
+    // whole coin-level dealer field has since been removed, column and all.
     expect(COIN_FIELDS['coinSet'].maxLength).toBe(100);
+  });
+
+  it('no longer binds a coin-level dealer column', () => {
+    // Coins.Dealer was dropped (migration 006). A binding left behind here
+    // would make every INSERT name a column that does not exist.
+    //
+    // This does NOT concern Transactions.Dealer, which still exists and is
+    // bound as DB_BINDINGS.transactionDealer in db/bindings.ts.
+    expect(COIN_FIELDS['dealer']).toBeUndefined();
   });
 
   it('binds the text-based date columns as text, not sql.Date', () => {

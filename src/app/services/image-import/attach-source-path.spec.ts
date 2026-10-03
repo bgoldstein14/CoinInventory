@@ -20,7 +20,7 @@ function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
     category: 'Silver', country: 'United States', grade: 'MS64', certCompany: '',
     certNumber: '', variety: '', mintMark: '', composition: '',
     purchaseDate: '2024-01-01', purchasePrice: 100, currentValue: 120, notes: '',
-    imagePaths: [], tags: [], source: 'manual',
+    imagePaths: [], source: 'manual',
     ...overrides
   };
 }

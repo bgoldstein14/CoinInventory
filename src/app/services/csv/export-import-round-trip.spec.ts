@@ -44,7 +44,7 @@ function coin(overrides: Partial<CoinRecord> = {}): CoinRecord {
     category: 'Silver', country: 'United States', grade: 'MS63', certCompany: 'PCGS',
     certNumber: '12345678', variety: '', mintMark: 'S', composition: '90% Silver',
     purchaseDate: '2024-03-15', purchasePrice: 1250, currentValue: 1400,
-    notes: '', imagePaths: [], tags: [], source: 'quicken',
+    notes: '', imagePaths: [], source: 'quicken',
     ...overrides
   };
 }
@@ -82,7 +82,10 @@ describe('Export -> CSV round trip', () => {
 
   it('survives a full export then re-import with values intact', () => {
     const { csv, written } = serviceCapturing();
-    csv.exportCsv([coin({ notes: 'Toned, with a comma', weight: 0.7734 })]);
+    // 26.73 is the Morgan dollar's weight in GRAMS, which is what the weight
+    // field holds since migration 008. It read 0.7734 here -- the same coin in
+    // troy ounces -- before the unit changed.
+    csv.exportCsv([coin({ notes: 'Toned, with a comma', weight: 26.73 })]);
 
     const rows = csv.parseCsv(written());
     const headers = rows[0];
@@ -92,9 +95,70 @@ describe('Export -> CSV round trip', () => {
     expect(reimported.coinType).toBe('Morgan Dollar');
     expect(reimported.grade).toBe('MS63');
     expect(reimported.purchasePrice).toBe(1250);
-    expect(reimported.weight).toBe(0.7734);
+    expect(reimported.weight).toBe(26.73);
     // Quoted field containing a comma must come back whole.
     expect(reimported.notes).toBe('Toned, with a comma');
+  });
+});
+
+/**
+ * The weight column's unit, and the compatibility decision that came with it.
+ *
+ * `Coins.Weight` held TROY OUNCES until server/migrations/008-weight-to-grams.sql
+ * multiplied every stored value by 31.1034768. The CSV label moved with it,
+ * from `Weight (oz)` to `Weight (g)`, which deliberately breaks auto-mapping
+ * for files exported before the change.
+ *
+ * That break is the behaviour under test here, because it is the kind of thing
+ * a later reader "fixes" out of kindness. Recognising the old header would
+ * import a Morgan dollar as 0.7734 GRAMS -- a 31x understatement, silent, and
+ * entirely plausible-looking in a grid. Recognising it AND converting would be
+ * arithmetically right but would make a cell's meaning depend on the text
+ * above it, so a spreadsheet already converted to grams but left with the old
+ * heading would be multiplied by 31 instead. An unmapped column is visible on
+ * the mapping screen and costs one dropdown selection; neither silent error is
+ * recoverable.
+ */
+describe('the weight column is grams, not troy ounces', () => {
+  it('labels the exported column Weight (g)', () => {
+    const { csv } = serviceCapturing();
+    expect(csv.exportHeaderLabels()).toContain('Weight (g)');
+    expect(csv.exportHeaderLabels()).not.toContain('Weight (oz)');
+  });
+
+  it('auto-maps the new Weight (g) header', () => {
+    const { csv } = serviceCapturing();
+    expect(csv.autoMapHeaders(['Weight (g)'])['Weight (g)']).toBe('weight');
+  });
+
+  it('does NOT auto-map the old Weight (oz) header, on purpose', () => {
+    // The whole point. If this assertion ever fails, read the block comment
+    // above before changing it -- a passing "fix" here is a silent 31x data
+    // error for every pre-008 export anyone re-imports.
+    const { csv } = serviceCapturing();
+    expect(csv.autoMapHeaders(['Weight (oz)'])['Weight (oz)']).toBeUndefined();
+  });
+
+  it('leaves the rest of an old file importing normally', () => {
+    // An unmapped weight column must not poison the row around it. This is the
+    // same guarantee the removed Dealer column was given.
+    const { csv } = serviceCapturing();
+    const headers = ['Coin Type', 'Weight (oz)', 'Grade'];
+    const mapping = csv.autoMapHeaders(headers);
+    const imported = csv.mapRowToCoin(['Morgan Dollar', '0.7734', 'MS63'], headers, mapping);
+
+    expect(imported.coinType).toBe('Morgan Dollar');
+    expect(imported.grade).toBe('MS63');
+    expect(imported.weight).toBeUndefined();
+  });
+
+  it('still auto-maps a bare Weight header, via the field key', () => {
+    // autoMapHeaders matches on the key as well as the label, so a plain
+    // `Weight` column keeps working. It carries no unit either way, so there
+    // is nothing extra to be inferred from it -- and no claim being made about
+    // what unit the numbers under it are in.
+    const { csv } = serviceCapturing();
+    expect(csv.autoMapHeaders(['Weight'])['Weight']).toBe('weight');
   });
 });
 
@@ -172,16 +236,35 @@ describe('the blank template', () => {
     expect(headers.filter(header => !mapping[header])).toEqual([]);
   });
 
-  it('demonstrates a unit-carrying and a fractional weight', () => {
+  it('demonstrates a unit-carrying weight in GRAMS, and no ounce form at all', () => {
     // The examples double as documentation, so they should show the forms the
-    // parser now handles rather than only the easy case.
+    // parser handles rather than only the easy case -- but only the forms that
+    // are SAFE in this column.
+    //
+    // This test used to assert the opposite: that the template contained
+    // 'ozt' and '1/10 oz'. Both were correct when Weight was measured in troy
+    // ounces. Both became traps when migration 008 moved the column to grams,
+    // because parseNumericCell reads the NUMBER and discards whatever unit
+    // follows it, and resolves a fraction on sight. So in the template's one
+    // job -- being the file people copy -- '0.7734 ozt' would now record
+    // 0.7734 GRAMS and '1/10 oz' would record a tenth of a gram.
+    //
+    // The assertions are therefore inverted: a gram example WITH its unit
+    // (which is both safe and useful, since it makes the unit unmissable),
+    // and nothing that looks like an ounce. The negative assertions are the
+    // point of the test -- they stop the old examples being restored by
+    // somebody who reads the parser's tolerance as an invitation.
     const written = (() => {
       const { csv, written } = serviceCapturing();
       csv.downloadCsvTemplate();
       return written();
     })();
 
-    expect(written).toContain('ozt');
-    expect(written).toContain('1/10 oz');
+    expect(written).toContain('Weight (g)');
+    expect(written).toContain('26.73 g');
+
+    expect(written).not.toContain('ozt');
+    expect(written).not.toContain('1/10 oz');
+    expect(written).not.toContain('(oz)');
   });
 });

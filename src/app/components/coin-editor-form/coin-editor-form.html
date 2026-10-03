@@ -1,6 +1,14 @@
 <div class="detail-editor">
+  <!-- ================= ROW 1: the coin's identity =================
+       Year, Coin Type, Denomination and Mint mark now share the first line.
+       Coin Type was moved up here from the Grade row because it is the field
+       people read first; to make room, the Denomination and Mint mark controls
+       were narrowed and the whole sidebar widened slightly. The column widths
+       are set in coin-editor-form.scss on `.detail-editor__row--top` rather
+       than with per-field max-widths, so the four controls are sized as one
+       decision instead of four that have to be kept in step. -->
   <div class="detail-editor__row detail-editor__row--top">
-    <label class="detail-field detail-field--narrow">
+    <label class="detail-field detail-field--year">
       <span>Year</span>
       <input
         type="text"
@@ -9,14 +17,31 @@
       />
     </label>
 
-    <label class="detail-field detail-field--narrow">
+    <label class="detail-field detail-field--coin-type">
+      <span>Coin Type</span>
+      <input
+        [ngModel]="coin().coinType"
+        (ngModelChange)="updateSelectedCoin('coinType', $event)"
+      />
+    </label>
+
+    <!-- The select's value is NOT bound to coin().denomination directly.
+         `denominationMode.selectValue(...)` substitutes the "Other" sentinel
+         while the custom text box is open, so the closed select still reads
+         "Other" even though the coin is storing the user's own wording.
+         See custom-option-mode.ts for why this indirection exists. -->
+    <label class="detail-field detail-field--denomination">
       <span>Denom.</span>
       <select
-        [ngModel]="coin().denomination"
-        (ngModelChange)="updateSelectedCoin('denomination', $event)"
+        [ngModel]="denominationMode.selectValue(coin().denomination)"
+        (ngModelChange)="onDenominationSelected($event)"
       >
         <option value="">(select)</option>
-        @for (country of ['US', 'GB']; track country) {
+        <!-- Country groups come from denominationCountries(), which reads the
+             actual data. A hard-coded ['US', 'GB'] used to be here, and when
+             anything stored a country outside that pair the dropdown showed
+             empty group headings and nothing to pick. See the computed. -->
+        @for (country of denominationCountries(); track country) {
           <optgroup [label]="country">
             @for (denom of inv.denominations(); track denom.denominationId) {
               @if (denom.country === country && denom.isActive) {
@@ -25,15 +50,17 @@
             }
           </optgroup>
         }
-        <option value="__OTHER__">Other</option>
+        <!-- The sentinel never reaches a coin: onDenominationSelected()
+             turns it into "open the custom box" and nothing else. -->
+        <option [value]="CUSTOM_OPTION_SENTINEL">Other…</option>
       </select>
     </label>
 
-    <label class="detail-field detail-field--narrow">
+    <label class="detail-field detail-field--mint-mark">
       <span>Mint mark</span>
       <select
-        [ngModel]="coin().mintMark"
-        (ngModelChange)="updateSelectedCoin('mintMark', $event)"
+        [ngModel]="mintMarkMode.selectValue(coin().mintMark)"
+        (ngModelChange)="onMintMarkSelected($event)"
       >
         <option value="">(none)</option>
         @for (mm of inv.mintMarks(); track mm.mintMarkId) {
@@ -41,37 +68,54 @@
             <option [value]="mm.label" [title]="mm.description">{{ mm.label }}</option>
           }
         }
-        <option value="__OTHER__">Other</option>
+        <!-- Shown as "Other…" rather than "Other" because the mint mark lookup
+             table contains a genuine mint mark whose label is literally
+             "Other" (the catch-all for oddities like O/S). The ellipsis is
+             what distinguishes "type your own" from that real code. -->
+        <option [value]="CUSTOM_OPTION_SENTINEL">Other…</option>
       </select>
     </label>
   </div>
 
-  @if (coin().denomination === '__OTHER__') {
+  <!-- ================= CUSTOM "OTHER" BOXES =================
+       Visibility is driven by the custom-mode signal, NEVER by the field's
+       value. These boxes are bound straight to the coin field like any other
+       text input, which is what makes typing in them work: a keystroke changes
+       the value, and the value no longer has any say in whether the box exists.
+
+       The previous version gated these on `coin().denomination === '__OTHER__'`,
+       so the first character typed destroyed the input the user was typing in. -->
+  @if (denominationMode.isCustom()) {
     <label class="detail-field detail-field--full">
       <span>Custom denomination</span>
       <input
-        [ngModel]="customDenominationValue()"
-        (ngModelChange)="customDenominationValue.set($event); updateSelectedCoin('denomination', $event)"
+        [ngModel]="coin().denomination"
+        (ngModelChange)="updateSelectedCoin('denomination', $event)"
       />
     </label>
   }
 
-  @if (coin().mintMark === '__OTHER__') {
+  @if (mintMarkMode.isCustom()) {
     <label class="detail-field detail-field--full">
       <span>Custom mint mark</span>
       <input
-        [ngModel]="customMintMarkValue()"
-        (ngModelChange)="customMintMarkValue.set($event); updateSelectedCoin('mintMark', $event)"
+        [ngModel]="coin().mintMark"
+        (ngModelChange)="updateSelectedCoin('mintMark', $event)"
       />
     </label>
   }
 
-  <div class="detail-editor__row">
-    <label class="detail-field">
-      <span>Coin Type</span>
+  <!-- ================= GRADE LINE =================
+       Certification company sits in front of the grade, because the two are
+       read together ("PCGS MS64"). The certification NUMBER deliberately stays
+       down with the other reference data further below. -->
+  <div class="detail-editor__row detail-editor__row--grade">
+    <label class="detail-field detail-field--compact detail-field--cert-company">
+      <span>Certification Co.</span>
       <input
-        [ngModel]="coin().coinType"
-        (ngModelChange)="updateSelectedCoin('coinType', $event)"
+        maxlength="10"
+        [ngModel]="coin().certCompany"
+        (ngModelChange)="updateSelectedCoin('certCompany', $event)"
       />
     </label>
 
@@ -126,42 +170,88 @@
         @for (m of metalContentOptions(); track m) { <option [value]="m">{{ m }}</option> }
       </select>
     </label>
-    <label class="detail-field detail-field--compact">
+    <!-- Composition takes the whole remainder of the row.
+         It used to be one of three equal thirds, with a hidden spacer filling
+         the last one — so the longest real values were truncated for no reason
+         while a third of the row sat empty. The strings the alloy inference
+         writes are genuinely long: "91.67% Gold, 8.33% Silver and Copper" is
+         36 characters, and the clad ones are longer still. -->
+    <label class="detail-field detail-field--composition">
       <span>Composition</span>
       <input [ngModel]="coin().composition" (ngModelChange)="updateSelectedCoin('composition', $event)" />
     </label>
-    <label class="detail-field detail-field--compact">
-      <span> </span>
-      <input aria-label="Spacer" style="visibility: hidden;" />
-    </label>
   </div>
 
+  <!-- ================= NUMERIC FIELDS =================
+       Every number box below uses the `appNumericField` directive instead of
+       the old `[ngModel]="formatX(...)" (ngModelChange)="parseX($event)"` pair.
+       That pair reformatted the text on every keystroke and threw the caret to
+       the end of the line; the directive leaves the text completely alone while
+       the box has focus and only normalises it on blur.
+
+       `decimals` is the only thing that varies per field, which is exactly why
+       this is one mechanism rather than one fix per input.
+       See directives/numeric-field.ts. -->
   <div class="detail-editor__row detail-editor__row--bottom-metrics">
     <label class="detail-field detail-field--weight">
-      <span>Weight</span>
+      <span>Weight (g)</span>
+      <!-- GRAMS, to five decimals. Three things to know about this field:
+
+           1. IT USED TO BE TROY OUNCES. The label said bare "Weight" and the
+              comment here said "troy ounces" (and claimed three decimals,
+              which was already stale — the input has read 5 for some time).
+              The column was switched to grams so that it and PM Weight (g)
+              beside it are in the same unit; the stored data was multiplied
+              by 31.1034768 by server/migrations/008-weight-to-grams.sql. The
+              unit is now IN THE LABEL, which is the real fix — the old label
+              named no unit at all, which is how the misreading started.
+
+           2. This is the coin's GROSS weight — the whole coin, alloy and all.
+              PM Weight (g) next to it is the PURE precious metal inside it.
+              Melt value uses PM Weight, never this field.
+
+           3. Five decimals, deliberately, matching PM Weight (g) and the
+              DECIMAL(12,5) column behind it. Grams are a coarser unit than
+              troy ounces so fewer decimals would read more cleanly, but see
+              the planned enhancement below — trimming now would cost
+              precision that is about to be wanted back.
+
+           PLANNED (not built — do not treat its absence as a bug; written up
+           in full under "Planned next steps" in the root README): show the
+           troy-ounce equivalent in parentheses beside the gram figure, to
+           five decimals, e.g. "30.09300 g (0.96750 ozt)". Grams stay the
+           stored, editable value; the ounce figure is display only, since
+           troy ounces remain the unit bullion is quoted and traded in. The
+           constant is 31.1034768 g per troy ounce (it already appears in
+           server/routes/data/spot-price-source.ts). Keeping five decimals on
+           the gram value is what lets that derived ounce figure be right in
+           its own fifth decimal: one step of the fifth ounce decimal is
+           0.000311 g, so a gram value rounded to three decimals could not
+           reproduce it. -->
       <input
-        type="text"
-        [ngModel]="formatWeightInput(coin().weight ?? 0)"
-        (ngModelChange)="updateSelectedCoin('weight', parseWeightInput($event))"
+        [appNumericField]="coin().weight ?? 0"
+        [decimals]="5"
+        (numericValueChange)="updateNumericField('weight', $event)"
       />
     </label>
     <label class="detail-field detail-field--pm-weight">
       <span>PM Weight (g)</span>
+      <!-- Five decimals, the owner's request. A gram figure for a fractional
+           coin is small enough that trailing zeros matter: 0.11250 g reads very
+           differently from 0.1125. This used to be a type="number" input, which
+           cannot show trailing zeros at all. -->
       <input
-        type="number"
-        step="0.01"
-        [ngModel]="coin().pmWeightGrams ?? 0"
-        (ngModelChange)="updateSelectedCoin('pmWeightGrams', Number($event))"
+        [appNumericField]="coin().pmWeightGrams ?? 0"
+        [decimals]="5"
+        (numericValueChange)="updateNumericField('pmWeightGrams', $event)"
       />
     </label>
     <label class="detail-field detail-field--pm-percent">
       <span>PM %</span>
       <input
-        type="number"
-        step="0.01"
-        max="100"
-        [ngModel]="coin().pmPercent ?? 0"
-        (ngModelChange)="updateSelectedCoin('pmPercent', Number($event))"
+        [appNumericField]="coin().pmPercent ?? 0"
+        [decimals]="2"
+        (numericValueChange)="updateNumericField('pmPercent', $event)"
       />
     </label>
   </div>
@@ -169,36 +259,48 @@
   <div class="detail-editor__row detail-editor__row--pricing">
     <label class="detail-field detail-field--money">
       <span>Price</span>
+      <!-- `prefix`/`group` reproduce the old "$1,234.56" display exactly. -->
       <input
-        type="text"
-        [ngModel]="formatMoneyInput(coin().purchasePrice)"
-        (ngModelChange)="updateSelectedCoin('purchasePrice', parseMoneyInput($event))"
+        [appNumericField]="coin().purchasePrice"
+        [decimals]="2"
+        prefix="$"
+        [group]="true"
+        (numericValueChange)="updateNumericField('purchasePrice', $event)"
       />
     </label>
     <label class="detail-field detail-field--money">
       <span>Value</span>
       <input
-        type="text"
-        [ngModel]="formatMoneyInput(coin().currentValue)"
-        (ngModelChange)="updateSelectedCoin('currentValue', parseMoneyInput($event))"
+        [appNumericField]="coin().currentValue"
+        [decimals]="2"
+        prefix="$"
+        [group]="true"
+        (numericValueChange)="updateNumericField('currentValue', $event)"
       />
     </label>
-    <label class="detail-field detail-field--narrow">
-      <span> </span>
-      <input aria-label="Spacer" style="visibility: hidden;" />
-    </label>
+    <!-- Melt value sits directly after Value, where it is useful: on its own
+         "$412.63" means little, but beside what the coin is actually valued at
+         it answers the question that makes melt worth tracking — is this coin
+         worth more than the metal in it?
+
+         It is NOT an input. It is worked out from the coin's PM Weight (g) and
+         Metal Content against the latest spot prices, so it is rendered as
+         read-only text in a field-shaped box rather than something you can
+         type into. It also fills the slot a hidden spacer used to occupy, so
+         the row still has three columns and nothing shifted.
+
+         It shows "—", never "$0.00", when melt cannot be worked out: a missing
+         weight or a missing spot price means UNKNOWN, not worthless. The
+         tooltip says which. -->
+    <div class="detail-field detail-field--money detail-field--readonly" [title]="meltValueHint()">
+      <span>Melt</span>
+      <output class="readonly-value">{{ meltValueDisplay() }}</output>
+    </div>
   </div>
 
+  <!-- Certification Number stays exactly where it was; only the company moved
+       up to the grade line. -->
   <div class="detail-editor__row detail-editor__row--certs">
-    <label class="detail-field detail-field--compact detail-field--cert-company">
-      <span>Certification Co.</span>
-      <input
-        maxlength="10"
-        [ngModel]="coin().certCompany"
-        (ngModelChange)="updateSelectedCoin('certCompany', $event)"
-      />
-    </label>
-
     <label class="detail-field detail-field--compact detail-field--cert-number">
       <span>Certification Number</span>
       <input
@@ -212,16 +314,27 @@
       <span> </span>
       <input aria-label="Spacer" style="visibility: hidden;" />
     </label>
+
+    <label class="detail-field detail-field--compact">
+      <span> </span>
+      <input aria-label="Spacer" style="visibility: hidden;" />
+    </label>
   </div>
 
+  <!-- This row used to hold "Dealer" on the left and "Purchase date" on the
+       right. The coin-level dealer field was removed, so Purchase date now
+       takes the left-hand half of the two-column row on its own, and the
+       hidden spacer on the right keeps the grid the same shape as the rows
+       above it. (Transactions still record a dealer -- see the add-transaction
+       row in coin-detail-panel.html -- but that is a different field.) -->
   <div class="detail-editor__row">
-    <label class="detail-field">
-      <span>Dealer</span>
-      <input [ngModel]="coin().dealer ?? ''" (ngModelChange)="updateSelectedCoin('dealer', $event)" />
-    </label>
     <label class="detail-field">
       <span>Purchase date</span>
       <input type="date" [ngModel]="coin().purchaseDate" (ngModelChange)="updateSelectedCoin('purchaseDate', $event)" />
+    </label>
+    <label class="detail-field">
+      <span> </span>
+      <input aria-label="Spacer" style="visibility: hidden;" />
     </label>
   </div>
 </div>

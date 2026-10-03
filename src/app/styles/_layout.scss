@@ -93,7 +93,11 @@ h1 {
   flex: 1;
   min-height: 0;
 
-  &.has-detail { grid-template-columns: minmax(0, 1fr) 360px; }
+  // The detail sidebar was widened from 360px to 420px so that the coin
+  // editor's first line can hold Year, Coin Type, Denomination and Mint mark
+  // together (see coin-editor-form.scss, `.detail-editor__row--top`). The
+  // inventory table takes whatever is left, so nothing else needed changing.
+  &.has-detail { grid-template-columns: minmax(0, 1fr) 420px; }
 }
 
 // ---- Responsive ----

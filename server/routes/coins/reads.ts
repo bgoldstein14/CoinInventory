@@ -4,10 +4,10 @@
  * Mounted (via routes/coins/index.ts) at /api/coins, so the paths below are
  * relative to that:
  *
- *   GET /      -> GET /api/coins       all coins, with tags joined, an
- *                                      `imageCount`, and (for now) the images
- *                                      inline unless ?includeImages=false
- *   GET /:id   -> GET /api/coins/:id   one coin, with its images and tags
+ *   GET /      -> GET /api/coins       all coins, with an `imageCount` and
+ *                                      (for now) the images inline unless
+ *                                      ?includeImages=false
+ *   GET /:id   -> GET /api/coins/:id   one coin, with its images
  *
  * The list query itself — the SQL, the COUNT(*) aggregate behind `imageCount`,
  * and the `includeImages` flag — lives in routes/coins/list-query.ts, which
@@ -36,7 +36,7 @@ import { loadCoinList, shouldIncludeImages } from './list-query';
 const router = Router();
 
 // ============================================================
-// GET /api/coins — all coins with tags, imageCount, and (for now) images
+// GET /api/coins — all coins with imageCount and (for now) images
 // ============================================================
 //
 // `?includeImages=false` drops the `imagePaths` array from every coin, which is
@@ -53,7 +53,7 @@ router.get('/', async (req: Request, res: Response) => {
   const includeImages = shouldIncludeImages(req.query['includeImages']);
 
   try {
-    logInfo(`Fetching all coins with tags and image counts (includeImages=${includeImages})`);
+    logInfo(`Fetching all coins with image counts (includeImages=${includeImages})`);
 
     const coins = await withDb((db) => loadCoinList(db, includeImages));
 
@@ -65,7 +65,7 @@ router.get('/', async (req: Request, res: Response) => {
 });
 
 // ============================================================
-// GET /api/coins/:id — single coin with images and tags
+// GET /api/coins/:id — single coin with its images
 // ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
@@ -88,14 +88,12 @@ router.get('/:id', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
 
-      const tagsResult = await db.request()
-        .input('id', DB_BINDINGS.coinId, id)
-        .query('SELECT Tag FROM CoinTags WHERE CoinId = @id ORDER BY Tag');
-
+      // There was a third query here reading CoinTags. The tag feature was
+      // removed (nothing in the app could ever create a tag), so this handler
+      // now runs exactly two queries: the coin, then its images.
       return {
         ...rowToCoin(coinResult.recordset[0]),
         imagePaths: imagesResult.recordset.map((r: Record<string, unknown>) => r['ImageData'] as string),
-        tags: tagsResult.recordset.map((r: Record<string, unknown>) => r['Tag'] as string),
       };
     });
 

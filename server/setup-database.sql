@@ -29,7 +29,10 @@ GO
 -- This allows the script to be re-run safely
 
 IF OBJECT_ID('Transactions', 'U') IS NOT NULL DROP TABLE Transactions;
-IF OBJECT_ID('CoinTags', 'U') IS NOT NULL DROP TABLE CoinTags;
+-- CoinTags used to be dropped here. The tag feature was removed and the table
+-- is no longer created below, so there is nothing to drop on a fresh build.
+-- An EXISTING database still has the table; migrations/005-drop-coin-tags.sql
+-- removes it there (safely -- it refuses to drop a table that has rows).
 IF OBJECT_ID('CoinImages', 'U') IS NOT NULL DROP TABLE CoinImages;
 IF OBJECT_ID('Coins', 'U') IS NOT NULL DROP TABLE Coins;
 IF OBJECT_ID('Categories', 'U') IS NOT NULL DROP TABLE Categories;
@@ -68,10 +71,34 @@ CREATE TABLE Coins (
     HasCacSticker       BIT                 NOT NULL DEFAULT 0,  -- CAC (Certified Acceptance Corp) sticker
     SoldPrice           DECIMAL(12,2)       NULL,           -- Price if sold
     SoldDate            NVARCHAR(30)        NULL,           -- Date sold
-    Dealer              NVARCHAR(200)       NULL,           -- Dealer/seller name
-    Weight              DECIMAL(10,4)       NULL,           -- Weight in troy ounces
+    -- NOTE: a `Dealer NVARCHAR(200) NULL` column used to sit here, recording
+    -- who a coin came from. It was removed at the owner's request; the same
+    -- information is already held per event in Transactions.Dealer, which is a
+    -- DIFFERENT column further down this file and is still in use.
+    -- Migration 006-drop-coin-dealer.sql removes it from existing databases.
+    -- Five decimals, matching what the coin editor displays. Widened from
+    -- (10,4) by migration 004. This is the coin's GROSS weight -- the whole
+    -- coin, alloy included. The PURE precious-metal content is PmWeightGrams
+    -- below; the two measure different things, but as of migration 008 they
+    -- are at least in the SAME UNIT.
+    --
+    -- *** THIS COLUMN USED TO BE TROY OUNCES. ***
+    -- It is GRAMS now. The owner always read it as grams, and rather than
+    -- correct the reading, the column was moved to match -- so that Weight
+    -- and PmWeightGrams can be compared and divided without a conversion in
+    -- the reader's head. migrations/008-weight-to-grams.sql multiplies the
+    -- existing values by 31.1034768 and guards itself with an AppSettings
+    -- marker row, because nothing in the column itself can reveal whether it
+    -- has already been converted. A database built fresh from THIS file has
+    -- never held troy ounces and needs no conversion.
+    Weight              DECIMAL(12,5)       NULL,           -- Gross weight in GRAMS (was troy ounces before migration 008)
     MetalContent        NVARCHAR(50)        NULL,           -- Primary metal: "Gold", "Silver", "Platinum"
-    PmWeightGrams       DECIMAL(10,4)       NULL,           -- Precious metal weight in grams
+    -- Five decimal places, matching what the coin editor displays (0.00000).
+    -- It was DECIMAL(10,4), which silently rounded away the fifth digit the
+    -- field offered to accept. Migration 004 widens an existing database.
+    -- NOTE: this is the weight of the PURE precious metal, not the coin's
+    -- gross weight -- see services/pm-reference.ts and computeMeltValue.
+    PmWeightGrams       DECIMAL(12,5)       NULL,           -- Precious metal weight in grams
     PmPercent           DECIMAL(5,2)        NULL,           -- Precious metal percentage (e.g., 90.00 for 90%)
     CoinSet             NVARCHAR(100)       NULL            -- Set membership (FK to CoinSets)
 );
@@ -114,16 +141,17 @@ CREATE TABLE CoinImages (
         FOREIGN KEY (CoinId) REFERENCES Coins(CoinId) ON DELETE CASCADE
 );
 
--- ----- CoinTags ----------------------------------------------
--- Many-to-many tags for flexible categorization
--- Examples: "key date", "rainbow toning", "investment grade"
-CREATE TABLE CoinTags (
-    CoinId              UNIQUEIDENTIFIER    NOT NULL,
-    Tag                 NVARCHAR(100)       NOT NULL,
-    CONSTRAINT PK_CoinTags PRIMARY KEY (CoinId, Tag),       -- Composite PK prevents duplicates
-    CONSTRAINT FK_CoinTags_Coin
-        FOREIGN KEY (CoinId) REFERENCES Coins(CoinId) ON DELETE CASCADE
-);
+-- ----- CoinTags (REMOVED) ------------------------------------
+-- There used to be a CoinTags table here -- a many-to-many of free-text labels
+-- such as "key date" or "rainbow toning". It was wired up end to end in the
+-- API and the grid, but there was never any way for the user to enter a tag:
+-- no editor input, no bulk-edit field, and neither importer could set one. The
+-- column could therefore only ever display a dash, so the whole feature was
+-- dropped rather than finished.
+--
+-- Nothing referenced CoinTags: the foreign key pointed FROM CoinTags TO Coins,
+-- not the other way round, so removing it leaves no dangling constraint.
+-- Existing databases are cleaned up by migrations/005-drop-coin-tags.sql.
 
 -- ----- Categories --------------------------------------------
 -- Lookup table for valid category names
@@ -153,6 +181,10 @@ CREATE TABLE Transactions (
     TransactionType     NVARCHAR(50)        NOT NULL,       -- 'purchase', 'sale', 'trade', 'appraisal'
     TransactionDate     NVARCHAR(30)        NOT NULL,       -- Date of transaction
     Amount              DECIMAL(12,2)       NOT NULL,       -- Dollar amount
+    -- KEEP. This is the TRANSACTION's counterparty -- who this one purchase /
+    -- sale / appraisal was with. It is not the coin-level Dealer column that
+    -- was removed from Coins above; that one described the coin as a whole,
+    -- this one belongs to a single dated, priced event.
     Dealer              NVARCHAR(200)       NULL,           -- Dealer or counterparty
     Notes               NVARCHAR(MAX)       NULL,
     CONSTRAINT FK_Transactions_Coin
@@ -242,12 +274,12 @@ GO
 -- coin that is worth having. (Migration 003 applies this same change to an
 -- existing database, where it replaces the old CoinId-only index.)
 CREATE INDEX IX_CoinImages_CoinId_SortOrder ON CoinImages  (CoinId, SortOrder);
-CREATE INDEX IX_CoinTags_CoinId          ON CoinTags      (CoinId);
+-- IX_CoinTags_CoinId used to sit here; the CoinTags table was removed.
 CREATE INDEX IX_Coins_Category           ON Coins         (Category);
 CREATE INDEX IX_Coins_Grade              ON Coins         (Grade);
 CREATE INDEX IX_Coins_Year               ON Coins         (Year);
 CREATE INDEX IX_Coins_CoinSet            ON Coins         (CoinSet);
-CREATE INDEX IX_Coins_Dealer             ON Coins         (Dealer);
+-- IX_Coins_Dealer used to sit here; the Coins.Dealer column was removed.
 CREATE INDEX IX_Coins_MetalContent       ON Coins         (MetalContent);
 CREATE INDEX IX_Coins_CoinType           ON Coins         (CoinType);
 CREATE INDEX IX_Transactions_CoinId      ON Transactions  (CoinId);

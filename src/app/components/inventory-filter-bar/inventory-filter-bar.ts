@@ -11,7 +11,7 @@ import { InventoryService } from '../../services/inventory.service';
  * Filtering is a self-contained job: read the user's criteria, write them into
  * the shared filter store, and let the inventory table react. Pulling it out of
  * the App shell removes roughly eighty lines of markup and eleven signals from
- * a component that has no other reason to care about grades or dealers.
+ * a component that has no other reason to care about grades or coin sets.
  *
  * Most controls write straight into the shared `filters` store. The search box
  * and the category dropdown are the two exceptions: they also emit, because the

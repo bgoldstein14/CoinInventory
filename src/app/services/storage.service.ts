@@ -26,7 +26,9 @@ export const StorageKeys = {
   CoinSets: 'coin-inventory-sets',
   Transactions: 'coin-inventory-transactions',
   SpotPrices: 'coin-inventory-spot-prices',
-  AppSettings: 'coin-inventory-app-settings'
+  AppSettings: 'coin-inventory-app-settings',
+  /** Which grid column the inventory is sorted by, and which way. */
+  SortState: 'coin-inventory-sort-state'
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];
