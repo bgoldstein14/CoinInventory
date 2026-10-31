@@ -1,0 +1,356 @@
+/**
+ * routes/coins/writes.spec.ts — HTTP tests for creating, updating and deleting
+ * a coin (routes/coins/writes.ts) plus the transaction unwinding in
+ * routes/coins/write-helpers.ts.
+ *
+ * Three of the tests below are regression guards, not ordinary coverage:
+ *
+ *   - "sends max-length ... without truncation" — parameter lengths must match
+ *     the schema exactly, or the user's data is silently trimmed.
+ *   - "updates only the supplied fields ..."    — the partial-update rule that
+ *     a previous refactor broke, blanking out the user's data.
+ *   - "reports the ORIGINAL error even when rollback() itself throws" — a
+ *     failing rollback must not hide the error that actually caused the save
+ *     to fail.
+ */
+
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import request from 'supertest';
+
+vi.mock('mssql', async () => {
+  const { createMssqlMock } = await import('../../test-support/mssql-mock');
+  return createMssqlMock();
+});
+
+import {
+  capturedInputs,
+  mockRequest,
+  mockTransaction,
+  resetMssqlMock,
+} from '../../test-support/mssql-mock';
+
+import { app } from '../../server';
+
+beforeEach(() => {
+  resetMssqlMock();
+});
+
+describe('PUT /api/coins/:id parameter binding', () => {
+  // Was '...Year, Grade, Dealer and CoinSet...'. The coin-level Dealer column
+  // was removed, so there is no longer a dealer parameter to check here.
+  it('sends max-length Year, Grade and CoinSet values through without truncation', async () => {
+    const longYear = 'Y'.repeat(50);
+    const longGrade = 'G'.repeat(50);
+    const longCoinSet = 'S'.repeat(100);
+
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ year: longYear, grade: longGrade, coinSet: longCoinSet });
+
+    expect(res.status).toBe(200);
+
+    const byName = new Map(capturedInputs.map((entry) => [entry.name, entry]));
+
+    expect(byName.get('year')?.value).toBe(longYear);
+    expect(byName.get('year')?.type).toMatchObject({ length: 50 });
+    expect(byName.get('grade')?.value).toBe(longGrade);
+    expect(byName.get('grade')?.type).toMatchObject({ length: 50 });
+    expect(byName.get('coinSet')?.value).toBe(longCoinSet);
+    expect(byName.get('coinSet')?.type).toMatchObject({ length: 100 });
+  });
+});
+
+describe('POST /api/coins', () => {
+  it('returns 400 when denomination is missing', async () => {
+    const res = await request(app)
+      .post('/api/coins')
+      .send({ coinType: 'Washington' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toContain('denomination');
+  });
+
+  it('creates a coin and returns 201 with id', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'test-id',
+        denomination: 'Quarter',
+        coinType: 'Washington',
+        year: '2024',
+        imagePaths: ['data:image/png;base64,img1'],
+      });
+
+    expect(res.status).toBe(201);
+    expect(res.body.id).toBe('test-id');
+  });
+
+  it('ignores a stray tags key from an out-of-date client', async () => {
+    // Tags were removed, table and all. An older client (or a replayed request)
+    // could still send the key; it must be silently ignored rather than
+    // producing an INSERT against a table that no longer exists.
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'stale-client-id',
+        denomination: 'Quarter',
+        tags: ['key-date'],
+      });
+
+    expect(res.status).toBe(201);
+    for (const call of mockRequest.query.mock.calls) {
+      expect(call[0] as string).not.toContain('CoinTags');
+    }
+  });
+
+  it('ignores a stray coin-level dealer key from an out-of-date client', async () => {
+    // Coins.Dealer was dropped (migration 006). An older client could still
+    // send the key; naming the column in the generated INSERT would make SQL
+    // Server reject the whole statement, so it has to be dropped silently.
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'stale-dealer-id',
+        denomination: 'Quarter',
+        dealer: 'Heritage',
+      });
+
+    expect(res.status).toBe(201);
+    expect(capturedInputs.some((entry) => entry.name === 'dealer')).toBe(false);
+    for (const call of mockRequest.query.mock.calls) {
+      // The INSERT targets Coins, so a bare "Dealer" here could only be the
+      // dropped coin column. Transactions.Dealer lives in a different route.
+      expect(call[0] as string).not.toContain('Dealer');
+    }
+  });
+});
+
+// ============================================================
+// imagePaths and the SourcePath column
+// ============================================================
+//
+// `imagePaths` is polymorphic by design (see the header of writes.ts): each
+// element may be the bare base64 string it has always been, or an object
+// `{ imageData, sourcePath }`. The mixed-array test below is the one that
+// matters — it proves a half-migrated client works, which is the actual state
+// of the frontend today.
+
+describe('imagePaths carries sourcePath through POST /api/coins', () => {
+  /** The values bound to @sourcePath during the request, in insert order. */
+  const boundSourcePaths = (): unknown[] =>
+    capturedInputs.filter((entry) => entry.name === 'sourcePath').map((entry) => entry.value);
+
+  it('accepts a mix of bare strings and { imageData, sourcePath } objects', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'mixed-id',
+        denomination: 'Dollar',
+        imagePaths: [
+          // The legacy form: no idea where the original lives -> SQL NULL.
+          'data:image/png;base64,legacy',
+          // The new form.
+          { imageData: 'data:image/png;base64,new', sourcePath: 'C:\\Coin Pictures\\b.jpg' },
+        ],
+      });
+
+    expect(res.status).toBe(201);
+    expect(boundSourcePaths()).toEqual([null, 'C:\\Coin Pictures\\b.jpg']);
+
+    const insertSql = mockRequest.query.mock.calls
+      .map((call) => call[0] as string)
+      .find((text) => text.includes('INSERT INTO CoinImages'));
+    expect(insertSql).toContain('SourcePath');
+  });
+
+  it('binds sourcePath as NVARCHAR(400), matching setup-database.sql', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    // A path at exactly the column length must survive untruncated; declaring
+    // the parameter shorter than the column would silently trim it.
+    const maxLengthPath = 'C:\\' + 'p'.repeat(397);
+
+    await request(app)
+      .post('/api/coins')
+      .send({
+        denomination: 'Dollar',
+        imagePaths: [{ imageData: 'data:image/png;base64,a', sourcePath: maxLengthPath }],
+      });
+
+    const input = capturedInputs.find((entry) => entry.name === 'sourcePath');
+    expect(input?.value).toBe(maxLengthPath);
+    expect(input?.type).toMatchObject({ length: 400 });
+  });
+
+  it('keeps SortOrder gap-free when an entry carries no image data', async () => {
+    mockRequest.query.mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    await request(app)
+      .post('/api/coins')
+      .send({
+        denomination: 'Dollar',
+        imagePaths: [
+          'data:image/png;base64,a',
+          '',                                        // dropped by the normalizer
+          { sourcePath: 'C:\\pics\\no-data.jpg' },   // dropped: no imageData
+          'data:image/png;base64,b',
+        ],
+      });
+
+    const sortOrders = capturedInputs
+      .filter((entry) => entry.name === 'sortOrder')
+      .map((entry) => entry.value);
+    expect(sortOrders).toEqual([0, 1]);
+  });
+});
+
+describe('imagePaths replacement on PUT /api/coins/:id', () => {
+  it('still replaces the whole set, now writing SourcePath too', async () => {
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({
+        imagePaths: [{ imageData: 'data:image/png;base64,a', sourcePath: 'C:\\pics\\a.png' }],
+      });
+
+    expect(res.status).toBe(200);
+
+    const statements = mockRequest.query.mock.calls.map((call) => call[0] as string);
+    // Replacement semantics are unchanged: delete-then-insert.
+    expect(statements.some((s) => s.includes('DELETE FROM CoinImages'))).toBe(true);
+    expect(statements.some((s) => s.includes('INSERT INTO CoinImages') && s.includes('SourcePath'))).toBe(true);
+
+    const input = capturedInputs.find((entry) => entry.name === 'sourcePath');
+    expect(input?.value).toBe('C:\\pics\\a.png');
+  });
+
+  it('does not touch the images when imagePaths is absent from the body', async () => {
+    // The partial-update rule, restated for images: a PUT that does not mention
+    // imagePaths must leave every photo alone.
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    await request(app).put('/api/coins/abc-123').send({ coinType: 'Morgan' });
+
+    const statements = mockRequest.query.mock.calls.map((call) => call[0] as string);
+    expect(statements.some((s) => s.includes('CoinImages'))).toBe(false);
+  });
+});
+
+describe('PUT /api/coins/:id', () => {
+  it('returns 404 for non-existent coin', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [] });
+
+    const res = await request(app)
+      .put('/api/coins/nonexistent')
+      .send({ coinType: 'Updated' });
+    expect(res.status).toBe(404);
+  });
+
+  it('updates a coin and returns 200', async () => {
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ coinType: 'Updated Morgan', denomination: '$1' });
+    expect(res.status).toBe(200);
+    expect(res.body.id).toBe('abc-123');
+  });
+
+  it('updates only the supplied fields so partial edits do not blank unrelated data', async () => {
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    await request(app)
+      .put('/api/coins/abc-123')
+      .send({ coinType: 'Updated Morgan' });
+
+    const sqlText = mockRequest.query.mock.calls.at(-1)?.[0] as string;
+    expect(sqlText).toContain('CoinType = @coinType');
+    expect(sqlText).not.toContain('Denomination = @denomination');
+    expect(sqlText).not.toContain('Year = @year');
+  });
+
+  it('ignores a stray tags key and still writes the real fields normally', async () => {
+    // Removing the tag delete/re-insert from this transaction must not disturb
+    // the partial-update behaviour around it. A body carrying BOTH a real field
+    // and a leftover `tags` key should update the real field and touch nothing
+    // else — in particular, no DELETE against the dropped CoinTags table.
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] })
+      .mockResolvedValue({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ coinType: 'Updated Morgan', tags: ['key-date'] });
+
+    expect(res.status).toBe(200);
+
+    const sqlText = mockRequest.query.mock.calls.at(-1)?.[0] as string;
+    expect(sqlText).toContain('CoinType = @coinType');
+
+    for (const call of mockRequest.query.mock.calls) {
+      expect(call[0] as string).not.toContain('CoinTags');
+    }
+  });
+});
+
+describe('DELETE /api/coins/:id', () => {
+  it('returns 404 for non-existent coin', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [], rowsAffected: [0] });
+
+    const res = await request(app).delete('/api/coins/nonexistent');
+    expect(res.status).toBe(404);
+  });
+
+  it('deletes a coin and returns 204', async () => {
+    mockRequest.query.mockResolvedValueOnce({ recordset: [], rowsAffected: [1] });
+
+    const res = await request(app).delete('/api/coins/abc-123');
+    expect(res.status).toBe(204);
+  });
+});
+
+// ============================================================
+// Transaction rollback safety
+// ============================================================
+
+describe('transaction rollback', () => {
+  it('reports the ORIGINAL error even when rollback() itself throws', async () => {
+    // Fail the UPDATE...
+    const originalError = Object.assign(new Error('Violation of UNIQUE KEY constraint'), { number: 2601 });
+    mockRequest.query
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123' }] }) // existence check
+      .mockRejectedValue(originalError);                             // the UPDATE
+
+    // ...and make the rollback fail too, which is exactly what happens when the
+    // connection already died. The old code rethrew the rollback error and lost
+    // the real cause; we must still classify on the original error (409).
+    mockTransaction.rollback.mockRejectedValue(new Error('No transaction is active'));
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ certNumber: '12345' });
+
+    expect(mockTransaction.rollback).toHaveBeenCalled();
+    expect(res.status).toBe(409);
+  });
+});

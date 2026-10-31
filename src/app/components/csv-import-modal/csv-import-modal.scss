@@ -1,0 +1,192 @@
+@use '../../styles/modal' as *;
+
+// ---- CSV import ----
+
+.csv-mapping {
+  margin-top: 14px;
+
+  h3 { margin: 0 0 10px; font-size: 0.88rem; }
+}
+
+.csv-mapping-grid {
+  display: grid;
+  gap: 8px;
+}
+
+.csv-mapping-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 8px;
+}
+
+.csv-header-label {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.82rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.csv-mapping-row select {
+  min-width: 160px;
+  padding: 5px 8px;
+  border: 1px solid #d9c7a5;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: #fdfaf6;
+}
+
+.csv-preview {
+  margin-top: 14px;
+  h3 { margin: 0 0 8px; font-size: 0.88rem; }
+}
+
+.csv-preview-table-wrap { overflow-x: auto; }
+
+.csv-preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+
+  th, td {
+    padding: 5px 8px;
+    border: 1px solid #ede5d8;
+    text-align: left;
+    white-space: nowrap;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  thead th {
+    background: #f8f0e4;
+    font-weight: 600;
+    color: #5d4832;
+  }
+}
+
+// ---- First-run guidance ----------------------------------------------
+// Shown only before a file has been selected. The modal used to open with
+// nothing but a file button, leaving a new user no idea what the CSV should
+// contain.
+
+.csv-help {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: #f8f0e4;
+  border: 1px solid #ede5d8;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: #5d4832;
+
+  p { margin: 0 0 8px; }
+  p:last-child { margin-bottom: 0; }
+
+  code {
+    background: #fff;
+    border: 1px solid #ede5d8;
+    border-radius: 3px;
+    padding: 0 4px;
+    font-size: 0.78rem;
+  }
+}
+
+.csv-help-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.csv-help-hint {
+  font-size: 0.78rem;
+  color: #6a5a47;
+}
+
+.csv-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.csv-help-columns {
+  // A plain multi-column list keeps 21 field names compact.
+  columns: 3;
+  margin: 8px 0;
+  padding-left: 18px;
+  font-size: 0.78rem;
+
+  li { break-inside: avoid; }
+}
+
+.csv-help-note {
+  margin-top: 6px;
+  font-size: 0.78rem;
+  color: #6a5a47;
+}
+
+// ---- Rows refused by the completeness rule ----
+// Styled as a warning block rather than an error: nothing went wrong, some
+// rows simply could not be identified as coins. The amber border is what
+// makes it read as "needs your attention" without implying failure, and it
+// deliberately stands out from the neutral mapping and preview sections above.
+.csv-exceptions {
+  margin-top: 16px;
+  padding: 12px 14px;
+  border: 1px solid #e3cfa4;
+  border-left: 4px solid #b98748;
+  border-radius: 10px;
+  background: #fdf8ef;
+
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.9rem;
+    color: #7a5b26;
+  }
+}
+
+.csv-exceptions-summary {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: #6a5a47;
+}
+
+.csv-exception-list {
+  // Capped so a badly mapped file of hundreds of rows cannot push the action
+  // buttons off the bottom of the dialog.
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+
+  li {
+    display: grid;
+    grid-template-columns: 72px minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 8px;
+    padding: 5px 0;
+    border-top: 1px solid #f0e4d0;
+    align-items: baseline;
+  }
+
+  li:first-child { border-top: none; }
+}
+
+.csv-exception-row {
+  color: #8a7a63;
+  font-variant-numeric: tabular-nums;
+}
+
+.csv-exception-summary {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.csv-exception-missing { color: #8a2c22; }

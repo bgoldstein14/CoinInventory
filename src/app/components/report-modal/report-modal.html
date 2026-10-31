@@ -1,0 +1,51 @@
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Collection Reports</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="report-summary">
+        <div class="report-grid">
+          <div class="report-stat"><span>Total coins</span><strong>{{ reportStats().totalCoins }}</strong></div>
+          <div class="report-stat"><span>Total cost</span><strong>${{ reportStats().totalCost | number: '1.2-2' }}</strong></div>
+          <div class="report-stat"><span>Current value</span><strong>${{ reportStats().totalValue | number: '1.2-2' }}</strong></div>
+          <div class="report-stat" [class.gain]="reportStats().totalProfit >= 0" [class.loss]="reportStats().totalProfit < 0">
+            <span>Total gain/loss</span>
+            <strong>{{ reportStats().totalProfit >= 0 ? '+' : '' }}${{ reportStats().totalProfit | number: '1.2-2' }}</strong>
+          </div>
+          <div class="report-stat"><span>Sold</span><strong>{{ reportStats().soldCount }} (${{ reportStats().totalSold | number: '1.2-2' }})</strong></div>
+          <div class="report-stat"><span>Certified</span><strong>{{ reportStats().gradedCount }}</strong></div>
+          <div class="report-stat"><span>With photos</span><strong>{{ reportStats().withImagesCount }}</strong></div>
+        </div>
+        @if (reportStats().byCategory.length > 0) {
+          <h3>By Category</h3>
+          <table class="report-table">
+            <thead><tr><th>Category</th><th>Count</th><th>Value</th></tr></thead>
+            <tbody>
+              @for (entry of reportStats().byCategory; track entry[0]) {
+                <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
+        @if (reportStats().byDenomination.length > 0) {
+          <h3>By Denomination</h3>
+          <table class="report-table">
+            <thead><tr><th>Denomination</th><th>Count</th><th>Value</th></tr></thead>
+            <tbody>
+              @for (entry of reportStats().byDenomination; track entry[0]) {
+                <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="secondary" (click)="exportCsvRequested.emit()">Export Full CSV</button>
+        <button type="button" class="secondary" (click)="exportInsuranceCsvRequested.emit()">Export Insurance Schedule</button>
+        <button type="button" (click)="closed.emit()">Close</button>
+      </div>
+    </div>
+  </div>
+</div>

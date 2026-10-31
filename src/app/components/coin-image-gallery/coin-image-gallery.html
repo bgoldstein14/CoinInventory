@@ -1,0 +1,124 @@
+<!--
+  Clicking the dark backdrop closes the gallery; the $event.stopPropagation()
+  on the panel itself stops a click *inside* the gallery from bubbling up and
+  closing it too.
+-->
+<div class="modal-backdrop" (click)="images().closeImageGallery()">
+  <div class="modal modal--wide image-gallery-modal" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <!--
+        Naming the coin in the title matters more than it looks. The complaint
+        that started this work was "I expect to only see the images for that
+        coin, not all images" — so the dialog now says out loud whose photos
+        these are, and the count says how many there are.
+      -->
+      <h2>Images &mdash; {{ coinLabel() }}</h2>
+      <button type="button" class="modal-close" (click)="images().closeImageGallery()" aria-label="Close images">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="image-gallery" (drop)="images().handleImageDrop($event)" (dragover)="images().handleDragOver($event)">
+        <div class="image-gallery__header">
+          <h3>
+            Attached photos
+            <span class="image-gallery__count">{{ photoCount() }}</span>
+          </h3>
+          <label class="file-picker file-picker--compact">
+            <input type="file" multiple accept="image/*" (change)="images().addCoinImages($event)" />
+            Add images
+          </label>
+        </div>
+
+        <!--
+          The tiles. `@empty` is Angular's built-in "the list was empty" branch
+          of @for, which is exactly the case this screen could not previously
+          reach at all: the overlay used to be gated on the coin already
+          having photos, so a coin with none had no way to get its first one.
+          See CoinImagesStore.canOpenImageGallery.
+        -->
+        <div class="image-list">
+          @for (imagePath of coin().imagePaths; track imagePath; let i = $index) {
+            <!--
+              `is-main` highlights the photo the main grid uses as this coin's
+              thumbnail. That is always the FIRST image in the list, because
+              the grid renders imagePaths[0] — see CoinImagesStore.setMainImage
+              for why "main photo" is stored as position rather than a flag.
+            -->
+            <div class="image-item" [class.image-item--main]="images().isMainImage(imagePath)">
+              <!--
+                Deliberately much larger than the import screens' previews
+                (128px tiles there, 88px rows on the near-match list). This is
+                the screen for looking at ONE coin properly rather than
+                scanning a folder, so the photo gets the room. Clicking opens
+                the resizable full-size window.
+              -->
+              <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
+
+              <div class="image-item__meta">
+                <span class="image-item__label">{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
+                <!--
+                  Where the ORIGINAL full-size file lives. `imagePath` above is
+                  only the downscaled copy we store in the database; this is the
+                  real photo on disk, clickable when it is still there and shown
+                  greyed out (but still readable) when it is not. Renders nothing
+                  when no path was ever recorded.
+                -->
+                <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
+              </div>
+
+              <div class="image-item__actions">
+                <!--
+                  The per-photo "main photo" control.
+
+                  It is deliberately a button that DISABLES itself (rather than
+                  disappearing) on the photo that is already the main one: a
+                  control that vanishes tells you nothing, whereas a greyed-out
+                  button reading "Main photo" shows the current state at a
+                  glance and keeps every tile the same height.
+                -->
+                @if (images().isMainImage(imagePath)) {
+                  <button
+                    type="button"
+                    class="secondary small-button is-main-photo"
+                    disabled
+                    title="This photo is shown in the main grid"
+                  >★ Main photo</button>
+                } @else {
+                  <button
+                    type="button"
+                    class="secondary small-button"
+                    title="Show this photo in the main grid"
+                    (click)="images().setMainImage(imagePath)"
+                  >Set as main</button>
+                }
+                <button type="button" class="secondary small-button" (click)="images().removeCoinImage(imagePath)">Delete</button>
+              </div>
+            </div>
+          } @empty {
+            <!--
+              THE EMPTY STATE.
+
+              One job: make "add the first photo" the obvious thing to do. It
+              therefore repeats the same `Add images` picker that sits in the
+              header, because a user who opened an empty gallery is looking at
+              the middle of the dialog, not at its top-right corner.
+
+              It reuses the EXISTING picker and the EXISTING drag-and-drop
+              target (the whole `.image-gallery` box listens for `drop`), so
+              there is no third way to attach a photo to maintain.
+            -->
+            <div class="image-gallery__empty">
+              <p class="image-gallery__empty-title">No photos yet for this coin.</p>
+              <p class="image-gallery__empty-hint">
+                Drag image files anywhere into this box, or pick them below.
+              </p>
+              <label class="file-picker">
+                <input type="file" multiple accept="image/*" (change)="images().addCoinImages($event)" />
+                Add images
+              </label>
+            </div>
+          }
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

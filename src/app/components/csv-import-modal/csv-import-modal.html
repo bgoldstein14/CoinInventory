@@ -1,0 +1,128 @@
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Import from CSV</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+    </div>
+    <div class="modal-body">
+      <!--
+        Guidance shown before a file is chosen. Previously this modal opened
+        with nothing but a file button, which gave a first-time user no idea
+        what the file should look like. The template download is generated
+        from the same field list the importer uses, so it cannot go stale.
+      -->
+      @if (csvHeaders().length === 0) {
+        <div class="csv-help">
+          <p>
+            There is no required format &mdash; pick any comma-separated file with a
+            <strong>header row</strong> and you will be able to match your columns to
+            coin fields on the next screen.
+          </p>
+          <p class="csv-help-actions">
+            <button type="button" class="small-button" (click)="downloadTemplate()">
+              Download blank template
+            </button>
+            <span class="csv-help-hint">
+              Already have coins? <strong>Export &rarr; CSV</strong> produces a file that
+              re-imports with every column matched automatically.
+            </span>
+          </p>
+          <details>
+            <summary>Columns this importer recognises</summary>
+            <ul class="csv-help-columns">
+              @for (field of csvMappableFields; track field.key) {
+                @if (field.key) { <li>{{ field.label }}</li> }
+              }
+            </ul>
+            <p class="csv-help-note">
+              Column order does not matter, and you can leave any of them out.
+              Unrecognised columns are simply left for you to map by hand or skip.
+              Prices may include <code>$</code> and commas. Year is free text, so
+              ranges such as <code>1878-S</code> are fine.
+            </p>
+          </details>
+        </div>
+      }
+
+      <label class="file-picker">
+        <input type="file" accept=".csv,.txt" (change)="handleCsvFileSelection($event)" />
+        Select CSV file
+      </label>
+      @if (csvHeaders().length > 0) {
+        <div class="csv-mapping">
+          <h3>Map columns ({{ csvPreviewCount() }} rows)</h3>
+          <div class="csv-mapping-grid">
+            @for (header of csvHeaders(); track header) {
+              <div class="csv-mapping-row">
+                <span class="csv-header-label">{{ header }}</span>
+                <select [ngModel]="csvFieldMapping()[header] ?? ''" (ngModelChange)="updateCsvMapping(header, $event)">
+                  @for (field of csvMappableFields; track field.key) {
+                    <option [value]="field.key">{{ field.label }}</option>
+                  }
+                </select>
+              </div>
+            }
+          </div>
+        </div>
+        @if (csvRows().length > 0) {
+          <div class="csv-preview">
+            <h3>Preview (first 5 rows)</h3>
+            <div class="csv-preview-table-wrap">
+              <table class="csv-preview-table">
+                <thead><tr>@for (header of csvHeaders(); track header) { <th>{{ header }}</th> }</tr></thead>
+                <tbody>
+                  @for (row of csvRows().slice(0, 5); track $index) {
+                    <tr>@for (cell of row; track $index) { <td>{{ cell }}</td> }</tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          </div>
+        }
+        <!-- Rows that could not be imported.
+             A coin needs at least two of Year / Coin Type / Denomination to be
+             identifiable, and the backend refuses one with no denomination
+             outright. Rather than import such a row and leave it stranded in
+             the grid with no database record behind it, it is listed here with
+             the reason. The dialog stays open so this is actually read. -->
+        @if (csvExceptions().length > 0) {
+          <div class="csv-exceptions">
+            <h3>Not imported &mdash; too little detail ({{ csvExceptions().length }})</h3>
+            <p class="csv-exceptions-summary">
+              Imported {{ importedCount() }}
+              {{ importedCount() === 1 ? 'coin' : 'coins' }}.
+              <!-- Say so when the import worked out metal / composition /
+                   purity / weight that the file itself did not carry. Values
+                   that WERE in the file are never replaced. -->
+              @if (enrichedCount() > 0) {
+                Metal, composition and weight were filled in automatically on
+                {{ enrichedCount() }} of them from the reference tables;
+                anything your file supplied was left exactly as you wrote it.
+              }
+              The rows below were skipped because a coin needs at least two of
+              <strong>Year</strong>, <strong>Coin Type</strong> and
+              <strong>Denomination</strong>. Fix them in your file, or map the
+              missing columns above, and import again.
+            </p>
+            <ul class="csv-exception-list">
+              @for (exception of csvExceptions(); track exception.rowNumber) {
+                <li>
+                  <span class="csv-exception-row">Row {{ exception.rowNumber }}</span>
+                  <span class="csv-exception-summary">{{ exception.summary }}</span>
+                  <span class="csv-exception-missing">{{ exception.missing }}</span>
+                </li>
+              }
+            </ul>
+          </div>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="close()">
+            {{ csvExceptions().length > 0 ? 'Done' : 'Cancel' }}
+          </button>
+          <button type="button" (click)="importCsv()">Import {{ csvPreviewCount() }} rows</button>
+        </div>
+      }
+    </div>
+  </div>
+</div>

@@ -1,0 +1,46 @@
+// A labelled form field: a small caption sitting directly above its control.
+//
+// WHY THIS PARTIAL EXISTS
+// Two components render `.detail-field`: the coin editor form
+// (CoinEditorForm) and the add-transaction row in the detail sidebar
+// (CoinDetailPanel). Angular scopes component styles, so a rule written in
+// one component's .scss cannot reach the other's template — each has to
+// `@use` the rule itself. Same reasoning as `_panel.scss`.
+//
+// It was promoted out of coin-editor-form.scss when the transaction row was
+// given real labels. That row previously used `placeholder` text as its only
+// label ("Amount", "Dealer", "Notes"), which disappears the moment you start
+// typing and is skipped by some screen readers. Sharing this rule is what
+// makes the two field groups look like the same application.
+//
+// Component-specific width/layout modifiers (--narrow, --money, --cert and
+// friends) deliberately stay in the component that uses them; only the base
+// look is shared.
+
+.detail-field {
+  display: grid;
+  gap: 3px;
+  font-size: 0.68rem;
+  color: #5c4935;
+  font-weight: 600;
+  min-width: 0;
+
+  span {
+    white-space: nowrap;
+  }
+
+  input, select {
+    width: 100%;
+    border: 1px solid #d9c7a5;
+    border-radius: 7px;
+    padding: 5px 7px;
+    background: #fdfaf6;
+    font-size: 0.75rem;
+    min-width: 0;
+  }
+}
+
+// Span every column of the parent grid.
+.detail-field--full {
+  grid-column: 1 / -1;
+}

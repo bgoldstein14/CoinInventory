@@ -1,0 +1,270 @@
+// Styles for the inventory grid. Moved here wholesale from the old
+// `styles/_inventory-table.scss` partial, which only this component used.
+//
+// `controls` supplies the shared button / badge / checkbox look, plus the
+// `box-sizing: border-box` reset — Angular scopes styles per component, so each
+// component has to ask for the shared basics itself.
+@use '../../styles/controls' as *;
+@use '../../styles/panel' as *;
+
+// The host element is an artefact of making this a component; `display: contents`
+// removes it from layout so `<section class="panel">` remains a direct child of
+// the `.main-content` grid, exactly as it was in app.html.
+:host { display: contents; }
+
+// ---- Inventory panel header ----
+
+.inventory-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.selection-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: #dbeafe;
+  color: #1d4ed8;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+// ---- Column picker ----
+
+.column-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.toggle-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
+// ---- Table ----
+
+.inventory-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inventory-table-wrap {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.inventory-table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 700px;
+  font-size: 0.7rem;
+}
+
+.inventory-table th,
+.inventory-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid #ede5d8;
+  text-align: left;
+  vertical-align: middle;
+}
+
+.inventory-table thead th {
+  background: #f8f0e4;
+  color: #5d4832;
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.sortable-header {
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+
+  &:hover { color: #8e5b2d; }
+}
+
+.sort-indicator {
+  display: inline-block;
+  margin-left: 3px;
+  font-size: 0.65rem;
+}
+
+// ---- Per-column widths ----
+//
+// HOW WIDTH WORKS IN THIS GRID, because it is not obvious from reading the
+// template. The table is `width: 100%` with the DEFAULT (auto) layout
+// algorithm, so every column is sized from its contents and then the leftover
+// space is shared out in proportion to those contents. Nothing declared a
+// width for a data column until now -- `.check-column` and `.thumb-column` are
+// the two fixed, non-data columns -- which means a column full of long text
+// (Type, Variety, Source) quietly claims space from short ones.
+//
+// `width: 1%` is the idiom for opting out of that share-out. In an auto-layout
+// table a width smaller than the column's min-content is clamped UP to
+// min-content, so 1% does not mean "1% wide": it means "take only what you
+// need and give the surplus to the other columns". That is deliberately not a
+// pixel value -- a hard px figure here would either be ignored (if below
+// min-content) or clip nothing and mislead the next reader into thinking the
+// number was measured.
+//
+// The two columns below are the cert/grade pair, narrowed at the owner's
+// request: "It doesn't have to be very wide ... and maybe shrink the grade
+// column a bit to ensure the grid has enough room." Adding a column only takes
+// room away from the others, so the new one pays for itself.
+
+// Contents are a short badge -- "MS65", "AU58", plus the optional CAC bean --
+// against a 5-character header, so this column was being handed far more room
+// than it can ever use.
+.column-grade { width: 1%; }
+
+// Contents are a 3-5 letter company: NGC, PCGS, ANACS, ICG.
+//
+// This used to override `.sortable-header`'s `white-space: nowrap` so the
+// header could wrap: "CERTIFIED BY" on one line set a width floor about twice
+// that of any value beneath it, which fought the "doesn't have to be very
+// wide" this column was asked for. The owner saw the two-line header and
+// preferred to shorten the label instead -- it is 'Cert. By' now (see
+// inventoryColumnLabels), which is narrow enough to sit on one line without
+// widening the column. So the override is gone and the header behaves like
+// every other one.
+//
+// If the label is ever lengthened again, re-add `white-space: normal` here
+// rather than letting the column grow.
+.column-certCompany { width: 1%; }
+
+.check-column {
+  width: 32px;
+  text-align: center;
+
+  input { accent-color: #8e5b2d; cursor: pointer; }
+}
+
+// ---- Table rows ----
+
+.inventory-table tbody tr {
+  cursor: pointer;
+  transition: background 0.1s ease;
+
+  &:hover { background: #fdf8f0; }
+
+  // A row that has not been saved to the database yet (see the `is-draft`
+  // comment in the template). Deliberately a faint warm tint only — the
+  // "Unsaved" chip is what actually carries the message; this just makes the
+  // row easy to pick out when several are on screen.
+  //
+  // Declared BEFORE `.selected` on purpose: the two rules have the same CSS
+  // specificity, so whichever comes last wins, and the selection highlight
+  // must always beat the draft tint.
+  &.is-draft {
+    background: #fffaf0;
+
+    &:hover { background: #fff4e3; }
+  }
+
+  &.selected {
+    background: #f5ead8;
+    box-shadow: inset 3px 0 0 #b98748;
+  }
+
+  &.multi-selected { background: #eef2ff; }
+
+  &.selected.multi-selected {
+    background: #e8edf8;
+    box-shadow: inset 3px 0 0 #4f6dba;
+  }
+}
+
+.empty-row td {
+  text-align: center;
+  color: #8a7a63;
+  padding: 32px 12px;
+  cursor: default;
+}
+
+// ---- "Unsaved" chip on draft rows ----
+// Only the colour modifier lives here; the pill shape, padding and font come
+// from the shared `.badge` primitive in styles/_controls.scss, which is
+// already pulled in at the top of this file.
+
+.badge--draft {
+  background: #fdf0d9;
+  color: #8a5a10;
+  border: 1px solid #ecd2a0;
+  font-size: 0.6rem;
+  padding: 1px 6px;
+  margin-right: 6px;
+  cursor: help;
+}
+
+// ---- Row thumbnails ----
+
+.thumb-column { width: 48px; }
+
+.row-thumb {
+  display: block;
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+}
+
+.row-thumb--placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.5rem;
+  text-align: center;
+  color: #a4937a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px;
+}
+
+.row-action-stack {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.row-action-stack .small-button {
+  min-width: 0;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+// ---- Print ----
+// On paper the table should fill the page and lose its selection column.
+// (Moved from `_overlays.scss`.)
+
+@media print {
+  .inventory-panel { border: none; box-shadow: none; padding: 0; margin: 0; }
+
+  .check-column { display: none; }
+}

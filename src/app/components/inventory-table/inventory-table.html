@@ -1,0 +1,141 @@
+<section class="panel inventory-panel">
+  <div class="inventory-header">
+    <h2>
+      Inventory
+      @if (selection().selectionCount() > 0) {
+        <span class="selection-badge">{{ selection().selectionCount() }} selected</span>
+      }
+    </h2>
+    <button type="button" class="secondary small-button" (click)="columns().toggleColumnPicker()">
+      Columns {{ columns().showColumnPicker() ? '▲' : '▼' }}
+    </button>
+  </div>
+
+  @if (columns().showColumnPicker()) {
+    <div class="column-picker">
+      @for (column of columns().inventoryColumnOptions(); track column) {
+        <label class="toggle-item">
+          <input type="checkbox" [checked]="columns().visibleInventoryColumns().includes(column)" (change)="columns().toggleColumn(column)" />
+          <span>{{ columns().inventoryColumnLabels[column] }}</span>
+        </label>
+      }
+    </div>
+  }
+
+  <div class="inventory-table-wrap">
+    <table class="inventory-table">
+      <thead>
+        <tr>
+          <th class="check-column">
+            <input type="checkbox" [checked]="selection().allVisibleSelected()" (change)="selection().toggleAllCoins()" title="Select all" />
+          </th>
+          <th class="thumb-column">Photo</th>
+          <!-- `column-<key>` is the ONLY hook stylesheets have for sizing an
+               individual column: every other column attribute (its label, its
+               position) is data, not markup, because the whole grid is one
+               @for over visibleInventoryColumns(). Without this class a rule
+               like "make Grade narrower" has nothing to select -- there is no
+               per-column <th> to hang a width on, and nth-child is useless
+               because the user can switch columns on and off, which changes
+               every index. The matching class goes on the <td> below so the
+               header and its cells agree on a width.
+               See `Per-column widths` in inventory-table.scss. -->
+          @for (column of columns().visibleInventoryColumns(); track column) {
+            <th class="sortable-header column-{{ column }}" (click)="filters().setSortColumn(column)">
+              {{ columns().inventoryColumnLabels[column] }}
+              <span class="sort-indicator">{{ filters().sortIndicator(column) }}</span>
+            </th>
+          }
+          <th>Images</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (coin of filters().filteredInventory(); track coin.id) {
+          <!-- `is-draft` marks a row that exists on screen only: it has not
+               reached the database yet because it still needs 2 of
+               Year / Coin Type / Denomination. See InventoryService.isDraftCoin. -->
+          <tr [class.selected]="inv.selectedCoinId() === coin.id" [class.multi-selected]="selection().isCoinSelected(coin.id)" [class.is-draft]="inv.isDraftCoin(coin.id)" (click)="coinSelected.emit(coin.id)">
+            <td class="check-column" (click)="$event.stopPropagation()">
+              <input type="checkbox" [checked]="selection().isCoinSelected(coin.id)" (click)="selection().toggleCoinSelection(coin.id, $event)" />
+            </td>
+            <td class="thumb-column">
+              @if (primaryImage(coin); as image) {
+                <img [src]="image" alt="" class="row-thumb" />
+              } @else {
+                <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
+              }
+            </td>
+            @for (column of columns().visibleInventoryColumns(); track column; let firstColumn = $first) {
+              <td class="column-{{ column }}">
+                <!-- The "Unsaved" chip rides in the first visible column so it
+                     reads as part of the row rather than as an extra column.
+                     Its tooltip spells out what the row still needs. -->
+                @if (firstColumn && inv.isDraftCoin(coin.id)) {
+                  <span class="badge badge--draft" [title]="inv.draftHint(coin)">Unsaved</span>
+                }
+                @if (column === 'grade') {
+                  <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
+                  @if (coin.hasCacSticker) {
+                    <img [src]="cacGreenBeanIconPath" alt="CAC" title="CAC green bean" class="cac-bean cac-bean--inline" />
+                  }
+                } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
+                  <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
+                } @else if (column === 'meltValue') {
+                  <!-- Melt gets its own branch for ONE reason: the tooltip.
+                       The number itself is still produced by the shared pure
+                       formatter below (that is what the third argument is
+                       for); all this branch adds is a `title` saying why the
+                       cell is a dash when it is one. Without it, "no spot
+                       prices have ever been fetched" — which one press of
+                       Fetch would fix for the whole grid — looks exactly like
+                       "this coin is base metal", which nothing can fix.
+                       See InventoryService.meltValueHint. -->
+                  <span [title]="inv.meltValueHint(coin)">{{ formatInventoryCell(coin, column, inv.spotPrices()) }}</span>
+                } @else {
+                  {{ formatInventoryCell(coin, column) }}
+                }
+              </td>
+            }
+            <td>
+              <div class="row-action-stack">
+                <!--
+                  The row's photo button.
+
+                  It used to be DISABLED and read "No images" for a coin with
+                  none, which made this — the most-used entry point — a dead
+                  end: the gallery it opens is the only place a photo can be
+                  attached to one specific coin, so a coin without photos
+                  could never get its first one. It is now always live, and
+                  the label says which of the two jobs the click will do.
+                  The gallery shows an empty state inviting the upload. See
+                  CoinImagesStore.canOpenImageGallery.
+                -->
+                <button
+                  type="button"
+                  class="secondary small-button"
+                  [title]="coin.imagePaths.length > 0 ? 'Show this coin\'s photos' : 'Attach the first photo to this coin'"
+                  (click)="$event.stopPropagation(); imagesRequested.emit(coin.id)"
+                >
+                  {{ coin.imagePaths.length > 0 ? 'Images' : 'Add images' }}
+                </button>
+                <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); detailRequested.emit(coin.id)">
+                  Details
+                </button>
+              </div>
+            </td>
+          </tr>
+        } @empty {
+          <tr class="empty-row">
+            <td [attr.colspan]="columns().visibleInventoryColumns().length + 3">
+              @if (inv.inventory().length === 0) {
+                No coins yet. Add one manually or import from a QIF/CSV file.
+              } @else {
+                No coins match the current search and filters.
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</section>

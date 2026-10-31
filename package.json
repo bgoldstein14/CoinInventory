@@ -1,0 +1,43 @@
+{
+  "name": "coin-inventory-app",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "npx kill-port 3000 4200 && concurrently -k \"npm --prefix server run dev\" \"npm run start:app\"",
+    "start:app": "ng serve --host 0.0.0.0 --port 4200",
+    "start:server": "npx kill-port 3000 4200 && npm --prefix server run dev",
+    "build": "ng build",
+    "watch": "ng build --watch --configuration development",
+    "test": "vitest run --root src",
+    "test:server": "cd server && npm test"
+  },
+  "private": true,
+  "packageManager": "npm@11.17.0",
+  "dependencies": {
+    "@angular/common": "^22.1.0",
+    "@angular/compiler": "^22.1.0",
+    "@angular/core": "^22.1.0",
+    "@angular/forms": "^22.1.0",
+    "@angular/platform-browser": "^22.1.0",
+    "@angular/router": "^22.1.0",
+    "msnodesqlv8": "^5.3.0",
+    "rxjs": "~7.8.0",
+    "tslib": "^2.3.0"
+  },
+  "overrides": {
+    "esbuild": "npm:esbuild-wasm@0.28.1"
+  },
+  "devDependencies": {
+    "@angular-devkit/build-angular": "^22.1.3",
+    "@angular/build": "^22.1.3",
+    "@angular/cli": "^22.1.3",
+    "@angular/compiler-cli": "^22.1.0",
+    "concurrently": "^9.1.0",
+    "fake-indexeddb": "^6.2.5",
+    "kill-port": "^2.0.1",
+    "jsdom": "^28.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.11"
+  }
+}

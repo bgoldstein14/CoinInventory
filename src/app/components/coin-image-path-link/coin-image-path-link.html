@@ -1,0 +1,41 @@
+<!--
+  One photo's original-file location, in one of three shapes.
+
+  Note the deliberate asymmetry: the PRESENT case is an <a>, and the other two
+  are a <span>. That is not cosmetic. A "missing" file must not merely *look*
+  unclickable — with no <a> there is no href, no pointer cursor, no underline,
+  nothing in the tab order and nothing for a screen reader to announce as a
+  link. Styling an <a> to look dead would leave all of that behind.
+
+  The "no path recorded" case renders nothing at all: an empty link or a
+  dangling label is worse than silence.
+-->
+@if (view().hasPath) {
+  @if (view().isLink) {
+    <!--
+      target="_blank" opens the original alongside the app instead of
+      navigating away from it. rel="noopener" goes with it as a matter of
+      course: without it the opened tab gets a `window.opener` handle back to
+      this page.
+    -->
+    <a
+      class="image-path image-path--present"
+      [href]="view().fileUrl"
+      [title]="view().title"
+      target="_blank"
+      rel="noopener"
+    >{{ view().displayPath }}</a>
+  } @else {
+    <!--
+      Missing or unknown. The path text stays fully visible either way, because
+      the user asked for it as documentation of where the file *was* — only the
+      clickability and the colour change.
+    -->
+    <span
+      class="image-path"
+      [class.image-path--missing]="view().existence === 'missing'"
+      [class.image-path--unknown]="view().existence === 'unknown'"
+      [title]="view().title"
+    >{{ view().displayPath }}</span>
+  }
+}

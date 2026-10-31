@@ -1,0 +1,1772 @@
+!Type:Tag
+N\
+^
+NA101
+^
+NA202
+DSpare set, box two
+^
+NB303
+^
+NShow 2015
+DRegional show, spring 2015
+^
+NDuplicates
+^
+NSets
+^
+!Type:Cat
+NAuction Fees
+DAuction house commission
+E
+R000
+E
+^
+NBullion Sales
+DProceeds of bullion sales
+T
+R286
+I
+^
+NCoin Supplies
+DHolders, flips, albums
+E
+R000
+E
+^
+NDealer Fees
+E
+R000
+E
+^
+NDiv Income
+DDividend Income
+T
+R286
+I
+^
+NGrading Fees
+DThird-party grading
+E
+R000
+E
+^
+NHobby Income
+T
+R460
+I
+^
+NInsurance:Collection
+DScheduled collection rider
+E
+R000
+E
+^
+NInt Income
+DInterest Income
+T
+R286
+I
+^
+NPostage
+DShipping and insurance
+E
+R000
+E
+^
+NShow Travel
+E
+R000
+E
+^
+NStorage
+DSafe deposit box
+E
+R000
+E
+^
+!Option:AutoSwitch
+!Account
+NAlder Bank - Checking
+TBank
+DEveryday checking
+^
+NAlder Bank - Savings
+TBank
+^
+NBirch Credit Union MMA
+TBank
+^
+NCedar Card - Rewards
+TCCard
+^
+NCedar Card - Travel
+TCCard
+^
+NPetty Cash
+TCash
+^
+NCollection Insurance Rider
+TOth A
+^
+NHome Safe Contents
+TOth A
+^
+NDealer Credit Line
+TOth L
+^
+NDriftwood Brokerage
+TPort
+DTaxable brokerage
+^
+NDriftwood Retirement
+TPort
+^
+NElm Street CD - 12 month
+TCD
+^
+NFernway Trust
+TTrust Fund
+^
+NUnfiled Invoices
+TInvoice
+^
+NTax Holding
+TTax
+^
+NEarly Proofs
+TInvst
+^
+N2-3-20-cent Collection
+TInvst
+^
+NOdd Type Set
+TInvst
+^
+NType Coins
+TInvst
+^
+N20th Cent. Type
+TInvst
+^
+NGold Coins
+TInvst
+^
+NMisc. Coins
+TInvst
+^
+NAncients
+TInvst
+^
+!Clear:AutoSwitch
+!Type:Security
+NAldbury Manufacturing
+SZQALDB
+TStock
+^
+!Type:Security
+NBarrowfield Energy
+SZQBRWF
+TStock
+^
+!Type:Security
+NCaldmere Health Group
+SZQCALD
+TStock
+^
+!Type:Security
+NDunwich Freight Lines
+SZQDUNW
+TStock
+^
+!Type:Security
+NEastmere Semiconductor
+SZQEAST
+TStock
+^
+!Type:Security
+NFallowgate Retail
+SZQFALL
+TStock
+^
+!Type:Security
+NGarrowby Chemical
+SZQGARR
+TStock
+^
+!Type:Security
+NHarrowden Pharmaceutical
+SZQHARR
+TStock
+^
+!Type:Security
+NInglewick Insurance
+SZQINGL
+TStock
+^
+!Type:Security
+NJarrowfield Mining
+SZQJARR
+TStock
+^
+!Type:Security
+NKelvedon Software
+SZQKELV
+TStock
+^
+!Type:Security
+NLanchester Utilities
+SZQLANC
+TStock
+^
+!Type:Security
+NMarchmont Foods
+SZQMARC
+TStock
+^
+!Type:Security
+NNetherby Telecom
+SZQNETH
+TStock
+^
+!Type:Security
+NOakmere Aerospace
+SZQOAKM
+TStock
+^
+!Type:Security
+NPennycross Bancorp
+SZQPENN
+TStock
+^
+!Type:Security
+NQuarrington Rail
+SZQQUAR
+TStock
+^
+!Type:Security
+NRavensmoor Timber
+SZQRAVE
+TStock
+^
+!Type:Security
+NBroad Market Index Fund
+SZQBMIF
+TMutual Fund
+^
+!Type:Security
+NConservative Allocation Fund
+SZQCAFD
+TMutual Fund
+^
+!Type:Security
+NDividend Growth Fund
+SZQDGFD
+TMutual Fund
+^
+!Type:Security
+NEmerging Markets Fund
+SZQEMFD
+TMutual Fund
+^
+!Type:Security
+NIntermediate Bond Fund
+SZQIBFD
+TMutual Fund
+^
+!Type:Security
+NMoney Market Reserve Fund
+SZQMMRF
+TMutual Fund
+^
+!Type:Security
+NSmall Cap Value Fund
+SZQSCVF
+TMutual Fund
+^
+!Type:Security
+NTarget 2040 Fund
+SZQT40F
+TMutual Fund
+^
+!Type:Security
+NMunicipal Bond 2031
+SZQMB31
+TBond
+^
+!Type:Security
+NMunicipal Bond 2034
+SZQMB34
+TBond
+^
+!Type:Security
+NCorporate Note 2029
+SZQCN29
+TBond
+^
+!Type:Security
+N$100 Series I Bond 5/2019
+SZQIB19
+TUS Savings Bond
+^
+!Type:Security
+N$100 Series I Bond 9/2020
+SZQIB20
+TUS Savings Bond
+^
+!Type:Security
+N$500 Series EE Bond 2/2017
+SZQEE17
+TUS Savings Bond
+^
+!Type:Security
+NAldbury Jan 50 Call
+SZQALDC
+TStock Option
+^
+!Type:Security
+NBarrowfield Mar 25 Put
+SZQBRWP
+TStock Option
+^
+!Type:Security
+NEastmere Jun 120 Call
+SZQEASC
+TStock Option
+^
+!Type:Security
+NBroad Market Composite
+SZQIDXA
+TMarket Index
+^
+!Type:Security
+NSmall Cap Composite
+SZQIDXB
+TMarket Index
+^
+!Type:Security
+NGeneric Silver Round 1 oz
+SZQAGRD
+TBullion
+^
+!Type:Security
+NGeneric Gold Bar 1 oz
+SZQAUBR
+TBullion
+^
+!Type:Security
+NPlatinum Bar 1 oz
+SZQPTBR
+TBullion
+^
+!Type:Security
+NUnallocated Storage Credit
+SZQUSTC
+TOther
+^
+!Type:Security
+NClub Membership Deposit
+SZQCLUB
+TOther
+^
+!Type:Security
+NFernway Trust Units
+SZQFWTU
+TTrust Fund
+^
+!Type:Security
+NElm Street CD - 12 month
+SZQECD1
+TCD
+^
+!Type:Security
+N1868 ½10¢-NGC PR64
+TCoin
+^
+!Type:Security
+N1868 2¢ - PCGS PF65RB
+TCoin
+^
+!Type:Security
+N1873 ½10¢-PCGS PR65
+TCoin
+^
+!Type:Security
+N1868 5¢ - NGC/CAC 65CAM
+TCoin
+^
+!Type:Security
+N1883 5¢ Shield - PCGS PF66
+TCoin
+^
+!Type:Security
+N1879 3CN - PCGS PF66
+TCoin
+^
+!Type:Security
+N1885 3CN - NGC PF66CAM
+TCoin
+^
+!Type:Security
+N1880 3CN - PCGS/CAC PF65
+TCoin
+^
+!Type:Security
+N1859 ½10¢ - PCGS PF65
+TCoin
+^
+!Type:Security
+N1882 3CN - PCGS/CAC PR66
+TCoin
+^
+!Type:Security
+N1881 3CN - NGC PR66
+TCoin
+^
+!Type:Security
+N1874 3CN - PCGS PR66
+TCoin
+^
+!Type:Security
+N1862 3CS - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1884 3CN - PCGS PF66
+TCoin
+^
+!Type:Security
+N1883 5¢ N/C-NGC PF66
+TCoin
+^
+!Type:Security
+N1864 3CS - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1868 ½10¢ - PCGS/CAC PR65 Cameo
+TCoin
+^
+!Type:Security
+N1869 ½10¢-NGC PF65
+TCoin
+^
+!Type:Security
+N1885 5¢ - PCGS PF66
+TCoin
+^
+!Type:Security
+N1867 3CN - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1872 3CS NGC PF65
+TCoin
+^
+!Type:Security
+N1872 3CN - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1868 3CN - PCGS/CAC PF65
+TCoin
+^
+!Type:Security
+N1889 3CN - PCGS PF66 Cameo
+TCoin
+^
+!Type:Security
+N1878 3CN - PCGS/CAC PF66 Cameo
+TCoin
+^
+!Type:Security
+N1855 3CS - PCI PF64
+TCoin
+^
+!Type:Security
+N1865 3CS - NGC PF65
+TCoin
+^
+!Type:Security
+N1868 3CS - PCGS PF65
+TCoin
+^
+!Type:Security
+N1883 3CN - NGC PR66
+TCoin
+^
+!Type:Security
+N1859 3CS - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1872 ½10¢ - PCGS PF65
+TCoin
+^
+!Type:Security
+N1866 2¢ - NGC/CAC PF65RB
+TCoin
+^
+!Type:Security
+N1886 3CN - NGC/CAC PF66
+TCoin
+^
+!Type:Security
+N1877 3CN - PCGS PF65
+TCoin
+^
+!Type:Security
+N1870 ½10¢ - PCGS PR65
+TCoin
+^
+!Type:Security
+N1883 5¢ W/C-PCGS PF66
+TCoin
+^
+!Type:Security
+N1871 25¢ - PCGS/CAC PF65 Cameo
+TCoin
+^
+!Type:Security
+N1855 ½10¢ - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1885 1¢ PCGS PF66RB
+TCoin
+^
+!Type:Security
+N1888 3CN - PCGS/CAC PF66
+TCoin
+^
+!Type:Security
+N1871 ½10¢ - PCGS PF65
+TCoin
+^
+!Type:Security
+N1883 1¢ PCGS PF62BN
+TCoin
+^
+!Type:Security
+N1871 50¢ - NGC PF65
+TCoin
+^
+!Type:Security
+N1883 3CN - NGC/CAC PR62
+TCoin
+^
+!Type:Security
+N1869 3CN - NGC/CAC PF65 Cameo
+TCoin
+^
+!Type:Security
+N1868 25¢ - PCGS/CAC PF65 Cameo
+TCoin
+^
+!Type:Security
+N1908 10¢ PCGS PF65 Cameo
+TCoin
+^
+!Type:Security
+N1868 50¢ - ANACS PF65
+TCoin
+^
+!Type:Security
+N1868 1¢ - PCGS/CAC PF66RB
+TCoin
+^
+!Type:Security
+N1868 10¢ - PCGS/CAC PF65 Cameo
+TCoin
+^
+!Type:Security
+N1887/6 3CN - NGC PF66
+TCoin
+^
+!Type:Security
+N1867 3CS - PCGS PF66 Cameo
+TCoin
+^
+!Type:Security
+N1876 20¢ - NGC PF64
+TCoin
+^
+!Type:Security
+N1872 2¢ - PCGS/CAC PF66RB
+TCoin
+^
+!Type:Security
+N1868 $1 - NGC/CAC PF63+
+TGold Coin
+^
+!Type:Security
+N1866 3CN NGC PF65
+TCoin
+^
+!Type:Security
+N1871 3CS - NGC PR66
+TCoin
+^
+!Type:Security
+N1866 3CS - NGC/CAC PF66
+TCoin
+^
+!Type:Security
+N1875 3CN - PCGS PF65
+TCoin
+^
+!Type:Security
+N1864 2¢
+TCoin
+^
+!Type:Security
+N1852 3CS - EF
+TCoin
+^
+!Type:Security
+N1873 3CN Open 3 - AU50
+TCoin
+^
+!Type:Security
+N1864 2¢-EF
+TCoin
+^
+!Type:Security
+N1869 3CN - AU
+TCoin
+^
+!Type:Security
+N1862/1 3CS - PCGS/CAC MS64
+TCoin
+^
+!Type:Security
+N1886 3CN - VF
+TCoin
+^
+!Type:Security
+N1862/1 3CS - ANACS AU50
+TCoin
+^
+!Type:Security
+N1882 3CN - PCGS XF40
+TCoin
+^
+!Type:Security
+N1865 3CN - VF35
+TCoin
+^
+!Type:Security
+N1877 3CN - AU58
+TCoin
+^
+!Type:Security
+N1859 3CS - AU
+TCoin
+^
+!Type:Security
+N1864 2¢ - AU50
+TCoin
+^
+!Type:Security
+N1944P 5¢-BU
+TCoin
+^
+!Type:Security
+N1838 Reeded 50¢-XF (CLEANED/NGC)
+TCoin
+^
+!Type:Security
+N1867 3CN - CH+AU
+TCoin
+^
+!Type:Security
+N1883 5¢ N/C-BU
+TCoin
+^
+!Type:Security
+N1800 1¢ - F
+TCoin
+^
+!Type:Security
+N1853 50¢ A&R-XF (CLEANED)
+TCoin
+^
+!Type:Security
+N1872 $1-XF
+TGold Coin
+^
+!Type:Security
+N1804 ½¢  Plain 4-Stemless - ANACS F12
+TCoin
+^
+!Type:Security
+N1828 50¢ - AU (CLEANED)
+TCoin
+^
+!Type:Security
+N1947D 50¢-AU
+TCoin
+^
+!Type:Security
+N1902 10¢-VF/XF
+TCoin
+^
+!Type:Security
+N1905 $20 - PCGS MS64
+TGold Coin
+^
+!Account
+NEarly Proofs
+TInvst
+^
+!Type:Invst
+D1/15'10
+NXIn
+PHarbourstone Coins
+U1,500.00
+T1,500.00
+MOpening transfer
+L[Alder Bank - Checking]
+$1,500.00
+^
+D1/16'10
+NCash
+L[Early Proofs]
+^
+D3/16' 4
+NBuy
+Y1868 ½10¢-NGC PR64
+I413.45
+Q1
+T413.45
+PHarbourstone Coins
+^
+D8/28' 5
+NSellX
+Y1868 ½10¢-NGC PR64
+I474.55
+Q1
+T474.55
+PTollgate Rarities
+L[Alder Bank - Checking]
+$474.55
+^
+D4/ 3' 4
+NBuy
+Y1868 2¢ - PCGS PF65RB
+I640.61
+Q1
+T640.61
+PPelham & Vance
+^
+D8/28' 5
+NSellX
+Y1868 2¢ - PCGS PF65RB
+I640.61
+Q1
+T640.61
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$640.61
+^
+D4/ 9' 4
+NBuy
+Y1873 ½10¢-PCGS PR65
+I574.37
+Q1
+T574.37
+PKingsmere Numismatics
+^
+D1/23' 7
+NSell
+Y1873 ½10¢-PCGS PR65
+I574.37
+Q1
+T574.37
+PAmbersley Auctions
+^
+D5/ 3' 4
+NBuy
+Y1868 5¢ - NGC/CAC 65CAM
+I320.05
+Q1
+T320.05
+PTollgate Rarities
+^
+D11/16'13
+NSell
+Y1868 5¢ - NGC/CAC 65CAM
+I320.05
+Q1
+T320.05
+PHarbourstone Coins
+^
+D5/23' 4
+NBuy
+Y1883 5¢ Shield - PCGS PF66
+I560.64
+Q1
+T560.64
+PWestmarch Coin Co.
+^
+D1/13'11
+NSellX
+Y1883 5¢ Shield - PCGS PF66
+I731.63
+Q1
+T731.63
+PPelham & Vance
+L[Alder Bank - Checking]
+$731.63
+^
+D5/27' 4
+NBuy
+Y1879 3CN - PCGS PF66
+I457.28
+Q1
+T457.28
+PAmbersley Auctions
+^
+D3/30'12
+NSell
+Y1879 3CN - PCGS PF66
+I531.99
+Q1
+T531.99
+PKingsmere Numismatics
+^
+D6/10' 4
+NBuy
+Y1885 3CN - NGC PF66CAM
+I572.08
+Q1
+T572.08
+PHarbourstone Coins
+^
+D11/ 4'13
+NSell
+Y1885 3CN - NGC PF66CAM
+I646.31
+Q1
+T646.31
+PTollgate Rarities
+^
+D6/24' 4
+NBuy
+Y1880 3CN - PCGS/CAC PF65
+I479.16
+Q1
+T479.16
+PPelham & Vance
+^
+D6/27' 4
+NBuy
+Y1859 ½10¢ - PCGS PF65
+I731.63
+Q1
+T731.63
+PKingsmere Numismatics
+^
+D3/18'14
+NSellX
+Y1859 ½10¢ - PCGS PF65
+I731.63
+Q1
+T731.63
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$731.63
+^
+D7/ 3' 4
+NBuy
+Y1882 3CN - PCGS/CAC PR66
+I454.99
+Q1
+T454.99
+PTollgate Rarities
+^
+D7/ 3' 4
+NBuy
+Y1881 3CN - NGC PR66
+I468.24
+Q1
+T468.24
+PWestmarch Coin Co.
+^
+D3/ 5' 6
+NSell
+Y1881 3CN - NGC PR66
+I531.99
+Q1
+T531.99
+PPelham & Vance
+^
+D7/ 3' 4
+NBuy
+Y1874 3CN - PCGS PR66
+I534.31
+Q1
+T534.31
+PAmbersley Auctions
+^
+D1/22'12
+NSell
+Y1874 3CN - PCGS PR66
+I638.33
+Q1
+T638.33
+PKingsmere Numismatics
+^
+D7/11' 4
+NShrsIn
+Y1862 3CS - NGC/CAC PF65
+I674.79
+Q1
+U674.79
+T674.79
+MXfr From: Misc. Coins
+^
+D7/11' 4
+NShrsIn
+Y1884 3CN - PCGS PF66
+I394.93
+Q1
+U394.93
+T394.93
+MXfr From: Misc. Coins
+^
+D3/30'12
+NSell
+Y1884 3CN - PCGS PF66
+I523.96
+Q1
+T523.96
+PWestmarch Coin Co.
+^
+D7/11' 4
+NShrsIn
+Y1883 5¢ N/C-NGC PF66
+I985.88
+Q1
+U985.88
+T985.88
+MXfr From: Misc. Coins
+^
+D4/11' 9
+NSell
+Y1883 5¢ N/C-NGC PF66
+I1042.09
+Q1
+T1042.09
+PAmbersley Auctions
+^
+D7/19' 4
+NBuy
+Y1864 3CS - NGC/CAC PF65
+I674.79
+Q1
+T674.79
+PTollgate Rarities
+^
+D7/19' 4
+NBuy
+Y1868 ½10¢ - PCGS/CAC PR65 Cameo
+I691.85
+Q1
+T691.85
+PWestmarch Coin Co.
+^
+D11/16'13
+NSell
+Y1868 ½10¢ - PCGS/CAC PR65 Cameo
+I691.85
+Q1
+T691.85
+PPelham & Vance
+^
+D7/19' 4
+NBuy
+Y1869 ½10¢-NGC PF65
+I629.20
+Q1
+T629.20
+PAmbersley Auctions
+^
+D1/23' 7
+NSell
+Y1869 ½10¢-NGC PF65
+I629.20
+Q1
+T629.20
+PKingsmere Numismatics
+^
+D8/12' 4
+NBuy
+Y1885 5¢ - PCGS PF66
+I491.81
+Q1
+T491.81
+PHarbourstone Coins
+^
+D1/23' 7
+NSell
+Y1885 5¢ - PCGS PF66
+I491.81
+Q1
+T491.81
+PTollgate Rarities
+^
+D9/ 1' 4
+NBuy
+Y1867 3CN - NGC/CAC PF65
+I560.64
+Q1
+T560.64
+PPelham & Vance
+^
+D9/ 1' 4
+NBuy
+Y1872 3CS NGC PF65
+I751.49
+Q1
+T751.49
+PKingsmere Numismatics
+^
+D9/ 9' 6
+NSellX
+Y1872 3CS NGC PF65
+I751.49
+Q1
+T751.49
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$751.49
+^
+D9/ 7' 4
+NBuy
+Y1872 3CN - NGC/CAC PF65
+I486.06
+Q1
+T486.06
+PTollgate Rarities
+^
+D9/10' 4
+NBuy
+Y1868 3CN - PCGS/CAC PF65
+I463.04
+Q1
+T463.04
+PWestmarch Coin Co.
+^
+D11/16'13
+NSell
+Y1868 3CN - PCGS/CAC PF65
+I463.04
+Q1
+T463.04
+PPelham & Vance
+^
+D9/15' 4
+NBuy
+Y1889 3CN - PCGS PF66 Cameo
+I541.74
+Q1
+T541.74
+PAmbersley Auctions
+^
+D3/18'14
+NSellX
+Y1889 3CN - PCGS PF66 Cameo
+I674.79
+Q1
+T674.79
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$674.79
+^
+D9/18' 4
+NBuy
+Y1878 3CN - PCGS/CAC PF66 Cameo
+I728.28
+Q1
+T728.28
+PHarbourstone Coins
+^
+D9/30' 4
+NBuy
+Y1855 3CS - PCI PF64
+I405.34
+Q1
+T405.34
+PPelham & Vance
+^
+D5/ 8' 8
+NSell
+Y1855 3CS - PCI PF64
+I405.34
+Q1
+T405.34
+PWestmarch Coin Co.
+^
+D10/18' 4
+NBuy
+Y1865 3CS - NGC PF65
+I788.34
+Q1
+T788.34
+PKingsmere Numismatics
+^
+D3/18'14
+NSellX
+Y1865 3CS - NGC PF65
+I788.34
+Q1
+T788.34
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$788.34
+^
+D11/ 8' 4
+NBuy
+Y1868 3CS - PCGS PF65
+I674.79
+Q1
+T674.79
+PTollgate Rarities
+^
+D11/16'13
+NSell
+Y1868 3CS - PCGS PF65
+I674.79
+Q1
+T674.79
+PHarbourstone Coins
+^
+D11/20' 4
+NBuy
+Y1883 3CN - NGC PR66
+I528.55
+Q1
+T528.55
+PWestmarch Coin Co.
+^
+D3/ 5' 6
+NSell
+Y1883 3CN - NGC PR66
+I531.99
+Q1
+T531.99
+PPelham & Vance
+^
+D12/23' 4
+NBuy
+Y1859 3CS - NGC/CAC PF65
+I633.77
+Q1
+T633.77
+PAmbersley Auctions
+^
+D2/18' 5
+NBuy
+Y1872 ½10¢ - PCGS PF65
+I572.08
+Q1
+T572.08
+PHarbourstone Coins
+^
+D1/23' 7
+NSell
+Y1872 ½10¢ - PCGS PF65
+I572.08
+Q1
+T572.08
+PTollgate Rarities
+^
+D2/27' 5
+NBuy
+Y1866 2¢ - NGC/CAC PF65RB
+I617.85
+Q1
+T617.85
+PPelham & Vance
+^
+D1/ 6'25
+NSell
+Y1866 2¢ - NGC/CAC PF65RB
+I1098.20
+Q1
+T1098.20
+PWestmarch Coin Co.
+^
+D3/20' 5
+NBuy
+Y1886 3CN - NGC/CAC PF66
+I459.60
+Q1
+T459.60
+PKingsmere Numismatics
+^
+D6/13' 5
+NBuy
+Y1877 3CN - PCGS PF65
+I503.30
+Q1
+T503.30
+PTollgate Rarities
+^
+D3/ 5' 6
+NSell
+Y1877 3CN - PCGS PF65
+I416.90
+Q1
+T416.90
+PHarbourstone Coins
+^
+D7/25' 5
+NBuy
+Y1870 ½10¢ - PCGS PR65
+I760.00
+Q1
+T760.00
+PWestmarch Coin Co.
+^
+D7/26'22
+NSell
+Y1870 ½10¢ - PCGS PR65
+I760.00
+Q1
+T760.00
+PPelham & Vance
+^
+D7/25' 5
+NBuy
+Y1883 5¢ W/C-PCGS PF66
+I514.78
+Q1
+T514.78
+PAmbersley Auctions
+^
+D4/11' 9
+NSell
+Y1883 5¢ W/C-PCGS PF66
+I816.65
+Q1
+T816.65
+PKingsmere Numismatics
+^
+D9/ 8' 5
+NShrsIn
+Y1871 25¢ - PCGS/CAC PF65 Cameo
+I1710.40
+Q1
+U1710.40
+T1710.40
+MXfr From: Misc. Coins
+^
+D10/ 3' 5
+NBuy
+Y1855 ½10¢ - NGC/CAC PF65
+I788.34
+Q1
+T788.34
+PPelham & Vance
+^
+D1/ 6'25
+NSell
+Y1855 ½10¢ - NGC/CAC PF65
+I844.92
+Q1
+T844.92
+PWestmarch Coin Co.
+^
+D10/ 3' 5
+NBuy
+Y1885 1¢ PCGS PF66RB
+I416.90
+Q1
+T416.90
+PKingsmere Numismatics
+^
+D1/23' 7
+NSell
+Y1885 1¢ PCGS PF66RB
+I416.90
+Q1
+T416.90
+PAmbersley Auctions
+^
+D10/10' 5
+NBuy
+Y1888 3CN - PCGS/CAC PF66
+I588.84
+Q1
+T588.84
+PTollgate Rarities
+^
+D12/24' 5
+NBuy
+Y1871 ½10¢ - PCGS PF65
+I760.00
+Q1
+T760.00
+PWestmarch Coin Co.
+^
+D3/18'14
+NSellX
+Y1871 ½10¢ - PCGS PF65
+I760.00
+Q1
+T760.00
+PPelham & Vance
+L[Alder Bank - Checking]
+$760.00
+^
+D1/18' 6
+NShrsIn
+Y1883 1¢ PCGS PF62BN
+I1377.51
+Q1
+U1377.51
+T1377.51
+MXfr From: Misc. Coins
+^
+D4/11' 9
+NSell
+Y1883 1¢ PCGS PF62BN
+I1711.85
+Q1
+T1711.85
+PKingsmere Numismatics
+^
+D3/ 5' 6
+NBuy
+Y1871 50¢ - NGC PF65
+I1474.36
+Q1
+T1474.36
+PHarbourstone Coins
+^
+D8/ 7' 6
+NSell
+Y1871 50¢ - NGC PF65
+I1474.36
+Q1
+T1474.36
+PTollgate Rarities
+^
+D5/10' 6
+NBuy
+Y1883 3CN - NGC/CAC PR62
+I783.80
+Q1
+T783.80
+PPelham & Vance
+^
+D5/10' 6
+NBuy
+Y1869 3CN - NGC/CAC PF65 Cameo
+I509.04
+Q1
+T509.04
+PKingsmere Numismatics
+^
+D7/ 9' 6
+NBuy
+Y1868 25¢ - PCGS/CAC PF65 Cameo
+I1488.72
+Q1
+T1488.72
+PTollgate Rarities
+^
+D11/16'13
+NSell
+Y1868 25¢ - PCGS/CAC PF65 Cameo
+I1488.72
+Q1
+T1488.72
+PHarbourstone Coins
+^
+D7/18' 6
+NBuy
+Y1908 10¢ PCGS PF65 Cameo
+I771.34
+Q1
+T771.34
+PWestmarch Coin Co.
+^
+D1/ 6' 7
+NSellX
+Y1908 10¢ PCGS PF65 Cameo
+I873.17
+Q1
+T873.17
+PPelham & Vance
+L[Alder Bank - Checking]
+$873.17
+^
+D8/ 7' 6
+NBuy
+Y1868 50¢ - ANACS PF65
+I1654.06
+Q1
+T1654.06
+PAmbersley Auctions
+^
+D11/16'13
+NSell
+Y1868 50¢ - ANACS PF65
+I1503.16
+Q1
+T1503.16
+PKingsmere Numismatics
+^
+D8/28' 6
+NBuy
+Y1868 1¢ - PCGS/CAC PF66RB
+I1115.01
+Q1
+T1115.01
+PHarbourstone Coins
+^
+D11/16'13
+NSell
+Y1868 1¢ - PCGS/CAC PF66RB
+I1115.01
+Q1
+T1115.01
+PTollgate Rarities
+^
+D9/ 2' 6
+NBuy
+Y1868 10¢ - PCGS/CAC PF65 Cameo
+I935.21
+Q1
+T935.21
+PPelham & Vance
+^
+D11/16'13
+NSell
+Y1868 10¢ - PCGS/CAC PF65 Cameo
+I974.63
+Q1
+T974.63
+PWestmarch Coin Co.
+^
+D9/ 9' 6
+NBuy
+Y1887/6 3CN - NGC PF66
+I949.30
+Q1
+T949.30
+PKingsmere Numismatics
+^
+D3/30'12
+NSell
+Y1887/6 3CN - NGC PF66
+I760.00
+Q1
+T760.00
+PAmbersley Auctions
+^
+D1/ 6' 7
+NBuy
+Y1867 3CS - PCGS PF66 Cameo
+I1599.68
+Q1
+T1599.68
+PTollgate Rarities
+^
+D1/27'14
+NSell
+Y1867 3CS - PCGS PF66 Cameo
+I2254.57
+Q1
+T2254.57
+PHarbourstone Coins
+^
+D1/23' 7
+NBuy
+Y1876 20¢ - NGC PF64
+I2576.20
+Q1
+T2576.20
+PWestmarch Coin Co.
+^
+D11/ 3'13
+NSell
+Y1876 20¢ - NGC PF64
+I2698.32
+Q1
+T2698.32
+PPelham & Vance
+^
+D4/ 6' 7
+NBuy
+Y1872 2¢ - PCGS/CAC PF66RB
+I940.85
+Q1
+T940.85
+PAmbersley Auctions
+^
+D6/11' 7
+NBuy
+Y1868 $1 - NGC/CAC PF63+
+I3350.39
+Q1
+T3350.39
+PHarbourstone Coins
+^
+D11/16'13
+NSell
+Y1868 $1 - NGC/CAC PF63+
+I3350.39
+Q1
+T3350.39
+PTollgate Rarities
+^
+D10/ 6' 9
+NBuy
+Y1866 3CN NGC PF65
+I560.64
+Q1
+T560.64
+PPelham & Vance
+^
+D1/22'12
+NSell
+Y1866 3CN NGC PF65
+I560.64
+Q1
+T560.64
+PWestmarch Coin Co.
+^
+D8/ 9'10
+NBuy
+Y1871 3CS - NGC PR66
+I1765.67
+Q1
+T1765.67
+PKingsmere Numismatics
+^
+D7/26'22
+NSell
+Y1871 3CS - NGC PR66
+I1377.51
+Q1
+T1377.51
+PAmbersley Auctions
+^
+D3/15'12
+NBuy
+Y1866 3CS - NGC/CAC PF66
+I1488.72
+Q1
+T1488.72
+PTollgate Rarities
+^
+D1/ 6'25
+NBuy
+Y1875 3CN - PCGS PF65
+I2479.92
+Q1
+T2479.92
+PWestmarch Coin Co.
+^
+!Type:Prices
+"ZQALDB",23.88," 1/ 1'24"
+^
+!Type:Prices
+"ZQBRWF",24.63," 2/ 2'24"
+^
+!Type:Prices
+"ZQCALD",25.39," 3/ 3'24"
+^
+!Type:Prices
+"ZQDUNW",26.16," 4/ 4'24"
+^
+!Type:Prices
+"ZQEAST",26.94," 5/ 5'24"
+^
+!Type:Prices
+"ZQFALL",27.73," 6/ 6'24"
+^
+!Type:Prices
+"ZQGARR",28.53," 7/ 7'24"
+^
+!Type:Prices
+"ZQHARR",29.34," 8/ 8'24"
+^
+!Type:Prices
+"ZQINGL",30.16," 9/ 9'24"
+^
+!Type:Prices
+"ZQJARR",30.99," 10/10'24"
+^
+!Type:Prices
+"ZQKELV",31.83," 11/11'24"
+^
+!Type:Prices
+"ZQLANC",32.69," 12/12'24"
+^
+!Type:Prices
+"ZQMARC",33.56," 1/13'24"
+^
+!Type:Prices
+"ZQNETH",34.44," 2/14'24"
+^
+!Type:Prices
+"ZQOAKM",35.33," 3/15'24"
+^
+!Type:Prices
+"ZQPENN",36.23," 4/16'24"
+^
+!Type:Prices
+"ZQQUAR",37.15," 5/17'24"
+^
+!Type:Prices
+"ZQRAVE",38.08," 6/18'24"
+^
+!Type:Prices
+"ZQBMIF",39.02," 7/19'24"
+^
+!Type:Prices
+"ZQCAFD",39.97," 8/20'24"
+^
+!Type:Prices
+"ZQDGFD",40.94," 9/21'24"
+^
+!Type:Prices
+"ZQEMFD",41.92," 10/22'24"
+^
+!Type:Prices
+"ZQIBFD",42.91," 11/23'24"
+^
+!Type:Prices
+"ZQMMRF",43.92," 12/24'24"
+^
+!Type:Prices
+"ZQSCVF",44.94," 1/25'24"
+^
+!Type:Prices
+"ZQT40F",45.98," 2/26'24"
+^
+!Type:Prices
+"ZQMB31",47.03," 3/27'24"
+^
+!Type:Prices
+"ZQMB34",48.09," 4/28'24"
+^
+!Type:Prices
+"ZQCN29",49.17," 5/ 1'24"
+^
+!Type:Prices
+"ZQIB19",50.26," 6/ 2'24"
+^
+!Type:Prices
+"ZQIB20",51.37," 7/ 3'24"
+^
+!Type:Prices
+"ZQEE17",52.49," 8/ 4'24"
+^
+!Type:Prices
+"ZQALDC",53.63," 9/ 5'24"
+^
+!Type:Prices
+"ZQBRWP",54.78," 10/ 6'24"
+^
+!Type:Prices
+"ZQEASC",55.95," 11/ 7'24"
+^
+!Type:Prices
+"ZQIDXA",57.14," 12/ 8'24"
+^
+!Type:Prices
+"ZQIDXB",58.34," 1/ 9'24"
+^
+!Type:Prices
+"ZQAGRD",59.56," 2/10'24"
+^
+!Type:Prices
+"ZQAUBR",60.80," 3/11'24"
+^
+!Type:Prices
+"ZQPTBR",62.05," 4/12'24"
+^
+!Account
+NDriftwood Brokerage
+TPort
+^
+!Type:Invst
+D3/ 4'18
+NBuy
+YAldbury Manufacturing
+I41.22
+Q100
+T4122.00
+^
+D6/19'19
+NBuy
+YBroad Market Index Fund
+I118.40
+Q25
+T2960.00
+^
+D9/ 8'20
+NSell
+YBarrowfield Energy
+I27.65
+Q50
+T1382.50
+^
+D2/11'21
+NReinvDiv
+YDividend Growth Fund
+I33.10
+Q4.512
+T149.35
+^
+D5/23'22
+NBuy
+YMunicipal Bond 2031
+I99.25
+Q10
+T992.50
+^
+!Account
+NAlder Bank - Checking
+TBank
+^
+!Type:Bank
+D1/ 8'19
+T-42.00
+N1041
+PHarbourstone Coins
+LCoin Supplies
+MFlips and 2x2s
+^
+D2/14'19
+T-180.00
+N1042
+PTollgate Rarities
+LGrading Fees
+MSubmission 4 coins
+^
+D3/ 2'19
+T1,250.00
+PAmbersley Auctions
+LBullion Sales
+MAuction settlement
+^
+D4/19'19
+T-16.85
+PPost Office
+LPostage
+MInsured parcel
+^
+D7/ 1'19
+T-95.00
+N1043
+PElm Street Vault
+LStorage
+MAnnual box fee
+^

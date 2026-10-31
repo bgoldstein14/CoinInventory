@@ -1,0 +1,214 @@
+// Styles for the attached-photos overlay.
+@use '../../styles/controls' as *;
+@use '../../styles/modal' as *;
+
+// Not part of the original markup, and everything inside is position: fixed
+// anyway — keep the host out of the layout.
+:host { display: contents; }
+
+// ---------------------------------------------------------------------------
+// WHY THE MODAL PARTIAL IS IMPORTED ABOVE (it used to be deliberately absent)
+// ---------------------------------------------------------------------------
+// This overlay has always used the `.modal-backdrop` / `.modal` /
+// `.modal-header` class names, but nothing ever supplied their styles: the
+// markup originally lived in app.html, and `app.scss` never imported
+// `styles/_modal.scss`. When the gallery was extracted into this component the
+// omission was carried across on purpose, so the refactor would change nothing
+// visually, and a comment here recorded that as "a one-line change, left out
+// on purpose".
+//
+// It was not merely cosmetic, and it is very likely part of what prompted the
+// owner's complaint that the Images button shows him "all images". With no
+// `.modal-backdrop` rule there was no fixed positioning, no dimmed overlay and
+// no card chrome: the gallery rendered INLINE, underneath the inventory table.
+// The inventory table has a Photo column, so what was actually on screen was
+// every coin's thumbnail with a small unstyled strip of this coin's photos
+// tacked on below — which reads exactly like "all the images". The same
+// omission had already been found and fixed in the Settings dialog for the
+// same reason; see the matching note in settings-modal.scss.
+// ---------------------------------------------------------------------------
+
+// The gallery is now the screen for looking at one coin's photos properly, so
+// it is given more room than the shared 800px `.modal--wide`: wide enough for
+// four of the tiles below side by side, and still capped at the viewport.
+.image-gallery-modal {
+  max-width: min(1100px, 94vw);
+}
+
+// ---- Image gallery ----
+
+.image-gallery {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+}
+
+.image-gallery__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+
+  h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
+}
+
+// The "how many photos" chip next to the heading. Part of answering "whose
+// photos am I looking at, and how many are there" at a glance.
+.image-gallery__count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ece0cb;
+  color: #5a4632;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+// ---------------------------------------------------------------------------
+// THE TILES
+// ---------------------------------------------------------------------------
+// This used to be a vertical list of rows with a 48px square thumbnail. It is
+// now a wrapping grid of tiles, and the photos are deliberately MUCH bigger
+// than anywhere else in the app:
+//
+//     near-match review rows   88px
+//     import matched-coin tiles 128px
+//     here                     220px tile, 200px of photo
+//
+// The import screens are for SCANNING a folder — you want many at once and
+// only enough detail to say "yes, that's the coin". This screen is the
+// opposite: one coin, however many shots of it, and you are here to actually
+// look at them. Hence roughly double the size.
+.image-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.image-item {
+  display: grid;
+  // photo / caption / buttons, with the caption allowed to stretch so every
+  // tile's button row lines up along the bottom no matter how long the
+  // original file's path is.
+  grid-template-rows: auto 1fr auto;
+  gap: 6px;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid #e8daca;
+  border-radius: 8px;
+  font-size: 0.8rem;
+}
+
+// The photo the main grid uses as this coin's thumbnail. Tinted and outlined
+// so you can tell which one it is without reading the buttons — the disabled
+// "★ Main photo" button says the same thing in words.
+.image-item--main {
+  border-color: #c9a227;
+  background: #fffaf0;
+  box-shadow: inset 0 3px 0 #c9a227;
+}
+
+// The disabled "already the main photo" button. `opacity` alone looked broken
+// rather than intentional, so it keeps full-contrast text and just loses the
+// pointer affordance.
+.is-main-photo[disabled] {
+  cursor: default;
+  color: #8a6d1f;
+  border-color: #e0cf9a;
+  background: #fdf4dd;
+}
+
+// The caption block: the "Attached image" label stacked on top of the
+// original file's path. `min-width: 0` is what actually lets the label
+// ellipsise — without it a grid child refuses to shrink below its content
+// width and one long filename would stretch the whole column.
+.image-item__meta {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 2px;
+}
+
+.image-item__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// "Set as main" and "Delete", side by side along the bottom of the tile.
+.image-item__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+
+  button { flex: 1 1 auto; }
+}
+
+// The photo itself.
+//
+// `object-fit: contain`, NEVER `cover`. Coins are round and photographed
+// centred, so filling a fixed box by cropping shaves the rim off every one of
+// them — and the rim, the date and the mint mark are precisely what this
+// screen exists to show. (`cover` is what the import tiles used to do, and it
+// was changed there for the same reason.)
+.coin-thumb {
+  display: block;
+  width: 100%;
+  height: 200px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+  cursor: zoom-in;
+}
+
+// ---- Empty state ----
+//
+// Shown by @for's `@empty` branch when the coin has no photos — a state this
+// dialog could not even be opened in until now. Its one job is to make
+// "add the first photo" unmissable, so it restates the picker in the middle
+// of the dialog where the eye already is. Dashed border because the whole
+// `.image-gallery` box is also a drop target, and dashed is the convention
+// for "you can drop things here".
+.image-gallery__empty {
+  grid-column: 1 / -1;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  padding: 36px 20px;
+  border: 2px dashed #ddc9a8;
+  border-radius: 10px;
+  background: #fffdf9;
+  text-align: center;
+}
+
+.image-gallery__empty-title {
+  margin: 0;
+  font-weight: 600;
+  color: #5a4632;
+}
+
+.image-gallery__empty-hint {
+  margin: 0 0 6px;
+  font-size: 0.8rem;
+  color: #8a7a63;
+}
+
+// ---- Responsive & print ----
+
+@media (max-width: 900px) {
+  .modal { max-width: 100%; border-radius: 14px; }
+
+  // Two tiles across on a narrow screen rather than one giant one.
+  .image-list { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .coin-thumb { height: 140px; }
+}
+
+@media print {
+  .modal-backdrop { display: none !important; }
+}

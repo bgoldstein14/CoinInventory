@@ -1,0 +1,150 @@
+// Styles for TIER 2 of the batch image import: one coin and the photos that
+// are one yes/no away from it.
+//
+// Buttons / .small-button / .secondary come from the shared controls partial.
+// The warm amber palette is the same one the old resolver card used, so a
+// "needs you" block still reads the same way at a glance; a fully answered
+// group fades to the green "settled" tone the matched rows use.
+@use '../../styles/controls' as *;
+
+.near-group {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #f0d59a;
+  border-radius: 10px;
+  background: #fffcf5;
+}
+
+.near-group--done {
+  border-color: #b9dfc0;
+  background: #f6fbf6;
+}
+
+// ---- The question, asked once for the whole coin ----
+
+.near-group-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.near-group-title { display: grid; gap: 2px; min-width: 0; }
+.near-group-coin { font-size: 0.9rem; font-weight: 700; color: #2c1c0e; }
+.near-group-count { font-size: 0.73rem; color: #8a7a63; }
+
+.near-group-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; }
+
+.near-group-why {
+  margin: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.73rem;
+  color: #6b5c48;
+  line-height: 1.4;
+}
+
+.near-grade-note { font-weight: 600; color: #5c4935; }
+.near-why-label { font-weight: 600; }
+
+.near-discrepancies {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 1px;
+}
+
+// ---- One photo ----
+
+.near-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+
+.near-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: #fff;
+  border: 1px solid #ebdfcc;
+  border-radius: 8px;
+}
+
+.near-row--answered { border-color: #b9dfc0; background: #f6fbf6; }
+.near-row--skipped { opacity: 0.6; }
+
+// Preview size and fit are both deliberate, and both were wrong before.
+//
+// SIZE: this was 48x48. The whole job of this row is "is this photo this
+// coin?", and a 48px square is too small to read a date or a mint mark, which
+// is often the only thing separating two candidate coins. 88px is roughly the
+// smallest that makes a coin's devices legible without the row becoming a
+// gallery. It costs nothing to fetch: the <img> points at the ORIGINAL
+// multi-megabyte file via createObjectURL, so the browser already decoded the
+// full image regardless of the box it is painted into.
+//
+// FIT: this was `cover`, which fills the square by CROPPING. Coins are round
+// and photographed centred, so cover shaved the rim off every one of them --
+// losing exactly the edge detail, lettering and toning you judge a match by.
+// `contain` shows the whole frame; the letterboxing is the neutral tile
+// colour, which reads fine against the card.
+.near-thumb {
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  border-radius: 6px;
+  border: 1px solid #e4d3aa;
+  background: #f4efe7;
+  flex-shrink: 0;
+}
+
+.near-row-info { flex: 1; display: grid; gap: 2px; min-width: 0; }
+
+.near-filename {
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.near-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.near-candidate-select {
+  font-size: 0.75rem;
+  padding: 4px 6px;
+  border: 1px solid #d9c7a5;
+  border-radius: 6px;
+  background: #fdfaf6;
+  max-width: 220px;
+}
+
+.near-badge {
+  font-size: 0.73rem;
+  font-weight: 700;
+  color: #2b6b34;
+  padding: 4px 8px;
+  background: #e5f3e6;
+  border-radius: 999px;
+}
+
+.near-badge--skipped { color: #6b5c48; background: #ece5da; }
+
+// ---- "What we read from the filename" chips ----
+
+.parsed-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.parsed-chip {
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #f1eadf;
+  color: #5c4935;
+  border: 1px solid #e2d6c3;
+}

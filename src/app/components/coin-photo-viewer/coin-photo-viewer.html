@@ -1,0 +1,80 @@
+<!--
+  Clicking the dark backdrop closes the viewer; clicking the window itself
+  does not, hence the $event.stopPropagation() on the inner element.
+-->
+<div class="photo-viewer-backdrop" (click)="images().closePhotoViewer()">
+  <!--
+    THE RESIZABLE WINDOW.
+
+    Its size is set in inline px by the three bindings below, and after that
+    CSS `resize: both` (see the stylesheet) lets the user drag the
+    bottom-right corner. Angular only rewrites these values when the photo
+    changes, so a drag is never undone — see the comment on `windowSize` in
+    the component, which explains why that computed must stay as narrow as it
+    is.
+
+    - width/height : about half the display, in the photo's own proportions.
+    - max-width/height : the image's NATIVE resolution. This is the owner's
+      "grow it up to the highest resolution of the picture", and it is the
+      reason the viewer prefers the original file over the stored copy.
+    - min-width/height : a usable floor, lowered automatically for an image
+      whose native size is smaller than the floor itself.
+
+    All six are absent until the image has loaded and reported its size,
+    which is the one moment we can know any of them.
+  -->
+  <div
+    class="photo-viewer"
+    (click)="$event.stopPropagation()"
+    [style.width.px]="windowSize()?.width"
+    [style.height.px]="windowSize()?.height"
+    [style.max-width.px]="maxSize()?.width"
+    [style.max-height.px]="maxSize()?.height"
+    [style.min-width.px]="minSize().width"
+    [style.min-height.px]="minSize().height"
+  >
+    <!--
+      The photo fills the window edge to edge. `object-fit: contain` (in the
+      stylesheet) is what keeps a round coin round once the window has been
+      dragged to a different shape — never `cover`, which would crop the rim
+      away, and that rim is exactly what you open this window to look at.
+    -->
+    <img
+      [src]="source().url"
+      alt="Coin photo, full size"
+      class="photo-viewer__image"
+      (load)="onImageLoad($event)"
+      (error)="onImageError()"
+    />
+
+    <!--
+      Every control floats ON TOP of the image rather than sitting beside it,
+      so the image really does take up the full size of the window as asked.
+      They are all clear of the bottom-right corner, which belongs to the
+      resize grip.
+    -->
+    <button type="button" class="photo-viewer__close" (click)="images().closePhotoViewer()" aria-label="Close">&times;</button>
+
+    <!-- Previous / next are pointless (and misleading) on a single photo. -->
+    @if (photoCount() > 1) {
+      <button type="button" class="photo-viewer__nav photo-viewer__nav--prev" (click)="images().movePhotoViewer(-1)" aria-label="Previous image">&lsaquo;</button>
+      <button type="button" class="photo-viewer__nav photo-viewer__nav--next" (click)="images().movePhotoViewer(1)" aria-label="Next image">&rsaquo;</button>
+      <span class="photo-viewer__counter">{{ photoPosition() }} of {{ photoCount() }}</span>
+    }
+
+    <!--
+      Which of the two copies is on screen, and how big it is. One short line,
+      bottom-LEFT so it never collides with the resize grip. The path link
+      underneath is the original file's location on disk, exactly as it is
+      shown in the gallery; it renders nothing when no path was recorded.
+    -->
+    <div class="photo-viewer__caption">
+      <span class="photo-viewer__source" [class.photo-viewer__source--stored]="source().kind === 'stored'">
+        {{ sourceLabel() }}
+      </span>
+      @if (currentImage(); as imageData) {
+        <app-coin-image-path-link [imageData]="imageData" [coinId]="coin().id" />
+      }
+    </div>
+  </div>
+</div>

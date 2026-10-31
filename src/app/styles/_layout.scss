@@ -1,0 +1,141 @@
+// The outer page layout owned by the App shell: the flex column, the header,
+// and the one/two column main content grid.
+//
+// Styles for things that now live in child components have moved out:
+//  - the search/filter toolbar -> components/inventory-filter-bar
+//  - the header action buttons -> components/app-toolbar
+//  - the white `.panel` card    -> styles/_panel.scss (shared by two components)
+
+// ---- Layout shell ----
+
+// The shell fills whatever vertical space the root flex column gives it,
+// rather than computing its own height.
+//
+// It used to be `height: calc(100vh - 24px)`, a hand-tuned guess meant to
+// leave room for the body margin and the fixed status bar. That guess never
+// quite matched reality, which is where the leftover vertical "wiggle room"
+// came from. `flex: 1` measures it exactly instead.
+//
+// `min-height: 0` is required: a flex item defaults to `min-height: auto`,
+// which refuses to shrink below its content. Without it the inner table
+// would push the shell taller than the viewport and the page would scroll
+// again.
+.app-shell {
+  max-width: 1440px;
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  margin: 0 auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+// ---- Top bar ----
+
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 10px;
+  flex-shrink: 0;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3.5vw, 2.8rem);
+  letter-spacing: -0.03em;
+  color: #2c1c0e;
+}
+
+.summary-cards {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.metric-card {
+  min-width: 110px;
+  background: #fff;
+  border: 1px solid #e8daca;
+  border-radius: 12px;
+  padding: 8px 12px;
+  box-shadow: 0 2px 8px rgba(32, 22, 10, 0.04);
+
+  span {
+    display: block;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #6a5a47;
+  }
+
+  strong {
+    display: block;
+    margin-top: 4px;
+    font-size: 1rem;
+    color: #2c1c0e;
+  }
+
+  &.gain strong { color: #2b6b34; }
+  &.loss strong { color: #8a2c22; }
+}
+
+// ---- Main content grid ----
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  align-items: stretch;
+  flex: 1;
+  min-height: 0;
+
+  // The detail sidebar was widened from 360px to 420px so that the coin
+  // editor's first line can hold Year, Coin Type, Denomination and Mint mark
+  // together (see coin-editor-form.scss, `.detail-editor__row--top`). The
+  // inventory table takes whatever is left, so nothing else needed changing.
+  &.has-detail { grid-template-columns: minmax(0, 1fr) 420px; }
+}
+
+// ---- Responsive ----
+// Below 900px the detail sidebar drops underneath the table instead of sitting
+// beside it. (Moved here from the old `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .topbar { display: block; }
+  .summary-cards { margin-top: 12px; }
+  .main-content.has-detail { grid-template-columns: 1fr; }
+}
+
+// ---- Print ----
+
+@media print {
+  body { background: white; }
+
+  .topbar { display: none !important; }
+
+  .main-content.has-detail { grid-template-columns: 1fr; }
+
+  // On screen the app is deliberately locked to exactly one viewport with
+  // internal scrolling. For print that would clip everything past the first
+  // page, so release the height constraints and let content flow naturally
+  // across pages.
+  :host {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  .app-shell {
+    height: auto;
+    max-width: none;
+    overflow: visible;
+  }
+
+  .main-content { min-height: 0; }
+
+  .status-bar { display: none !important; }
+}

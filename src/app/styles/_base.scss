@@ -1,0 +1,38 @@
+// Page-level basics for the root <app-root> component.
+//
+// The shared buttons / badges / form primitives used to live here too, but
+// child components cannot reach styles written in app.scss, so they moved to
+// `_controls.scss` where every component can `@use` them. This file keeps only
+// the rules that are genuinely about the application root itself — most
+// importantly `:host`, which must NOT be inherited by child components.
+@use 'controls' as *;
+
+// The app root is a full-viewport flex column:
+//
+//   [ error banner (only when disconnected) ]  <- natural height
+//   [ .app-shell                            ]  <- flex: 1, takes the rest
+//   [ .status-bar                           ]  <- natural height
+//
+// Using an exact `height` (not `min-height`) plus `overflow: hidden` is what
+// keeps the page from scrolling. The previous `min-height: 100vh` let the
+// content grow past the viewport, and combined with the browser's default
+// body margin it produced a permanent page scrollbar and a few pixels of
+// vertical drift.
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  // `dvh` accounts for mobile browser chrome that shows and hides on scroll.
+  // Declared second so browsers that don't understand it keep the `vh` value.
+  height: 100dvh;
+  overflow: hidden;
+  background: #f6f3ec;
+  color: #1f1f22;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+}
+
+// The toast renders its own fixed-position container, so the host element
+// itself must not take part in the flex column and add stray height.
+app-notification-toast {
+  display: contents;
+}

@@ -1,0 +1,264 @@
+// Styles for the editable field grid inside the detail sidebar.
+// Moved here from the old `styles/_detail-panel.scss` partial.
+@use '../../styles/controls' as *;
+@use '../../styles/field' as *;
+
+// Not part of the original markup — keep the host out of the layout so
+// `.detail-editor` and `.detail-notes` remain direct children of the panel.
+:host { display: contents; }
+
+// ---- Editor grid ----
+
+.detail-editor {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.detail-editor__row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.detail-editor__row--pricing,
+.detail-editor__row--certs,
+.detail-editor__row--bottom-metrics,
+.detail-editor__row--weight-inline {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+// ---- Metal / Composition ----
+// Two columns, not three equal thirds. Metal is a dropdown of short words
+// ("Gold", "Copper-Nickel") and needs very little room; Composition holds free
+// text that the alloy inference fills with things like
+// "91.67% Gold, 8.33% Silver and Copper". Splitting the row evenly truncated
+// the long one while leaving a whole empty third beside it (a hidden spacer
+// element, now removed). `minmax(0, …)` on both tracks is what lets the input
+// actually shrink inside the grid rather than forcing the row wider.
+.detail-editor__row--metadata {
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr);
+}
+
+// ---- Row 1: Year / Coin Type / Denomination / Mint mark ----
+//
+// Four controls on the line that used to hold three. The owner asked for Coin
+// Type to join Year on the first line, paid for by "slightly expand the width
+// of the details area and shrink the Denomination and Mint Mark entry areas".
+// The sidebar grew from 360px to 420px (see styles/_layout.scss).
+//
+// These are explicit pixel tracks rather than `1fr` columns plus per-field
+// max-widths, because the four fields have genuinely different needs and
+// sizing them as four independent rules is how they drift out of step:
+//
+//   64px  Year        — four digits; a range like "1916-1945" scrolls inside
+//                       the input, which is normal text-input behaviour.
+//   1fr   Coin Type   — gets everything left over, because it is the one
+//                       free-text field here with no natural maximum.
+//   132px Denomination— sized from the ACTUAL lookup table, whose longest
+//                       active label is "2/6 (Half Crown)" (16 characters).
+//                       NOTE: this is the one place the owner's "shrink by
+//                       about 40%" could not be honoured — 40% off would be
+//                       ~63px and would clip that label to "2/6 (Half...".
+//                       The brief also says to keep it readable, and the two
+//                       instructions conflict; readability won.
+//   68px  Mint mark   — labels are "", P, D, S, W, O, CC, C, Other plus the
+//                       "Other…" entry. This IS the ~40% cut (was ~105px).
+//
+// The tighter column gap and select padding below buy back the handful of
+// pixels that keeps Coin Type usable at the 420px sidebar width.
+.detail-editor__row--top {
+  grid-template-columns: 64px minmax(0, 1fr) 132px 68px;
+  column-gap: 6px;
+
+  // Trimmed from the shared 7px. Not trimmed further on the right: a <select>
+  // draws its drop-down arrow inside the right padding, and squeezing that
+  // makes the longest label run underneath the arrow.
+  select {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+}
+
+.detail-field--year,
+.detail-field--coin-type,
+.detail-field--denomination,
+.detail-field--mint-mark {
+  // The grid track above owns the width; a max-width here would fight it.
+  max-width: none;
+  min-width: 0;
+}
+
+// ---- Grade line ----
+// Certification company first, then Grade with its inline CAC tick-box.
+// `max-content` lets the company field take only the width its 12ch input
+// needs, so Grade keeps the rest of the line rather than half of it.
+.detail-editor__row--grade {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
+.detail-editor__row--certs {
+  margin-top: 6px;
+  margin-bottom: 8px;
+  column-gap: 14px;
+}
+
+// ---- Individual fields ----
+//
+// The base `.detail-field` look and `--full` modifier now live in
+// `styles/_field.scss` (see the `@use` at the top of this file), because the
+// add-transaction row in the detail sidebar uses the same pattern. Only the
+// modifiers specific to this editor's grid remain below.
+
+.detail-field--grade-wrap {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.detail-grade-line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cac-inline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.68rem;
+  color: #5c4935;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.detail-field--compact,
+.detail-field--narrow,
+.detail-field--money,
+.detail-field--weight,
+.detail-field--pm-weight,
+.detail-field--pm-percent {
+  min-width: 0;
+}
+
+.detail-field--narrow {
+  max-width: 130px;
+}
+
+.detail-field--money {
+  max-width: 140px;
+}
+
+.detail-field--weight {
+  max-width: 150px;
+}
+
+.detail-field--cert-company {
+  max-width: 200px;
+
+  // The input used to carry an inline `width: 7.5ch` (plus matching min/max),
+  // which clipped the final letter of "ANACS".
+  //
+  // Two things made 7.5ch too narrow: `ch` is the width of the digit "0",
+  // but grader names are UPPERCASE letters, which are wider; and the global
+  // `box-sizing: border-box` means that width had to cover the input's
+  // 7px horizontal padding and 1px border on each side as well as the text.
+  // 12ch leaves comfortable room for the longest grader name in use.
+  input {
+    width: 12ch;
+    text-transform: uppercase;
+  }
+}
+
+.detail-field--cert-number {
+  max-width: 220px;
+}
+
+.detail-field--pm-weight {
+  max-width: 150px;
+}
+
+.detail-field--pm-percent {
+  max-width: 100px;
+}
+
+.cac-toggle-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+  font-size: 0.7rem;
+  color: #5c4935;
+  font-weight: 600;
+}
+
+// ---- Notes ----
+
+.detail-notes { margin-top: 8px; }
+
+.detail-notes-label {
+  display: block;
+  font-size: 0.7rem;
+  color: #5c4935;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.detail-notes textarea {
+  width: 100%;
+  min-height: 52px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid #d9c7a5;
+  border-radius: 7px;
+  background: #fdfaf6;
+}
+
+// ---- Responsive ----
+// On a narrow screen the two/three-column field grid collapses to one column.
+// (Moved from `_overlays.scss`.)
+
+@media (max-width: 900px) {
+  .detail-editor { grid-template-columns: 1fr; }
+
+  // Below 900px the sidebar drops under the table and spans the full page
+  // width, but the fixed pixel tracks above were measured for a 420px column.
+  // Hand the row back to proportional columns so nothing is clipped on a
+  // phone or a narrow window.
+  .detail-editor__row--top {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 8px;
+
+    select { padding-left: 7px; padding-right: 7px; }
+  }
+
+  .detail-editor__row--grade {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+// ---- Read-only value inside the editor grid (Melt) ----
+// Melt value is computed, not typed, so it is an <output> rather than an
+// <input>. These rules make it sit on the same baseline and the same height
+// as the money inputs beside it, so the Price / Value / Melt row reads as one
+// row rather than two inputs and a stray caption. The muted fill is the cue
+// that it cannot be edited — deliberately NOT a disabled input, which would
+// be focusable-looking, greyed-out text and imply the value is unavailable
+// rather than derived.
+.detail-field--readonly {
+  .readonly-value {
+    display: block;
+    padding: 3px 7px;
+    border: 1px solid #e8dece;
+    border-radius: 7px;
+    background: #f6f3ec;
+    color: #3b2a14;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}

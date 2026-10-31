@@ -1,0 +1,335 @@
+<div class="modal-backdrop" (click)="closed.emit()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Import from Quicken (QIF)</h2>
+      <div class="modal-header-actions">
+        <button type="button" class="secondary small-button" (click)="previewImport()" [disabled]="!quickenText()">Preview</button>
+        <!--
+          The count is `recordsToImport()`, not `importedRecords()`: a row the
+          user cancelled is still listed in the preview (struck through, with
+          an Undo) but is not going to be imported, so the button must not
+          promise it.
+        -->
+        <button type="button" class="small-button" (click)="importQuicken()" [disabled]="recordsToImport().length === 0 || importing()">
+          @if (importing()) {
+            Importing...
+          } @else {
+            Import {{ recordsToImport().length > 0 ? recordsToImport().length + ' coins' : '' }}
+          }
+        </button>
+        <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <label class="file-picker">
+        <input type="file" accept=".qif,.txt,.csv" (change)="handleQuickenFileSelection($event)" [disabled]="parsing() || importing()" />
+        Load QIF file
+      </label>
+
+      @if (parsing() || importing()) {
+        <div class="busy-indicator" aria-live="polite" role="status">
+          <span class="busy-spinner" aria-hidden="true"></span>
+          <span><strong>Working...</strong> Loading Quicken data…</span>
+        </div>
+      }
+
+      <textarea
+        [ngModel]="quickenText()"
+        (ngModelChange)="onQuickenTextChange($event)"
+        rows="8"
+        aria-label="Quicken import text"
+        placeholder="Or paste QIF text here&hellip;"
+      ></textarea>
+
+      <!-- QIF Filters -->
+      <div class="qif-filters">
+        <h3>Filters</h3>
+        <div class="filter-group">
+          <label>
+            <span>Date from</span>
+            <input type="date" [ngModel]="qifDateFrom()" (ngModelChange)="qifDateFrom.set($event)" />
+          </label>
+          <label>
+            <span>Date to</span>
+            <input type="date" [ngModel]="qifDateTo()" (ngModelChange)="qifDateTo.set($event)" />
+          </label>
+          <label>
+            <span>Min price</span>
+            <input type="number" step="0.01" placeholder="$0" [ngModel]="qifPriceMin()" (ngModelChange)="qifPriceMin.set($event)" />
+          </label>
+          <label>
+            <span>Max price</span>
+            <input type="number" step="0.01" placeholder="$∞" [ngModel]="qifPriceMax()" (ngModelChange)="qifPriceMax.set($event)" />
+          </label>
+          <label>
+            <span>Denomination</span>
+            <input type="text" placeholder="e.g. Dime, Quarter" [ngModel]="qifDenominationFilter()" (ngModelChange)="qifDenominationFilter.set($event)" />
+          </label>
+        </div>
+      </div>
+
+      @if (quickenAccounts().length > 0) {
+        <div class="account-selector">
+          <div class="account-header">
+            <span>Accounts</span>
+            <div>
+              <button type="button" class="secondary small-button" (click)="toggleAllAccounts()">
+                {{ selectedAccounts().length === quickenAccounts().length ? 'Clear all' : 'Select all' }}
+              </button>
+              <button type="button" class="secondary small-button" (click)="refreshQuickenAccounts()">Refresh</button>
+            </div>
+          </div>
+
+          <div class="account-list">
+            @for (account of quickenAccounts(); track account) {
+              <label class="account-checkbox">
+                <input type="checkbox" [checked]="selectedAccounts().includes(account)" (change)="toggleAccount(account)" />
+                <span>{{ account }}</span>
+              </label>
+            }
+          </div>
+        </div>
+      }
+
+      <p class="hint-text">
+        Each imported coin's category defaults to its Quicken account name. Filters apply to both preview and import.
+      </p>
+
+      @if (quickenWarnings().length > 0) {
+        <div class="warning-list" role="alert">
+          <h3>Review before importing</h3>
+          <ul>
+            @for (warning of quickenWarnings(); track warning) {
+              <li>{{ warning }}</li>
+            }
+          </ul>
+        </div>
+      }
+
+      <!--
+        GUESSED READINGS.
+
+        Some Quicken names do not say which of two coins they mean. A bare
+        "3¢" dated 1865-1873 is the standing example: the three-cent silver
+        and the three-cent nickel were both being struck, and the date cannot
+        separate them. The parser still answers -- the owner asked it to --
+        but the answer now arrives labelled as an assumption, with the
+        reasoning attached:
+
+          "It's okay to make an assumption and note to the user that there was
+           ambiguity in a choice so they can either fix the choice right away
+           or later or just cancel the match."
+
+        THIS IS NOT THE EXCEPTIONS PANEL AND MUST NEVER BECOME IT. An
+        exception is a row that CANNOT be imported. A guessed row imports by
+        default, exactly like any other row; this panel exists so the user
+        knows which ones to look at, and the preview table below carries the
+        two controls for acting on them (re-point the denomination, or drop
+        the row). Styled as a warning rather than an error for the same
+        reason.
+      -->
+      @if (ambiguousCount() > 0) {
+        <div class="ambiguity-list" role="region" aria-label="Assumptions made while reading Quicken names">
+          <h3>Assumptions — imported, but worth a look ({{ ambiguousCount() }})</h3>
+          <p class="hint-text">
+            These Quicken names did not say which of two coins they meant, so the importer
+            picked the likelier one. They will be imported as shown. Use the denomination
+            picker in the preview below to switch one to the other candidate, or
+            <strong>Drop</strong> to leave it out of this import. You can also change it
+            later in the coin editor.
+          </p>
+          <ul>
+            @for (record of importedRecords(); track record.id) {
+              @if (ambiguity(record); as guess) {
+                <li>
+                  <code>{{ record.securityName }}</code> — read as
+                  <strong>{{ guess.chosen }}</strong>: {{ guess.why }}
+                </li>
+              }
+            }
+          </ul>
+        </div>
+      }
+
+      <!--
+        Exceptions: coins the parser could read but refused to import because
+        fewer than 2 of Year / Coin Type / Denomination were present.
+
+        These are always SHOWN and never silently dropped -- that reporting is
+        the whole point of the panel. What they cannot be is imported. There
+        used to be an "Import anyway" button here; it produced a row in the
+        grid that the backend had never saved (it rejects a coin with no
+        denomination with 400 "denomination is required"), so every later edit
+        failed against an id that did not exist. The fix for a row landing
+        here is to fix its name in Quicken and re-import, not to force it in.
+      -->
+      @if (rejectedRecords().length > 0) {
+        <div class="exception-list" role="region" aria-label="Import exceptions">
+          <h3>Exceptions — not imported ({{ rejectedRecords().length }})</h3>
+          <p class="hint-text">
+            A coin needs at least 2 of Year, Coin Type and Denomination to be imported.
+            These rows did not qualify, so they were left out. Everything the parser
+            could read is shown below — edit the security name in Quicken, export
+            again, and they will come through.
+          </p>
+          <table class="exception-table">
+            <thead>
+              <tr>
+                <th>Quicken security name</th>
+                <th>Year</th>
+                <th>Coin Type</th>
+                <th>Denomination</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (exception of rejectedRecords(); track exception.securityName) {
+                <tr>
+                  <td><code>{{ exception.securityName }}</code></td>
+                  <td>{{ exception.record.year || '—' }}</td>
+                  <td>{{ exception.record.coinType || '—' }}</td>
+                  <td>{{ exception.record.denomination || '—' }}</td>
+                  <td>{{ exception.reason }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      @if (importedRecords().length > 0) {
+        <div class="import-preview">
+          <h3>Import preview ({{ recordsToImport().length }} coins)</h3>
+          <p class="hint-text">
+            Review the coins that will be imported. Values are extracted from Quicken security names.
+            @if (importedRecords().length !== recordsToImport().length) {
+              <strong>{{ importedRecords().length - recordsToImport().length }}</strong>
+              row(s) below are struck through and will be left out — press Undo on a row to put it back.
+            }
+          </p>
+          @for (accountName of groupedAccountNames(); track accountName) {
+            <div class="account-group-preview">
+              <h4>{{ accountName }}</h4>
+              <table class="import-preview-table">
+                <thead>
+                  <tr>
+                    <th>Coin Type</th>
+                    <th>Denomination</th>
+                    <th>Year</th>
+                    <th>Grade</th>
+                    <!--
+                      Certification company ("PCGS", "NGC", ...) and the green
+                      CAC sticker, both parsed out of the Quicken security
+                      name. Shown here so the user can spot a bad parse on the
+                      preview screen instead of after the import.
+                    -->
+                    <th>Cert Co.</th>
+                    <th title="Green CAC sticker">CAC</th>
+                    <th>Mint Mark</th>
+                    <th>Variety</th>
+                    <!--
+                      Country, Metal and PM % are worked out from the coin's
+                      country, denomination and YEAR (pm-reference.ts). They
+                      are shown here because they are deliberately left blank
+                      whenever the combination does not pin the alloy down --
+                      seeing the dash on the preview is how the user knows to
+                      fill it in rather than discovering a wrong melt value
+                      later.
+                    -->
+                    <th>Country</th>
+                    <th title="Metal / Composition">Metal</th>
+                    <th title="Precious metal purity">PM %</th>
+                    <th>Value</th>
+                    <!--
+                      Row actions. Empty for every row the parser was sure
+                      about; a Drop / Undo button on the ones it guessed at.
+                      Deliberately NOT a select-every-row checkbox column:
+                      the ask was a way out for an assumption the user
+                      disagrees with, not a general row picker, and a column
+                      of 400 ticked boxes would bury the handful that matter.
+                    -->
+                    <th><span title="Leave a guessed row out of this import">Action</span></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (record of groupedImportedRecords()[accountName]; track record.id) {
+                    <tr [class.preview-row--guessed]="ambiguity(record)" [class.preview-row--dropped]="isDropped(record)">
+                      <td>{{ record.coinType || '—' }}</td>
+                      <!--
+                        THE DENOMINATION CELL IS WHERE A GUESS BECOMES VISIBLE.
+
+                        A certain reading prints as plain text, exactly as it
+                        always has. A guessed one becomes a two-option picker
+                        holding the alternatives the parser was choosing
+                        between, so switching to the other candidate is one
+                        click and no typing. Changing it re-runs the parse
+                        with the answer, which is what keeps the Coin Type and
+                        the Metal / PM % cells on this same row consistent
+                        with the denomination the user just chose.
+                      -->
+                      <td>
+                        @if (ambiguity(record); as guess) {
+                          <span class="guess-flag" [title]="guess.why" aria-hidden="true">&#9888;</span>
+                          <select
+                            class="guess-select"
+                            [title]="guess.why"
+                            [attr.aria-label]="'Denomination (assumed) for ' + record.securityName"
+                            [ngModel]="record.denomination"
+                            (ngModelChange)="chooseDenomination(record, $event)"
+                          >
+                            @for (option of guess.alternatives; track option) {
+                              <option [value]="option">{{ option }}</option>
+                            }
+                          </select>
+                        } @else {
+                          {{ record.denomination || '—' }}
+                        }
+                      </td>
+                      <td>{{ record.year || '—' }}</td>
+                      <td>{{ record.grade || '—' }}</td>
+                      <td>{{ record.certCompany || '—' }}</td>
+                      <!--
+                        A check mark only when the sticker was actually
+                        detected; an em dash otherwise, matching every other
+                        "nothing here" cell in this table.
+                      -->
+                      <td>
+                        @if (record.hasCacSticker) {
+                          <span class="cac-indicator" title="Green CAC sticker">&#10003;</span>
+                        } @else {
+                          —
+                        }
+                      </td>
+                      <td>{{ record.mintMark || '—' }}</td>
+                      <td>{{ record.variety || '—' }}</td>
+                      <td>{{ record.country || '—' }}</td>
+                      <td [title]="record.composition || ''">{{ record.metalContent || '—' }}</td>
+                      <td>{{ record.pmPercent !== undefined ? record.pmPercent + '%' : '—' }}</td>
+                      <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>
+                      <!--
+                        "...or just cancel the match." Offered only on a
+                        guessed row, and reversible from the same button, so
+                        the action cannot be taken by accident and cannot be
+                        taken back only by re-loading the file.
+                      -->
+                      <td>
+                        @if (ambiguity(record)) {
+                          <button
+                            type="button"
+                            class="secondary small-button"
+                            (click)="toggleDropped(record)"
+                            [attr.aria-label]="(isDropped(record) ? 'Put back ' : 'Leave out ') + record.securityName"
+                          >{{ isDropped(record) ? 'Undo' : 'Drop' }}</button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>

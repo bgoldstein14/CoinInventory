@@ -1,0 +1,161 @@
+// Styles for the resizable full-size photo window.
+@use '../../styles/controls' as *;
+
+// Not part of the original markup, and the backdrop is position: fixed — keep
+// the host element out of the layout entirely.
+:host { display: contents; }
+
+// ---- The backdrop -----------------------------------------------------------
+//
+// `overflow: auto` is load-bearing, not tidiness. The window is allowed to be
+// grown all the way to the image's native resolution, and a camera original is
+// routinely 4032 x 3024 — larger than the monitor. Without a scrollable
+// backdrop the parts of the window past the screen edge would simply be
+// unreachable, and "grow it up to the highest resolution" would be a promise
+// the UI could not keep. See maxViewerSize() in photo-viewer-window.ts.
+//
+// `place-items: center` keeps a normal-sized window centred; once the window
+// is bigger than the backdrop, the flex/grid centring would push its top-left
+// corner off-screen into the unscrollable direction, which is what the
+// `safe` keyword prevents. (`safe center` falls back to `start` exactly in
+// that overflow case.)
+.photo-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 14, 8, 0.8);
+  display: grid;
+  place-items: safe center;
+  // ABOVE the gallery overlay, which sits at z-index 1100 (styles/_modal.scss).
+  // The viewer is opened FROM the gallery and must cover it; at the old 1000 it
+  // would open behind the gallery and look like nothing had happened.
+  z-index: 1200;
+  padding: 24px;
+  overflow: auto;
+}
+
+// ---- The window itself ------------------------------------------------------
+//
+// `resize: both` is the entire resizing implementation: the browser draws a
+// grip in the bottom-right corner and writes the dragged size into the
+// element's inline width/height. No mouse handlers, no library, and it keeps
+// working if the component is restructured.
+//
+// Two requirements come with it, and both are below:
+//   * `overflow` must not be `visible` — `resize` is ignored on a visible-
+//     overflow box. `hidden` also clips the photo to the rounded corners.
+//   * the element needs an explicit width/height to resize FROM; those are the
+//     inline px bindings in the template.
+//
+// min/max also come from the template, because both depend on the image's
+// natural size, which is only known after it loads.
+.photo-viewer {
+  position: relative;
+  resize: both;
+  overflow: hidden;
+  // The size BEFORE the image has loaded and reported its dimensions — the
+  // same "about half the display" the template will shortly set in px, just
+  // without the photo's aspect ratio, which is not known yet. Without it the
+  // window would briefly be sized by the raw <img>, i.e. several thousand
+  // pixels wide, and the overlay would lurch. The inline bindings in the
+  // template override these the moment (load) fires.
+  width: 50vw;
+  height: 50vh;
+  border-radius: 10px;
+  background: #1b140d;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.45);
+}
+
+// The photo fills the window exactly. `contain` rather than `cover`: coins are
+// round and photographed centred, so `cover` would crop the rim — the single
+// most informative part of the picture — off every edge.
+//
+// `display: block` removes the inline-element baseline gap that would
+// otherwise leave a few stubborn pixels of background at the bottom.
+.photo-viewer__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+// ---- Floating controls ------------------------------------------------------
+// Everything here is absolutely positioned ON the image so that the image
+// itself takes up the whole window, and everything stays clear of the
+// bottom-right corner, which is the resize grip.
+
+.photo-viewer__close,
+.photo-viewer__nav {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.92);
+  color: #2c1c0e;
+  border: none;
+  border-radius: 999px;
+  width: 36px;
+  height: 36px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { transform: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
+}
+
+// Inside the window now, not hanging off its edges: the window has
+// `overflow: hidden` (required by `resize`), so anything outside it is clipped
+// away rather than merely overlapping the backdrop as it used to.
+.photo-viewer__close { top: 8px; right: 8px; }
+.photo-viewer__nav--prev { left: 8px; top: 50%; transform: translateY(-50%); }
+.photo-viewer__nav--next { right: 8px; top: 50%; transform: translateY(-50%); }
+
+// "3 of 8". Top-left, opposite the close button.
+.photo-viewer__counter {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(253, 250, 246, 0.9);
+  color: #5a4632;
+  font-size: 0.72rem;
+}
+
+// ---- Caption: which copy is on screen, and where its original lives ---------
+// Bottom-LEFT, with a right margin, so the resize grip in the opposite corner
+// is never covered. A light, mostly-opaque chip keeps the text readable
+// against both the dark window background and whatever the photo looks like.
+.photo-viewer__caption {
+  position: absolute;
+  bottom: 10px;
+  left: 10px;
+  max-width: calc(100% - 72px); // clear of the resize grip
+  display: grid;
+  gap: 2px;
+  padding: 5px 10px;
+  background: rgba(253, 250, 246, 0.94);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+// Stated as a plain fact, in the app's ordinary body colour. Deliberately not
+// a warning: "stored copy" is the normal state for every photo added by
+// drag-and-drop, and colouring it like a problem would nag the user about
+// something that is usually fine and often not fixable.
+.photo-viewer__source {
+  font-size: 0.72rem;
+  color: #5a4632;
+}
+
+// The fallback case gets the same muted grey-brown as the app's other hint
+// text (`.image-path--unknown`), one shade quieter than the original case —
+// enough to notice if you are looking for it, not enough to shout.
+.photo-viewer__source--stored {
+  color: #8a7a63;
+}
+
+// ---- Print ------------------------------------------------------------------
+
+@media print {
+  .photo-viewer-backdrop { display: none !important; }
+}

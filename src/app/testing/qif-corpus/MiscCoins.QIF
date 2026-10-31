@@ -1,0 +1,3260 @@
+!Type:Tag
+N\
+^
+NA101
+^
+NA202
+DSpare set, box two
+^
+NB303
+^
+NShow 2015
+DRegional show, spring 2015
+^
+NDuplicates
+^
+NSets
+^
+!Type:Cat
+NAuction Fees
+DAuction house commission
+E
+R000
+E
+^
+NBullion Sales
+DProceeds of bullion sales
+T
+R286
+I
+^
+NCoin Supplies
+DHolders, flips, albums
+E
+R000
+E
+^
+NDealer Fees
+E
+R000
+E
+^
+NDiv Income
+DDividend Income
+T
+R286
+I
+^
+NGrading Fees
+DThird-party grading
+E
+R000
+E
+^
+NHobby Income
+T
+R460
+I
+^
+NInsurance:Collection
+DScheduled collection rider
+E
+R000
+E
+^
+NInt Income
+DInterest Income
+T
+R286
+I
+^
+NPostage
+DShipping and insurance
+E
+R000
+E
+^
+NShow Travel
+E
+R000
+E
+^
+NStorage
+DSafe deposit box
+E
+R000
+E
+^
+!Option:AutoSwitch
+!Account
+NAlder Bank - Checking
+TBank
+DEveryday checking
+^
+NAlder Bank - Savings
+TBank
+^
+NBirch Credit Union MMA
+TBank
+^
+NCedar Card - Rewards
+TCCard
+^
+NCedar Card - Travel
+TCCard
+^
+NPetty Cash
+TCash
+^
+NCollection Insurance Rider
+TOth A
+^
+NHome Safe Contents
+TOth A
+^
+NDealer Credit Line
+TOth L
+^
+NDriftwood Brokerage
+TPort
+DTaxable brokerage
+^
+NDriftwood Retirement
+TPort
+^
+NElm Street CD - 12 month
+TCD
+^
+NFernway Trust
+TTrust Fund
+^
+NUnfiled Invoices
+TInvoice
+^
+NTax Holding
+TTax
+^
+NEarly Proofs
+TInvst
+^
+N2-3-20-cent Collection
+TInvst
+^
+NOdd Type Set
+TInvst
+^
+NType Coins
+TInvst
+^
+N20th Cent. Type
+TInvst
+^
+NGold Coins
+TInvst
+^
+NMisc. Coins
+TInvst
+^
+NAncients
+TInvst
+^
+!Clear:AutoSwitch
+!Type:Security
+NAldbury Manufacturing
+SZQALDB
+TStock
+^
+!Type:Security
+NBarrowfield Energy
+SZQBRWF
+TStock
+^
+!Type:Security
+NCaldmere Health Group
+SZQCALD
+TStock
+^
+!Type:Security
+NDunwich Freight Lines
+SZQDUNW
+TStock
+^
+!Type:Security
+NEastmere Semiconductor
+SZQEAST
+TStock
+^
+!Type:Security
+NFallowgate Retail
+SZQFALL
+TStock
+^
+!Type:Security
+NGarrowby Chemical
+SZQGARR
+TStock
+^
+!Type:Security
+NHarrowden Pharmaceutical
+SZQHARR
+TStock
+^
+!Type:Security
+NInglewick Insurance
+SZQINGL
+TStock
+^
+!Type:Security
+NJarrowfield Mining
+SZQJARR
+TStock
+^
+!Type:Security
+NKelvedon Software
+SZQKELV
+TStock
+^
+!Type:Security
+NLanchester Utilities
+SZQLANC
+TStock
+^
+!Type:Security
+NMarchmont Foods
+SZQMARC
+TStock
+^
+!Type:Security
+NNetherby Telecom
+SZQNETH
+TStock
+^
+!Type:Security
+NOakmere Aerospace
+SZQOAKM
+TStock
+^
+!Type:Security
+NPennycross Bancorp
+SZQPENN
+TStock
+^
+!Type:Security
+NQuarrington Rail
+SZQQUAR
+TStock
+^
+!Type:Security
+NRavensmoor Timber
+SZQRAVE
+TStock
+^
+!Type:Security
+NBroad Market Index Fund
+SZQBMIF
+TMutual Fund
+^
+!Type:Security
+NConservative Allocation Fund
+SZQCAFD
+TMutual Fund
+^
+!Type:Security
+NDividend Growth Fund
+SZQDGFD
+TMutual Fund
+^
+!Type:Security
+NEmerging Markets Fund
+SZQEMFD
+TMutual Fund
+^
+!Type:Security
+NIntermediate Bond Fund
+SZQIBFD
+TMutual Fund
+^
+!Type:Security
+NMoney Market Reserve Fund
+SZQMMRF
+TMutual Fund
+^
+!Type:Security
+NSmall Cap Value Fund
+SZQSCVF
+TMutual Fund
+^
+!Type:Security
+NTarget 2040 Fund
+SZQT40F
+TMutual Fund
+^
+!Type:Security
+NMunicipal Bond 2031
+SZQMB31
+TBond
+^
+!Type:Security
+NMunicipal Bond 2034
+SZQMB34
+TBond
+^
+!Type:Security
+NCorporate Note 2029
+SZQCN29
+TBond
+^
+!Type:Security
+N$100 Series I Bond 5/2019
+SZQIB19
+TUS Savings Bond
+^
+!Type:Security
+N$100 Series I Bond 9/2020
+SZQIB20
+TUS Savings Bond
+^
+!Type:Security
+N$500 Series EE Bond 2/2017
+SZQEE17
+TUS Savings Bond
+^
+!Type:Security
+NAldbury Jan 50 Call
+SZQALDC
+TStock Option
+^
+!Type:Security
+NBarrowfield Mar 25 Put
+SZQBRWP
+TStock Option
+^
+!Type:Security
+NEastmere Jun 120 Call
+SZQEASC
+TStock Option
+^
+!Type:Security
+NBroad Market Composite
+SZQIDXA
+TMarket Index
+^
+!Type:Security
+NSmall Cap Composite
+SZQIDXB
+TMarket Index
+^
+!Type:Security
+NGeneric Silver Round 1 oz
+SZQAGRD
+TBullion
+^
+!Type:Security
+NGeneric Gold Bar 1 oz
+SZQAUBR
+TBullion
+^
+!Type:Security
+NPlatinum Bar 1 oz
+SZQPTBR
+TBullion
+^
+!Type:Security
+NUnallocated Storage Credit
+SZQUSTC
+TOther
+^
+!Type:Security
+NClub Membership Deposit
+SZQCLUB
+TOther
+^
+!Type:Security
+NFernway Trust Units
+SZQFWTU
+TTrust Fund
+^
+!Type:Security
+NElm Street CD - 12 month
+SZQECD1
+TCD
+^
+!Type:Security
+N1982 Lincoln 7-Piece Set
+TCoin
+^
+!Type:Security
+NWar Nickel Set - Gem BU
+TCoin
+^
+!Type:Security
+NMercury Dime Short Set - Gem BU
+TCoin
+^
+!Type:Security
+N1945D 10¢ Micro-S MS65
+TCoin
+^
+!Type:Security
+N1986D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1987D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1988D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1989D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1990D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1991D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1992D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1993D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1971D Ag $1-PF
+TGold Coin
+^
+!Type:Security
+N1972D Ag $1-PF
+TGold Coin
+^
+!Type:Security
+N1973D Ag $1-PF
+TGold Coin
+^
+!Type:Security
+N1974D Ag $1-PF
+TGold Coin
+^
+!Type:Security
+NLib. $1 1986D-PF
+TGold Coin
+^
+!Type:Security
+NLib. 50¢ 1986D-PF
+TCoin
+^
+!Type:Security
+NConst. $1 1987D-PF
+TGold Coin
+^
+!Type:Security
+NConst. $1 1987S-BU
+TGold Coin
+^
+!Type:Security
+NOly. $1 1983D-PF
+TGold Coin
+^
+!Type:Security
+NOly. $1 1984D-PF
+TGold Coin
+^
+!Type:Security
+NOly. $1 1988D-PF
+TGold Coin
+^
+!Type:Security
+NOly. $1 1988S-BU
+TGold Coin
+^
+!Type:Security
+NOly. $1 1992D-PF
+TGold Coin
+^
+!Type:Security
+NOly. 50¢ 1992D-PF
+TCoin
+^
+!Type:Security
+NOly. 50¢ 1992S-BU
+TCoin
+^
+!Type:Security
+N1986D Au $50-PF
+TGold Coin
+^
+!Type:Security
+N1994D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+NOly. $1 1992P-BU
+TGold Coin
+^
+!Type:Security
+NSBA $1
+TGold Coin
+^
+!Type:Security
+N1995D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1754 Mex. 8 Real
+TCoin
+^
+!Type:Security
+N1996D Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1997 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1998 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+NFranklin Half BU Coin Set
+TCoin
+^
+!Type:Security
+N1999 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1884 3CN - PCGS PF66
+TCoin
+^
+!Type:Security
+N1925 $20-NGC MS64
+TGold Coin
+^
+!Type:Security
+N1999 SBA - PF
+TCoin
+^
+!Type:Security
+N1999 SBA - BU
+TCoin
+^
+!Type:Security
+N2000 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1908 $20-NGC MS64
+TGold Coin
+^
+!Type:Security
+N2001 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1900o $20 Liberty - ICG AU50
+TGold Coin
+^
+!Type:Security
+N1893o $20 Liberty - ICG AU58
+TGold Coin
+^
+!Type:Security
+NEuro Coin set (12 countries)
+TCoin
+^
+!Type:Security
+N2002 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N2003 Ag Eagle-PF
+TCoin
+^
+!Type:Security
+N1876O $20 - NGC AU50
+TGold Coin
+^
+!Type:Security
+N1872 2¢ PF
+TCoin
+^
+!Type:Security
+N1883 5¢ N/C-NGC PF66
+TCoin
+^
+!Type:Security
+N1907 1¢ - NGC PF65RB
+TCoin
+^
+!Type:Security
+N1876 $20 - NCG AU50
+TGold Coin
+^
+!Type:Security
+N1862 3CS - NGC/CAC PF65
+TCoin
+^
+!Type:Security
+N1873o ½10¢ - PCGS MS65
+TCoin
+^
+!Type:Security
+N1888 $1 - ICG MS65DMPL
+TGold Coin
+^
+!Type:Security
+N1828 Cap & Rays 8 Reales
+TCoin
+^
+!Type:Security
+N1860 3CS - NGC MS65
+TCoin
+^
+!Type:Security
+N1893 Columbian Exposition Token
+TCoin
+^
+!Type:Security
+NBenjamin Harrison Token
+TCoin
+^
+!Type:Security
+NBarber coins
+TCoin
+^
+!Type:Security
+N1919D 1¢ - AU
+TCoin
+^
+!Type:Security
+N1876-CC 10¢ - VF35
+TCoin
+^
+!Type:Security
+N1753 Pillar Dollar (8 Reales) - ANACS AU53 Details
+TCoin
+^
+!Type:Security
+N1904-O 5¢ - F12
+TCoin
+^
+!Type:Security
+N1878-O Trade Dollar - ANACS F12
+TCoin
+^
+!Type:Security
+N1855 3CS - ANACS AU58
+TCoin
+^
+!Type:Security
+N1876-O Trade Dollar - AU50 Cleaned
+TCoin
+^
+!Type:Security
+N1882-O $1 - ANACS MS65
+TGold Coin
+^
+!Type:Security
+N1889 1 Crown
+TCoin
+^
+!Type:Security
+N1884-O $1 - ANACS MS65
+TGold Coin
+^
+!Type:Security
+N1872 5¢ - NGC/CAC XF40
+TCoin
+^
+!Type:Security
+N1877-CC 10¢ - ANACS VF20
+TCoin
+^
+!Type:Security
+N1873 Open 3 G$1 - ANACS AU50
+TGold Coin
+^
+!Type:Security
+N1854 G$3 - NGC/CAC AU53
+TGold Coin
+^
+!Type:Security
+N1812 ½ Real - Mexico City
+TCoin
+^
+!Type:Security
+N1867 $3 - NGC AU55
+TGold Coin
+^
+!Type:Security
+N1878-CC 25¢ - VF
+TCoin
+^
+!Type:Security
+N1913 $2.50 Gold Indian - ANACS AU58
+TGold Coin
+^
+!Type:Security
+N1922 $10 Gold Indian - NGC MS64
+TGold Coin
+^
+!Type:Security
+N1850-S $1 Gold - ANACS XF40
+TGold Coin
+^
+!Type:Security
+N1908 NM $20 - NGC/CAC MS65
+TGold Coin
+^
+!Type:Security
+N1905 $20 - PCGS MS64
+TGold Coin
+^
+!Type:Security
+N1908 $5 - NGC/CAC XF40
+TGold Coin
+^
+!Type:Security
+N1909 $5 - NGC/CAC XF45
+TGold Coin
+^
+!Type:Security
+N1913-D $5 - NGC XF45
+TGold Coin
+^
+!Type:Security
+N1926-D $5 - NGC XF45
+TGold Coin
+^
+!Type:Security
+N1914-D $5 - NGC XF45
+TGold Coin
+^
+!Type:Security
+N1893 $5 - PCI AU53
+TGold Coin
+^
+!Type:Security
+N1824 50¢ - VF
+TCoin
+^
+!Type:Security
+N1873 Open 3 G$2.50 - ANACS AU55
+TGold Coin
+^
+!Type:Security
+N1875-O $1 - PCGS VF35
+TGold Coin
+^
+!Type:Security
+N1819 50¢ - F
+TCoin
+^
+!Type:Security
+N1859 3CS - XF40 - FAKE
+TCoin
+^
+!Type:Security
+N1877 20¢ - PCGS/CAC VF20
+TCoin
+^
+!Type:Security
+N1877CC 20¢ - NGC/CAC VF25
+TCoin
+^
+!Type:Security
+N1877CC 20¢ - NGC VF25
+TCoin
+^
+!Type:Security
+N1877CC 20¢ - NGC VF30
+TCoin
+^
+!Type:Security
+N1877O 20¢ - ANACS XF45
+TCoin
+^
+!Type:Security
+N1876 20¢ - NGC/CAC XF40
+TCoin
+^
+!Type:Security
+N1889 3CN - PCI EF40
+TCoin
+^
+!Type:Security
+N1862/1 3CS - PCGS/CAC MS64
+TCoin
+^
+!Type:Security
+N1868 2¢ - VF35
+TCoin
+^
+!Type:Security
+N1872 2¢ - VF/XF
+TCoin
+^
+!Type:Security
+N1877 3CN - VF
+TCoin
+^
+!Type:Security
+N1877 3CN - XF
+TCoin
+^
+!Type:Security
+N1881 3CN - ANACS VF30
+TCoin
+^
+!Type:Security
+N1881 3CN - ANACS AU55 (CLEANED)
+TCoin
+^
+!Type:Security
+N1855 3CS - VF - FAKE
+TCoin
+^
+!Type:Security
+N1877 3CN - PCGS XF45
+TCoin
+^
+!Type:Security
+N1877 3CN - NGC/CAC MS63
+TCoin
+^
+!Type:Security
+N1886 3CN - ANACS EF40
+TCoin
+^
+!Type:Security
+N1882 3CN - ANACS AU58
+TCoin
+^
+!Type:Security
+N1879 3CN - NGC AU50
+TCoin
+^
+!Type:Security
+N1876 20¢ - VF Details (TOOLED\NGC)
+TCoin
+^
+!Type:Security
+N1877 3CN - AU50
+TCoin
+^
+!Type:Security
+N1856 Repunched Date 3CS - ANACS VF25 (CLEANED)
+TCoin
+^
+!Type:Security
+N1877 3CN - AU55
+TCoin
+^
+!Type:Security
+N1870 2¢ - XF
+TCoin
+^
+!Type:Security
+N1891-S $1 - ANACS MS60
+TGold Coin
+^
+!Type:Security
+N1882-O $1 - ANACS MS64 Cameo PL
+TGold Coin
+^
+!Type:Security
+N1889 3CN - ANACS EF40
+TCoin
+^
+!Type:Security
+N1909 S-VDB 1¢ - NGC/CAC AU50
+TCoin
+^
+!Type:Security
+N1877 3CN - Choice VF
+TCoin
+^
+!Type:Security
+N1876 3CN - Choice VF
+TCoin
+^
+!Type:Security
+N1881 3CN - ANACS AU58
+TCoin
+^
+!Type:Security
+N1934-S Oregon 50¢ - NGC MS60
+TCoin
+^
+!Type:Security
+N2025 250th Anniversary U.S. Army ASE
+TCoin
+^
+!Type:Security
+N2025 $1 Gold Sacagawea - ½ oz
+TGold Coin
+^
+!Type:Security
+N1868 ½10¢-NGC PR64
+TCoin
+^
+!Type:Security
+N1874 3CN - PCGS PR66
+TCoin
+^
+!Type:Security
+N1868 3CN - PCGS/CAC PF65
+TCoin
+^
+!Type:Security
+N1877 3CN - PCGS PF65
+TCoin
+^
+!Type:Security
+N1869 3CN - NGC/CAC PF65 Cameo
+TCoin
+^
+!Type:Security
+N1866 3CN NGC PF65
+TCoin
+^
+!Type:Security
+N1864 2¢
+TCoin
+^
+!Type:Security
+N1852 3CS - EF
+TCoin
+^
+!Type:Security
+N1873 3CN Open 3 - AU50
+TCoin
+^
+!Type:Security
+N1864 2¢-EF
+TCoin
+^
+!Type:Security
+N1869 3CN - AU
+TCoin
+^
+!Type:Security
+N1862/1 3CS - PCGS/CAC MS64
+TCoin
+^
+!Type:Security
+N1886 3CN - VF
+TCoin
+^
+!Type:Security
+N1862/1 3CS - ANACS AU50
+TCoin
+^
+!Type:Security
+N1882 3CN - PCGS XF40
+TCoin
+^
+!Type:Security
+N1865 3CN - VF35
+TCoin
+^
+!Type:Security
+N1877 3CN - AU58
+TCoin
+^
+!Type:Security
+N1859 3CS - AU
+TCoin
+^
+!Type:Security
+N1864 2¢ - AU50
+TCoin
+^
+!Type:Security
+N1944P 5¢-BU
+TCoin
+^
+!Type:Security
+N1838 Reeded 50¢-XF (CLEANED/NGC)
+TCoin
+^
+!Type:Security
+N1867 3CN - CH+AU
+TCoin
+^
+!Type:Security
+N1883 5¢ N/C-BU
+TCoin
+^
+!Type:Security
+N1800 1¢ - F
+TCoin
+^
+!Type:Security
+N1853 50¢ A&R-XF (CLEANED)
+TCoin
+^
+!Account
+NMisc. Coins
+TInvst
+^
+!Type:Invst
+D1/15'10
+NXIn
+PHarbourstone Coins
+U1,500.00
+T1,500.00
+MOpening transfer
+L[Alder Bank - Checking]
+$1,500.00
+^
+D1/16'10
+NCash
+L[Misc. Coins]
+^
+D3/14'14
+NBuyX
+Y1982 Lincoln 7-Piece Set
+I4.12
+Q1
+T4.12
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$4.12
+^
+D8/16' 5
+NSellX
+Y1982 Lincoln 7-Piece Set
+I6.77
+Q1
+T6.77
+PTollgate Rarities
+L[Alder Bank - Checking]
+$6.77
+^
+D3/14'14
+NBuyX
+YWar Nickel Set - Gem BU
+I90.53
+Q1
+T90.53
+PPelham & Vance
+L[Alder Bank - Checking]
+$90.53
+^
+D8/23' 5
+NSellX
+YWar Nickel Set - Gem BU
+I105.64
+Q1
+T105.64
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$105.64
+^
+D3/14'14
+NBuyX
+YMercury Dime Short Set - Gem BU
+I158.33
+Q1
+T158.33
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$158.33
+^
+D7/ 6' 5
+NSellX
+YMercury Dime Short Set - Gem BU
+I242.26
+Q1
+T242.26
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$242.26
+^
+D3/14'14
+NBuyX
+Y1945D 10¢ Micro-S MS65
+I25.96
+Q1
+T25.96
+PTollgate Rarities
+L[Alder Bank - Checking]
+$25.96
+^
+D8/22' 5
+NSellX
+Y1945D 10¢ Micro-S MS65
+I34.73
+Q1
+T34.73
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$34.73
+^
+D3/14'14
+NBuyX
+Y1986D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1986D Ag Eagle-PF
+I33.48
+Q1
+T33.48
+PPelham & Vance
+^
+D3/14'14
+NBuyX
+Y1987D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1987D Ag Eagle-PF
+I37.22
+Q1
+T37.22
+PKingsmere Numismatics
+^
+D3/14'14
+NBuyX
+Y1988D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1988D Ag Eagle-PF
+I68.03
+Q1
+T68.03
+PTollgate Rarities
+^
+D3/14'14
+NBuyX
+Y1989D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PPelham & Vance
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1989D Ag Eagle-PF
+I39.71
+Q1
+T39.71
+PWestmarch Coin Co.
+^
+D3/14'14
+NBuyX
+Y1990D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1990D Ag Eagle-PF
+I38.47
+Q1
+T38.47
+PAmbersley Auctions
+^
+D3/14'14
+NBuyX
+Y1991D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PTollgate Rarities
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1991D Ag Eagle-PF
+I53.31
+Q1
+T53.31
+PHarbourstone Coins
+^
+D3/14'14
+NBuyX
+Y1992D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1992D Ag Eagle-PF
+I45.91
+Q1
+T45.91
+PPelham & Vance
+^
+D3/14'14
+NBuyX
+Y1993D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1993D Ag Eagle-PF
+I165.47
+Q1
+T165.47
+PKingsmere Numismatics
+^
+D3/14'14
+NBuyX
+Y1971D Ag $1-PF
+I6.77
+Q1
+T6.77
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$6.77
+^
+D11/ 1' 4
+NSell
+Y1971D Ag $1-PF
+I8.07
+Q1
+T8.07
+PTollgate Rarities
+^
+D3/14'14
+NBuyX
+Y1972D Ag $1-PF
+I6.77
+Q1
+T6.77
+PPelham & Vance
+L[Alder Bank - Checking]
+$6.77
+^
+D11/ 1' 4
+NSell
+Y1972D Ag $1-PF
+I8.07
+Q1
+T8.07
+PWestmarch Coin Co.
+^
+D3/14'14
+NBuyX
+Y1973D Ag $1-PF
+I32.23
+Q1
+T32.23
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$32.23
+^
+D11/ 1' 4
+NSell
+Y1973D Ag $1-PF
+I33.48
+Q1
+T33.48
+PAmbersley Auctions
+^
+D3/14'14
+NBuyX
+Y1974D Ag $1-PF
+I8.07
+Q1
+T8.07
+PTollgate Rarities
+L[Alder Bank - Checking]
+$8.07
+^
+D11/ 1' 4
+NSell
+Y1974D Ag $1-PF
+I9.38
+Q1
+T9.38
+PHarbourstone Coins
+^
+D3/14'14
+NBuyX
+YLib. $1 1986D-PF
+I27.22
+Q1
+T27.22
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$27.22
+^
+D6/ 8' 4
+NSell
+YLib. $1 1986D-PF
+I14.54
+Q1
+T14.54
+PPelham & Vance
+^
+D3/14'14
+NBuyX
+YLib. 50¢ 1986D-PF
+I9.38
+Q1
+T9.38
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$9.38
+^
+D6/ 8' 4
+NSell
+YLib. 50¢ 1986D-PF
+I11.96
+Q1
+T11.96
+PKingsmere Numismatics
+^
+D3/14'14
+NBuyX
+YConst. $1 1987D-PF
+I27.22
+Q1
+T27.22
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$27.22
+^
+D6/ 8' 4
+NSell
+YConst. $1 1987D-PF
+I13.25
+Q1
+T13.25
+PTollgate Rarities
+^
+D3/14'14
+NBuyX
+YConst. $1 1987S-BU
+I22.17
+Q1
+T22.17
+PPelham & Vance
+L[Alder Bank - Checking]
+$22.17
+^
+D6/ 8' 4
+NSell
+YConst. $1 1987S-BU
+I13.25
+Q1
+T13.25
+PWestmarch Coin Co.
+^
+D3/14'14
+NBuyX
+YOly. $1 1983D-PF
+I40.95
+Q1
+T40.95
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$40.95
+^
+D6/ 8' 4
+NSell
+YOly. $1 1983D-PF
+I20.91
+Q1
+T20.91
+PAmbersley Auctions
+^
+D3/14'14
+NBuyX
+YOly. $1 1984D-PF
+I40.95
+Q1
+T40.95
+PTollgate Rarities
+L[Alder Bank - Checking]
+$40.95
+^
+D6/ 8' 4
+NSell
+YOly. $1 1984D-PF
+I20.91
+Q1
+T20.91
+PHarbourstone Coins
+^
+D3/14'14
+NBuyX
+YOly. $1 1988D-PF
+I20.91
+Q1
+T20.91
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$20.91
+^
+D6/ 8' 4
+NSell
+YOly. $1 1988D-PF
+I13.25
+Q1
+T13.25
+PPelham & Vance
+^
+D3/14'14
+NBuyX
+YOly. $1 1988S-BU
+I20.91
+Q1
+T20.91
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$20.91
+^
+D6/ 8' 4
+NSell
+YOly. $1 1988S-BU
+I13.25
+Q1
+T13.25
+PKingsmere Numismatics
+^
+D3/14'14
+NBuyX
+YOly. $1 1992D-PF
+I32.23
+Q1
+T32.23
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$32.23
+^
+D6/ 8' 4
+NSell
+YOly. $1 1992D-PF
+I19.64
+Q1
+T19.64
+PTollgate Rarities
+^
+D3/14'14
+NBuyX
+YOly. 50¢ 1992D-PF
+I13.25
+Q1
+T13.25
+PPelham & Vance
+L[Alder Bank - Checking]
+$13.25
+^
+D6/ 8' 4
+NSell
+YOly. 50¢ 1992D-PF
+I11.96
+Q1
+T11.96
+PWestmarch Coin Co.
+^
+D3/14'14
+NBuyX
+YOly. 50¢ 1992S-BU
+I9.38
+Q1
+T9.38
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$9.38
+^
+D6/ 8' 4
+NSell
+YOly. 50¢ 1992S-BU
+I11.96
+Q1
+T11.96
+PAmbersley Auctions
+^
+D3/14'14
+NBuyX
+Y1986D Au $50-PF
+I646.31
+Q1
+T646.31
+PTollgate Rarities
+L[Alder Bank - Checking]
+$646.31
+^
+D3/23' 4
+NSell
+Y1986D Au $50-PF
+I606.38
+Q1
+T606.38
+PHarbourstone Coins
+^
+D3/14'14
+NBuyX
+Y1994D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1994D Ag Eagle-PF
+I147.60
+Q1
+T147.60
+PPelham & Vance
+^
+D3/14'14
+NBuyX
+YOly. $1 1992P-BU
+I20.91
+Q1
+T20.91
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$20.91
+^
+D6/ 8' 4
+NSell
+YOly. $1 1992P-BU
+I19.64
+Q1
+T19.64
+PKingsmere Numismatics
+^
+D3/14'14
+NBuyX
+YSBA $1
+I1.42
+Q1
+T1.42
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$1.42
+^
+D8/ 9' 5
+NSellX
+YSBA $1
+I1.42
+Q1
+T1.42
+PTollgate Rarities
+L[Alder Bank - Checking]
+$1.42
+^
+D3/14'14
+NBuyX
+Y1995D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PPelham & Vance
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1995D Ag Eagle-PF
+I118.88
+Q1
+T118.88
+PWestmarch Coin Co.
+^
+D3/14'14
+NShrsIn
+Y1754 Mex. 8 Real
+I153.56
+Q1
+U153.56
+T153.56
+MXfr From: Misc. Coins
+^
+D7/ 6' 5
+NSellX
+Y1754 Mex. 8 Real
+I177.34
+Q1
+T177.34
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$177.34
+^
+D3/14'14
+NBuyX
+Y1996D Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PTollgate Rarities
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1996D Ag Eagle-PF
+I54.54
+Q1
+T54.54
+PHarbourstone Coins
+^
+D3/14'14
+NBuyX
+Y1997 Ag Eagle-PF
+I29.73
+Q1
+T29.73
+PWestmarch Coin Co.
+L[Alder Bank - Checking]
+$29.73
+^
+D8/ 1' 4
+NSell
+Y1997 Ag Eagle-PF
+I86.29
+Q1
+T86.29
+PPelham & Vance
+^
+D3/14'14
+NBuy
+Y1998 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PAmbersley Auctions
+^
+D8/ 1' 4
+NSell
+Y1998 Ag Eagle-PF
+I28.47
+Q1
+T28.47
+PKingsmere Numismatics
+^
+D3/14'14
+NBuy
+YFranklin Half BU Coin Set
+I338.09
+Q1
+T338.09
+PHarbourstone Coins
+^
+D11/18' 5
+NSell
+YFranklin Half BU Coin Set
+I710.22
+Q1
+T710.22
+PTollgate Rarities
+^
+D3/14'14
+NBuy
+Y1999 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PPelham & Vance
+^
+D8/ 1' 4
+NSell
+Y1999 Ag Eagle-PF
+I69.25
+Q1
+T69.25
+PWestmarch Coin Co.
+^
+D3/14'14
+NBuy
+Y1884 3CN - PCGS PF66
+I394.93
+Q1
+T394.93
+PKingsmere Numismatics
+^
+D7/11' 4
+NShrsOut
+Y1884 3CN - PCGS PF66
+Q1
+MXfr To: Odd Type Set
+^
+D3/14'14
+NBuy
+Y1925 $20-NGC MS64
+I533.14
+Q1
+T533.14
+PTollgate Rarities
+^
+D1/18' 6
+NShrsOut
+Y1925 $20-NGC MS64
+Q1
+MXfr To: Odd Type Set
+^
+D3/14'14
+NBuy
+Y1999 SBA - PF
+I11.90
+Q1
+T11.90
+PWestmarch Coin Co.
+^
+D2/21'22
+NSell
+Y1999 SBA - PF
+I1.42
+Q1
+T1.42
+PPelham & Vance
+^
+D3/14'14
+NBuy
+Y1999 SBA - BU
+I4.09
+Q1
+T4.09
+PAmbersley Auctions
+^
+D7/ 6' 5
+NSellX
+Y1999 SBA - BU
+I6.77
+Q1
+T6.77
+PKingsmere Numismatics
+L[Alder Bank - Checking]
+$6.77
+^
+D10/14' 0
+NBuy
+Y2000 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PHarbourstone Coins
+^
+D8/ 1' 4
+NSell
+Y2000 Ag Eagle-PF
+I44.67
+Q1
+T44.67
+PTollgate Rarities
+^
+D3/27' 1
+NBuy
+Y1908 $20-NGC MS64
+I468.80
+Q1
+T468.80
+PPelham & Vance
+^
+D9/ 8' 5
+NShrsOut
+Y1908 $20-NGC MS64
+Q1
+MXfr To: Odd Type Set
+^
+D9/12' 1
+NBuy
+Y2001 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PKingsmere Numismatics
+^
+D8/ 1' 4
+NSell
+Y2001 Ag Eagle-PF
+I32.23
+Q1
+T32.23
+PAmbersley Auctions
+^
+D10/20' 1
+NBuy
+Y1900o $20 Liberty - ICG AU50
+I393.20
+Q1
+T393.20
+PTollgate Rarities
+^
+D9/ 8' 5
+NShrsOut
+Y1900o $20 Liberty - ICG AU50
+Q1
+MXfr To: Odd Type Set
+^
+D10/20' 1
+NBuy
+Y1893o $20 Liberty - ICG AU58
+I393.20
+Q1
+T393.20
+PWestmarch Coin Co.
+^
+D5/10' 6
+NSellX
+Y1893o $20 Liberty - ICG AU58
+I606.38
+Q1
+T606.38
+PPelham & Vance
+L[Alder Bank - Checking]
+$606.38
+^
+D8/20' 2
+NBuy
+YEuro Coin set (12 countries)
+I125.48
+Q1
+T125.48
+PAmbersley Auctions
+^
+D12/19' 2
+NBuy
+Y2002 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PHarbourstone Coins
+^
+D8/ 1' 4
+NSell
+Y2002 Ag Eagle-PF
+I34.73
+Q1
+T34.73
+PTollgate Rarities
+^
+D12/18' 3
+NBuy
+Y2003 Ag Eagle-PF
+I30.98
+Q1
+T30.98
+PPelham & Vance
+^
+D8/ 1' 4
+NSell
+Y2003 Ag Eagle-PF
+I32.23
+Q1
+T32.23
+PWestmarch Coin Co.
+^
+D2/11' 4
+NBuy
+Y1876O $20 - NGC AU50
+I560.46
+Q1
+T560.46
+PKingsmere Numismatics
+^
+D9/ 8' 5
+NShrsOut
+Y1876O $20 - NGC AU50
+Q1
+MXfr To: Odd Type Set
+^
+D3/16' 4
+NBuy
+Y1872 2¢ PF
+I445.76
+Q1
+T445.76
+PTollgate Rarities
+^
+D3/23' 4
+NSell
+Y1872 2¢ PF
+I850.57
+Q1
+T850.57
+PHarbourstone Coins
+^
+D3/23' 4
+NBuy
+Y1883 5¢ N/C-NGC PF66
+I985.88
+Q1
+T985.88
+PWestmarch Coin Co.
+^
+D7/11' 4
+NShrsOut
+Y1883 5¢ N/C-NGC PF66
+Q1
+MXfr To: Odd Type Set
+^
+D3/23' 4
+NBuy
+Y1907 1¢ - NGC PF65RB
+I353.20
+Q1
+T353.20
+PAmbersley Auctions
+^
+D5/ 1' 4
+NSell
+Y1907 1¢ - NGC PF65RB
+I271.58
+Q1
+T271.58
+PKingsmere Numismatics
+^
+D4/ 6' 4
+NBuy
+Y1876 $20 - NCG AU50
+I590.38
+Q1
+T590.38
+PHarbourstone Coins
+^
+D1/18' 6
+NShrsOut
+Y1876 $20 - NCG AU50
+Q1
+MXfr To: Odd Type Set
+^
+D5/ 1' 4
+NBuy
+Y1862 3CS - NGC/CAC PF65
+I674.79
+Q1
+T674.79
+PPelham & Vance
+^
+D7/11' 4
+NShrsOut
+Y1862 3CS - NGC/CAC PF65
+Q1
+MXfr To: Odd Type Set
+^
+D6/13' 4
+NBuy
+Y1873o ½10¢ - PCGS MS65
+I376.40
+Q1
+T376.40
+PKingsmere Numismatics
+^
+D10/10' 5
+NSellX
+Y1873o ½10¢ - PCGS MS65
+I359.00
+Q1
+T359.00
+PAmbersley Auctions
+L[Alder Bank - Checking]
+$359.00
+^
+D11/ 7' 4
+NBuy
+Y1888 $1 - ICG MS65DMPL
+I212.54
+Q1
+T212.54
+PTollgate Rarities
+^
+D5/10' 6
+NSellX
+Y1888 $1 - ICG MS65DMPL
+I254.00
+Q1
+T254.00
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$254.00
+^
+D7/18' 6
+NBuy
+Y1828 Cap & Rays 8 Reales
+I29.73
+Q1
+T29.73
+PWestmarch Coin Co.
+^
+D9/ 9' 6
+NBuy
+Y1860 3CS - NGC MS65
+I445.76
+Q1
+T445.76
+PAmbersley Auctions
+^
+D10/ 9'13
+NShrsOut
+Y1860 3CS - NGC MS65
+Q1
+MXfr To: Odd Type Set
+^
+D9/26' 6
+NBuy
+Y1893 Columbian Exposition Token
+I13.25
+Q1
+T13.25
+PHarbourstone Coins
+^
+D9/18' 8
+NSell
+Y1893 Columbian Exposition Token
+I13.25
+Q1
+T13.25
+PTollgate Rarities
+^
+D9/26' 6
+NBuy
+YBenjamin Harrison Token
+I5.45
+Q1
+T5.45
+PPelham & Vance
+^
+D9/18' 8
+NSell
+YBenjamin Harrison Token
+I7.42
+Q1
+T7.42
+PWestmarch Coin Co.
+^
+D10/ 6' 6
+NBuy
+YBarber coins
+I23.16
+Q1
+T23.16
+PKingsmere Numismatics
+^
+D3/13'11
+NSell
+YBarber coins
+I26.92
+Q1
+T26.92
+PAmbersley Auctions
+^
+D10/23' 6
+NBuy
+Y1919D 1¢ - AU
+I83.87
+Q1
+T83.87
+PTollgate Rarities
+^
+D3/18'14
+NSellX
+Y1919D 1¢ - AU
+I135.66
+Q1
+T135.66
+PHarbourstone Coins
+L[Alder Bank - Checking]
+$135.66
+^
+D11/28' 6
+NBuy
+Y1876-CC 10¢ - VF35
+I38.47
+Q1
+T38.47
+PWestmarch Coin Co.
+^
+D7/26'22
+NSell
+Y1876-CC 10¢ - VF35
+I87.51
+Q1
+T87.51
+PPelham & Vance
+^
+D1/ 6' 7
+NBuy
+Y1753 Pillar Dollar (8 Reales) - ANACS AU53 Details
+I376.40
+Q1
+T376.40
+PAmbersley Auctions
+^
+D2/21'22
+NSell
+Y1753 Pillar Dollar (8 Reales) - ANACS AU53 Details
+I416.90
+Q1
+T416.90
+PKingsmere Numismatics
+^
+D1/ 6' 7
+NBuy
+Y1904-O 5¢ - F12
+I329.94
+Q1
+T329.94
+PHarbourstone Coins
+^
+D8/12'13
+NSell
+Y1904-O 5¢ - F12
+I266.88
+Q1
+T266.88
+PTollgate Rarities
+^
+D1/ 8' 7
+NBuy
+Y1878-O Trade Dollar - ANACS F12
+I111.66
+Q1
+T111.66
+PPelham & Vance
+^
+D2/21'22
+NSell
+Y1878-O Trade Dollar - ANACS F12
+I212.83
+Q1
+T212.83
+PWestmarch Coin Co.
+^
+D11/19' 7
+NBuy
+Y1855 3CS - ANACS AU58
+I183.27
+Q1
+T183.27
+PKingsmere Numismatics
+^
+D2/21'22
+NSell
+Y1855 3CS - ANACS AU58
+I212.83
+Q1
+T212.83
+PAmbersley Auctions
+^
+D7/ 6' 8
+NBuy
+Y1876-O Trade Dollar - AU50 Cleaned
+I147.60
+Q1
+T147.60
+PTollgate Rarities
+^
+D2/ 8'11
+NSell
+Y1876-O Trade Dollar - AU50 Cleaned
+I212.83
+Q1
+T212.83
+PHarbourstone Coins
+^
+D9/ 9' 8
+NBuy
+Y1882-O $1 - ANACS MS65
+I69.25
+Q1
+T69.25
+PWestmarch Coin Co.
+^
+D2/21'22
+NSell
+Y1882-O $1 - ANACS MS65
+I111.66
+Q1
+T111.66
+PPelham & Vance
+^
+D9/18' 8
+NBuy
+Y1889 1 Crown
+I13.25
+Q1
+T13.25
+PAmbersley Auctions
+^
+D2/ 3'11
+NSell
+Y1889 1 Crown
+I25.96
+Q1
+T25.96
+PKingsmere Numismatics
+^
+D11/15' 8
+NBuy
+Y1884-O $1 - ANACS MS65
+I87.51
+Q1
+T87.51
+PHarbourstone Coins
+^
+D8/ 3'10
+NBuy
+Y1872 5¢ - NGC/CAC XF40
+I329.94
+Q1
+T329.94
+PPelham & Vance
+^
+D10/ 5'10
+NBuy
+Y1877-CC 10¢ - ANACS VF20
+I53.31
+Q1
+T53.31
+PKingsmere Numismatics
+^
+D7/26'22
+NSell
+Y1877-CC 10¢ - ANACS VF20
+I87.51
+Q1
+T87.51
+PAmbersley Auctions
+^
+D11/22'10
+NBuy
+Y1873 Open 3 G$1 - ANACS AU50
+I294.97
+Q1
+T294.97
+PTollgate Rarities
+^
+D7/13'12
+NShrsOut
+Y1873 Open 3 G$1 - ANACS AU50
+Q1
+MXfr To: Odd Type Set
+^
+D11/22'10
+NBuy
+Y1854 G$3 - NGC/CAC AU53
+I1405.34
+Q1
+T1405.34
+PWestmarch Coin Co.
+^
+D7/13'12
+NShrsOut
+Y1854 G$3 - NGC/CAC AU53
+Q1
+MXfr To: Odd Type Set
+^
+D11/22'10
+NBuy
+Y1812 ½ Real - Mexico City
+I35.98
+Q1
+T35.98
+PAmbersley Auctions
+^
+D2/21'22
+NSell
+Y1812 ½ Real - Mexico City
+I19.64
+Q1
+T19.64
+PKingsmere Numismatics
+^
+D12/ 4'10
+NBuy
+Y1867 $3 - NGC AU55
+I2643.77
+Q1
+T2643.77
+PHarbourstone Coins
+^
+D7/13'12
+NShrsOut
+Y1867 $3 - NGC AU55
+Q1
+MXfr To: Odd Type Set
+^
+D1/13'11
+NBuy
+Y1878-CC 25¢ - VF
+I141.63
+Q1
+T141.63
+PPelham & Vance
+^
+D7/26'22
+NSell
+Y1878-CC 25¢ - VF
+I129.67
+Q1
+T129.67
+PWestmarch Coin Co.
+^
+D2/ 8'11
+NBuy
+Y1913 $2.50 Gold Indian - ANACS AU58
+I324.12
+Q1
+T324.12
+PKingsmere Numismatics
+^
+D7/13'12
+NShrsOut
+Y1913 $2.50 Gold Indian - ANACS AU58
+Q1
+MXfr To: Odd Type Set
+^
+D2/22'11
+NBuy
+Y1922 $10 Gold Indian - NGC MS64
+I1533.13
+Q1
+T1533.13
+PTollgate Rarities
+^
+D3/23'12
+NSell
+Y1922 $10 Gold Indian - NGC MS64
+I1533.13
+Q1
+T1533.13
+PHarbourstone Coins
+^
+D10/ 4'11
+NBuy
+Y1850-S $1 Gold - ANACS XF40
+I329.94
+Q1
+T329.94
+PWestmarch Coin Co.
+^
+D7/13'12
+NShrsOut
+Y1850-S $1 Gold - ANACS XF40
+Q1
+MXfr To: Odd Type Set
+^
+D5/29'12
+NBuy
+Y1908 NM $20 - NGC/CAC MS65
+I2174.48
+Q1
+T2174.48
+PAmbersley Auctions
+^
+D7/13'12
+NShrsOut
+Y1908 NM $20 - NGC/CAC MS65
+Q1
+MXfr To: Odd Type Set
+^
+D5/29'12
+NBuy
+Y1905 $20 - PCGS MS64
+I2075.55
+Q1
+T2075.55
+PHarbourstone Coins
+^
+D7/13'12
+NShrsOut
+Y1905 $20 - PCGS MS64
+Q1
+MXfr To: Odd Type Set
+^
+D6/11'12
+NBuy
+Y1908 $5 - NGC/CAC XF40
+I549.18
+Q1
+T549.18
+PPelham & Vance
+^
+D7/13'12
+NShrsOut
+Y1908 $5 - NGC/CAC XF40
+Q1
+MXfr To: Odd Type Set
+^
+D6/11'12
+NBuy
+Y1909 $5 - NGC/CAC XF45
+I543.45
+Q1
+T543.45
+PKingsmere Numismatics
+^
+D7/13'12
+NShrsOut
+Y1909 $5 - NGC/CAC XF45
+Q1
+MXfr To: Odd Type Set
+^
+D6/11'12
+NBuy
+Y1913-D $5 - NGC XF45
+I549.18
+Q1
+T549.18
+PTollgate Rarities
+^
+D7/13'12
+NShrsOut
+Y1913-D $5 - NGC XF45
+Q1
+MXfr To: Odd Type Set
+^
+D6/11'12
+NBuy
+Y1926-D $5 - NGC XF45
+I583.52
+Q1
+T583.52
+PWestmarch Coin Co.
+^
+D7/13'12
+NShrsOut
+Y1926-D $5 - NGC XF45
+Q1
+MXfr To: Odd Type Set
+^
+D6/11'12
+NBuy
+Y1914-D $5 - NGC XF45
+I583.52
+Q1
+T583.52
+PAmbersley Auctions
+^
+D7/13'12
+NShrsOut
+Y1914-D $5 - NGC XF45
+Q1
+MXfr To: Odd Type Set
+^
+D6/12'12
+NBuy
+Y1893 $5 - PCI AU53
+I531.99
+Q1
+T531.99
+PHarbourstone Coins
+^
+D7/13'12
+NShrsOut
+Y1893 $5 - PCI AU53
+Q1
+MXfr To: Odd Type Set
+^
+D6/18'12
+NBuy
+Y1824 50¢ - VF
+I50.23
+Q1
+T50.23
+PPelham & Vance
+^
+D2/21'22
+NSell
+Y1824 50¢ - VF
+I75.35
+Q1
+T75.35
+PWestmarch Coin Co.
+^
+D6/18'12
+NBuy
+Y1873 Open 3 G$2.50 - ANACS AU55
+I338.67
+Q1
+T338.67
+PKingsmere Numismatics
+^
+D7/13'12
+NShrsOut
+Y1873 Open 3 G$2.50 - ANACS AU55
+Q1
+MXfr To: Odd Type Set
+^
+D7/ 8'13
+NBuy
+Y1875-O $1 - PCGS VF35
+I195.11
+Q1
+T195.11
+PTollgate Rarities
+^
+D7/26'22
+NSell
+Y1875-O $1 - PCGS VF35
+I329.94
+Q1
+T329.94
+PHarbourstone Coins
+^
+D10/ 8'13
+NBuy
+Y1819 50¢ - F
+I95.98
+Q1
+T95.98
+PWestmarch Coin Co.
+^
+D10/10'13
+NShrsIn
+Y1859 3CS - XF40 - FAKE
+I14.39
+Q1
+U14.39
+T14.39
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1877 20¢ - PCGS/CAC VF20
+I433.82
+Q1
+U433.82
+T433.82
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877 20¢ - PCGS/CAC VF20
+I382.19
+Q1
+T382.19
+PTollgate Rarities
+^
+D10/10'13
+NShrsIn
+Y1877CC 20¢ - NGC/CAC VF25
+I674.79
+Q1
+U674.79
+T674.79
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877CC 20¢ - NGC/CAC VF25
+I445.76
+Q1
+T445.76
+PWestmarch Coin Co.
+^
+D10/10'13
+NShrsIn
+Y1877CC 20¢ - NGC VF25
+I333.44
+Q1
+U333.44
+T333.44
+MXfr From: Misc. Coins
+^
+D2/21'22
+NSell
+Y1877CC 20¢ - NGC VF25
+I387.99
+Q1
+T387.99
+PAmbersley Auctions
+^
+D10/10'13
+NShrsIn
+Y1877CC 20¢ - NGC VF30
+I300.81
+Q1
+U300.81
+T300.81
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877CC 20¢ - NGC VF30
+I445.76
+Q1
+T445.76
+PHarbourstone Coins
+^
+D10/10'13
+NShrsIn
+Y1877O 20¢ - ANACS XF45
+I259.87
+Q1
+U259.87
+T259.87
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877O 20¢ - ANACS XF45
+I224.62
+Q1
+T224.62
+PPelham & Vance
+^
+D10/10'13
+NShrsIn
+Y1876 20¢ - NGC/CAC XF40
+I622.36
+Q1
+U622.36
+T622.36
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1889 3CN - PCI EF40
+I122.48
+Q1
+U122.48
+T122.48
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1889 3CN - PCI EF40
+I242.26
+Q1
+T242.26
+PTollgate Rarities
+^
+D10/10'13
+NShrsIn
+Y1862/1 3CS - PCGS/CAC MS64
+I405.34
+Q1
+U405.34
+T405.34
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1868 2¢ - VF35
+I75.35
+Q1
+U75.35
+T75.35
+MXfr From: Misc. Coins
+^
+D5/ 9'19
+NSell
+Y1868 2¢ - VF35
+I111.66
+Q1
+T111.66
+PAmbersley Auctions
+^
+D10/10'13
+NShrsIn
+Y1872 2¢ - VF/XF
+I25.96
+Q1
+U25.96
+T25.96
+MXfr From: Misc. Coins
+^
+D5/ 9'19
+NSell
+Y1872 2¢ - VF/XF
+I123.68
+Q1
+T123.68
+PHarbourstone Coins
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - VF
+I29.67
+Q1
+U29.67
+T29.67
+MXfr From: Misc. Coins
+^
+D2/ 7'14
+NSell
+Y1877 3CN - VF
+I47.34
+Q1
+T47.34
+PPelham & Vance
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - XF
+I52.70
+Q1
+U52.70
+T52.70
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1881 3CN - ANACS VF30
+I230.50
+Q1
+U230.50
+T230.50
+MXfr From: Misc. Coins
+^
+D2/21'22
+NSell
+Y1881 3CN - ANACS VF30
+I230.50
+Q1
+T230.50
+PTollgate Rarities
+^
+D10/10'13
+NShrsIn
+Y1881 3CN - ANACS AU55 (CLEANED)
+I109.24
+Q1
+U109.24
+T109.24
+MXfr From: Misc. Coins
+^
+D2/21'22
+NSell
+Y1881 3CN - ANACS AU55 (CLEANED)
+I230.50
+Q1
+T230.50
+PWestmarch Coin Co.
+^
+D10/10'13
+NShrsIn
+Y1855 3CS - VF - FAKE
+I105.64
+Q1
+U105.64
+T105.64
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - PCGS XF45
+I52.08
+Q1
+U52.08
+T52.08
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877 3CN - PCGS XF45
+I75.35
+Q1
+T75.35
+PHarbourstone Coins
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - NGC/CAC MS63
+I245.79
+Q1
+U245.79
+T245.79
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1886 3CN - ANACS EF40
+I93.56
+Q1
+U93.56
+T93.56
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1886 3CN - ANACS EF40
+I159.52
+Q1
+T159.52
+PKingsmere Numismatics
+^
+D10/10'13
+NShrsIn
+Y1882 3CN - ANACS AU58
+I224.62
+Q1
+U224.62
+T224.62
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1882 3CN - ANACS AU58
+I242.26
+Q1
+T242.26
+PTollgate Rarities
+^
+D10/10'13
+NShrsIn
+Y1879 3CN - NGC AU50
+I179.72
+Q1
+U179.72
+T179.72
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1879 3CN - NGC AU50
+I218.73
+Q1
+T218.73
+PWestmarch Coin Co.
+^
+D10/10'13
+NShrsIn
+Y1876 20¢ - VF Details (TOOLED\NGC)
+I391.46
+Q1
+U391.46
+T391.46
+MXfr From: Misc. Coins
+^
+D2/21'22
+NSell
+Y1876 20¢ - VF Details (TOOLED\NGC)
+I359.00
+Q1
+T359.00
+PAmbersley Auctions
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - AU50
+I174.97
+Q1
+U174.97
+T174.97
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1856 Repunched Date 3CS - ANACS VF25 (CLEANED)
+I93.56
+Q1
+U93.56
+T93.56
+MXfr From: Misc. Coins
+^
+D2/21'22
+NSell
+Y1856 Repunched Date 3CS - ANACS VF25 (CLEANED)
+I153.56
+Q1
+T153.56
+PPelham & Vance
+^
+D10/10'13
+NShrsIn
+Y1877 3CN - AU55
+I103.23
+Q1
+U103.23
+T103.23
+MXfr From: Misc. Coins
+^
+D10/10'13
+NShrsIn
+Y1870 2¢ - XF
+I75.35
+Q1
+U75.35
+T75.35
+MXfr From: Misc. Coins
+^
+D5/ 9'19
+NSell
+Y1870 2¢ - XF
+I87.51
+Q1
+T87.51
+PTollgate Rarities
+^
+D5/ 1'21
+NShrsIn
+Y1891-S $1 - ANACS MS60
+I12.50
+Q1
+U12.50
+T12.50
+MXfr From: Misc. Coins
+^
+D5/ 1'21
+NShrsIn
+Y1882-O $1 - ANACS MS64 Cameo PL
+I12.50
+Q1
+U12.50
+T12.50
+MXfr From: Misc. Coins
+^
+D5/ 2'21
+NShrsIn
+Y1889 3CN - ANACS EF40
+I125.84
+Q1
+U125.84
+T125.84
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1889 3CN - ANACS EF40
+I242.26
+Q1
+T242.26
+PHarbourstone Coins
+^
+D9/11'21
+NBuy
+Y1909 S-VDB 1¢ - NGC/CAC AU50
+I1210.16
+Q1
+T1210.16
+PWestmarch Coin Co.
+^
+D7/26'22
+NSell
+Y1909 S-VDB 1¢ - NGC/CAC AU50
+I1321.80
+Q1
+T1321.80
+PPelham & Vance
+^
+D7/26'22
+NShrsIn
+Y1877 3CN - Choice VF
+I12.50
+Q1
+U12.50
+T12.50
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1877 3CN - Choice VF
+I57.00
+Q1
+T57.00
+PKingsmere Numismatics
+^
+D7/26'22
+NShrsIn
+Y1876 3CN - Choice VF
+I12.50
+Q1
+U12.50
+T12.50
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1876 3CN - Choice VF
+I69.25
+Q1
+T69.25
+PTollgate Rarities
+^
+D7/26'22
+NShrsIn
+Y1881 3CN - ANACS AU58
+I12.50
+Q1
+U12.50
+T12.50
+MXfr From: Misc. Coins
+^
+D7/26'22
+NSell
+Y1881 3CN - ANACS AU58
+I359.00
+Q1
+T359.00
+PWestmarch Coin Co.
+^
+D2/11'23
+NBuy
+Y1934-S Oregon 50¢ - NGC MS60
+I363.57
+Q1
+T363.57
+PKingsmere Numismatics
+^
+D12/22'25
+NBuy
+Y2025 250th Anniversary U.S. Army ASE
+I136.79
+Q1
+T136.79
+PTollgate Rarities
+^
+D1/ 1'26
+NBuy
+Y2025 $1 Gold Sacagawea - ½ oz
+I2459.09
+Q1
+T2459.09
+PWestmarch Coin Co.
+^
+D1/31'26
+NSellX
+Y2025 $1 Gold Sacagawea - ½ oz
+I2541.43
+Q1
+T2541.43
+PPelham & Vance
+L[Alder Bank - Checking]
+$2541.43
+^
+!Type:Prices
+"ZQALDB",23.88," 1/ 1'24"
+^
+!Type:Prices
+"ZQBRWF",24.63," 2/ 2'24"
+^
+!Type:Prices
+"ZQCALD",25.39," 3/ 3'24"
+^
+!Type:Prices
+"ZQDUNW",26.16," 4/ 4'24"
+^
+!Type:Prices
+"ZQEAST",26.94," 5/ 5'24"
+^
+!Type:Prices
+"ZQFALL",27.73," 6/ 6'24"
+^
+!Type:Prices
+"ZQGARR",28.53," 7/ 7'24"
+^
+!Type:Prices
+"ZQHARR",29.34," 8/ 8'24"
+^
+!Type:Prices
+"ZQINGL",30.16," 9/ 9'24"
+^
+!Type:Prices
+"ZQJARR",30.99," 10/10'24"
+^
+!Type:Prices
+"ZQKELV",31.83," 11/11'24"
+^
+!Type:Prices
+"ZQLANC",32.69," 12/12'24"
+^
+!Type:Prices
+"ZQMARC",33.56," 1/13'24"
+^
+!Type:Prices
+"ZQNETH",34.44," 2/14'24"
+^
+!Type:Prices
+"ZQOAKM",35.33," 3/15'24"
+^
+!Type:Prices
+"ZQPENN",36.23," 4/16'24"
+^
+!Type:Prices
+"ZQQUAR",37.15," 5/17'24"
+^
+!Type:Prices
+"ZQRAVE",38.08," 6/18'24"
+^
+!Type:Prices
+"ZQBMIF",39.02," 7/19'24"
+^
+!Type:Prices
+"ZQCAFD",39.97," 8/20'24"
+^
+!Type:Prices
+"ZQDGFD",40.94," 9/21'24"
+^
+!Type:Prices
+"ZQEMFD",41.92," 10/22'24"
+^
+!Type:Prices
+"ZQIBFD",42.91," 11/23'24"
+^
+!Type:Prices
+"ZQMMRF",43.92," 12/24'24"
+^
+!Type:Prices
+"ZQSCVF",44.94," 1/25'24"
+^
+!Type:Prices
+"ZQT40F",45.98," 2/26'24"
+^
+!Type:Prices
+"ZQMB31",47.03," 3/27'24"
+^
+!Type:Prices
+"ZQMB34",48.09," 4/28'24"
+^
+!Type:Prices
+"ZQCN29",49.17," 5/ 1'24"
+^
+!Type:Prices
+"ZQIB19",50.26," 6/ 2'24"
+^
+!Type:Prices
+"ZQIB20",51.37," 7/ 3'24"
+^
+!Type:Prices
+"ZQEE17",52.49," 8/ 4'24"
+^
+!Type:Prices
+"ZQALDC",53.63," 9/ 5'24"
+^
+!Type:Prices
+"ZQBRWP",54.78," 10/ 6'24"
+^
+!Type:Prices
+"ZQEASC",55.95," 11/ 7'24"
+^
+!Type:Prices
+"ZQIDXA",57.14," 12/ 8'24"
+^
+!Type:Prices
+"ZQIDXB",58.34," 1/ 9'24"
+^
+!Type:Prices
+"ZQAGRD",59.56," 2/10'24"
+^
+!Type:Prices
+"ZQAUBR",60.80," 3/11'24"
+^
+!Type:Prices
+"ZQPTBR",62.05," 4/12'24"
+^
+!Account
+NDriftwood Brokerage
+TPort
+^
+!Type:Invst
+D3/ 4'18
+NBuy
+YAldbury Manufacturing
+I41.22
+Q100
+T4122.00
+^
+D6/19'19
+NBuy
+YBroad Market Index Fund
+I118.40
+Q25
+T2960.00
+^
+D9/ 8'20
+NSell
+YBarrowfield Energy
+I27.65
+Q50
+T1382.50
+^
+D2/11'21
+NReinvDiv
+YDividend Growth Fund
+I33.10
+Q4.512
+T149.35
+^
+D5/23'22
+NBuy
+YMunicipal Bond 2031
+I99.25
+Q10
+T992.50
+^
+!Account
+NAlder Bank - Checking
+TBank
+^
+!Type:Bank
+D1/ 8'19
+T-42.00
+N1041
+PHarbourstone Coins
+LCoin Supplies
+MFlips and 2x2s
+^
+D2/14'19
+T-180.00
+N1042
+PTollgate Rarities
+LGrading Fees
+MSubmission 4 coins
+^
+D3/ 2'19
+T1,250.00
+PAmbersley Auctions
+LBullion Sales
+MAuction settlement
+^
+D4/19'19
+T-16.85
+PPost Office
+LPostage
+MInsured parcel
+^
+D7/ 1'19
+T-95.00
+N1043
+PElm Street Vault
+LStorage
+MAnnual box fee
+^

@@ -1,0 +1,153 @@
+<!-- Notification toast at the top of the app for system messages -->
+<app-notification-toast />
+
+<!--
+  Database error banner.
+  `retryConnection()` re-runs hydration in place, so the user never has to
+  reload the page after the backend comes back up. The button is disabled
+  while an attempt is already in flight (inv.connecting()).
+-->
+@if (inv.connectionError()) {
+  <div class="db-error-banner" role="alert">
+    <strong>Database unavailable</strong>
+    <span>{{ inv.connectionError() }}</span>
+    <button
+      type="button"
+      class="small-button"
+      [disabled]="inv.connecting()"
+      (click)="retryConnection()">
+      {{ inv.connecting() ? 'Retrying…' : 'Retry connection' }}
+    </button>
+  </div>
+}
+
+<main class="app-shell">
+  <header class="topbar">
+    <div class="topbar-title">
+      <p class="eyebrow">Numismatic portfolio</p>
+      <h1>Coin Inventory</h1>
+    </div>
+
+    <app-toolbar
+      [settingsOpen]="showSettingsModal()"
+      (addCoinRequested)="addBlankCoin()"
+      (importSelected)="handleImportSelection($event)"
+      (exportSelected)="handleExportSelection($event)"
+      (settingsRequested)="openSettingsModal()"
+    />
+  </header>
+
+  <!--
+    Search, category dropdown and the advanced filter panel. The bar writes
+    straight into the shared filter store; it only calls back here for the two
+    filters that can push the selected coin out of view.
+  -->
+  <app-inventory-filter-bar
+    [filters]="filters"
+    (searchQueryChange)="onSearchQueryChange($event)"
+    (categoryFilterChange)="onCategoryFilterChange($event)"
+    (manageCategoriesRequested)="openCategoryModal()"
+    (reportsRequested)="openReportModal()"
+    (spotPricesRequested)="openSpotPriceModal()"
+  />
+
+  <div class="main-content" [class.has-detail]="showDetailPanel() && selectedCoin">
+    <app-inventory-table
+      [filters]="filters"
+      [columns]="columns"
+      [selection]="selection"
+      (coinSelected)="selectCoin($event)"
+      (detailRequested)="openCoinDetail($event)"
+      (imagesRequested)="showCoinImages($event)"
+    />
+
+    @if (showDetailPanel() && selectedCoin; as coin) {
+      <app-coin-detail-panel
+        [coin]="coin"
+        [images]="images"
+        [showTransactions]="showTransactionsInDetails()"
+        (closeRequested)="closeDetailPanel()"
+        (deleteRequested)="deleteSelectedCoin()"
+      />
+    }
+  </div>
+
+  <!--
+    The per-coin photo gallery.
+
+    NOTE the absence of an `imagePaths.length > 0` check, which used to be
+    here. The gallery is not only a viewer: it is the one place in the app
+    where photos can be attached to a SPECIFIC coin, so a coin with none yet
+    is precisely the case that needs it most. It shows its own empty state in
+    that situation. See CoinImagesStore.canOpenImageGallery.
+  -->
+  @if (selectedCoin; as coin) {
+    @if (images.showImageGallery()) {
+      <app-coin-image-gallery [coin]="coin" [images]="images" />
+    }
+  }
+
+  <!-- Bulk edit bar -->
+  @if (selection.selectionCount() > 0) {
+    <app-bulk-edit-bar [selection]="selection" />
+  }
+
+  <!-- Hidden file input used by Import > JSON (see InventoryFileIo). -->
+  <input id="inventory-json-import-input" type="file" accept="application/json" hidden (change)="io.handleInventoryImportFile($event)" />
+
+  @if (showSettingsModal()) {
+    <app-settings-modal
+      [showTransactionsInDetails]="showTransactionsInDetails()"
+      (showTransactionsInDetailsChange)="showTransactionsInDetails.set($event)"
+      (closed)="closeSettingsModal()"
+    />
+  }
+
+  <!-- Child component modals -->
+  @if (showQuickenModal()) {
+    <app-quicken-import-modal (closed)="closeQuickenModal()" (imported)="onQuickenImported($event)" />
+  }
+  @if (showCsvImportModal()) {
+    <app-csv-import-modal (closed)="closeCsvImportModal()" />
+  }
+  @if (showImageImportModal()) {
+    <app-image-import-modal (closed)="closeImageImportModal()" />
+  }
+  @if (showCategoryModal()) {
+    <app-category-modal (closed)="closeCategoryModal()" />
+  }
+  @if (showReportModal()) {
+    <app-report-modal (closed)="closeReportModal()" (exportCsvRequested)="io.exportCsv()" (exportInsuranceCsvRequested)="io.exportInsuranceCsv()" />
+  }
+  @if (showSpotPriceModal()) {
+    <app-spot-price-modal (closed)="closeSpotPriceModal()" />
+  }
+
+  <!-- The resizable full-size photo window.
+
+       This one DOES keep the `length > 0` guard, and the asymmetry with the
+       gallery above is deliberate: the viewer shows one existing photo and
+       offers no way to add anything, so on an empty coin it would be an empty
+       box with nothing to do in it. -->
+  @if (selectedCoin; as coin) {
+    @if (images.showPhotoViewer() && coin.imagePaths.length > 0) {
+      <app-coin-photo-viewer [coin]="coin" [images]="images" />
+    }
+  }
+</main>
+
+<footer class="status-bar">
+  @if (inv.connecting()) {
+    <span class="status-dot status-dot--connecting"></span> Connecting to database...
+  } @else if (inv.connected()) {
+    <span class="status-dot status-dot--connected"></span> Connected &mdash; {{ inv.inventory().length }} coins
+  } @else if (inv.connectionError()) {
+    <span class="status-dot status-dot--error"></span> Database unavailable
+    <!-- Second entry point for reconnecting, for when the top banner has
+         scrolled out of view. -->
+    <button type="button" class="small-button" (click)="retryConnection()">Retry connection</button>
+  } @else {
+    <span class="status-dot"></span> Idle
+    <button type="button" class="small-button" (click)="retryConnection()">Connect</button>
+  }
+</footer>
