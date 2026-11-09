@@ -1,14 +1,13 @@
-/* ===========================================================================
+ /*
  * denomination-units.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Reading a denomination out of a NUMBER THAT CARRIES A UNIT, straight from
  *   the raw filename: "$20", "50c" (the cent sign), "20-cent", "1-Cent".
  *   Public entry point is `findUnitBoundDenomination`.
  *
- * ---------------------------------------------------------------------------
  * THE ONE RULE THIS FILE EXISTS TO ENFORCE -- READ THIS BEFORE EDITING
- * ---------------------------------------------------------------------------
+ *
  * A **BARE** NUMBER MEANS NOTHING. A NUMBER **BOUND TO A UNIT** MEANS A LOT.
  *
  *   "25"        -> nothing. Could be a lot number, a price, a take number,
@@ -46,7 +45,7 @@
  *      with no whitespace allowed. (The stamp is additionally caught by
  *      non-coin-detector.ts -- belt and braces, because getting this wrong
  *      files a stamp photo under a coin.)
- * =========================================================================== */
+  */
 
 import { denominationsAgree } from './reference-tables';
 import { tokenize } from './text-tokens';
@@ -64,9 +63,9 @@ export interface UnitBoundDenomination {
   consumedTokens: string[];
 }
 
-/* ---------------------------------------------------------------------------
+ /*
  * THE DOLLAR TABLE -- AND THE ONE RULE THAT TELLS A FACE VALUE FROM A PRICE
- * ---------------------------------------------------------------------------
+ *
  * THE RULE, IN ONE SENTENCE:
  *
  *     A DOLLAR AMOUNT IN A FILENAME IS THIS COIN'S FACE VALUE ONLY IF IT IS
@@ -104,16 +103,11 @@ export interface UnitBoundDenomination {
  *                                 refuses a thousands separator before the
  *                                 lookup is ever reached.
  *
- *   $2.50 USED TO BE A NAMED EXCEPTION here -- the code asked whether cents
- *   were written and then whitelisted the Quarter Eagle by hand. It needs no
- *   exception now, because it was never an exception to begin with: it is
- *   simply one of the amounts a US coin is worth, and the table is what says
- *   so.
- *
  *   This is the SAME question `readTrustedDenominationText` further down this
- *   file has always asked of a coin record's denomination column. Both sides
- *   of the matcher now answer it the same way, out of the same table.
- *
+ *   file asks of a coin record's denomination column. Both sides of the
+ *   matcher answer it the same way, out of the same table -- so do not add a
+ *   hand-written exception for $2.50 or any other amount: an amount either is
+ *   in the table or is not.
  * AND THE SECOND HALF OF THE SENTENCE: A COIN HAS ONLY ONE FACE VALUE
  *   A round amount with no cents can still be a price -- "$50" for a coin that
  *   cost fifty dollars. Nothing in the digits can separate that from the $50
@@ -146,7 +140,7 @@ export interface UnitBoundDenomination {
  *   absent rather than misread. The exposure is as old as "$1", "$5" and
  *   "$20", and in this collection the denomination is written first and the
  *   price, where there is one at all, carries its cents.
- * ------------------------------------------------------------------------- */
+  */
 const DOLLAR_FACE_VALUES: Readonly<Record<string, { key: string; label: string }>> = {
   '1': { key: 'dollar', label: 'Dollar ($1)' },
   '2.50': { key: 'quarter eagle', label: 'Quarter Eagle ($2.50)' },
@@ -164,12 +158,12 @@ const DOLLAR_FACE_VALUES: Readonly<Record<string, { key: string; label: string }
   '50': { key: 'fifty dollar', label: 'Fifty Dollar ($50)' }
 };
 
-/* ---------------------------------------------------------------------------
+ /*
  * THE CENT TABLE
- * ---------------------------------------------------------------------------
+ *
  * Face value in cents -> denomination. Shared by the cent-sign form ("50c")
  * and the hyphenated form ("50-Cent"), because they mean the same thing.
- * ------------------------------------------------------------------------- */
+  */
 const CENT_FACE_VALUES: Readonly<Record<string, { key: string; label: string }>> = {
   '1': { key: 'cent', label: 'Cent (1c)' },
   '2': { key: 'two cent', label: 'Two Cent' },
@@ -189,9 +183,9 @@ const CENT_FACE_VALUES: Readonly<Record<string, { key: string; label: string }>>
   '100': { key: 'dollar', label: 'Dollar ($1)' }
 };
 
-/* ---------------------------------------------------------------------------
+ /*
  * THE PATTERNS
- * ------------------------------------------------------------------------- */
+  */
 
 /**
  * "$20", "$ 5", "$2.50", "$25.00" -- ANY dollar amount, captured whole.
@@ -225,24 +219,18 @@ const CENT_SIGN = /(\d{1,3})\s*[¢￠]/g;
  */
 const HYPHENATED_CENT = /(?:^|[^0-9a-z])(\d{1,3})-cents?(?![a-z])/gi;
 
-/* ---------------------------------------------------------------------------
+ /*
  * "2 CENT", "3 CENT", "20 CENT" -- THE SPACED FACE VALUE
- * ---------------------------------------------------------------------------
- * THE OWNER WAS ASKED DIRECTLY whether a number followed by a SPACE and the
- * word "cent" is one of his face values. His answer, verbatim:
  *
- *     "Yes, read them as face values"
+ * A number followed by a SPACE and the word "cent" IS one of this
+ * collection's face values: "2 cent", "3 cent" and "20 cent" all appear.
+ * Reading them as nothing costs a match; reading them as a ONE CENT piece is
+ * worse, because a wrong denomination is a hard veto and the photograph then
+ * vanishes out of the import entirely. (See `isCountedCentTrap` in
+ * text-tokens.ts for the related trap.)
  *
- * He does write "2 cent", "3 cent" and "20 cent", and until now the matcher
- * read every one of them as NO DENOMINATION AT ALL. (Before that it read them
- * as a ONE CENT piece, which was worse: a wrong denomination is a hard veto,
- * so a two-cent photograph was disqualified from its own two-cent record and
- * vanished out of the import. See `isCountedCentTrap` in text-tokens.ts for
- * that story.)
- *
- * ---------------------------------------------------------------------------
  * THE DEFENCE THIS WOULD BREAK, AND HOW IT IS KEPT
- * ---------------------------------------------------------------------------
+ *
  * The hyphen requirement on HYPHENATED_CENT above is documented as "the entire
  * defence" against this real filename:
  *
@@ -285,32 +273,30 @@ const HYPHENATED_CENT = /(?:^|[^0-9a-z])(\d{1,3})-cents?(?![a-z])/gi;
  *   table's 'three cent silver' whenever one is a specific form of the other
  *   (`isSpecificFormOf`). The spaced reader therefore cannot blunt a filename
  *   that names the metal.
- * ------------------------------------------------------------------------- */
+  */
 const SPACED_CENT = /(?:^|[^0-9a-z])(\d{1,3})\s+cents?(?![a-z])/gi;
 
 /**
- * "½10¢" -- the HALF DIME, written as half of a dime.
- *
- * The owner: "Half Dime can be ½10¢ or 5¢". It is an odd-looking notation but
- * it is literal: a half dime is half of ten cents.
+ * "1/2 10<cent sign>" -- the HALF DIME, written as half of a dime. It is an
+ * odd-looking notation but it is literal: a half dime is half of ten cents.
  *
  * THIS MUST BE TRIED BEFORE `CENT_SIGN`, and that is the only reason it is a
- * separate pattern. CENT_SIGN reads `(\d{1,3})\s*¢`, which sees the "10¢" at
- * the end of "½10¢" and happily reports a DIME -- twice the face value and
- * the wrong coin. Matching the fraction first consumes the whole thing.
+ * separate pattern. CENT_SIGN reads `(\d{1,3})\s*<cent sign>`, which sees the
+ * "10<cent sign>" at the end and happily reports a DIME -- twice the face
+ * value and the wrong coin. Matching the fraction first consumes the whole
+ * thing.
  *
- * `½` is the single Unicode character; "1/2 10¢" is accepted too because a
- * keyboard without the glyph is the obvious way to type it.
+ * The single Unicode fraction character is accepted, and so is "1/2 10c",
+ * because a keyboard without the glyph is the obvious way to type it.
  */
 const HALF_DIME_SIGN = /(?:½|1\/2)\s*10\s*[¢￠]/;
 
 /**
  * "G$1" -- a GOLD dollar, as opposed to the silver kind.
  *
- * The owner: "There are Gold $1 coins too but should have the word Gold in
- * the descriptor or possibly G$1." The word form ("Gold Dollar") is handled
- * by DENOMINATION_RULES; this is the abbreviation, which cannot be, because
- * tokenizing deletes the "$" and leaves the meaningless pair ['g','1'].
+ * The word form ("Gold Dollar") is handled by DENOMINATION_RULES; this is the
+ * abbreviation, which cannot be, because tokenizing deletes the "$" and leaves
+ * the meaningless pair ['g','1'].
  *
  * TRIED BEFORE `DOLLAR_SIGN` for the same reason as the half dime above:
  * DOLLAR_SIGN would match the "$1" inside "G$1" and report the generic
@@ -323,9 +309,9 @@ const HALF_DIME_SIGN = /(?:½|1\/2)\s*10\s*[¢￠]/;
  */
 const GOLD_DOLLAR_SIGN = /(?:^|[^a-z0-9])g\s*\$\s*1(?![\d.,])/i;
 
-/* ---------------------------------------------------------------------------
+ /*
  * ENTRY POINT
- * ------------------------------------------------------------------------- */
+  */
 
 /**
  * Look for a unit-bound denomination in the raw (extension-stripped) filename.
@@ -361,12 +347,12 @@ const GOLD_DOLLAR_SIGN = /(?:^|[^a-z0-9])g\s*\$\s*1(?![\d.,])/i;
  *        its own. The cent forms ignore it entirely: nobody prices a coin at
  *        "50<cent sign>", so there is nothing there to be confused about.
  * @param options.allowSpacedCent say YES only once you know this filename
- *        describes a single coin. It admits the owner's spaced face values
- *        ("2 cent", "20 cent") and it is the one thing standing between the
- *        matcher and "Stamp - 11 - 3 cent.jpg", so the default is NO and the
- *        only caller that turns it on is filename-parser.ts, which turns it
- *        on from `detectNonCoin(...).isNonCoin === false`. The whole argument
- *        is in the SPACED_CENT comment above; read it before changing this.
+ *        describes a single coin. It admits the spaced face values ("2 cent",
+ *        "20 cent") and it is the one thing standing between the matcher and
+ *        "Stamp - 11 - 3 cent.jpg", so the default is NO and the only caller
+ *        that turns it on is filename-parser.ts, which turns it on from
+ *        `detectNonCoin(...).isNonCoin === false`. The whole argument is in
+ *        the SPACED_CENT comment above; read it before changing this.
  */
 export function findUnitBoundDenomination(
   rawText: string,
@@ -423,20 +409,19 @@ export function readTrustedDenominationText(text: string): UnitBoundDenomination
   }
 
   /* "1¢", "5¢", "20¢", "50¢" -- THE FORM THE DATABASE ACTUALLY USES.
-   *
    * server/setup-database.sql seeds the US denominations as '½¢', '1¢', '2¢',
-   * '5¢', '10¢', '20¢', '25¢', '50¢', '3CS', '3CN' and the dollar values. The
-   * abbreviations and the dollar forms were already understood, but the cent
-   * SIGN was not: `tokenize` deletes the sign (leaving a bare "20", which the
-   * word table rightly refuses) and the "N Cents" pattern above wants the
-   * word spelled out. So every record holding a cent-sign denomination used
-   * to contribute NO denomination evidence at all -- which also means the
-   * denomination veto could never fire for one.
+   * '5¢', '10¢', '20¢', '25¢', '50¢', '3CS', '3CN' and the dollar values.
+   * Nothing else reads the cent SIGN:
+   * `tokenize` deletes the sign, leaving a bare "20" that the word table
+   * rightly refuses, and the "N Cents" pattern above wants the word spelled
+   * out. Without this branch a record holding a cent-sign denomination
+   * contributes NO denomination evidence, which also means the denomination
+   * veto can never fire for one.
    *
    * Safe here for the same reason the spaced forms are: this is a record's
    * denomination COLUMN, the whole field must match end to end, and there is
-   * nothing else a field reading "20¢" could be. The equivalent FILENAME form
-   * is handled by `matchCentSign` above, where the stricter rules apply. */
+   * nothing else such a field could be. The equivalent FILENAME form is
+   * handled by `matchCentSign` above, where the stricter rules apply. */
   const centSign = /^(\d{1,3})\s*[¢￠]$/.exec(trimmed);
   if (centSign) {
     const hit = CENT_FACE_VALUES[centSign[1]];
@@ -445,9 +430,9 @@ export function readTrustedDenominationText(text: string): UnitBoundDenomination
 
   /* "½10¢" / "1/2 10¢" / "½ Dime" -- THE HALF DIME.
    *
-   * The owner: "Half Dime can be ½10¢ or 5¢". The "5¢" spelling needs nothing
-   * here: it goes through CENT_FACE_VALUES above to the generic 'five cent',
-   * which reference-tables.ts already declares equivalent to 'half dime'.
+   * The "5¢" spelling needs nothing here: it goes through CENT_FACE_VALUES
+   * above to the generic 'five cent', which reference-tables.ts already
+   * declares equivalent to 'half dime'.
    * The "½10¢" spelling DOES need a line, for two reasons:
    *
    *   1. nothing else would read it. `tokenize` throws the "½" and the "¢"
@@ -473,7 +458,7 @@ export function readTrustedDenominationText(text: string): UnitBoundDenomination
     return { key: 'half cent', label: 'Half Cent', consumedTokens: ['half', 'cent'] };
   }
 
-  /* "G$1" -- a GOLD dollar. See GOLD_DOLLAR_SIGN above for the owner's rule.
+  /* "G$1" -- a GOLD dollar. See GOLD_DOLLAR_SIGN above.
    * Checked before the dollar branch below, which would read the "$1" and
    * report the generic 'dollar'. */
   if (/^g\s*\$\s*1$/i.test(trimmed)) {
@@ -490,8 +475,8 @@ export function readTrustedDenominationText(text: string): UnitBoundDenomination
    *
    * NOTE THE LOOKUP: the captured amount goes into DOLLAR_FACE_VALUES exactly
    * as written, cents included. That is the same closed-set question the
-   * filename side now asks, from the same table, which is why a record column
-   * reading "$50.00" has never been a denomination either. */
+   * filename side asks, from the same table, which is why a record column
+   * reading "$50.00" is not a denomination either. */
   const dollars =
     /^\$\s*(\d{1,2}(?:\.\d{2})?)$/i.exec(trimmed) ??
     /^(\d{1,2}(?:\.\d{2})?)\s*dollars?$/i.exec(trimmed);
@@ -556,8 +541,7 @@ function matchHyphenatedCent(rawText: string): UnitBoundDenomination | null {
 }
 
 /**
- * "2 cent" -> Two Cent, "20 cent" -> Twenty Cent. The owner: "Yes, read them
- * as face values."
+ * "2 cent" -> Two Cent, "20 cent" -> Twenty Cent.
  *
  * Identical to `matchHyphenatedCent` except that the binder is whitespace
  * instead of a hyphen, which is exactly why it is reachable only behind

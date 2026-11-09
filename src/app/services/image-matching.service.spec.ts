@@ -32,9 +32,7 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
 
 const service = () => new ImageMatchingService();
 
-/* =========================================================================
- * PARSING
- * ======================================================================= */
+/* ---- PARSING ---- */
 describe('ImageMatchingService - filename parsing', () => {
   it('parses year, mint mark, denomination and coin type from a canonical name', () => {
     const parsed = service().parseFilename('1881-S Morgan Dollar obverse.jpg');
@@ -108,9 +106,7 @@ describe('ImageMatchingService - filename parsing', () => {
   });
 });
 
-/* =========================================================================
- * DEFECT #3 -- BARE-DIGIT DENOMINATION COLLISIONS
- * ======================================================================= */
+/* ---- DEFECT #3 -- BARE-DIGIT DENOMINATION COLLISIONS ---- */
 describe('ImageMatchingService - denomination parsing safety', () => {
   it('does not read "25" inside a cert number or a price as a quarter', () => {
     const parsed = service().parseFilename('1925-S Peace Dollar NGC 2599001 $25.00.jpg');
@@ -172,9 +168,7 @@ describe('ImageMatchingService - denomination parsing safety', () => {
   });
 });
 
-/* =========================================================================
- * AUTO-MATCH (the happy path)
- * ======================================================================= */
+/* ---- AUTO-MATCH (the happy path) ---- */
 describe('ImageMatchingService - confident auto matches', () => {
   it('auto-assigns when year, denomination, coin type and mint mark all agree', () => {
     const inventory = [
@@ -237,9 +231,7 @@ describe('ImageMatchingService - confident auto matches', () => {
   });
 });
 
-/* =========================================================================
- * DEFECT #2 -- RUNNER-UP / AMBIGUITY
- * ======================================================================= */
+/* ---- DEFECT #2 -- RUNNER-UP / AMBIGUITY ---- */
 describe('ImageMatchingService - ambiguity goes to review', () => {
   it('sends near-identical coins to review instead of silently picking one', () => {
     const inventory = [
@@ -299,9 +291,7 @@ describe('ImageMatchingService - ambiguity goes to review', () => {
   });
 });
 
-/* =========================================================================
- * DEFECT #1 -- SINGLE-ATTRIBUTE COINCIDENCES
- * ======================================================================= */
+/* ---- DEFECT #1 -- SINGLE-ATTRIBUTE COINCIDENCES ---- */
 describe('ImageMatchingService - corroboration is required', () => {
   it('never auto-assigns on a bare year alone', () => {
     const inventory = [
@@ -361,9 +351,7 @@ describe('ImageMatchingService - corroboration is required', () => {
   });
 });
 
-/* =========================================================================
- * NO MATCH
- * ======================================================================= */
+/* ---- NO MATCH ---- */
 describe('ImageMatchingService - no usable match', () => {
   it('reports "none" for a camera filename with no coin attributes', () => {
     const inventory = [
@@ -413,9 +401,7 @@ describe('ImageMatchingService - no usable match', () => {
   });
 });
 
-/* =========================================================================
- * EDGE CASES
- * ======================================================================= */
+/* ---- EDGE CASES ---- */
 describe('ImageMatchingService - edge cases', () => {
   it('returns an empty array for an empty image list', () => {
     const inventory = [coin({ id: 'a', denomination: 'Dollar', coinType: 'Morgan', year: '1881' })];
@@ -515,10 +501,10 @@ describe('ImageMatchingService - edge cases', () => {
   //
   // Without the grade, two records of the same issue read identically: an
   // 1876 20c in XF45 and another in MS63 both came out as "Twenty Cent 1876",
-  // which is not enough to answer "is this photo this coin?". The owner hit
-  // that reviewing a folder of 20c photos. The grading company is shown with
-  // it because "PCGS XF45" and "NGC XF45" are different slabs, and because
-  // the filenames themselves usually carry the company.
+  // which is not enough to answer "is this photo this coin?" when reviewing
+  // a folder of 20c photos. The grading company is shown with it because
+  // "PCGS XF45" and "NGC XF45" are different slabs, and because the
+  // filenames themselves usually carry the company.
 
   it('includes the grading company and grade when the coin has them', () => {
     const label = service().describeCoin(

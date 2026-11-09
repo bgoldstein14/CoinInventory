@@ -212,7 +212,7 @@ try {
         $notReady = @()
         if (-not $apiReady) { $notReady += 'the database API on port 3000' }
         if (-not $appReady) { $notReady += 'the web app on port 4200' }
-        throw ("Timed out after $startupTimeoutSeconds seconds waiting for " + ($notReady -join ' and ') + ". The browser was not opened. Check server\logs\app.log, and confirm SQL Server is running.")
+        throw ("Timed out after $startupTimeoutSeconds seconds waiting for " + ($notReady -join ' and ') + ". The browser was not opened. Check the newest log in server\logs\, and confirm SQL Server is running.")
     }
 
     Write-Host 'Both servers are ready. Opening browser...'

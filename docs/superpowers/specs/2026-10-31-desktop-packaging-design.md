@@ -322,6 +322,56 @@ Consequence the builder must handle: do **not** read image blobs on the coin-lis
 query. README already flags that `GET /api/coins` returning `imagePaths` by default
 is a compatibility shim to be removed; the SQLite move is the natural moment.
 
+### 4.9a Full-resolution originals in the database — amends §4.4 and §4.9
+
+**Decided by the owner, 2026-11-08**, and it changes the sizing above materially.
+
+A Settings option lets the user store **the original full-resolution files in the
+database** rather than only referencing them on disk, so that moving or deleting a
+photo folder cannot cost them anything. A one-time backfill ingests the originals of
+photos already imported, reporting any it can no longer find.
+
+This does **not** replace §4.4 — referencing stays supported and stays the default.
+It adds a second mode.
+
+**Worth recording, because it reframes the request:** the database *already* holds a
+usable copy of every photo — `ImageData` is a 1600 px, quality-0.85 JPEG. Deleting
+the entire photo library today would not lose a single image from the application;
+only the click-through to the full-resolution original breaks. This feature is
+therefore about **fidelity and self-containment**, not about rescuing images from
+loss. The owner was shown this and chose full originals anyway.
+
+**What it does to the numbers.** On the owner's own library: 2,140 originals,
+4.2 GB, largest single file 46 MB — on top of the ~0.5–1 GB of downscaled copies
+already stored. **A ~5 GB database**, where §4.9 alone implied a few hundred MB.
+
+Four consequences the builder must design for rather than discover:
+
+1. **`VARBINARY(MAX)`, never base64 text.** `ImageData` today is `NVARCHAR(MAX)`
+   holding a base64 data URL, which costs roughly **2.66×** the raw bytes — base64
+   adds a third, and `NVARCHAR` stores two bytes per character. Putting 4.2 GB of
+   originals through that path would consume about 11 GB. Originals go in binary.
+2. **Backup (§4.7) becomes a multi-gigabyte operation.** It can no longer be a
+   synchronous, un-cancellable, progress-free action behind a dialog button:
+   `VACUUM INTO` on a 5 GB file takes minutes.
+3. **Originals must stream, never be loaded whole.** A 46 MB row read into memory and
+   base64-encoded into a JSON response is ~120 MB of string. `GET /api/images/file`
+   streams from disk today and must keep streaming when the bytes come from the
+   database instead.
+4. **The backfill is a long-running job, not a settings toggle.** Multiple gigabytes
+   read, hashed and written. It needs progress, cancellation, resumability, and a
+   report of originals it could not find — and it must not be started implicitly by
+   flipping a switch.
+
+Interaction with §4.4: once a photo's original is embedded, a moved folder stops
+mattering for it. The photo-relocation repair tool is therefore for reference-mode
+users and for photos imported before the switch — it does not become redundant.
+
+A related feature ships with this: **re-saving an image back out to a file** from the
+photo viewer. Note this is worth building *regardless* of the storage mode, because
+the downscaled copy in the database is already a perfectly good photo — it does not
+depend on originals being embedded.
+
 ### 4.10 Local API access control — *author's call*
 
 `GET /api/images/file?path=<absolute path>` serves any file the path names, and
@@ -337,6 +387,57 @@ and required by every `/api` route. Plus an Origin check, and drop the blanket C
 This is cheap to build in from the start and genuinely awkward to retrofit once the
 routes and `ApiService` have settled. The honest risk for a single-user desktop app is
 low, but the cost of doing it now is close to zero, which settles it.
+
+### 4.10a Install layout — confirmed by the owner, 2026-11-08
+
+> "a simple Setup.exe for the install of everything an external user would need
+> (and allow them to choose a directory to install if they don't like the
+> default, which should be `Program Files\Coin Inventory`)"
+
+```
+Program Files\Coin Inventory\        the application. Changeable at install.
+%LOCALAPPDATA%\CoinInventory\        the database, backups, logs. NOT changeable.
+```
+
+**These two must stay separate, and the reason is a Windows constraint rather
+than a preference.** `Program Files` is not writable by a standard user account
+without elevation. A SQLite file living there would fail to open for writing on
+a normal (non-admin) run — and it would fail *intermittently*, because an admin
+install followed by a standard-user launch is exactly the common case. Keeping
+data under `%LOCALAPPDATA%` also means §4.7's uninstall rule ("must not remove
+the collection silently") is structurally true: the uninstaller removes the
+install directory, and the data is not in it.
+
+The installer therefore offers one choice — where the program goes — and the
+data location is not a question the user is asked.
+
+### 4.10b What the SQL Server → SQLite migration must now carry
+
+§4.1 was written on 2026-10-31. The schema has grown substantially since, and
+the one-time migration has to move all of it. As of 2026-11-08:
+
+- `Coins.CollectionStatus`, `Coins.StorageLocation` (migration 010)
+- `Issuers`, `Denominations.IssuerId`, `Denominations.FaceValue`,
+  `Coins.DenominationId` (011) — see
+  `2026-11-08-denomination-reference-model-design.md`
+- `Catalogs`, `Coins.CatalogId`, `Coins.CatalogNumber` (012)
+- 61 issuers and 1,161 seeded denominations (013), plus whatever the user has
+  added since
+- Resolved denomination links (014)
+- Full-resolution original images, if §4.9a is built before the move — which
+  would take the migration from megabytes to **gigabytes** and changes it from
+  a script that runs in seconds to one that needs progress and resumability.
+
+Two consequences:
+
+1. **Sequence §4.9a (embedded originals) AFTER the SQLite move, not before.**
+   Moving a 5 GB database is a materially different job from moving a 50 MB one,
+   and doing the schema change first means the hard part is done once.
+2. The seeded reference data does not need migrating at all — it can be
+   **re-seeded** from `server/migrations/seed-data/issuers-denominations.json`
+   on the SQLite side. Only the user's own additions and the coin links have to
+   move. That is a meaningfully smaller and safer job than a row-for-row copy,
+   and the JSON exists precisely so this is possible.
 
 ### 4.11 Code signing: not in v1
 

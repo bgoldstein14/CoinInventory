@@ -5,39 +5,24 @@
  * machine's disk, so the user can click the filename shown next to a coin photo
  * and see the real photo in a new browser tab.
  *
- * ==================================================================
- * WHY THE BACKEND HAS TO SERVE THIS AT ALL
- * ==================================================================
- * The obvious idea is to skip the server entirely: the file is right there on
- * the same machine, so just make the link `file:///C:/Coin Pictures/a.jpg` and
- * let the browser open it. That does not work, and it is worth being explicit
- * about why so nobody "simplifies" this route away:
+ * WHY THE BACKEND HAS TO SERVE THIS AT ALL — do not "simplify" this route away
+ * by linking straight to `file:///C:/Coin Pictures/a.jpg`. Chrome and Edge
+ * REFUSE to navigate from an http(s) page to a file:// URL. It is a deliberate
+ * security rule, not a bug or a setting, and the click is dropped SILENTLY:
+ * no error, no tab, nothing. Typing the same file:// URL into the address bar
+ * by hand works fine, which makes the failure very confusing to diagnose.
  *
- *   Chrome and Edge REFUSE to navigate from an http(s) page to a file:// URL.
- *   It is a deliberate security rule, not a bug or a setting — a web page being
- *   able to point the browser at arbitrary local files is exactly the attack
- *   the rule exists to stop. The click is dropped silently; there is no error,
- *   no tab, nothing. Typing the same file:// URL into the address bar by hand
- *   works fine, which makes the failure very confusing to diagnose.
+ * So the file has to arrive over http from an origin the page may link to. The
+ * Express server already runs on that machine and can read the disk, so the
+ * page links to `/api/images/file?path=...` and gets an ordinary http response.
  *
- * So the file has to arrive over http from an origin the page is allowed to
- * link to. The Express server is already running on that same machine and can
- * read the disk, which makes it the natural (and only practical) route: the
- * page links to `/api/images/file?path=...`, the server opens the file locally,
- * and the browser receives an ordinary http response it is happy to display.
- *
- * ==================================================================
  * THE SECURITY TRADEOFF — read this before reusing this code
- * ==================================================================
- * This endpoint is, plainly stated, "read any file on the host machine whose
- * name ends in an image extension". There is no root directory it is confined
- * to. On a public server that would be a serious vulnerability.
- *
- * It is acceptable HERE, and only here, because of what this app is: a
- * single-user inventory that the owner runs on his own PC, serving photos that
- * live in arbitrary folders on that same PC. A confined root would defeat the
- * feature — the whole point is that the pictures are wherever the user put
- * them. The owner has stated that security is not a concern for this project.
+ * This endpoint is "read any file on the host machine whose name ends in an
+ * image extension". There is no root directory it is confined to, and on a
+ * public server that would be a serious vulnerability. It is acceptable only
+ * because this is a single-user inventory run on the user's own PC, serving
+ * photos from arbitrary folders on that same PC — a confined root would defeat
+ * the feature.
  *
  * What we still do, because it is cheap:
  *   - restrict to the image extension allowlist in allowed-types.ts, so this
@@ -49,9 +34,7 @@
  * TO LOCK DOWN: confine it to a configured pictures root, or serve by ImageId
  * and look the path up in the database instead of accepting it from the client.
  *
- * ==================================================================
  * WHY IT STREAMS
- * ==================================================================
  * The originals are camera files, up to about 46 MB each. fs.readFile() would
  * pull the whole thing into the Node heap before sending a single byte: slow to
  * first byte, and several concurrent clicks could push the process into a heap
@@ -72,11 +55,10 @@ router.get('/file', async (req: Request, res: Response) => {
   // Express has already URL-decoded the query string, so this is the real path
   // including spaces and backslashes — e.g. `C:\Coin Pictures\1921 morgan.jpg`.
   //
-  // Express types a query parameter as possibly repeated (?path=a&path=b), and
-  // for `?path[0]=x` it hands back an OBJECT. So collapse to a single value and
-  // treat anything that is not a string as absent — calling .trim() on an
-  // object would throw a TypeError inside the handler instead of returning the
-  // 400 the caller deserves.
+  // A query parameter may be repeated (?path=a&path=b), and `?path[0]=x` hands
+  // back an OBJECT. Collapse to a single value and treat a non-string as
+  // absent: .trim() on an object throws a TypeError inside the handler instead
+  // of returning the 400 the caller deserves.
   const rawPath = req.query['path'];
   const firstPath = Array.isArray(rawPath) ? rawPath[0] : rawPath;
   const requestedPath = typeof firstPath === 'string' ? firstPath.trim() : '';
@@ -127,14 +109,13 @@ router.get('/file', async (req: Request, res: Response) => {
 
     const stream = fs.createReadStream(requestedPath);
 
-    // ----- A stream failure AFTER the headers went out --------------------
-    // Once pipe() has written the first chunk the status code is already on the
-    // wire, so there is no way to turn this into a 500 — res.status() would
-    // throw "Cannot set headers after they are sent to the client" and, because
-    // this fires on an internal I/O callback, that throw would become an
-    // uncaught exception and kill the process (the same class of bug as the
-    // missing pool 'error' listener; see db/index.ts). All we can safely do is
-    // log it and destroy the response so the browser sees a truncated download.
+    // A stream failure AFTER the headers went out cannot become a 500: the
+    // status is already on the wire, res.status() would throw "Cannot set
+    // headers after they are sent", and since this fires on an internal I/O
+    // callback that throw becomes an uncaught exception and kills the process
+    // (same class of bug as a missing pool 'error' listener; see db/index.ts).
+    // Log it and destroy the response, so the browser sees a truncated
+    // download.
     stream.on('error', (streamErr: Error) => {
       logError(`Error while streaming image file: ${requestedPath}`, streamErr);
       if (res.headersSent) {
@@ -150,11 +131,9 @@ router.get('/file', async (req: Request, res: Response) => {
 
     stream.pipe(res);
   } catch (err) {
-    // ----- 404: the usual case — the file has been moved or deleted -------
-    // ENOENT (no such file) and ENOTDIR (a parent folder in the path is not a
-    // directory) both mean the same thing to the user: it is not there any
-    // more. That is precisely the state the UI wants to show as a greyed-out,
-    // non-clickable filename.
+    // 404: the usual case. ENOENT (no such file) and ENOTDIR (a parent folder
+    // in the path is not a directory) both mean "it is not there any more",
+    // which the UI shows as a greyed-out, non-clickable filename.
     const code = (err as { code?: string } | null)?.code;
     if (code === 'ENOENT' || code === 'ENOTDIR') {
       logWarn(`Original image file not found: ${requestedPath}`);

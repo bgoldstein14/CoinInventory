@@ -18,9 +18,9 @@
 -- hard-coded an empty list. So the Tags column could only ever render a dash,
 -- for every coin, forever.
 --
--- Faced with "build the missing editor" or "drop the idea", the owner chose to
--- drop it. This migration is the database half of that removal; the
--- application half has already deleted the queries, the field and the column.
+-- Rather than build the missing editor, the idea was dropped. This migration
+-- is the database half of that removal; the application half has already
+-- deleted the queries, the field and the column.
 --
 -- IS IT SAFE TO DROP THE TABLE?
 -- -----------------------------

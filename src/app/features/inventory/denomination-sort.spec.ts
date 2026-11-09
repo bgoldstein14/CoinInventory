@@ -4,23 +4,22 @@ import { parseDenominationValue } from './denomination-sort';
 /**
  * Longest-match ordering.
  *
- * `parseDenominationValue` used to take the FIRST entry in its table whose
- * text appeared anywhere in the label. The table runs smallest face value
- * first, so a short pattern reliably shadowed a longer one starting the same
- * way — and four of the victims are denominations the database actually
- * seeds, so this was live and silent: nothing failed, rows were just sorted
- * into the wrong place.
+ * `parseDenominationValue` scans a table of patterns. Taking the first whose
+ * text appears anywhere in the label lets a short pattern shadow a longer
+ * one starting the same way, and the failure is silent: nothing throws, rows
+ * are just sorted into the wrong place. The inline notes below name the
+ * pattern each assertion stops winning.
  */
 describe('parseDenominationValue — a short pattern must not shadow a longer one', () => {
   it('reads the dollar denominations at their real value', () => {
     expect(parseDenominationValue('$1')).toBe(1);
-    expect(parseDenominationValue('$2.50')).toBe(2.5);  // was 2   — matched "$2"
+    expect(parseDenominationValue('$2.50')).toBe(2.5);  // not "$2"
     expect(parseDenominationValue('$3')).toBe(3);
     expect(parseDenominationValue('$5')).toBe(5);
-    expect(parseDenominationValue('$10')).toBe(10);     // was 1   — matched "$1"
-    expect(parseDenominationValue('$20')).toBe(20);     // was 2   — matched "$2"
-    expect(parseDenominationValue('$25')).toBe(25);     // new
-    expect(parseDenominationValue('$50')).toBe(50);     // was 5   — matched "$5"
+    expect(parseDenominationValue('$10')).toBe(10);     // not "$1"
+    expect(parseDenominationValue('$20')).toBe(20);     // not "$2"
+    expect(parseDenominationValue('$25')).toBe(25);     // not "$2"
+    expect(parseDenominationValue('$50')).toBe(50);     // not "$5"
   });
 
   it('reads the cent denominations at their real value', () => {
@@ -28,7 +27,7 @@ describe('parseDenominationValue — a short pattern must not shadow a longer on
     expect(parseDenominationValue('5¢')).toBe(0.05);
     expect(parseDenominationValue('10¢')).toBe(0.1);
     expect(parseDenominationValue('20¢')).toBe(0.2);
-    expect(parseDenominationValue('25¢')).toBe(0.25);   // was 0.05 — matched "5¢"
+    expect(parseDenominationValue('25¢')).toBe(0.25);   // not "5¢"
     expect(parseDenominationValue('50¢')).toBe(0.5);
   });
 

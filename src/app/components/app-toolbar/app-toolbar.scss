@@ -5,10 +5,8 @@
 // component's own markup — a rule written in app.scss cannot reach in here.
 @use '../../styles/controls' as *;
 
-// The host element only exists because this is a component; it is not part of
-// the original markup. `display: contents` makes the browser ignore it for
-// layout purposes so the divs below sit in the header flex row exactly as they
-// did when this markup lived in app.html.
+// `display: contents` makes the browser ignore the component host for layout
+// purposes, so the divs below sit directly in the header's flex row.
 :host { display: contents; }
 
 .topbar-actions {

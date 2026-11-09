@@ -80,9 +80,7 @@ describe('buildDbConfig', () => {
   });
 });
 
-// ============================================================
 // REGRESSION TEST FOR THE PRODUCTION CRASH
-// ============================================================
 //
 // The bug: db.ts created the pool without attaching an 'error' listener.
 // mssql's ConnectionPool is an EventEmitter, and a Node EventEmitter with zero

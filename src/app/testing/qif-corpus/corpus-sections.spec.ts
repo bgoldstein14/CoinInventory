@@ -1,38 +1,18 @@
-/* ===========================================================================
- * corpus-sections.spec.ts
- * ---------------------------------------------------------------------------
+/*
  * WHAT THIS FILE PROVES
  *   That `QuickenImportService.parse` reads a WHOLE Quicken export -- not a
  *   hand-built two-line `!Type:Invst` snippet -- and comes back with coins
  *   and nothing else.
  *
- * ---------------------------------------------------------------------------
- * WHY IT EXISTS, AND WHY IT IS NEW
- * ---------------------------------------------------------------------------
- *   Every other spec that touches the importer feeds it a QIF it built
- *   itself, one block long. `qif-accounts.fixture.ts` does too: it scans the
- *   corpus for `Y` lines with its own reader and then re-wraps them, because
- *   what it wants is the SECURITY NAMES and not the net-quantity rule.
+ *   Every other importer spec feeds it a QIF it built itself, one block long.
+ *   `qif-accounts.fixture.ts` does too: it scans the corpus for `Y` lines
+ *   with its own reader and re-wraps them, because what it wants is the
+ *   SECURITY NAMES and not the net-quantity rule. So this is the only place
+ *   the parser meets a whole file. A regression that made it choke on a
+ *   `!Type:Cat` block, or worse, ingest a stock position as a coin, would
+ *   otherwise reach the import button with every other test still green.
  *
- *   So until this file, NOTHING ran the parser over a real file end to end,
- *   and the only reason that was survivable is that the owner's own exports
- *   were sitting in the repository root where a human could try them by hand.
- *   They are gone. If the corpus that replaced them held nothing but coins,
- *   the parser's entire IGNORE half would stop being exercised -- and the
- *   owner's instinct about it,
- *
- *       "The QIFs might carry that information but I don't see why this
- *        application would do anything but ignore stuff that it doesn't
- *        actually store."
- *
- *   is exactly right and exactly the kind of thing that silently stops being
- *   true. A regression that made the parser choke on a `!Type:Cat` block, or
- *   worse, ingest a stock position as a coin, would reach the import button
- *   with every other test still green.
- *
- * ---------------------------------------------------------------------------
  * THE SECTIONS, AND WHICH CODE PATH DROPS EACH ONE
- * ---------------------------------------------------------------------------
  *   READ
  *     !Account       its `N` line names the account the following
  *                    transactions belong to; also feeds the account picker.
@@ -54,7 +34,7 @@
  *   them. The securities are invented and their tickers all begin "ZQ",
  *   which is not a form any US exchange issues, so nothing in here can be
  *   looked up as a real holding. See `generate-corpus.mjs`.
- * ======================================================================== */
+ */
 
 import { describe, expect, it } from 'vitest';
 import { QIF_ACCOUNTS, decodeQif } from '../qif-accounts.fixture';
@@ -72,8 +52,8 @@ const parse = (text: string, account?: string) => new QuickenImportService().par
 const securityNameOf = (record: unknown) => (record as { securityName: string }).securityName;
 
 /**
- * Words that may never reach a coin record. Each is a thing the real export
- * carried in bulk and the corpus carries a synthetic stand-in for.
+ * Words that may never reach a coin record. Each is a thing a real export
+ * carries in bulk and the corpus carries a synthetic stand-in for.
  */
 const NEVER_A_COIN = [
   'ZQ',              // every invented ticker, and every non-coin security name's symbol
@@ -146,10 +126,10 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   });
 
   it('applies the net-quantity rule, so sold coins land in skippedRecords', () => {
-    /* The corpus reproduces the real export's held/sold split per account --
-     * the 2-3-20-cent collection really had held 112 coins and still owned 6
-     * -- so both lists are non-empty on every account and the rule is
-     * measured rather than assumed. */
+    /* The corpus reproduces a real held/sold split per account -- the
+     * 2-3-20-cent collection has held 112 coins and still owns 6 -- so both
+     * lists are non-empty on every account and the rule is measured rather
+     * than assumed. */
     const result = parse(text, account);
     expect(result.importedRecords.length + result.skippedRecords.length + result.rejectedRecords.length)
       .toBeGreaterThan(0);

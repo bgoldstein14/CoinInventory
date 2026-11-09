@@ -1,9 +1,7 @@
 // Styles for the floating bulk-edit bar.
-// Moved here from the old `styles/_overlays.scss` partial.
 @use '../../styles/controls' as *;
 
-// Not part of the original markup, and the bar is position: fixed — keep the
-// host element out of the layout.
+// The bar is position: fixed — keep the component host out of the layout.
 :host { display: contents; }
 
 // ---- Bulk edit bar ----
@@ -49,7 +47,6 @@
 }
 
 // ---- Responsive & print ----
-// (Both rules moved from `_overlays.scss`.)
 
 @media (max-width: 900px) {
   .bulk-edit-bar { flex-wrap: wrap; }

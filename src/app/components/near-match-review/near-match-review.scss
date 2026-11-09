@@ -2,9 +2,8 @@
 // are one yes/no away from it.
 //
 // Buttons / .small-button / .secondary come from the shared controls partial.
-// The warm amber palette is the same one the old resolver card used, so a
-// "needs you" block still reads the same way at a glance; a fully answered
-// group fades to the green "settled" tone the matched rows use.
+// The warm amber palette marks a "needs you" block; a fully answered group
+// fades to the green "settled" tone the matched rows use.
 @use '../../styles/controls' as *;
 
 .near-group {
@@ -73,21 +72,21 @@
 .near-row--answered { border-color: #b9dfc0; background: #f6fbf6; }
 .near-row--skipped { opacity: 0.6; }
 
-// Preview size and fit are both deliberate, and both were wrong before.
+// Preview size and fit are both deliberate.
 //
-// SIZE: this was 48x48. The whole job of this row is "is this photo this
-// coin?", and a 48px square is too small to read a date or a mint mark, which
-// is often the only thing separating two candidate coins. 88px is roughly the
-// smallest that makes a coin's devices legible without the row becoming a
-// gallery. It costs nothing to fetch: the <img> points at the ORIGINAL
-// multi-megabyte file via createObjectURL, so the browser already decoded the
-// full image regardless of the box it is painted into.
+// SIZE: the whole job of this row is "is this photo this coin?", and a 48px
+// square is too small to read a date or a mint mark, which is often the only
+// thing separating two candidate coins. 88px is roughly the smallest that
+// makes a coin's devices legible without the row becoming a gallery. It costs
+// nothing to fetch: the <img> points at the ORIGINAL multi-megabyte file via
+// createObjectURL, so the browser already decoded the full image regardless
+// of the box it is painted into.
 //
-// FIT: this was `cover`, which fills the square by CROPPING. Coins are round
-// and photographed centred, so cover shaved the rim off every one of them --
-// losing exactly the edge detail, lettering and toning you judge a match by.
-// `contain` shows the whole frame; the letterboxing is the neutral tile
-// colour, which reads fine against the card.
+// FIT: `contain`, never `cover`. `cover` fills the square by CROPPING, and
+// coins are round and photographed centred, so it shaves the rim off every
+// one of them -- losing exactly the edge detail, lettering and toning you
+// judge a match by. The letterboxing is the neutral tile colour, which reads
+// fine against the card.
 .near-thumb {
   width: 88px;
   height: 88px;

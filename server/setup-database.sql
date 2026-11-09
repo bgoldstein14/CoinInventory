@@ -35,11 +35,22 @@ IF OBJECT_ID('Transactions', 'U') IS NOT NULL DROP TABLE Transactions;
 -- removes it there (safely -- it refuses to drop a table that has rows).
 IF OBJECT_ID('CoinImages', 'U') IS NOT NULL DROP TABLE CoinImages;
 IF OBJECT_ID('Coins', 'U') IS NOT NULL DROP TABLE Coins;
+-- AFTER Coins, never before it: Coins.CatalogId has a foreign key pointing
+-- here, and dropping the referenced table first fails outright and leaves
+-- this script half-applied. (Migration 012 adds both to an existing
+-- database.)
+IF OBJECT_ID('Catalogs', 'U') IS NOT NULL DROP TABLE Catalogs;
 IF OBJECT_ID('Categories', 'U') IS NOT NULL DROP TABLE Categories;
 IF OBJECT_ID('CoinSets', 'U') IS NOT NULL DROP TABLE CoinSets;
 IF OBJECT_ID('SpotPrices', 'U') IS NOT NULL DROP TABLE SpotPrices;
 IF OBJECT_ID('AppSettings', 'U') IS NOT NULL DROP TABLE AppSettings;
 IF OBJECT_ID('Denominations', 'U') IS NOT NULL DROP TABLE Denominations;
+-- Issuers comes AFTER Denominations: Denominations carries FK_Denominations_Issuer
+-- pointing at it, so dropping Issuers first fails on the constraint and the
+-- whole re-run stops half way. (Coins is already dropped further up, which is
+-- what lets Denominations go before Issuers here -- FK_Coins_Denomination
+-- points the other way.)
+IF OBJECT_ID('Issuers', 'U') IS NOT NULL DROP TABLE Issuers;
 IF OBJECT_ID('MintMarks', 'U') IS NOT NULL DROP TABLE MintMarks;
 GO
 
@@ -52,7 +63,26 @@ GO
 -- Uses UNIQUEIDENTIFIER for globally unique IDs
 CREATE TABLE Coins (
     CoinId              UNIQUEIDENTIFIER    NOT NULL PRIMARY KEY DEFAULT NEWID(),
-    Denomination        NVARCHAR(100)       NULL,           -- e.g., "1¢", "Quarter", "Sovereign"
+    -- *** THESE TWO COLUMNS ARE A PAIR AND BOTH ARE DELIBERATE. ***
+    -- Denomination is no longer the authority; as of migration 011 it means
+    -- WHAT THE SOURCE SAID -- typed by the user, or read out of a QIF, a CSV
+    -- or a spreadsheet. DenominationId is the canonical link, when one could
+    -- be established, and NULL is a normal state rather than an error.
+    --
+    -- Keeping the text was the owner's decision and it is load-bearing.
+    -- Everything in this application arrives by import; a QIF security
+    -- reading "Trade Dollar", or a spreadsheet column reading "8 Reales"
+    -- before Mexico is seeded, resolves to nothing. Under an id-only model
+    -- that string is destroyed at import and neither the user nor a later,
+    -- smarter resolver can recover it.
+    --
+    -- Nothing rewrites Denomination. Not the migration (014 reads it and
+    -- does not touch it), not the importers. The one place that decides what
+    -- the pair READS AS is src/app/services/denominations/
+    -- denomination-display.ts: id set -> the Label, id null and text present
+    -- -> "Other (8 Reales)", both empty -> an em dash.
+    Denomination        NVARCHAR(100)       NULL,           -- e.g., "1¢", "Quarter", "Sovereign" -- as recorded, never rewritten
+    DenominationId      INT                 NULL,           -- FK to Denominations; NULL = never resolved (migration 011)
     Year                NVARCHAR(50)        NULL,           -- Stored as text to allow ranges like "1878-S"
     CoinType            NVARCHAR(100)       NULL,           -- e.g., "Morgan Dollar", "Lincoln Cent"
     Category            NVARCHAR(100)       NULL,           -- User-defined category grouping
@@ -100,7 +130,74 @@ CREATE TABLE Coins (
     -- gross weight -- see services/pm-reference.ts and computeMeltValue.
     PmWeightGrams       DECIMAL(12,5)       NULL,           -- Precious metal weight in grams
     PmPercent           DECIMAL(5,2)        NULL,           -- Precious metal percentage (e.g., 90.00 for 90%)
-    CoinSet             NVARCHAR(100)       NULL            -- Set membership (FK to CoinSets)
+    CoinSet             NVARCHAR(100)       NULL,           -- Set membership (FK to CoinSets)
+    -- ===== Where this coin sits in the collecting cycle ======================
+    -- One of exactly five values: 'owned', 'wanted', 'ordered', 'for-sale',
+    -- 'sold'. The list, and the argument for those five, lives in
+    -- src/app/types/collection-status.ts; the server's copy of it is in
+    -- server/db/collection-status.ts and a spec there fails the build if the
+    -- two ever disagree.
+    --
+    -- *** NOT NULL WITH A DEFAULT OF 'owned', AND BOTH HALVES MATTER. ***
+    -- This column decides whether a coin counts towards the value of the
+    -- collection and whether it appears on the insurance schedule. A NULL
+    -- would be a third answer to a yes/no question, and every reader would
+    -- have to decide for itself what to do with it -- which is how two parts
+    -- of an app end up disagreeing about what the user owns. The DEFAULT is
+    -- what makes an INSERT written before this column existed still work, and
+    -- makes it mean the right thing.
+    --
+    -- NVARCHAR(20) rather than a lookup table or a CHECK constraint:
+    --   * a lookup table would be a join and a seed script for five words
+    --     that are part of the application's logic, not the user's data --
+    --     unlike Categories or CoinSets, the user cannot invent a sixth;
+    --   * a CHECK constraint would have to be dropped and recreated every
+    --     time a value is added, from a migration that can only guess at the
+    --     constraint's generated name on a database it has never seen. The
+    --     server validates instead, in one function, on the way in.
+    -- 20 characters leaves room for a longer future token without an ALTER.
+    --
+    -- Migration 010 adds this column (and the next) to an existing database.
+    CollectionStatus    NVARCHAR(20)        NOT NULL DEFAULT 'owned',
+    -- Where the physical coin is: "Safe deposit box 2", "Dansco 7070, page 4".
+    -- FREE TEXT, NULLABLE, NO VALIDATION AND NO LOOKUP TABLE, on purpose --
+    -- every collector organises differently and any structure imposed here
+    -- would be wrong for most of them. NOT the same thing as CoinSet above:
+    -- a set is a conceptual grouping a coin belongs to wherever it lives,
+    -- this is the shelf you walk to. A coin is routinely in both.
+    -- 200 characters: long enough for "Safe deposit box 2, tray 3, slot 12"
+    -- and well short of anything that belongs in Notes.
+    StorageLocation     NVARCHAR(200)       NULL,
+    -- ===== The catalogue reference: "Sear 6819"  (migration 012) ============
+    -- Two columns for one idea. CatalogId says WHICH catalogue (a row in the
+    -- Catalogs lookup further down this file); CatalogNumber is the
+    -- reference within it, stored EXACTLY as typed -- "1A", "6819",
+    -- "II.1 234", "RRC 44/5". Nothing in the application upper-cases it,
+    -- strips its punctuation or collapses its spaces: a reference the app
+    -- tidied is a reference that no longer matches the book.
+    --
+    -- WHY THIS EXISTS. Ancients have no year, no denomination and no grade,
+    -- so the catalogue reference is frequently the ONLY thing identifying
+    -- the coin. The owner is already recording them -- in the Variety column
+    -- above, for want of anywhere else (see coin-signature.ts, which
+    -- documents a live record whose Variety reads "Sear 6819"). Migration
+    -- 012 does NOT move those; the user does, one coin at a time, because
+    -- only he can tell a reference from a real variety.
+    --
+    -- BOTH NULLABLE, NEITHER DEFAULTED. Almost no coin has a catalogue
+    -- reference and almost none ever will; NULL is the honest and
+    -- overwhelmingly common state, and a default would attribute the whole
+    -- collection to a catalogue nobody chose.
+    --
+    -- NVARCHAR(50) is mirrored by CATALOG_NUMBER_MAX_LENGTH in
+    -- src/app/types/catalog-reference.ts and by the binding in
+    -- server/db/coin-fields.ts; migration-012.spec.ts asserts all of them
+    -- against this file.
+    --
+    -- FK_Coins_Catalog is added by an ALTER further down rather than written
+    -- inline here, because Catalogs is created AFTER this table.
+    CatalogId           INT                 NULL,           -- FK to Catalogs; NULL = no catalogue chosen
+    CatalogNumber       NVARCHAR(50)        NULL            -- The reference within that catalogue, as typed
 );
 
 -- ----- CoinImages --------------------------------------------
@@ -212,13 +309,68 @@ CREATE TABLE AppSettings (
     SettingValue        NVARCHAR(MAX)       NULL
 );
 
+-- ----- Issuers -----------------------------------------------
+-- WHO STRUCK THE COIN. Added by migration 011.
+--
+-- "Issuer" rather than "Country" because the Roman Empire, the Papal States
+-- and the German states are not countries, and ancients are explicitly in
+-- scope. IsoCode is nullable and that is the point: roughly half the entries
+-- this table is for have no ISO code and never will, and a table requiring
+-- one would have excluded exactly the issuers the design calls first-class.
+--
+-- ValidFrom / ValidTo are plain INT years, not dates: the precision
+-- available for "the Roman Republic" is a year at best and a DATE would
+-- invite a precision nobody has. NULL on either side means open-ended.
+--
+-- Name is UNIQUE because the seed script (013) matches issuers BY NAME. Two
+-- rows called 'Mexico' would make its join multiply rows silently rather
+-- than fail.
+--
+-- Declared BEFORE Denominations because Denominations points at it. The DDL
+-- below is character-for-character identical to the CREATE TABLE in
+-- migrations/011-add-issuers-and-denomination-links.sql, and
+-- migrations/migration-011.spec.ts fails the build if the two ever drift --
+-- a fresh install and a migrated install must not end up with different
+-- schemas.
+CREATE TABLE Issuers (
+    IssuerId            INT                 IDENTITY(1,1) PRIMARY KEY,
+    Name                NVARCHAR(100)       NOT NULL,       -- 'Mexico', 'Roman Empire', 'Great Britain'
+    IsoCode             CHAR(2)             NULL,           -- 'MX' where one exists; NULL for ancients and historical states
+    Kind                NVARCHAR(20)        NOT NULL,       -- 'modern' | 'historical' | 'ancient'
+    ValidFrom           INT                 NULL,           -- Year this authority began issuing
+    ValidTo             INT                 NULL,           -- Year it stopped; NULL means it still does
+    SortOrder           INT                 NOT NULL DEFAULT 0,
+    IsActive            BIT                 NOT NULL DEFAULT 1,
+    CONSTRAINT UQ_Issuers_Name UNIQUE (Name)
+);
+
+-- Issuers is deliberately left EMPTY by this script. It is seeded by
+-- migrations/013-seed-issuers-and-denominations.sql, which is generated from
+-- a reviewable JSON file and is the same script an existing database runs.
+-- One seeding path rather than two means a fresh install and a migrated one
+-- cannot disagree about what was seeded.
+
 -- ----- Denominations -----------------------------------------
 -- Pre-defined denomination lookup table
 -- Supports both US and international coins
+--
+-- IssuerId is nullable through the migration window: the 37 rows seeded at
+-- the bottom of this file have a Country and no issuer until 013 backfills
+-- them from it. FaceValue is nullable because NULL is a real answer -- a
+-- Denarius has no face value in any system this application knows about, and
+-- inventing one would be a lie that then sorts things. Every ancient
+-- denomination in the seed is NULL here deliberately; it is not missing data
+-- waiting to be backfilled.
+--
+-- *** FaceValue IS COMPARABLE ONLY WITHIN ONE CURRENCY ERA OF ONE ISSUER. ***
+-- France carries both '1 Franc' = 1 and '1 Euro' = 1, which are not the same
+-- amount of anything. ANYTHING THAT SORTS A WHOLE ISSUER MUST USE SortOrder.
 CREATE TABLE Denominations (
     DenominationId      INT                 IDENTITY(1,1) PRIMARY KEY,
     Label               NVARCHAR(100)       NOT NULL,       -- Display label with symbols
-    Country             NVARCHAR(100)       NOT NULL,       -- "US", "GB", etc.
+    Country             NVARCHAR(100)       NOT NULL,       -- "US", "GB", etc. -- kept as flagged debt (design §4.2)
+    IssuerId            INT                 NULL,           -- FK to Issuers; NULL until seeded/backfilled (migration 011)
+    FaceValue           DECIMAL(18,6)       NULL,           -- For sorting; NULL where a face value is meaningless
     SortOrder           INT                 NOT NULL,       -- For dropdown display order
     IsActive            BIT                 NOT NULL DEFAULT 1
 );
@@ -231,6 +383,69 @@ CREATE TABLE MintMarks (
     Label               NVARCHAR(20)        NOT NULL,       -- "P", "D", "S", "CC", blank, etc.
     Description         NVARCHAR(200)       NULL,           -- Human-readable description
     IsActive            BIT                 NOT NULL DEFAULT 1
+);
+
+-- ----- Catalogs ----------------------------------------------
+-- THE REFERENCE CATALOGUES A COIN CAN BE ATTRIBUTED TO. Added by migration
+-- 012, whose header carries the full argument.
+--
+-- Shaped like Denominations and MintMarks on purpose -- same IDENTITY key,
+-- same SortOrder, same IsActive soft delete -- so it is maintained by the
+-- same kind of screen through the same kind of routes, and anyone who
+-- understands one understands all three.
+--
+-- The DDL below is character-for-character identical to the CREATE TABLE in
+-- migrations/012-add-catalog-references.sql, and
+-- migrations/migration-012.spec.ts fails the build if the two ever drift: a
+-- fresh install and a migrated install must not end up with different
+-- schemas, because the parameter bindings in db/coin-fields.ts can only be
+-- right for one of them.
+CREATE TABLE Catalogs (
+    CatalogId           INT                 IDENTITY(1,1) PRIMARY KEY,
+    Name                NVARCHAR(60)        NOT NULL,       -- 'Sear', 'RIC', 'Krause (KM)'
+    SortOrder           INT                 NOT NULL DEFAULT 0,  -- Picker order; seeded 1..15
+    IsActive            BIT                 NOT NULL DEFAULT 1   -- Soft delete, like every other lookup here
+);
+
+-- SEED DATA: the fifteen catalogues this collection uses.
+--
+-- NOT AN ARBITRARY LIST. The first fourteen are CATALOG_PREFIXES from
+-- src/app/services/image-matching/filename-vocabulary.ts, expanded into
+-- display names -- a list built by reading this collection's actual photo
+-- filenames, which is why the picker's top entry is usually the right one.
+-- The fifteenth, Krause (KM), is world-coin numbering: no filename mentions
+-- it, but anyone cataloguing modern foreign coins needs it.
+--
+-- Duplicated from TypeScript because SQL cannot import a module.
+-- src/app/types/catalog-seed-parity.spec.ts reads this file, the migration
+-- and catalog-reference.ts off disk and fails the build if the three ever
+-- disagree -- the same technique sql-pm-reference-parity.spec.ts uses for
+-- migration 007's alloy table.
+--
+-- Guarded per NAME rather than "insert if the table is empty", matching
+-- migration 012, so a re-run can neither duplicate a catalogue nor resurrect
+-- one the user deliberately removed.
+INSERT INTO Catalogs (Name, SortOrder, IsActive)
+SELECT Seed.Name, Seed.SortOrder, 1
+FROM (VALUES
+    ('Sear',         1),   -- David Sear: Greek / Roman / Byzantine
+    ('RIC',          2),   -- Roman Imperial Coinage
+    ('Hendin',       3),   -- Guide to Biblical Coins (Judaea)
+    ('RPC',          4),   -- Roman Provincial Coinage
+    ('Svoronos',     5),   -- Ptolemaic
+    ('BMC',          6),   -- British Museum Catalogue
+    ('SNG',          7),   -- Sylloge Nummorum Graecorum
+    ('Crawford',     8),   -- Roman Republican Coinage (RRC)
+    ('Sydenham',     9),   -- The Coinage of the Roman Republic
+    ('Cohen',       10),   -- Description historique des monnaies romaines
+    ('RSC',         11),   -- Roman Silver Coinage
+    ('Meshorer',    12),   -- Ancient Jewish Coinage
+    ('TJC',         13),   -- A Treasury of Jewish Coins
+    ('Kraay',       14),   -- Archaic and Classical Greek Coins
+    ('Krause (KM)', 15)    -- Standard Catalog of World Coins (the one NOT from the matcher)
+) AS Seed(Name, SortOrder)
+WHERE NOT EXISTS (
+    SELECT 1 FROM Catalogs WHERE Catalogs.Name = Seed.Name
 );
 
 -- ----- MetalContents -----------------------------------------
@@ -259,6 +474,49 @@ INSERT INTO MetalContents (MetalContentName, SortOrder, IsActive) VALUES
 ('Clad', 14, 1),
 ('Other', 15, 1);
 
+-- ----- Foreign keys added after the tables -------------------
+-- Both of these are ALTERs rather than inline constraints, and the reason is
+-- testability rather than necessity. Coins is created above Denominations,
+-- so ITS foreign key has to be an ALTER here whatever we do; writing the
+-- other one the same way means both read character-for-character identically
+-- to migrations/011-add-issuers-and-denomination-links.sql, and
+-- migrations/migration-011.spec.ts can compare the two files as text.
+--
+-- Both constraints are NAMED. A generated name
+-- (FK__Coins__Denomin__1A2B3C4D) is different on every database, so a later
+-- migration that needs to drop one would have to hunt for it in sys.objects.
+--
+-- NO cascade on either, deliberately. ON DELETE SET NULL on
+-- Coins.DenominationId is close to what design §4.4 wants when a
+-- denomination is removed -- but removal is a SOFT delete (IsActive = 0)
+-- precisely so a mistake is recoverable, and a cascade would make a genuine
+-- row deletion silently unlink coins with no count and no confirmation.
+ALTER TABLE Denominations
+        ADD CONSTRAINT FK_Denominations_Issuer
+            FOREIGN KEY (IssuerId) REFERENCES Issuers(IssuerId);
+
+ALTER TABLE Coins
+        ADD CONSTRAINT FK_Coins_Denomination
+            FOREIGN KEY (DenominationId) REFERENCES Denominations(DenominationId);
+
+-- The same shape again, for the catalogue reference (migration 012). An
+-- ALTER for the same reason: Catalogs is created well below Coins, so an
+-- inline REFERENCES on the column could not resolve.
+--
+-- NO CASCADE, and here that is the important word. Deleting a catalogue must
+-- never delete the owner's coins; removal in the UI is a soft delete
+-- (IsActive = 0) and even a hand-run DELETE should fail loudly on this
+-- constraint rather than quietly take a hundred coins with it. ON DELETE SET
+-- NULL was considered and rejected too -- it would silently discard the
+-- attribution on every affected coin.
+--
+-- Character-for-character identical to the ALTER in
+-- migrations/012-add-catalog-references.sql, which is what lets
+-- migration-012.spec.ts compare the two files as text.
+ALTER TABLE Coins
+        ADD CONSTRAINT FK_Coins_Catalog
+            FOREIGN KEY (CatalogId) REFERENCES Catalogs(CatalogId);
+
 GO
 
 -- ============================================================
@@ -283,6 +541,13 @@ CREATE INDEX IX_Coins_CoinSet            ON Coins         (CoinSet);
 CREATE INDEX IX_Coins_MetalContent       ON Coins         (MetalContent);
 CREATE INDEX IX_Coins_CoinType           ON Coins         (CoinType);
 CREATE INDEX IX_Transactions_CoinId      ON Transactions  (CoinId);
+-- The two foreign keys added by migration 011. Both earn an index: every
+-- "which coins use this denomination?" count behind the maintenance screen
+-- and every read of an issuer's denominations filters on exactly these
+-- columns. (These two lines are duplicated by 011 for existing databases;
+-- migration-011.spec.ts asserts the two files agree.)
+CREATE INDEX IX_Denominations_IssuerId ON Denominations (IssuerId);
+CREATE INDEX IX_Coins_DenominationId ON Coins (DenominationId);
 
 GO
 

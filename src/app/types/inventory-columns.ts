@@ -1,11 +1,17 @@
 import { CoinRecord, SpotPrices } from './coin.model';
+import { CatalogOption, coinCatalogReference } from './catalog-reference';
+import { collectionStatusLabel } from './collection-status';
 import { computeMeltValue } from '../services/inventory/inventory-metrics';
+import { denominationDisplay } from '../services/denominations/denomination-display';
+import {
+  PickerDenomination,
+  denominationSelectionFor
+} from '../components/coin-editor-form/denomination-picker';
 
 /**
  * Column order for the inventory table.
  *
  * THIS ARRAY IS THE SINGLE SOURCE OF TRUTH FOR COLUMN ORDER.
- * ---------------------------------------------------------
  * Two things read it, and that is exactly why it must stay the only place the
  * order is written down:
  *   1. the column picker (the "Columns" tick-box panel) lists options in this
@@ -14,91 +20,91 @@ import { computeMeltValue } from '../services/inventory/inventory-metrics';
  *      the table's `<th>`/`<td>` sequence follows it too.
  * Re-ordering the template instead would make those two disagree, which is how
  * you end up with a tick-box panel whose order does not match the grid.
- *
- * Key changes from legacy schema:
- * - Replaced 'name' with 'coinType' (aligns with CoinRecord changes)
- * - Added 'pmWeightGrams', 'pmPercent', 'meltValue' for precious metal tracking
- * - 'certNumber' sits immediately before 'grade' (owner request): the slab's
- *   certification and the grade printed on that slab are one idea, so they read
- *   as a pair. See the note on the 'certNumber' entry below for WHAT that
- *   column actually displays.
- * - 'certCompany' ("Certified By") sits immediately before 'certNumber' (owner
- *   request: "show the certification company to the left of the grade"). It is
- *   the only cert column that is ON by default, so in the grid as shipped it is
- *   the one the user sees next to Grade. The long note on its entry below
- *   explains why it is a new column and why it went to the left of 'certNumber'
- *   instead of between 'certNumber' and 'grade'.
  */
 export const inventoryColumnOrder = [
   'year',
   'mintMark',
-  // ---- Denomination immediately after Mint Mark -----------------------------
-  // Moved here from between 'category' and 'country' at the owner's request.
   // Year / Mint Mark / Denomination is how a coin is spoken about and written
-  // on a holder -- "1881-S Dollar" -- so the three now read together, and the
-  // grid's leading columns match the first line of the coin editor.
+  // on a holder -- "1881-S Dollar" -- so the three read together here, and
+  // the grid's leading columns match the first line of the coin editor.
   'denomination',
-  'coinType', // Changed from 'name' - displays the coin type/variant
-  // ---- The cert block, ending flush against Grade ---------------------------
-  // Two columns, not one, and they are NOT interchangeable:
+  'coinType',
+  // Cert sits immediately before Grade: the slab's certification and the
+  // grade printed on that slab are one idea and read as a pair.
   //
-  //   certCompany ("Certified By") — the grading company ALONE: "NGC". Narrow,
-  //     and ON by default. Added at the owner's request: "we need to show the
-  //     certification company to the left of the grade".
-  //   certNumber  ("Cert")         — a BADGE carrying company AND number,
-  //     "PCGS #12345678", falling back to just the company when no number is
-  //     recorded. Wider, and OFF by default. See certBadgeLabel() at the
-  //     bottom of this file.
+  // Despite the key being `certNumber`, the cell is a BADGE carrying the
+  // company AND the number -- "PCGS #12345678" -- falling back to just the
+  // company when no number is recorded. See certBadgeLabel() at the bottom of
+  // this file. OFF by default: the slab number is reference data most people
+  // do not want on screen.
   //
-  // WHY A NEW COLUMN RATHER THAN NARROWING THE EXISTING ONE.
-  // Repurposing 'certNumber' to show only the company would have been fewer
-  // lines, but it is off by default precisely because the slab number is
-  // reference data most people do not want on screen — so anyone who HAS
-  // ticked it has gone looking for that number. Quietly replacing it with the
-  // company would take away the one thing they switched the column on for.
-  //
-  // WHY certCompany SITS BEFORE certNumber RATHER THAN BETWEEN IT AND GRADE.
-  // 'certNumber' immediately precedes 'grade' at the owner's earlier request
-  // (the slab's certification and the grade printed on that slab read as a
-  // pair), and that adjacency is pinned by tests in
-  // features/inventory/inventory-columns.store.spec.ts. Wedging the new column
-  // into that gap would have broken it. Sitting to the LEFT of certNumber
-  // satisfies both requests at once: the cert block ends flush against Grade,
-  // and because certNumber is off by default, the column the user actually
-  // sees immediately left of Grade IS "Certified By".
-  'certCompany',
+  // THERE IS NO SEPARATE COMPANY COLUMN, AND THAT IS DELIBERATE: certBadgeLabel()
+  // already leads with the company, so a company-only column alongside this
+  // one would render "NGC" next to "NGC #2599001".
   'certNumber',
   'grade',
+  // Status: "do I actually have this one?"
+  // ON by default, which is the point of it. Without a visible status a coin
+  // on the want list looks exactly like a coin in the cabinet, and the one
+  // thing this feature must never allow is the owner mistaking the second for
+  // the first. See src/app/types/collection-status.ts for the five values and
+  // why they are those five.
+  //
+  // WHY HERE. Everything to the left of this point describes the COIN — what
+  // it is, how it is graded. Status is the first column about the OWNER's
+  // relationship to it, and what follows (category, country, then the money)
+  // is the same kind of thing, so this is the seam.
+  //
+  // This column NEVER renders an em-dash. A coin with no stored status is
+  // Owned, not unknown; see the `collectionStatus` case in
+  // formatInventoryCell() below.
+  'collectionStatus',
   'category',
   'country',
   'purchasePrice',
   'currentValue',
-  'meltValue', // New: computed melt value based on PM content and spot prices
+  'meltValue',
   'soldPrice',
   'variety',
-  // NOTE: a 'dealer' column used to sit here. The coin-level dealer field was
-  // removed at the owner's request -- who a coin came from is already recorded,
-  // per event, on its transaction rows. (Transactions still have their own
-  // dealer; that is a different thing and it stays.)
+  // Catalogue reference: "Sear 6819", "Hendin 1234", "RIC II.1 234" -- the
+  // catalogue and the number read as one cell, composed by
+  // coinCatalogReference() in types/catalog-reference.ts.
+  //
+  // WHY IT SITS AGAINST VARIETY. Before this column existed, catalogue
+  // references got typed into the VARIETY field because there was nowhere
+  // else for them. With the two adjacent, a user can see at a glance which
+  // coins still have a reference in the wrong box and move it.
+  //
+  // OFF by default. Most collectors of modern coins will never record a
+  // catalogue reference, and an always-empty column in a grid this dense
+  // pushes the money columns off the right-hand edge. It is one tick in the
+  // Columns panel for the people who collect ancients and world coins, where
+  // it is often the only thing that identifies the coin at all.
+  'catalogReference',
   'coinSet',
+  // Storage sits immediately after Set.
+  // The two ask the only two organising questions a collector has, and they
+  // are NOT the same question: Set is the conceptual grouping a coin belongs
+  // to ("Morgan Set"), Storage is the shelf you walk to ("Safe deposit box
+  // 2"). A coin is routinely in both. Reading them side by side is what makes
+  // the difference obvious to anyone looking at the grid for the first time.
+  //
+  // OFF by default: free text, often long, and in a grid this dense it would
+  // push the money columns off the right-hand edge for the majority of users
+  // who keep everything in one album.
+  'storageLocation',
   'metalContent',
   'weight',
-  'pmWeightGrams', // New: precious metal weight in grams
-  'pmPercent', // New: precious metal purity percentage
-  // NOTE: there used to be a 'tags' column here. Nothing in the app could ever
-  // put a tag on a coin (no editor input, no bulk-edit field, no importer), so
-  // the column could only ever display a dash. The whole feature was removed.
+  'pmWeightGrams',
+  'pmPercent',
   'source'
 ] as const;
 
 export type InventoryColumn = (typeof inventoryColumnOrder)[number];
 
-/**
- * Human-readable labels for each inventory column.
- * These labels are displayed in the table header and column selector UI.
- */
+/** Headers for the table and the column-selector panel. */
 export const inventoryColumnLabels: Record<InventoryColumn, string> = {
-  coinType: 'Type', // Changed from 'Name' - displays coin variant (e.g., "Walking Liberty")
+  coinType: 'Type',
   grade: 'Grade',
   category: 'Category',
   denomination: 'Denom.',
@@ -106,36 +112,33 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   year: 'Year',
   purchasePrice: 'Cost',
   currentValue: 'Value',
-  meltValue: 'Melt Value', // New: computed melt value
+  meltValue: 'Melt Value',
   soldPrice: 'Sold Price',
   mintMark: 'MM',
   variety: 'Variety',
-  // Two different headers for two different columns -- see the cert block in
-  // inventoryColumnOrder.
-  //
-  // 'Cert. By' is deliberately a shortened PHRASE rather than a noun like
-  // 'Company': the header has to say what the cell means on a RAW coin too,
-  // where it reads as an em-dash, and "Cert. By: —" is honest where
-  // "Company: —" is just blank.
-  //
-  // It was 'Certified By' first. That was long enough to force the header to
-  // wrap to two lines -- the header, not the data, is the widest thing in this
-  // column, since the values are 3-5 letters (NGC, PCGS, ANACS) -- and the
-  // owner asked for the shorter label rather than the taller header row. Keep
-  // any future wording about this short for the same reason; see the note on
-  // `.column-certCompany` in inventory-table.scss.
-  certCompany: 'Cert. By',
+  // Spelled out rather than shortened to 'Cat.' or 'Ref.': on its own 'Ref'
+  // could be a certification number or an internal stock number, and 'Cat.'
+  // reads as Category, which is a column two places to the right. The header
+  // is wider than most cells in this column, which is acceptable for a column
+  // that is off by default and switched on deliberately.
+  catalogReference: 'Catalogue Ref.',
   certNumber: 'Cert',
+  // One word, because the cell values are one word too ("Owned", "Wanted") and
+  // a header wider than its data wastes space in a grid that has none spare.
+  collectionStatus: 'Status',
   coinSet: 'Set',
+  // 'Storage', not 'Location'. This grid already has a Country column, and in
+  // that company "Location" reads as "where in the world is this coin from"
+  // rather than "which drawer is it in" -- which is the opposite of what the
+  // field records. Keep any future wording unambiguous against Country.
+  storageLocation: 'Storage',
   metalContent: 'Metal',
-  // GRAMS. This read 'Weight (oz)' until the gross Weight column was switched
-  // from troy ounces to grams -- see server/migrations/008-weight-to-grams.sql,
-  // which multiplied the stored values by 31.1034768. The two weight columns
-  // in this grid now share a unit, so 'Weight (g)' and 'PM Weight (g)' can be
+  // GRAMS, and the unit is in the header on purpose: the two weight columns
+  // in this grid share a unit, so 'Weight (g)' and 'PM Weight (g)' can be
   // read side by side and divided into one another without conversion.
   weight: 'Weight (g)',
-  pmWeightGrams: 'PM Weight (g)', // New: precious metal weight in grams
-  pmPercent: 'PM %', // New: precious metal purity percentage
+  pmWeightGrams: 'PM Weight (g)',
+  pmPercent: 'PM %',
   source: 'Source'
 };
 
@@ -152,15 +155,14 @@ export const defaultVisibleColumns: InventoryColumn[] = [
   'mintMark',
   'denomination',
   'coinType',
-  // ON by default, unlike its sibling 'certNumber'. The owner said "we need to
-  // show the certification company" -- a column that only appears once the
-  // user has found it in the Columns picker is not shown. Being in this list
-  // is also what makes the change reach EXISTING users: normalizeVisibleColumns
-  // unions a saved preference with these defaults, so the new column turns up
-  // on their next load with no migration and no version stamp on the storage
-  // key. See InventoryColumnsStore.restoreFromStorage.
-  'certCompany',
   'grade',
+  // ON by default for the reason spelled out on its entry in
+  // inventoryColumnOrder: an invisible status makes a want-list coin look
+  // identical to one in the cabinet. normalizeVisibleColumns unions a saved
+  // preference with this list, so a newly-defaulted-on column reaches
+  // existing users on their next load with no migration and no version stamp
+  // on the storage key.
+  'collectionStatus',
   'category',
   'country',
   'purchasePrice',
@@ -187,6 +189,130 @@ export function formatDenominationDisplay(value: string): string {
     .replace(/5\s*shilling/gi, '5 sh');
 }
 
+/* THE COIN'S DENOMINATION, AS EVERY READ PATH MUST WRITE IT
+ *
+ * WHY THIS FUNCTION EXISTS AT ALL
+ *
+ * A coin carries TWO denomination fields: `denominationId` (the canonical
+ * link, frequently NULL) and `denomination` (what the source said, never
+ * rewritten). The coin editor reads the id. Everything else — this grid, the
+ * search box, the statistics chart, the printed reports — would otherwise
+ * read only the text.
+ *
+ * That split is not a cosmetic inconsistency waiting to happen; it is a
+ * SILENT one. As soon as ids are set, the same coin reads `8 Reales` in the
+ * editor and `Pillar Dollar` in the grid, nothing throws and no test fails.
+ * So all four read paths come through here.
+ *
+ * WHY IT RESOLVES THE TEXT AND DOES NOT JUST LOOK THE ID UP
+ *
+ * `denominationLabelById()` would be the obvious implementation and it is the
+ * wrong one: `DenominationId` is NULL on most rows, so an id-only read path
+ * would show all of them as unresolved.
+ *
+ * `denominationSelectionFor()` is what the editor's picker already uses. It
+ * prefers the stored id and falls back to putting the TEXT through
+ * `resolveDenomination` — the same resolver the backfill and the importers
+ * use, not a second copy of the rules. The property this is judged on:
+ *
+ *     A COIN READS IDENTICALLY BEFORE AND AFTER THE IDS ARE BACKFILLED.
+ *
+ * Nothing here writes. A resolution is SHOWN, never saved — rendering a grid
+ * must not rewrite the collection it is rendering.
+ *
+ * WHY THE SHILLING REWRITE IS APPLIED TO THE LABEL AND NOT TO THE TEXT
+ *
+ * `formatDenominationDisplay` above turns '5/-' into '5 sh'. Two decisions,
+ * and they point opposite ways on purpose:
+ *
+ *   THE RESOLVED LABEL IS NORMALISED. coin-editor-form.html renders every
+ *   <option> in the denomination picker through this same function, so the
+ *   dropdown says '5 sh (Crown)'. A grid printing the raw '5/- (Crown)'
+ *   would re-create, in a new place, the very two-spellings-of-one-coin
+ *   problem this change exists to remove.
+ *
+ *   THE RECORDED TEXT IS NOT. It is evidence of what the source wrote, and
+ *   showing it verbatim is the entire point of the unresolved form: the user
+ *   has to RECOGNISE the value before they can re-map it. `Coins.Denomination`
+ *   is never rewritten; rewriting it on the way to the screen is the same
+ *   loss, one layer up.
+ *
+ * Note the ORDER below, which is load-bearing: the label is normalised only
+ * when there IS one. `formatDenominationDisplay(null)` answers '—', and an
+ * em-dash is a perfectly good non-empty "label" as far as
+ * `denominationDisplay()` is concerned — so normalising first would make
+ * every unresolved coin in the grid read '—' and the collection would look
+ * empty. composition-breakdown.ts documents the same trap.
+ */
+
+/** What `coinDenominationDisplay` needs off a coin. Widened for the reports. */
+export interface DenominationBearing {
+  denomination: string;
+  denominationId?: number | null;
+  country?: string;
+}
+
+/**
+ * One coin's denomination, exactly as every screen must write it.
+ *
+ * @param coin          the record; only three fields are read
+ * @param denominations the `Denominations` lookup, already in memory on
+ *                      InventoryService. NO SERVER ROUND TRIP: the grid
+ *                      renders hundreds of rows and `denominationSelectionFor`
+ *                      indexes the list once per array identity (a WeakMap in
+ *                      denomination-picker.ts), so a row costs two map
+ *                      lookups and two alias folds.
+ *
+ * *** THE LOOKUP IS OPTIONAL, AND AN ABSENT ONE IS NOT A WRONG ANSWER. ***
+ * With no list there is nothing to resolve against, so the coin's own text
+ * stands as its own label and the cell renders precisely what this app has
+ * rendered for years. That matters twice: during start-up hydration, where
+ * the alternative is a flash of "unresolved" across the whole grid, and in
+ * the many callers and specs that have no lookup to give.
+ *
+ * *** THE STRING IS BUILT BY denominationDisplay() AND NOWHERE ELSE. ***
+ * That is the one place the rule may be written down, and its spec greps the
+ * whole of src/ and fails the build if a second copy appears — because two
+ * copies are a FORK, not a duplicate.
+ */
+export function coinDenominationDisplay(
+  coin: DenominationBearing,
+  denominations?: readonly PickerDenomination[]
+): string {
+  const label = resolvedDenominationLabel(coin, denominations ?? []);
+  return denominationDisplay(label ? formatDenominationDisplay(label) : null, coin.denomination);
+}
+
+/**
+ * The lookup Label this coin resolves to, or null.
+ *
+ * Separated from the formatting above so the "which row is this?" question
+ * and the "how is it written?" question stay apart — the first is shared
+ * with the editor and the migration, the second is presentation.
+ */
+function resolvedDenominationLabel(
+  coin: DenominationBearing,
+  denominations: readonly PickerDenomination[]
+): string | null {
+  const selection = denominationSelectionFor(
+    coin.denominationId,
+    coin.denomination,
+    coin.country,
+    denominations
+  );
+
+  // `ready` is false only while the lookup list is empty — see the field's
+  // own note in denomination-picker.ts. Judged against an empty list every
+  // coin looks unresolvable, so the honest answer is not "unresolved", it is
+  // "we have nothing to contradict the text with", and the text stands.
+  if (!selection.ready) {
+    const text = String(coin.denomination ?? '').trim();
+    return text.length > 0 ? text : null;
+  }
+
+  return selection.label;
+}
+
 /**
  * Renders a melt value for display: currency to two decimals, or a dash.
  *
@@ -203,31 +329,34 @@ export function formatMeltValue(value: number | null): string {
 }
 
 /**
- * Formats a cell value for display in the inventory table.
- * Each column has custom formatting logic (currency, percentages, badges, etc.).
+ * Formats one cell for the inventory table (currency, percentages, badges).
  *
- * ---------------------------------------------------------------------------
- * WHY THERE IS A THIRD PARAMETER (and why it is optional)
- * ---------------------------------------------------------------------------
- * Every other column can be worked out from the coin alone. Melt value cannot:
- * it also needs today's spot prices, which live on InventoryService. There
- * were two sensible ways to bridge that gap —
+ * WHY THE THREE LOOKUP PARAMETERS EXIST, AND WHY THEY ARE OPTIONAL
  *
- *   (a) pass the prices in here, or
- *   (b) special-case `meltValue` in the inventory-table template the way
- *       `grade` and `certNumber` already are, calling inv.meltValue(coin).
+ * Most columns can be worked out from the coin alone. Three cannot, because
+ * the coin stores a key and the value behind it lives on InventoryService:
+ * `meltValue` needs today's spot prices, `catalogReference` needs the
+ * Catalogs lookup, `denomination` needs the Denominations lookup.
  *
- * (a) was chosen. The reason is testability: this stays ONE pure function of
- * its arguments, so the interesting cases — a real figure, and the null/dash
- * case — are unit-testable with a plain object and no DOM, which matters
- * because this test suite runs under Node with no jsdom. Option (b) would have
- * pushed the formatting decision into a template, where the only way to check
- * it is to render something.
+ * They are passed in rather than special-cased in the template so that this
+ * stays ONE pure function of its arguments, unit-testable with a plain
+ * object and no DOM — which matters because this suite runs under Node with
+ * no jsdom. Pushing the decision into a template would mean the only way to
+ * check it is to render something.
  *
- * It is OPTIONAL so that every existing caller (and every existing test) keeps
- * compiling unchanged. Omitting it is not a silent wrong answer: with no
- * prices there is nothing to price the metal at, so the cell correctly reads
- * "—", exactly as it would for a coin with no precious metal.
+ * They are OPTIONAL so existing callers and tests keep compiling. Omitting
+ * one is never a silent wrong answer, but note the two cases differ:
+ *
+ *   NO PRICES — there is genuinely nothing to price the metal at, so the
+ *   melt cell reads "—", exactly as for a coin with no precious metal.
+ *
+ *   NO CATALOGUE LIST — we still know the NUMBER the user typed, so the cell
+ *   reads "6819" rather than "Sear 6819". Hiding real data behind an em-dash
+ *   would be worse, and inventing a name worse still.
+ *
+ *   NO DENOMINATIONS LIST — the coin's own text stands as its label; see
+ *   coinDenominationDisplay() above for why that is the honest answer rather
+ *   than a degraded one.
  *
  * Note it calls computeMeltValue() rather than doing the arithmetic. That is
  * deliberate and load-bearing — see the comment at the `meltValue` case below.
@@ -235,15 +364,19 @@ export function formatMeltValue(value: number | null): string {
  * @param coin - The coin record to format
  * @param column - The column identifier
  * @param spotPrices - Current spot prices; only the `meltValue` column uses them
+ * @param catalogs - The Catalogs lookup; only `catalogReference` uses it
+ * @param denominations - The Denominations lookup; only `denomination` uses it
  * @returns Formatted string for display
  */
 export function formatInventoryCell(
   coin: CoinRecord,
   column: InventoryColumn,
-  spotPrices?: SpotPrices
+  spotPrices?: SpotPrices,
+  catalogs?: readonly CatalogOption[],
+  denominations?: readonly PickerDenomination[]
 ): string {
   switch (column) {
-    case 'coinType': // Changed from 'name' - displays coin variant
+    case 'coinType':
       return coin.coinType || '—';
 
     case 'grade':
@@ -252,13 +385,18 @@ export function formatInventoryCell(
     case 'category':
       return coin.category || '—';
 
+    // NOT `formatDenominationDisplay(coin.denomination)`. Reading the text
+    // alone makes this cell and the coin editor disagree about the same coin
+    // as soon as `denominationId` is set — see coinDenominationDisplay()
+    // above, which also explains why an absent fifth argument still renders
+    // the right thing.
     case 'denomination':
-      return formatDenominationDisplay(coin.denomination);
+      return coinDenominationDisplay(coin, denominations);
 
     case 'country':
       return coin.country || '—';
 
-    case 'year': // Now a string (not number|null), so no conversion needed
+    case 'year': // a string, so that ranges like "1916-1945" survive
       return coin.year || '—';
 
     case 'purchasePrice':
@@ -270,18 +408,15 @@ export function formatInventoryCell(
     case 'meltValue':
       // *** NEVER DO THE ARITHMETIC HERE. ALWAYS CALL computeMeltValue(). ***
       //
-      // This column used to be a stub that returned a dash for every coin, and
-      // the comment that sat here offered this formula to whoever finished it:
+      // The tempting formula is WRONG:
       //     (pmWeightGrams * pmPercent / 100) * spotPricePerGram
-      // That formula is WRONG and implementing it would have re-broken a bug
-      // that was fixed earlier. It applies purity TWICE: `pmWeightGrams` is
-      // already the weight of the PURE precious metal, not the coin's gross
-      // weight (see the header of services/pm-reference.ts, which works it
-      // through on a $20 Saint-Gaudens: 33.44 g gross, 90% fine, so
-      // pmWeightGrams = 30.09 g, which IS the 0.9675 oz AGW the trade quotes).
-      // Discounting that by 0.90 a second time understates every figure by the
-      // purity factor -- about 10% on 90% gold and silver, 60% on a 40% silver
-      // Kennedy half.
+      // It applies purity TWICE. `pmWeightGrams` is ALREADY the weight of the
+      // pure precious metal, not the coin's gross weight (see the header of
+      // services/pm-reference.ts, which works it through on a $20
+      // Saint-Gaudens: 33.44 g gross, 90% fine, so pmWeightGrams = 30.09 g,
+      // which IS the 0.9675 oz AGW the trade quotes). Discounting that by
+      // 0.90 again understates every figure by the purity factor -- about
+      // 10% on 90% gold and silver, 60% on a 40% silver Kennedy half.
       //
       // The correct sum, and the ONLY place it is written down, is
       // computeMeltValue() in services/inventory/inventory-metrics.ts:
@@ -303,38 +438,61 @@ export function formatInventoryCell(
     case 'variety':
       return coin.variety || '—';
 
-    // The grading company AND NOTHING ELSE -- "NGC", never "NGC 9000002-001".
-    // That is the entire difference between this column and the 'certNumber'
-    // case directly below, and it is the reason both exist. If you are ever
-    // tempted to "tidy up" by folding one into the other, read the cert block
-    // in inventoryColumnOrder first.
-    case 'certCompany':
-      return coin.certCompany || '—';
+    // The catalogue and the number as one reference. Composed by
+    // coinCatalogReference() rather than here, because the search box in
+    // features/inventory/inventory-filter.store.ts has to build the exact
+    // same string — a cell the user can see but cannot search for is a bug
+    // report, and two copies of `${name} ${number}` is how you get one.
+    //
+    // An em-dash only when there is genuinely nothing: a coin with a number
+    // but no resolvable catalogue still shows the number. See the note on
+    // the `catalogs` parameter above.
+    case 'catalogReference':
+      return coinCatalogReference(catalogs, coin.catalogId, coin.catalogNumber) || '—';
 
     case 'certNumber':
       return coin.certCompany || coin.certNumber ? `${coin.certCompany} ${coin.certNumber}`.trim() || '—' : '—';
 
+    // *** THE ONLY CELL IN THIS GRID THAT CANNOT RENDER AN EM-DASH. ***
+    //
+    // Every other case above answers a missing value with '—', meaning "we do
+    // not know". A missing status is not unknown: a coin with no stored status
+    // is OWNED, and saying anything else about it is false. Plenty of coins
+    // arrive here with `collectionStatus` undefined, so a dash would put a
+    // visible hole across the whole collection and invite the user to go and
+    // "fix" hundreds of rows that were never broken.
+    //
+    // collectionStatusLabel() is what guarantees that, for absent, empty AND
+    // unrecognised values alike. Do not replace it with a lookup into
+    // COLLECTION_STATUS_LABELS, and do not add a `|| '—'`.
+    case 'collectionStatus':
+      return collectionStatusLabel(coin.collectionStatus);
+
     case 'coinSet':
       return coin.coinSet || '—';
+
+    // Free text, shown exactly as typed. An ordinary dash when blank, which
+    // unlike Status is the honest answer -- until the user records where a
+    // coin lives, the app genuinely does not know.
+    case 'storageLocation':
+      return coin.storageLocation || '—';
 
     case 'metalContent':
       return coin.metalContent || '—';
 
-    // Three decimals, matching the pmWeightGrams cell below it. Both columns
-    // are now grams, so showing one to four places and the other to three
-    // would make two comparable figures look like different kinds of number.
-    // Four decimals suited troy ounces, where the fourth place is still worth
-    // about 3 mg; in grams it is a tenth of a milligram, which no coin scale
-    // in a collector's house can resolve and which only adds noise to a dense
-    // grid. The coin editor still accepts and stores five -- see the
-    // DECIMAL(12,5) column -- this is a display choice for the grid alone.
+    // Three decimals, matching the pmWeightGrams cell below it: both columns
+    // are grams, and showing one to four places and the other to three would
+    // make two comparable figures look like different kinds of number. In
+    // grams a fourth place is a tenth of a milligram, which no coin scale in
+    // a collector's house can resolve. The editor still accepts and stores
+    // five (DECIMAL(12,5)); this is a display choice for the grid alone.
     case 'weight':
       return (coin.weight ?? 0) > 0 ? `${(coin.weight ?? 0).toFixed(3)}` : '—';
 
-    case 'pmWeightGrams': // New: precious metal weight in grams
+    case 'pmWeightGrams':
       return coin.pmWeightGrams ? `${coin.pmWeightGrams.toFixed(3)}` : '—';
 
-    case 'pmPercent': // New: precious metal purity percentage
+    case 'pmPercent':
       return coin.pmPercent ? `${coin.pmPercent.toFixed(1)}%` : '—';
 
     case 'source':
@@ -354,14 +512,12 @@ const GRADE_TIER_MODIFIERS = /^(?:SUPERB|CHOICE|SELECT|NEARLY|NEAR|ABOUT|CH|SEL)
 /**
  * Grade letters to the colour tier they belong to.
  *
- * Keyed on the COMPLETE letter run, never on a prefix, which is what makes
- * this table order-independent: `VF` and `F` are simply two different keys,
- * and no amount of reordering can make one answer for the other. An earlier
- * version tested anchored prefixes in a careful sequence and relied on `VF`
- * being checked before `F`, `VG` before `G`, and `FR` before `F`. That worked,
- * but it was correct only by arrangement -- and the failure mode was a wrong
- * COLOUR rather than an error, so nothing would have caught a reordering.
- * Reading the whole grade removes the hazard instead of managing it.
+ * KEYED ON THE COMPLETE LETTER RUN, NEVER ON A PREFIX, which is what makes
+ * this table order-independent: `VF` and `F` are two different keys, and no
+ * amount of reordering can make one answer for the other. Do not rewrite it
+ * as a sequence of anchored prefix tests — that is correct only by
+ * arrangement (`VF` before `F`, `VG` before `G`, `FR` before `F`), and its
+ * failure mode is a wrong COLOUR rather than an error, so nothing catches it.
  */
 const GRADE_TIERS: Readonly<Record<string, string>> = {
   // Struck for collectors. Off the circulated-to-mint ladder entirely, so it
@@ -392,9 +548,9 @@ const GRADE_TIERS: Readonly<Record<string, string>> = {
  * than a guess: showing an unrecognised grade in, say, green would assert
  * something untrue about the coin.
  *
- * The tiers follow the owner's request -- MS green, PF its own gold, VF the
- * established blue with XF a shade darker, and the circulated grades below
- * them through earth tones. See `styles/_controls.scss` for the colours.
+ * The tiers run MS green, PF its own gold, VF the established blue with XF a
+ * shade darker, and the circulated grades below them through earth tones.
+ * See `styles/_controls.scss` for the colours.
  */
 export function gradeBadgeClass(grade: string): string {
   const normalized = (grade || '').trim().toUpperCase().replace(GRADE_TIER_MODIFIERS, '');

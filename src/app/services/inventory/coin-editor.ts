@@ -8,9 +8,9 @@ import { CoinDraftRegistry } from './coin-draft-registry';
 import { imageSourcePaths } from '../image-source-paths';
 import { firstValueFrom } from 'rxjs';
 
-/* ===========================================================================
+ /*
  * CoinEditor
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   The "the user typed something" path, end to end:
  *     1. paint the new value on screen straight away (optimistic update),
@@ -32,7 +32,7 @@ import { firstValueFrom } from 'rxjs';
  * It owns no state of its own: the coin list lives in a signal owned by
  * InventoryService, and all save bookkeeping lives in CoinChangeTracker and
  * CoinDraftRegistry.
- * =========================================================================== */
+  */
 
 /** How long to wait after the last keystroke before writing to the server. */
 const SAVE_DEBOUNCE_MS = 1000;
@@ -127,9 +127,7 @@ export class CoinEditor {
    * Apply an edit and write it RIGHT NOW, resolving when the server has
    * accepted it.
    *
-   * ---------------------------------------------------------------------------
-   * WHY THIS EXISTS ALONGSIDE `updateCoin`
-   * ---------------------------------------------------------------------------
+   * ---- WHY THIS EXISTS ALONGSIDE `updateCoin` ----
    * `updateCoin` above is built for a human typing: it repaints instantly and
    * waits a second in case more keystrokes follow, so "Quarter" produces one
    * PUT rather than seven. That debounce is kept in a Map keyed by coin id, so
@@ -147,9 +145,7 @@ export class CoinEditor {
    * paint, record, send, await. A caller can then loop over it sequentially and
    * know that each coin was written exactly once before the next one starts.
    *
-   * ---------------------------------------------------------------------------
-   * WHAT IT DELIBERATELY DOES NOT DO
-   * ---------------------------------------------------------------------------
+   * ---- WHAT IT DELIBERATELY DOES NOT DO ----
    * It does NOT cancel a debounced write that the user's typing may already
    * have queued for this coin. Cancelling would be the tidier-looking choice
    * and it would throw away whatever they just typed. Letting that timer fire
@@ -225,9 +221,7 @@ export class CoinEditor {
     return body;
   }
 
-  /* =========================================================================
-   * DRAFT COINS — the first-ever save
-   * ======================================================================= */
+  /* ---- DRAFT COINS — the first-ever save ---- */
 
   /**
    * Handle an edit to a coin that has never reached the database.
@@ -269,45 +263,30 @@ export class CoinEditor {
    * scheduled, because a full second of typing (or a delete) can happen in
    * between.
    *
-   * ---------------------------------------------------------------------------
-   * WHY THE ALLOY / WEIGHT INFERENCE IS *NOT* RUN HERE
-   * ---------------------------------------------------------------------------
-   * Every IMPORT path (QIF, CSV, the Settings backfill) works out Metal,
-   * Composition, PM %, PM weight and gross Weight from the coin's country,
-   * denomination and year — see services/pm-fill.ts. This method is the
-   * obvious-looking fourth place to do it: it is the exact moment a
-   * hand-typed row stops being a sketch and becomes a database record, the
-   * user has not typed for a second, and the 2-of-3 detail rule has already
-   * passed. It was considered, and deliberately not done. Three reasons, in
-   * increasing order of seriousness:
+   * ---- DO NOT RUN THE ALLOY / WEIGHT INFERENCE HERE ----
+   * The inference exists (services/pm-autofill.ts, triggered from
+   * components/coin-editor-form/coin-editor-form.ts) but it must not be
+   * invoked from this method, for two reasons:
    *
-   *   1. THE RECORD IS NOT FINISHED. An import sees a complete description
-   *      and acts on it once. A hand-typed row is observed MID-SENTENCE. A
-   *      user who has typed "1879" and "$1" and is reaching for the Coin Type
-   *      box has described a coin this table reads as ambiguous — and if they
-   *      then change the denomination to "$20", nothing re-runs, because the
-   *      row is no longer a draft. They would be left holding an inferred
-   *      value that is now WRONG and that they never typed. The governing
-   *      rule of this whole feature (pm-reference.ts, top of file) is that a
-   *      visible blank beats a silently wrong number; firing here would
-   *      manufacture exactly the silently wrong number it exists to avoid.
+   *   1. THIS METHOD RUNS ONCE, on a coin's first save, and never again. A
+   *      user who typed "1879 $1" and later corrects it to "$20" would be
+   *      left holding an inferred weight that is now wrong and that they
+   *      never typed. pm-autofill is re-run by every later change to a key
+   *      field, so no stale inference sits unchallenged.
    *
-   *   2. IT WOULD HAVE TO WRITE INTO FIELDS THE USER MAY BE INSIDE. To show
-   *      the inferred values the live `inventory` signal has to be repainted,
-   *      and the coin editor's inputs are bound to it. Changing the value of
-   *      a control while the caret is in it is a defect this project has
-   *      already had once (see the header of
-   *      components/coin-editor-form/custom-option-mode.ts, where a box was
-   *      being destroyed mid-keystroke).
+   *   2. IT WOULD WRITE INTO FIELDS THE USER MAY BE INSIDE. This method fires
+   *      off a DEBOUNCE TIMER: one second after a keystroke is, by
+   *      construction, a moment the user did not choose and may well be
+   *      typing through. (This project has already destroyed a text box
+   *      mid-keystroke that way — see the header of
+   *      components/coin-editor-form/custom-option-mode.ts.) pm-autofill is
+   *      triggered by the native `change` event of the key control instead —
+   *      a commit, after the caret has left the box — never by a clock, and
+   *      it refuses to write back to the field that triggered it.
    *
-   *   3. THERE IS ALREADY A GOOD ANSWER. Settings > Maintenance runs the
-   *      identical inference over the whole inventory, with a preview, a
-   *      count, and a moment the USER picks — which is the right shape for a
-   *      record whose author is still composing it.
-   *
-   * If this is ever revisited, the shape to aim for is an explicit action
-   * ("fill in metal and weight for this coin") on the detail panel rather
-   * than anything automatic on a timer.
+   * There is also nothing to add: by the time the user has typed enough for a
+   * draft to qualify for saving, the key fields have each already fired their
+   * own commit event and the autofill has already run.
    */
   private createDraftCoin(coinId: string): void {
     const liveCoin = this.inventory().find(c => c.id === coinId);
@@ -414,9 +393,7 @@ export class CoinEditor {
       ));
   }
 
-  /* =========================================================================
-   * Shared internals
-   * ======================================================================= */
+  /* ---- Shared internals ---- */
 
   /**
    * Write the proposed values into the on-screen list and return the coin as

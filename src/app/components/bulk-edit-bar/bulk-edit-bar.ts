@@ -5,10 +5,8 @@ import { InventorySelectionStore } from '../../features/inventory/inventory-sele
  * BulkEditBar — the bar that slides in along the bottom of the screen once you
  * tick one or more rows in the inventory table.
  *
- * WHY THIS FILE EXISTS
- * It is a small, visually distinct piece of UI that is physically nowhere near
- * the table it acts on. All of its behaviour already lives in
- * InventorySelectionStore, so this component is purely the markup.
+ * All of its behaviour lives in InventorySelectionStore; this component is
+ * purely the markup.
  */
 @Component({
   selector: 'app-bulk-edit-bar',

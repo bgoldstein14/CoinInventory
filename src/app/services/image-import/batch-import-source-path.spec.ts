@@ -105,12 +105,9 @@ describe('BatchImportSession — base folder', () => {
   });
 
   /**
-   * This test used to assert the OPPOSITE: that the box prefilled with the
-   * app's own install folder, per the original "should always start out from
-   * the app folder" requirement.
-   *
-   * That seed was removed after it caused a real data bug twice in one day —
-   * the owner imported a folder and every row was stamped under his
+   * DO NOT make the box prefill with the app's own install folder, however
+   * much "should always start out from the app folder" sounds reasonable.
+   * That seed caused a real data bug: an import stamped every row under the
    * development directory, because the box was still holding it. It is a
    * plausible-looking path that is never the correct answer, and it does not
    * improve when packaged (it becomes `C:\Program Files\...`). An empty box

@@ -2,15 +2,30 @@
 <app-notification-toast />
 
 <!--
-  Database error banner.
+  Start-up failure banner.
+
+  IT IS NOT ALWAYS A DATABASE PROBLEM, so do not hard-code a heading here.
+  The database can answer perfectly while the server fails to BUILD the
+  response, and a banner blaming the connection sends the user hunting a
+  problem that does not exist.
+
+  The heading, the sentence and the short status label all come from the
+  classified failure (services/inventory/load-failure.ts), which reads the
+  stage the server reports: 'connection', 'database' or 'delivery'. The one
+  line of technical detail sits in its own element underneath — available to
+  whoever wants it, shouted at nobody.
+
   `retryConnection()` re-runs hydration in place, so the user never has to
   reload the page after the backend comes back up. The button is disabled
   while an attempt is already in flight (inv.connecting()).
 -->
-@if (inv.connectionError()) {
+@if (inv.loadFailure(); as failure) {
   <div class="db-error-banner" role="alert">
-    <strong>Database unavailable</strong>
-    <span>{{ inv.connectionError() }}</span>
+    <strong>{{ failure.title }}</strong>
+    <span>{{ failure.message }}</span>
+    @if (failure.detail; as detail) {
+      <span class="db-error-banner__detail">{{ detail }}</span>
+    }
     <button
       type="button"
       class="small-button"
@@ -34,6 +49,7 @@
       (importSelected)="handleImportSelection($event)"
       (exportSelected)="handleExportSelection($event)"
       (settingsRequested)="openSettingsModal()"
+      (helpRequested)="openSupportModal()"
     />
   </header>
 
@@ -48,8 +64,34 @@
     (categoryFilterChange)="onCategoryFilterChange($event)"
     (manageCategoriesRequested)="openCategoryModal()"
     (reportsRequested)="openReportModal()"
+    (statisticsRequested)="openStatisticsModal()"
     (spotPricesRequested)="openSpotPriceModal()"
   />
+
+  <!--
+    "Some of your coins have no denomination."
+
+    THE ONLY PLACE IN THE APP THAT SAYS SO. Migration 014 prints the same
+    diagnosis, into SQL output a packaged user will never see; without this
+    line they would simply have rows reading "Other (8 Reales)" and no reason
+    to think anything could be done about it.
+
+    role="status" rather than role="alert": nothing is broken, and a coin with
+    no linked denomination is a perfectly valid record (design §4.1). It is a
+    piece of housekeeping, so it is announced politely rather than interrupting.
+
+    SILENT AT ZERO, on purpose. The pane itself reports zero loudly, because
+    "every coin has a denomination" is what somebody opening it wanted to
+    know; a permanent bar here saying the same thing is noise, and noise is
+    what would make the non-zero case invisible. See App.unlinkedPrompt.
+  -->
+  @if (unlinkedPrompt(); as prompt) {
+    <div class="unlinked-banner" role="status">
+      <strong>Denominations need attention</strong>
+      <span>{{ prompt }}</span>
+      <button type="button" class="small-button" (click)="openUnlinkedCoins()">Review</button>
+    </div>
+  }
 
   <div class="main-content" [class.has-detail]="showDetailPanel() && selectedCoin">
     <app-inventory-table
@@ -75,11 +117,11 @@
   <!--
     The per-coin photo gallery.
 
-    NOTE the absence of an `imagePaths.length > 0` check, which used to be
-    here. The gallery is not only a viewer: it is the one place in the app
-    where photos can be attached to a SPECIFIC coin, so a coin with none yet
-    is precisely the case that needs it most. It shows its own empty state in
-    that situation. See CoinImagesStore.canOpenImageGallery.
+    DO NOT add an `imagePaths.length > 0` check here. The gallery is not only
+    a viewer: it is the one place in the app where photos can be attached to
+    a SPECIFIC coin, so a coin with none yet is precisely the case that needs
+    it most. It shows its own empty state. See
+    CoinImagesStore.canOpenImageGallery.
   -->
   @if (selectedCoin; as coin) {
     @if (images.showImageGallery()) {
@@ -114,23 +156,57 @@
     <app-image-import-modal (closed)="closeImageImportModal()" />
   }
   @if (showCategoryModal()) {
-    <app-category-modal (closed)="closeCategoryModal()" />
+    <!-- `initialSection` exists for the unlinked-coins banner above, which
+         has to land the user on the pane that fixes them rather than on
+         Categories with a hunt ahead of them. Every other caller leaves it
+         at the default. -->
+    <app-category-modal [initialSection]="categoryModalSection()" (closed)="closeCategoryModal()" />
   }
   @if (showReportModal()) {
-    <app-report-modal (closed)="closeReportModal()" (exportCsvRequested)="io.exportCsv()" (exportInsuranceCsvRequested)="io.exportInsuranceCsv()" />
+    <!--
+      `filters` and `columns` are passed so the printed inventory listing can
+      honour the filter, the sort order and the visible columns the user is
+      actually looking at. Both are optional on the component; without them it
+      would print the whole collection through a default column set.
+    -->
+    <app-report-modal
+      [filters]="filters"
+      [columns]="columns"
+      (closed)="closeReportModal()"
+      (exportCsvRequested)="io.exportCsv()"
+      (exportInsuranceCsvRequested)="io.exportInsuranceCsv()"
+    />
+  }
+  @if (showStatisticsModal()) {
+    <app-statistics-modal (closed)="closeStatisticsModal()" />
   }
   @if (showSpotPriceModal()) {
     <app-spot-price-modal (closed)="closeSpotPriceModal()" />
   }
+  <!--
+    "Help > Report a problem". Takes no inputs on purpose: it reads the
+    recent-errors buffer through the injector and asks the backend for
+    everything else, so the shell does not have to know what a problem
+    report contains.
+  -->
+  @if (showSupportModal()) {
+    <app-support-modal (closed)="closeSupportModal()" />
+  }
 
   <!-- The resizable full-size photo window.
 
-       This one DOES keep the `length > 0` guard, and the asymmetry with the
+       This one DOES keep the "has photos" guard, and the asymmetry with the
        gallery above is deliberate: the viewer shows one existing photo and
        offers no way to add anything, so on an empty coin it would be an empty
-       box with nothing to do in it. -->
+       box with nothing to do in it.
+
+       The guard asks `photoCount(coin)`, not `coin.imagePaths.length`. The
+       list endpoint does not carry photographs, so that array is ABSENT
+       until the selected coin's fetch lands and reading `.length` on it
+       would throw (see server/routes/coins/list-query.ts). `imageCount`
+       answers the same question immediately and for free. -->
   @if (selectedCoin; as coin) {
-    @if (images.showPhotoViewer() && coin.imagePaths.length > 0) {
+    @if (images.showPhotoViewer() && photoCount(coin) > 0) {
       <app-coin-photo-viewer [coin]="coin" [images]="images" />
     }
   }
@@ -141,8 +217,11 @@
     <span class="status-dot status-dot--connecting"></span> Connecting to database...
   } @else if (inv.connected()) {
     <span class="status-dot status-dot--connected"></span> Connected &mdash; {{ inv.inventory().length }} coins
-  } @else if (inv.connectionError()) {
-    <span class="status-dot status-dot--error"></span> Database unavailable
+  } @else if (inv.loadFailure(); as failure) {
+    <!-- The short label, not the heading: a status bar has no room for a
+         sentence, and "Database unavailable" was being shown here for
+         failures that had nothing to do with the database. -->
+    <span class="status-dot status-dot--error"></span> {{ failure.statusLabel }}
     <!-- Second entry point for reconnecting, for when the top banner has
          scrolled out of view. -->
     <button type="button" class="small-button" (click)="retryConnection()">Retry connection</button>

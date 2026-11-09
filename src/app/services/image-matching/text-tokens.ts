@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * text-tokens.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   The low-level TOKEN PLUMBING that both parsers stand on:
  *     - turning a string into a clean list of tokens (`tokenize`,
@@ -20,7 +20,7 @@
  *   one shared home guarantees both sides speak the identical token language.
  *
  *   Every function here is pure: same input, same output, no state.
- * =========================================================================== */
+  */
 
 import { MIN_COIN_YEAR } from './matching-thresholds';
 import {
@@ -30,15 +30,15 @@ import {
   STOP_WORDS
 } from './reference-tables';
 
-/* ---------------------------------------------------------------------------
+ /*
  * PARSING HELPERS
- * ------------------------------------------------------------------------- */
+  */
 
 /**
  * Split text into normalized tokens.
  *
- * Everything downstream compares WHOLE tokens, which is the fix for
- * defect #3: "2599001" is one token and can never equal "25".
+ * Everything downstream compares WHOLE tokens, which is what stops the cert
+ * number "2599001" from ever equalling "25".
  */
 export function tokenize(value: string): string[] {
   return value
@@ -143,12 +143,10 @@ export interface FindDenominationOptions {
  *     1866 3 cent silver - Obverse.jpg   -> ['1866','3','cent','silver']
  *     1875 20 cent - Obverse.jpg         -> ['1875','20','cent']
  *
- * Every one of those was being read as a ONE CENT piece. That is not merely
- * a weak guess, it is an actively harmful one: a wrong denomination is a HARD
- * VETO, so the photo was disqualified from its own coin record and vanished
- * from the import with a skip reason blaming the coin. The owner saw exactly
- * this -- photographs of a coin that "aren't coming up as a match or a near
- * match at all".
+ * Every one of those would otherwise be read as a ONE CENT piece. That is not
+ * merely a weak guess, it is an actively harmful one: a wrong denomination is
+ * a HARD VETO, so the photo is disqualified from its own coin record and
+ * vanishes from the import with a skip reason blaming the coin.
  *
  * Why the fix is to read NOTHING rather than to read "two cent".
  *   Reading "2 cent" as the Two Cent piece would be the generous choice, and
@@ -214,9 +212,9 @@ export function isPlausibleYear(value: number): boolean {
   return Number.isInteger(value) && value >= MIN_COIN_YEAR && value <= maxYear;
 }
 
-/* ---------------------------------------------------------------------------
+ /*
  * SMALL UTILITIES
- * ------------------------------------------------------------------------- */
+  */
 
 export function baseName(path: string): string {
   const parts = String(path ?? '').split(/[\\/]/);

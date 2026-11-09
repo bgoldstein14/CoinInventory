@@ -6,7 +6,7 @@
 -->
 <div class="coin-group" [class.coin-group--empty]="group().selectedCount === 0">
 
-  <!-- ---------- Header: coin, counts, expand toggle ---------- -->
+  <!-- Header: coin, counts, expand toggle. -->
   <button
     type="button"
     class="coin-group-header"
@@ -20,9 +20,9 @@
     </span>
   </button>
 
-  <!-- ---------- Bulk tick-box controls for THIS coin ----------
-       Shown whether or not the group is expanded: the whole point is that the
-       user can thin out a 10-photo coin without ever opening it. -->
+  <!-- Bulk tick-box controls for THIS coin. Shown whether or not the group is
+       expanded: the whole point is that the user can thin out a 10-photo coin
+       without ever opening it. -->
   <div class="coin-group-bulk">
     <button type="button" class="secondary small-button" (click)="bulkAction.emit('keep-obverse-reverse')">
       Keep only Obverse + Reverse
@@ -44,15 +44,14 @@
          Unticking leaves the coin in this list with 0 of 8 selected, which is
          right when you are still choosing. Skip says "I am done with this
          coin, take it off my screen" and drops the whole group out of the
-         list. The product owner asked for a Skip wherever there is an
-         apparent match, and tier 1 is one of the two places there is one;
-         the other is the near-match tier. Tier 3 deliberately has neither. -->
+         list. Skip belongs wherever there is an apparent match — tier 1 here
+         and the near-match tier. Tier 3 deliberately has neither. -->
     <button type="button" class="secondary small-button" (click)="skipped.emit(group().coinId)">
       Skip this coin
     </button>
   </div>
 
-  <!-- ---------- Thumbnails, grouped by side ---------- -->
+  <!-- Thumbnails, grouped by side. -->
   @if (expanded()) {
     @for (section of sections(); track section.side) {
       <div class="coin-group-section">

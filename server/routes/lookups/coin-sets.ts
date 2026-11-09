@@ -11,8 +11,8 @@
  *   DELETE /coin-sets/:name  -> remove one
  *
  * Note the duplicate check here is an exact SetName match, whereas Categories
- * compares case- and whitespace-insensitively. That difference is pre-existing
- * behaviour and has been carried over unchanged.
+ * compares case- and whitespace-insensitively. The two differ; do not assume
+ * one from the other.
  *
  * Every database call runs inside `withDb()` and every parameter type comes
  * from DB_BINDINGS so it matches setup-database.sql.
@@ -21,7 +21,7 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 
 const router = Router();
@@ -35,9 +35,9 @@ router.get('/coin-sets', async (_req: Request, res: Response) => {
       return result.recordset.map((r: Record<string, unknown>) => r['SetName'] as string);
     });
 
-    res.json(names);
+    sendJson(res, 'GET /api/coin-sets', names, 'coin set list');
   } catch (err) {
-    sendDbError(res, 'GET /api/coin-sets', err, 'Failed to retrieve coin sets');
+    sendDbError(res, 'GET /api/coin-sets', err, 'Failed to retrieve coin sets', 'coin set list');
   }
 });
 

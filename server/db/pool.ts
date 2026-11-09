@@ -21,9 +21,7 @@ import { logInfo, logWarn, logError } from '../logger';
 import { buildDbConfig } from './config';
 import { isConnectionError } from './errors';
 
-// ============================================================
 // Connection pool (single-flight, generation-guarded singleton)
-// ============================================================
 
 /**
  * Everything we track about one physical pool. `generation` is the key idea:
@@ -70,13 +68,12 @@ async function createPooledConnection(): Promise<PooledConnection> {
   for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
     const generation = ++generationCounter;
 
-    // Construct the pool explicitly instead of calling the global sql.connect().
-    // sql.connect() stashes the pool in a hidden module-level global inside the
-    // mssql package, which made it impossible to reason about who owned what.
+    // Construct the pool explicitly instead of calling the global
+    // sql.connect(), which stashes the pool in a hidden module-level global
+    // inside the mssql package where nobody can reason about who owns it.
     const pool = new sql.ConnectionPool(config);
     const handle: PooledConnection = { generation, pool, healthy: true };
 
-    // ******************************************************************
     // *** THE ACTUAL CRASH FIX ***
     // Attach the 'error' listener IMMEDIATELY, before connect() is called,
     // so there is never a window where the pool can emit 'error' with no
@@ -85,7 +82,6 @@ async function createPooledConnection(): Promise<PooledConnection> {
     //
     // We log it, mark the pool unhealthy so the next caller rebuilds it,
     // and deliberately do NOT rethrow.
-    // ******************************************************************
     pool.on('error', (err: unknown) => {
       handle.healthy = false;
       logError(`SQL connection pool (generation ${generation}) reported an error; it will be rebuilt on next use`, err);
@@ -211,10 +207,10 @@ export async function resetPool(generation?: number): Promise<void> {
  *     return result.recordset;
  *   });
  *
- * Why "connection-class errors only"? Because the previous code called
- * `resetPool()` in every catch block. A constraint violation or a too-long
- * string would nuke the shared pool and break every other request in flight.
- * Ordinary query errors now propagate on the first throw, untouched.
+ * Connection-class errors ONLY. Calling `resetPool()` from every catch block
+ * means a constraint violation or a too-long string nukes the shared pool and
+ * breaks every other request in flight. Ordinary query errors propagate on
+ * the first throw, untouched.
  */
 export async function withDb<T>(fn: (db: sql.ConnectionPool) => Promise<T>): Promise<T> {
   const handle = await acquirePooledConnection();

@@ -1,14 +1,9 @@
 /**
  * routes/db-error-response.spec.ts — the error -> HTTP status translation.
  *
- * ============================================================
- * Error classification (replaces the old blanket 500 + resetPool)
- * ============================================================
- *
- * Every route catch block used to call resetPool() (destroying the pool for
- * the whole process) and return 500 regardless of what went wrong. These tests
- * pin down the replacement: a real status code per failure kind, and the pool
- * left alone.
+ * These tests pin a real status code per failure kind, and the pool left
+ * alone — a blanket 500 plus resetPool() in every catch block destroys the
+ * pool for the whole process over an ordinary bad request.
  *
  * They drive the classifier through real routes rather than calling
  * classifyDbError() directly, because what matters is that the routes actually

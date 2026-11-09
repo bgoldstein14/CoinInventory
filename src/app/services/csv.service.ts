@@ -1,6 +1,18 @@
 import { Injectable } from '@angular/core';
 import { CoinRecord } from '../types/coin.model';
 import { parseNumericCell } from './csv/numeric-cell';
+import { mapHeadersToFields } from './csv/header-synonyms';
+import { ColumnValueEvidence } from './csv/date-column-shape';
+import { CSV_MAPPABLE_FIELDS } from './csv/mappable-fields';
+import { BOM, stripBom } from './csv/byte-order-mark';
+import { normalizeCollectionStatus } from '../types/collection-status';
+// The ONE resolver. Not a second alias table, not a second set of rules --
+// the same function the editor's picker and migration 014 answer with. See
+// services/denominations/denomination-index.ts, and `mapRowToCoin` below.
+import {
+  resolveDenominationId,
+  type IndexableDenomination
+} from './denominations/denomination-index';
 
 /**
  * The provenance values `CoinRecord.source` is allowed to hold.
@@ -11,93 +23,27 @@ import { parseNumericCell } from './csv/numeric-cell';
  */
 const KNOWN_COIN_SOURCES: readonly string[] = ['manual', 'quicken', 'import', 'csv'];
 
-export const CSV_MAPPABLE_FIELDS: { key: string; label: string }[] = [
-  { key: '', label: '(skip)' },
-  { key: 'coinType', label: 'Coin Type' },
-  { key: 'denomination', label: 'Denomination' },
-  { key: 'year', label: 'Year' },
-  { key: 'category', label: 'Category' },
-  { key: 'country', label: 'Country' },
-  { key: 'grade', label: 'Grade' },
-  { key: 'certCompany', label: 'Cert Company' },
-  { key: 'certNumber', label: 'Cert Number' },
-  { key: 'variety', label: 'Variety' },
-  { key: 'mintMark', label: 'Mint Mark' },
-  { key: 'composition', label: 'Composition' },
-  { key: 'purchaseDate', label: 'Purchase Date' },
-  { key: 'purchasePrice', label: 'Purchase Price' },
-  { key: 'currentValue', label: 'Current Value' },
-  { key: 'notes', label: 'Notes' },
-  // A `{ key: 'dealer', label: 'Dealer' }` entry sat here. The coin-level
-  // dealer field was removed, and because this one list drives the importer's
-  // auto-mapping, the Export -> CSV columns AND the blank template, deleting it
-  // here removes the Dealer column from all three at once. An older file that
-  // still carries a Dealer column simply has no field to map it onto now, so it
-  // is left unmapped and ignored -- the rest of the row imports normally.
-  { key: 'coinSet', label: 'Set' },
-  { key: 'metalContent', label: 'Metal Content' },
-  // GRAMS, not troy ounces. This label was `Weight (oz)` until the gross
-  // Weight column was switched to grams (see
-  // server/migrations/008-weight-to-grams.sql). Because this one list drives
-  // three things at once -- the Export -> CSV header, the blank template, and
-  // the importer's auto-mapping -- changing the label here changes all three.
-  //
-  // *** OLD EXPORTS WILL NOT AUTO-MAP, AND THAT IS THE INTENDED BEHAVIOUR. ***
-  //
-  // autoMapHeaders() matches a header against each field's key or its label,
-  // case-insensitively. A file exported before this change has a column headed
-  // `Weight (oz)`, which now matches neither `weight` nor `Weight (g)`, so it
-  // arrives at the mapping screen UNMAPPED. (A header of plain `Weight` still
-  // maps, via the key.)
-  //
-  // Two alternatives were considered and rejected:
-  //
-  //   Recognise `Weight (oz)` and map it straight onto `weight`.
-  //     This is the worst option available. The numbers under that header are
-  //     troy ounces, so it would import a Morgan dollar as 0.7734 GRAMS -- a
-  //     31x understatement that looks entirely plausible, silently, with no
-  //     warning anywhere. It is the exact failure the migration exists to
-  //     prevent, reintroduced through the back door.
-  //
-  //   Recognise `Weight (oz)` and multiply by 31.1034768 on the way in.
-  //     Arithmetically right, and still rejected: it makes the meaning of a
-  //     cell depend on the text in the header, which nobody expects. Somebody
-  //     who has already converted their spreadsheet to grams but left the old
-  //     header alone would get every weight multiplied by 31 instead, and
-  //     there is no way for the importer to tell the two files apart. A
-  //     silent 31x error in either direction is worse than a column the user
-  //     has to look at.
-  //
-  // Leaving it unmapped is the honest option, and the cost is small and
-  // visible: the mapping screen shows the column with no field chosen, and the
-  // user either picks `Weight (g)` by hand (if the numbers are already grams)
-  // or fixes the numbers first. Nothing else about the row is affected -- the
-  // rest of it imports normally. This is the same precedent the removed
-  // `Dealer` column set above: an unrecognised column is ignored, loudly
-  // enough to be noticed on the mapping screen, rather than guessed at.
-  { key: 'weight', label: 'Weight (g)' },
-  { key: 'soldPrice', label: 'Sold Price' },
-  { key: 'soldDate', label: 'Sold Date' },
-  // `Source` is here so that Export -> CSV actually round-trips.
-  //
-  // exportCsv() has always written a Source column, but it was missing from
-  // this list, which meant a freshly exported file could not be fully
-  // re-imported: the column did not auto-map, and because the mapping dropdown
-  // is built from this same list, it could not even be mapped by hand. So the
-  // one file advertised as a ready-made template was the one file with an
-  // unmappable column in it.
-  //
-  // Importing it also PRESERVES provenance rather than flattening it: a coin
-  // that originally came from Quicken stays marked 'quicken' through an export
-  // and re-import, instead of every row being relabelled 'csv'. Unrecognised
-  // or blank values still fall back to 'csv' -- see mapRowToCoin().
-  { key: 'source', label: 'Source' }
-];
+/**
+ * Re-exported, not defined here. The list moved to csv/mappable-fields.ts to
+ * break the import cycle with csv/header-synonyms.ts; see the comment at the
+ * top of that file. Every existing
+ * `import { CSV_MAPPABLE_FIELDS } from '.../csv.service'` keeps working.
+ */
+export { CSV_MAPPABLE_FIELDS };
 
 @Injectable({ providedIn: 'root' })
 export class CsvService {
 
-  parseCsv(text: string): string[][] {
+  parseCsv(rawText: string): string[][] {
+    // A leading byte-order mark belongs to the ENCODING, not to the first
+    // header. Leaving it attached makes column one read `﻿Coin Type`,
+    // which matches no field, so the column arrives unmapped on a screen
+    // where everything else mapped correctly -- a blank dropdown nobody
+    // notices. Our own exports now carry a BOM (without it Excel decodes `¢`
+    // as `Â¢`; see csv/byte-order-mark.ts), and so do plenty of files written
+    // by other programs.
+    const text = stripBom(rawText);
+
     const rows: string[][] = [];
     let current: string[] = [];
     let inQuotes = false;
@@ -140,22 +86,85 @@ export class CsvService {
     return rows;
   }
 
-  autoMapHeaders(headers: string[]): Record<string, string> {
-    const mapping: Record<string, string> = {};
-    for (const header of headers) {
-      const lower = header.toLowerCase().trim();
-      const match = CSV_MAPPABLE_FIELDS.find(f =>
-        f.key && (f.key.toLowerCase() === lower || f.label.toLowerCase() === lower)
-      );
-      if (match) mapping[header] = match.key;
-    }
-    return mapping;
+  /**
+   * Guess which coin field each column holds.
+   *
+   * The matching lives in csv/header-synonyms.ts, which keeps the exact,
+   * case-insensitive key-or-label comparison as its most-confident tier and
+   * adds a synonym tier beneath it -- without which a stranger's workbook
+   * (`Yr`, `Cost`, `MM`, `TPG`, `Cert #`) arrives with thirty blank
+   * dropdowns. Both import paths -- CSV and `.xlsx` -- call this one method,
+   * so neither can drift ahead of the other.
+   *
+   * A header that cannot be placed is ABSENT from the returned dictionary,
+   * which the mapping dropdown renders as "(skip)" for the user to set.
+   * `Weight (oz)` and `Dealer` are refused -- see the long notes on
+   * CSV_MAPPABLE_FIELDS above and in header-synonyms.ts.
+   *
+   * @param columnValues sampled cells per column, keyed by header text.
+   *   Optional, and the whole reason it exists is the one heading the
+   *   heading cannot settle: `Date`, which is a coin year over `1881` and a
+   *   calendar date over `3/15/2024`. Build it with `textColumnSamples` for
+   *   plain rows, or take `WorkbookSheet.valueSamples` for a workbook --
+   *   the workbook form additionally carries whether Excel itself typed the
+   *   cell as a date. Omit it and the guess is made on headings alone, as
+   *   it always was.
+   */
+  autoMapHeaders(
+    headers: string[],
+    columnValues?: ColumnValueEvidence
+  ): Record<string, string> {
+    return mapHeadersToFields(headers, columnValues);
   }
 
-  mapRowToCoin(row: string[], headers: string[], mapping: Record<string, string>): CoinRecord {
+  /**
+   * One spreadsheet row, mapped onto a coin.
+   *
+   * ---- THE DENOMINATION IS NOW TWO FIELDS, AND THIS WRITES BOTH   (design §4.1) ----
+   * `denomination` is WHAT THE FILE SAID and is copied across untouched, as
+   * it always was. `denominationId` is the link to the Denominations row
+   * that text names, when one can be established.
+   *
+   * *** THE TEXT IS NEVER REWRITTEN FROM THE LINK. *** Not trimmed into the
+   * label, not replaced, not cleared when nothing matched. A column reading
+   * `Pillar Dollar` that resolves to `8 Reales` keeps saying `Pillar
+   * Dollar`, because that string is the only surviving record of what the
+   * file contained and the input a later, smarter resolver would need. The
+   * same rule binds migration 014 and the server bindings; it is what makes
+   * the whole change recoverable.
+   *
+   * *** NO LINK IS A NORMAL OUTCOME, NOT AN ERROR. *** A value six issuers
+   * struck, or one the seed has never heard of, resolves to nothing. The
+   * row still imports, with its text, and reads `Other (8 Reales)`. Nothing
+   * warns and nothing is rejected -- the 2-of-3 completeness rule is the
+   * only gate on this path and resolution is deliberately not wired into
+   * it.
+   *
+   * @param denominations the lookup list, straight from
+   *   `InventoryService.denominations()`. OPTIONAL, and the default matters:
+   *   every existing three-argument caller keeps working unchanged and
+   *   simply links nothing, which is the honest result when there is no
+   *   table to link against. The cost of passing it is one alias fold per
+   *   row -- the index behind `resolveDenominationId` is built once per
+   *   lookup array, not once per row. See denomination-index.ts.
+   */
+  mapRowToCoin(
+    row: string[],
+    headers: string[],
+    mapping: Record<string, string>,
+    denominations: readonly IndexableDenomination[] = []
+  ): CoinRecord {
     const coin: CoinRecord = {
       id: crypto.randomUUID(),
       denomination: '',
+      /* Spelled out as null rather than left undefined, like
+       * `collectionStatus` below: this record is POSTed as-is and is the
+       * snapshot later edits diff against, and "no link" is a real answer
+       * about this coin rather than a field nobody got round to. The loop
+       * below never writes it -- there is no mappable `Denomination Id`
+       * column, deliberately -- so the only thing that sets it is the
+       * resolution at the end. */
+      denominationId: null,
       year: '',
       coinType: '',
       category: '',
@@ -172,7 +181,17 @@ export class CsvService {
       notes: '',
       imagePaths: [],
       source: 'csv',
-      hasCacSticker: false
+      hasCacSticker: false,
+      // Spelled out rather than left undefined so that a sheet with no Status
+      // column produces coins that are explicitly Owned. Both readings mean
+      // the same thing to the app, but a row POSTed with the field present is
+      // one fewer place relying on the normaliser to rescue it.
+      //
+      // `storageLocation` gets no default on purpose: the loop below only
+      // writes fields the sheet actually supplied, and a coin whose file said
+      // nothing about where it lives has no storage location -- not an empty
+      // one. Status cannot work that way because it has a meaningful default.
+      collectionStatus: 'owned'
     };
 
     for (let i = 0; i < headers.length; i++) {
@@ -183,10 +202,27 @@ export class CsvService {
       if (field === 'purchasePrice' || field === 'currentValue' || field === 'soldPrice' || field === 'weight') {
         // parseNumericCell tolerates the decoration people actually type -- a
         // unit on a weight ("26.73 g"), a fraction ("1/10"), a currency word,
-        // an accounting negative. The previous
-        // `Number(v.replace(/[$,]/g,'')) || 0` turned every one of those into
+        // an accounting negative. A plain
+        // `Number(v.replace(/[$,]/g,'')) || 0` turns every one of those into
         // a silent 0. See csv/numeric-cell.ts.
         (coin as unknown as Record<string, unknown>)[field] = parseNumericCell(value);
+      } else if (field === 'collectionStatus') {
+        // A CLOSED SET, SO VALIDATE RATHER THAN COPY -- exactly as `source`
+        // is handled directly below, and for a sharper reason.
+        //
+        // Five tokens decide whether a coin counts towards the value of the
+        // collection. A cell reading "maybe" or "Wish List" copied straight
+        // into the record would be a sixth value that nothing downstream has
+        // a rule for, and `isHeldInCollection` would have to invent an answer
+        // about a coin the owner really does have.
+        //
+        // normalizeCollectionStatus() answers 'owned' for anything it does
+        // not recognise -- a typo, a word from a future build, a heading row
+        // that slipped into the data. Owned is the safe fallback because the
+        // coin is in a file the owner is importing INTO his collection.
+        // It also accepts "For Sale" for the stored token 'for-sale', so the
+        // words a human reads in the grid are the words he can type.
+        coin.collectionStatus = normalizeCollectionStatus(value);
       } else if (field === 'source') {
         // Provenance is a closed set, so validate rather than trust the cell.
         // An unrecognised value means this row's origin is unknown to us, and
@@ -200,19 +236,29 @@ export class CsvService {
       }
     }
 
+     /*
+     * AFTER the loop, because it reads two fields the loop fills in.
+     *
+     * `coin.country` is THIS ROW'S country -- the file's Country column if
+     * one was mapped, and otherwise the mapper's own 'United States'
+     * default. Passing the row's own value rather than a constant is not a
+     * detail: the country scopes the search before it widens, so a row that
+     * says Mexico resolves an `8 Reales` that six issuers struck, and the
+     * same row with the country thrown away does not.
+      */
+    coin.denominationId = resolveDenominationId(coin.denomination, coin.country, denominations);
+
     return coin;
   }
 
   /**
    * Build the header labels and matching field keys used by Export -> CSV.
    *
-   * DERIVED from CSV_MAPPABLE_FIELDS rather than written out again, and that is
-   * the point. These used to be two hand-maintained parallel arrays -- one of
-   * labels, one of keys -- kept in step with the mappable list by nothing but
-   * care. They drifted: the export grew a `Source` column that was never added
-   * to the mappable list, so the file the app recommends as a ready-made
-   * template contained a column the importer could not map at all, by hand or
-   * otherwise.
+   * DERIVED from CSV_MAPPABLE_FIELDS rather than written out again, and that
+   * is the point. Two hand-maintained parallel arrays -- one of labels, one
+   * of keys -- drift: the export once grew a `Source` column that was never
+   * added to the mappable list, so the file the app recommends as a
+   * ready-made template contained a column the importer could not map.
    *
    * Deriving both sides from one list makes that impossible. Anything
    * exportable is importable by construction, and adding a field in one place
@@ -233,14 +279,13 @@ export class CsvService {
       lines.push(row.join(','));
     }
 
-    this.downloadBlob(lines.join('\n'), 'coin-inventory.csv', 'text/csv');
+    this.downloadCsv(lines, 'coin-inventory.csv');
   }
 
   /**
    * The header row Export -> CSV writes, exposed so tests can prove that every
-   * exported column round-trips through autoMapHeaders(). Without this the
-   * header list was private and the export/import mismatch was untestable,
-   * which is a large part of why it went unnoticed.
+   * exported column round-trips through autoMapHeaders(). Keeping it private
+   * makes that mismatch untestable.
    */
   exportHeaderLabels(): string[] {
     return this.exportColumns().map(column => column.label);
@@ -272,11 +317,11 @@ export class CsvService {
     // carry currency formatting, and that a weight is in grams and may carry
     // its unit.
     //
-    // Keyed by field rather than written as positional arrays. The arrays that
-    // used to live here had to be kept in the same order and length as
-    // CSV_MAPPABLE_FIELDS by hand, so adding one field silently shifted every
-    // example value one column to the left. Looking each value up by key makes
-    // that impossible: a field with no example here simply comes out blank.
+    // Keyed by field rather than written as positional arrays: a positional
+    // array has to be kept in the same order and length as
+    // CSV_MAPPABLE_FIELDS by hand, so adding one field silently shifts every
+    // example value one column to the left. Looking each value up by key
+    // makes that impossible -- a field with no example here comes out blank.
     const examples: Record<string, string>[] = [
       {
         coinType: 'Morgan Dollar', denomination: 'Dollar', year: '1881',
@@ -302,11 +347,10 @@ export class CsvService {
         // contains 1/10 troy oz (3.110 g) of gold, but it is a 91.67% alloy,
         // so the whole coin weighs more than its gold content.
         //
-        // This example used to read '1/10 oz'. It was changed, and not only
-        // because the unit changed: parseNumericCell still resolves a fraction
-        // ("1/10" -> 0.1), so that cell would now quietly mean a tenth of a
-        // GRAM. The template must not demonstrate a form that is a trap in
-        // this column.
+        // Do NOT write this as '1/10 oz': parseNumericCell resolves a
+        // fraction ("1/10" -> 0.1), so in a GRAMS column that cell quietly
+        // means a tenth of a gram. The template must not demonstrate a form
+        // that is a trap in this column.
         coinSet: '', metalContent: 'Gold', weight: '3.393'
       }
     ];
@@ -320,7 +364,7 @@ export class CsvService {
       );
     }
 
-    this.downloadBlob(lines.join('\n'), 'coin-inventory-template.csv', 'text/csv');
+    this.downloadCsv(lines, 'coin-inventory-template.csv');
   }
 
   exportInsuranceCsv(coins: CoinRecord[]): void {
@@ -338,7 +382,7 @@ export class CsvService {
       ].join(','));
     }
 
-    this.downloadBlob(lines.join('\n'), 'coin-insurance-schedule.csv', 'text/csv');
+    this.downloadCsv(lines, 'coin-insurance-schedule.csv');
   }
 
   private escapeCsvField(value: unknown): string {
@@ -347,6 +391,27 @@ export class CsvService {
       return `"${str.replace(/"/g, '""')}"`;
     }
     return str;
+  }
+
+  /**
+   * Write one of the three CSV exports to disk.
+   *
+   * EVERY CSV THIS APP PRODUCES GOES THROUGH HERE, and the reason is the
+   * leading byte-order mark. Without it Excel decodes the file with the
+   * machine's ANSI codepage rather than UTF-8, and `½ Cent` arrives as
+   * `Â½ Cent`. See csv/byte-order-mark.ts, including why the importer had to
+   * learn to strip one at the same time.
+   *
+   * The BOM is prepended HERE rather than inside `downloadBlob` so that the
+   * tests see it. `downloadBlob` touches `document`, so specs replace it
+   * wholesale and capture its `content` argument; if the BOM were added
+   * below this line, every captured "exported file" would be missing the one
+   * character under test and no round-trip test could ever catch its
+   * absence. Adding it above the seam means the captured string is
+   * byte-for-byte the file.
+   */
+  private downloadCsv(lines: string[], filename: string): void {
+    this.downloadBlob(BOM + lines.join('\n'), filename, 'text/csv;charset=utf-8');
   }
 
   private downloadBlob(content: string, filename: string, mimeType: string): void {

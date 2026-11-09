@@ -1,11 +1,11 @@
-/* ===========================================================================
+ /*
  * image-file-filter.ts
- * ---------------------------------------------------------------------------
+ *
  * STEP 1 of the batch image import: throw away everything a browser cannot
  * draw, BEFORE we do any matching, reading or decoding.
  *
  * Why this has to be first
- * ------------------------
+ *
  * Pointing the picker at the photo share hands us ~2,140 files across 8
  * subfolders. A big chunk of them are not web images at all:
  *
@@ -21,7 +21,7 @@
  * display and save.
  *
  * Why we do NOT trust File.type
- * -----------------------------
+ *
  * The old code used `file.type.startsWith('image/')`. On Windows that is
  * whatever the registry says: .dng often reports "image/x-adobe-dng" (passes
  * the test, still undecodable) and .webp sometimes reports "" (fails the test,
@@ -31,7 +31,7 @@
  *
  * Nothing is dropped silently: every rejection is returned with a reason, and
  * the reasons are tallied for the summary line.
- * =========================================================================== */
+  */
 
 import {
   ImageFileFilterResult,

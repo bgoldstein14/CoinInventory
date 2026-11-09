@@ -43,18 +43,14 @@ export class InventoryColumnsStore {
    * Guard rail: the table would be unreadable with zero columns, so if the user
    * unticks the last one we keep it ticked instead.
    *
-   * WHY THE SORT MATTERS (this used to be a real, visible bug)
-   * ---------------------------------------------------------
-   * This method used to append a newly ticked column with `[...next, column]`,
-   * i.e. onto the END of the visible list. So ticking "Cert" put it at the far
-   * RIGHT of the grid, not in its canonical position — and because the result
-   * is persisted, that end-of-list order was then written to IndexedDB.
+   * WHY THE SORT MATTERS
+   * Appending a newly ticked column with `[...next, column]` would put it at
+   * the far RIGHT of the grid rather than in its canonical position, and the
+   * result is persisted, so that order reaches storage too. restoreFromStorage()
+   * re-sorts on the next load, but "my change only appears after a reload" is
+   * indistinguishable from "my change did not work" — so sort here as well.
    *
-   * (It happened to straighten itself out on the next page load, because
-   * restoreFromStorage() re-sorts. But "my change only appears after a reload"
-   * is indistinguishable from "my change did not work", so we sort here too.)
-   *
-   * Sorting on REMOVAL as well is deliberate: it costs nothing and it means a
+   * Sorting on REMOVAL too is deliberate: it costs nothing and it means a
    * legacy out-of-order array read from storage gets straightened out by the
    * first toggle, rather than being carried around for the rest of the session.
    */

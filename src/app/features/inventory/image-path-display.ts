@@ -1,13 +1,11 @@
-/* ===========================================================================
- * image-path-display.ts — deciding HOW to render one image's original path.
- * ---------------------------------------------------------------------------
+/*
+ * Deciding HOW to render one image's original path.
+ *
  * Pure functions, no Angular. Everything the template needs is worked out here
  * and handed over as a plain object, which keeps the markup free of nested
  * conditionals and makes all of the behaviour unit-testable without a browser.
  *
- * ---------------------------------------------------------------------------
  * THE THREE (well, four) CASES
- * ---------------------------------------------------------------------------
  *   present  the backend confirmed the file is readable
  *            -> a real link, opening in a new tab
  *   missing  the backend looked and it is not there
@@ -22,7 +20,7 @@
  *            feature, or one added through the gallery's file picker)
  *            -> render nothing at all. An empty or dead affordance is worse
  *               than no affordance.
- * =========================================================================== */
+ */
 
 import { ImageFileExistence } from '../../types/coin-image.model';
 
@@ -105,7 +103,7 @@ export function buildImagePathView(
 ): ImagePathView {
   const path = (sourcePath ?? '').trim();
 
-  // ---- Case 'none': nothing recorded, so render nothing --------------------
+  // Case 'none': nothing recorded, so render nothing.
   if (path.length === 0) {
     return {
       hasPath: false,

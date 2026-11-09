@@ -6,26 +6,14 @@
  * errors raised by MIDDLEWARE rather than by handlers, because every route
  * module funnels its own failures through sendDbError().
  *
- * ------------------------------------------------------------------
- * THE BUG THIS FILE FIXES: an oversized upload reported 500, not 413
- * ------------------------------------------------------------------
- * The handler used to be four lines that ended in an unconditional
- * `res.status(500).json({ error: 'Internal server error' })`.
- *
- * That threw away information the error was already carrying. `express.json()`
- * is configured with `limit: '50mb'`, and when a request body exceeds it
- * body-parser rejects the request with a PayloadTooLargeError that already has
- * `status: 413` and `type: 'entity.too.large'` set on it. The old handler
- * ignored both and reported "Internal server error".
- *
- * During a batch photo import that was actively misleading: the real problem is
- * "that batch of images is too big, send fewer at a time", which the user can
- * act on immediately — but what they saw was a generic server error, which
- * suggests the server is broken and there is nothing to be done. Someone
- * debugging that goes looking in entirely the wrong place.
- *
- * So the handler now honours `err.status` when the error supplies a sensible
- * one, and gives the 413 case a message that names the actual problem.
+ * IT HONOURS `err.status` RATHER THAN ALWAYS SENDING 500. `express.json()` is
+ * configured with `limit: '50mb'`, and when a request body exceeds it
+ * body-parser rejects the request with a PayloadTooLargeError that already
+ * carries `status: 413` and `type: 'entity.too.large'`. Throwing that away
+ * and reporting "Internal server error" is actively misleading during a batch
+ * photo import: the real problem is "that batch of images is too big, send
+ * fewer at a time", which the user can act on, while a generic server error
+ * suggests there is nothing to be done.
  */
 
 import { Request, Response, NextFunction } from 'express';

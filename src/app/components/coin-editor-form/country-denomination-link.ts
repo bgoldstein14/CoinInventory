@@ -1,11 +1,5 @@
-/* ===========================================================================
+ /*
  * country-denomination-link.ts — Country and Denomination, aware of each other
- * ---------------------------------------------------------------------------
- * WHAT THE OWNER ASKED FOR
- * ---------------------------------------------------------------------------
- *   "If a coin is being added from Great Britain, then only the British
- *    denominations should be available... If the denomination is entered
- *    first then the country should be automatically chosen/entered."
  *
  * Two directions, and they are NOT symmetrical:
  *
@@ -15,9 +9,8 @@
  *                              It fills the Country field ONLY when that
  *                              field is empty.
  *
- * ---------------------------------------------------------------------------
  * THE NON-OBVIOUS PART: THE TWO SIDES DO NOT SPEAK THE SAME LANGUAGE
- * ---------------------------------------------------------------------------
+ *
  * You cannot write `denomination.country === coin.country`. It is false for
  * every single row in the database, because the two columns store a country
  * in two different formats:
@@ -25,28 +18,23 @@
  *     Denominations.Country   holds a TWO-LETTER CODE   -> 'US', 'GB'
  *     Coins.Country           holds a FULL NAME          -> 'United States'
  *
- * The seed data has 16 denominations filed under 'US' and 22 under 'GB';
- * every coin-creation path in the app writes 'United States'. Both are
- * long-standing and neither is being migrated.
+ * Both are long-standing and neither is being migrated.
  *
  * The bridge is `resolveCountryName()` in services/coin-countries.ts, which
  * turns ANY of those spellings — plus free text such as 'uk' or 'British' —
  * into one canonical name. Every comparison in this file goes through it (as
  * `isSameCountry`), so 'GB' and 'Great Britain' compare equal and the user
- * can type the country however they like.
+ * can type the country however they like. That file already holds the
+ * canonical spellings and the matching patterns, built for the QIF importer;
+ * a second vocabulary here would be a second thing to keep in step.
  *
- * That file was chosen rather than a new country list because it already
- * holds the canonical spellings and the matching patterns, built for the QIF
- * importer. A second vocabulary here would be a second thing to keep in step.
- *
- * ---------------------------------------------------------------------------
  * THE TWO RULES THAT STOP THIS LOSING DATA
- * ---------------------------------------------------------------------------
+ *
  * 1. NEVER SHOW AN EMPTY DROPDOWN. If the country is blank, or is something
  *    this app has never heard of, or is a country with no denominations on
- *    file, the dropdown falls back to showing EVERYTHING grouped by country —
- *    exactly as it behaved before. Filtering an unrecognised country down to
- *    nothing would leave the user unable to pick anything at all.
+ *    file, the dropdown falls back to showing EVERYTHING grouped by country.
+ *    Filtering an unrecognised country down to nothing would leave the user
+ *    unable to pick anything at all.
  *
  * 2. NEVER SILENTLY DROP THE DENOMINATION THE COIN ALREADY HAS. A coin with
  *    a GB denomination whose country is then edited to the United States has
@@ -54,7 +42,24 @@
  *    vanish from the list: it is kept, still selected, in its own clearly
  *    labelled group so the user can see what is there and decide. Silently
  *    blanking a saved field is the worst outcome available here.
- * =========================================================================== */
+ *
+ * WHAT IN HERE IS STILL LIVE
+ *
+ *   `preferredDenominationCountries` — Rule 1's three gates. The editor's
+ *      type-ahead picker (denomination-picker.ts) and the filter below both
+ *      ask this one copy of the question, and both read an empty answer as
+ *      "show everything".
+ *
+ *   `denominationChoiceUpdates` — called when the user chooses a denomination.
+ *
+ *   `denominationOptionGroups` — RENDERS NOTHING any more. It is kept, with
+ *      its tests, deliberately: it is the executable specification of both
+ *      rules in the form they were originally fixed in, which is what the
+ *      picker's own tests are checked against, and its suite is the regression
+ *      net for `preferredDenominationCountries`, which IS live — mutate any of
+ *      the three gates and those tests are what go red. If it is ever removed,
+ *      that coverage has to be MOVED, not dropped.
+  */
 
 import { countryDisplayName, isSameCountry, resolveCountryName } from '../../services/coin-countries';
 import { Denomination } from '../../types/coin.model';
@@ -92,13 +97,10 @@ function activeDenominations(denominations: readonly Denomination[]): Denominati
 }
 
 /**
- * Everything, grouped by country, in the order the dropdown has always used.
- *
- * This is the fallback shape — what the dropdown showed before this feature
- * existed, and what it still shows whenever the country gives us nothing to
- * filter on. Group ordering is delegated to `denominationCountriesOf`, which
- * already derives headings from the data (US first, then alphabetical) and is
- * tested separately.
+ * Everything, grouped by country. The fallback shape, shown whenever the
+ * country gives us nothing to filter on. Group ordering is delegated to
+ * `denominationCountriesOf`, which already derives headings from the data (US
+ * first, then alphabetical) and is tested separately.
  */
 function allGroupedByCountry(denominations: readonly Denomination[]): DenominationOptionGroup[] {
   const active = activeDenominations(denominations);
@@ -113,6 +115,49 @@ function allGroupedByCountry(denominations: readonly Denomination[]): Denominati
 }
 
 /**
+ * Which of the lookup's OWN country values does the coin's country point at?
+ *
+ * *** RULE 1 LIVES HERE. *** An empty answer means "there is no basis to
+ * narrow — show everything". It is shared so that the editor's type-ahead
+ * picker (denomination-picker.ts) asks the SAME question through the SAME
+ * code rather than re-deriving it. Two copies of "when may the list be
+ * narrowed?" is how one of them comes to narrow it to nothing.
+ *
+ * @returns the lookup's raw, trimmed `country` values that the coin's country
+ *          names — '[US]', not '[United States]' — or `[]` when there is no
+ *          basis to narrow at all.
+ *
+ * *** AN EMPTY ARRAY IS NEVER "FILTER EVERYTHING OUT". *** Every caller is
+ * required to read it as "show everything". Returning the gates' verdict
+ * rather than a filtered list is what keeps that obligation visible at each
+ * call site instead of buried in one of them.
+ */
+export function preferredDenominationCountries(
+  denominations: readonly Denomination[],
+  coinCountry: string | null | undefined
+): string[] {
+  const countryText = String(coinCountry ?? '').trim();
+
+  // Gate 1: nothing to filter on.
+  if (!countryText) return [];
+
+  // Gate 2: a country we cannot place. 'Ruritania' must still leave the user
+  // able to choose a denomination.
+  if (!resolveCountryName(countryText)) return [];
+
+  const matching = activeDenominations(denominations)
+    .filter((denomination) => isSameCountry(denomination.country, countryText))
+    .map((denomination) => denomination.country.trim());
+
+  // Gate 3: a country we DO recognise but have no denominations for — Peru,
+  // say. Filtering here would empty the dropdown. The caller shows
+  // everything; it does not show nothing.
+  if (matching.length === 0) return [];
+
+  return [...new Set(matching)];
+}
+
+/**
  * The denomination dropdown's contents for a given coin.
  *
  * @param denominations     the full lookup table, active and inactive
@@ -121,18 +166,6 @@ function allGroupedByCountry(denominations: readonly Denomination[]): Denominati
  *                          possibly something nobody recognises
  * @param currentDenomination the coin's Denomination field, so an existing
  *                          value outside the filter can be kept visible
- *
- * The decision tree, in order, with the bail-out at every step being "show
- * everything" rather than "show nothing":
- *
- *   country is blank              -> everything, grouped by country
- *   country does not resolve      -> everything (we have no basis to filter)
- *   country resolves but no
- *     denominations match it      -> everything (filtering would empty the
- *                                    list; Peru has no rows on file)
- *   otherwise                     -> just that country's denominations,
- *                                    plus the coin's existing value if it
- *                                    happens to fall outside them
  */
 export function denominationOptionGroups(
   denominations: readonly Denomination[],
@@ -141,21 +174,16 @@ export function denominationOptionGroups(
 ): DenominationOptionGroup[] {
   const countryText = String(coinCountry ?? '').trim();
 
-  // Rule 1, first gate: nothing to filter on.
-  if (!countryText) return allGroupedByCountry(denominations);
+  // Rule 1, all three gates, in `preferredDenominationCountries` above. An
+  // empty answer is the bail-out the rule demands: show EVERYTHING, never
+  // nothing. It covers a blank country, a country this app cannot place
+  // ('Ruritania'), and one it can place but has no rows for (Peru).
+  const preferred = new Set(preferredDenominationCountries(denominations, coinCountry));
+  if (preferred.size === 0) return allGroupedByCountry(denominations);
 
-  // Rule 1, second gate: a country we cannot place. 'Ruritania' must still
-  // leave the user able to choose a denomination.
   const canonical = resolveCountryName(countryText);
-  if (!canonical) return allGroupedByCountry(denominations);
-
   const active = activeDenominations(denominations);
-  const matching = active.filter((denomination) => isSameCountry(denomination.country, countryText));
-
-  // Rule 1, third gate: a country we DO recognise but have no denominations
-  // for — Peru, say, which the country vocabulary knows but the Denominations
-  // table has never had a row for. Filtering here would empty the dropdown.
-  if (matching.length === 0) return allGroupedByCountry(denominations);
+  const matching = active.filter((denomination) => preferred.has(denomination.country.trim()));
 
   const groups: DenominationOptionGroup[] = [
     {
@@ -173,9 +201,9 @@ export function denominationOptionGroups(
   // user would believe the field had been emptied, and the next thing they
   // picked would overwrite it for real.
   //
-  // So it is kept, in its own group, flagged. Note this only applies to a
-  // KNOWN denomination: a value that is in no group at all is a custom one,
-  // and custom-option-mode.ts already handles it by opening the text box.
+  // So it is kept, in its own group, flagged. This only applies to a KNOWN
+  // denomination: a value that is in no group at all is a custom one, and
+  // custom-option-mode.ts already handles it by opening the text box.
   const existing = String(currentDenomination ?? '').trim();
   const existingIsOffered = matching.some((denomination) => denomination.label === existing);
   const existingRow = active.find((denomination) => denomination.label === existing);

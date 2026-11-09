@@ -1,22 +1,26 @@
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Import from CSV</h2>
+      <h2>Import from a spreadsheet</h2>
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
       <!--
-        Guidance shown before a file is chosen. Previously this modal opened
-        with nothing but a file button, which gave a first-time user no idea
-        what the file should look like. The template download is generated
-        from the same field list the importer uses, so it cannot go stale.
+        Guidance shown before a file is chosen. The template download is
+        generated from the same field list the importer uses, so it cannot
+        go stale.
       -->
-      @if (csvHeaders().length === 0) {
+      @if (!hasFile() && !showSheetPicker()) {
         <div class="csv-help">
           <p>
-            There is no required format &mdash; pick any comma-separated file with a
-            <strong>header row</strong> and you will be able to match your columns to
-            coin fields on the next screen.
+            There is no required format. Pick an <strong>Excel workbook</strong>
+            (<code>.xlsx</code>) or a <strong>CSV file</strong> with a
+            <strong>heading row</strong>, and you will be able to match your columns
+            to coin fields on the next screen.
+          </p>
+          <p>
+            A workbook with several worksheets is fine &mdash; you will be asked which
+            ones to bring in, and you can take them all at once or one at a time.
           </p>
           <p class="csv-help-actions">
             <button type="button" class="small-button" (click)="downloadTemplate()">
@@ -35,27 +39,129 @@
               }
             </ul>
             <p class="csv-help-note">
-              Column order does not matter, and you can leave any of them out.
-              Unrecognised columns are simply left for you to map by hand or skip.
-              Prices may include <code>$</code> and commas. Year is free text, so
-              ranges such as <code>1878-S</code> are fine.
+              Column order does not matter, and you can leave any of them out. Common
+              alternative headings are recognised too &mdash; <code>Cost</code>,
+              <code>Yr</code>, <code>MM</code>, <code>Cert #</code> and so on.
+              Anything not recognised is left blank for you to map by hand or skip.
+              Prices may include <code>$</code> and commas, dates stored as real Excel
+              dates come through as dates, and a formula is read as its last
+              calculated result. Year is free text, so ranges such as
+              <code>1878-S</code> are fine.
             </p>
           </details>
         </div>
       }
 
-      <label class="file-picker">
-        <input type="file" accept=".csv,.txt" (change)="handleCsvFileSelection($event)" />
-        Select CSV file
-      </label>
-      @if (csvHeaders().length > 0) {
+      @if (!hasFile() && !showSheetPicker()) {
+        <label class="file-picker">
+          <input type="file" accept=".xlsx,.xlsm,.csv,.txt"
+                 (change)="handleFileSelection($event)" [disabled]="parsing()" />
+          {{ parsing() ? 'Reading workbook…' : 'Select Excel or CSV file' }}
+        </label>
+      }
+
+      <!-- A problem with the FILE, as opposed to with a row inside it. -->
+      @if (fileError()) {
+        <p class="csv-file-error" role="alert">{{ fileError() }}</p>
+      }
+
+      <!-- STEP 1 - which sheets? Workbooks with more than one worksheet
+           only; a single-sheet workbook skips this entirely. -->
+      @if (showSheetPicker()) {
+        <div class="sheet-picker">
+          <h3>Which worksheets? &mdash; {{ fileName() }}</h3>
+          <p class="sheet-picker-hint">
+            Tick the sheets to bring in. You can take them all together or come back
+            and do one at a time.
+          </p>
+          <ul class="sheet-list">
+            @for (sheet of workbookSheets(); track sheet.name) {
+              <li class="sheet-row" [class.sheet-row--unusable]="!sheet.importable">
+                <label>
+                  <input type="checkbox" [disabled]="!sheet.importable"
+                         [checked]="isSheetSelected(sheet.name)"
+                         (change)="setSheetSelected(sheet.name, $any($event.target).checked)" />
+                  <span class="sheet-name">{{ sheet.name }}</span>
+                  @if (sheet.importable) {
+                    <span class="sheet-meta">
+                      {{ sheet.rowCount }} {{ sheet.rowCount === 1 ? 'row' : 'rows' }},
+                      {{ sheet.headers.length }}
+                      {{ sheet.headers.length === 1 ? 'column' : 'columns' }}
+                    </span>
+                    @if (sheet.recognisedColumns === 0) {
+                      <!-- Listed and tickable, just not ticked. A guess about
+                           what counts as inventory is only a guess. -->
+                      <span class="sheet-warn">no coin columns recognised &mdash; tick to include anyway</span>
+                    }
+                  } @else {
+                    <span class="sheet-meta">{{ sheet.skipReason }}</span>
+                  }
+                </label>
+              </li>
+            }
+          </ul>
+          <p class="sheet-picker-actions">
+            <button type="button" class="small-button" (click)="selectAllSheets()">Select all</button>
+            <button type="button" class="small-button" (click)="clearSheetSelection()">Clear</button>
+          </p>
+
+          <!-- Name what differs rather than saying "columns are inconsistent",
+               which cannot be acted on without going back to Excel. -->
+          @if (sheetWarnings().length > 0) {
+            <div class="sheet-mismatch" role="status">
+              <h4>These sheets do not have the same columns</h4>
+              <ul>
+                @for (warning of sheetWarnings(); track warning) { <li>{{ warning }}</li> }
+              </ul>
+              <p class="sheet-mismatch-note">
+                You can still import them together. Each sheet is matched against its
+                own heading row, so a column that is missing from one sheet simply
+                leaves that field blank on those rows.
+              </p>
+            </div>
+          }
+
+          <div class="modal-actions">
+            <button type="button" class="secondary" (click)="close()">Cancel</button>
+            <button type="button" [disabled]="!canContinue()" (click)="continueToMapping()">
+              Continue
+            </button>
+          </div>
+        </div>
+      }
+
+      <!-- STEP 2 - map the columns, then preview what will be created.
+           Shared by both formats; this is the whole reason Excel import
+           lives in this component rather than in one of its own. -->
+      @if (hasFile() && !showSheetPicker()) {
+        @if (workbookSheets().length > 1) {
+          <p class="sheet-summary">
+            Importing {{ selectedSheets().length }} of {{ workbookSheets().length }}
+            worksheets from <strong>{{ fileName() }}</strong>.
+            <button type="button" class="link-button" (click)="backToSheetPicker()">
+              Change sheets
+            </button>
+          </p>
+          @if (sheetWarnings().length > 0) {
+            <div class="sheet-mismatch" role="status">
+              @for (warning of sheetWarnings(); track warning) { <p>{{ warning }}</p> }
+            </div>
+          }
+        }
+
         <div class="csv-mapping">
           <h3>Map columns ({{ csvPreviewCount() }} rows)</h3>
           <div class="csv-mapping-grid">
-            @for (header of csvHeaders(); track header) {
+            @for (column of mappableColumns(); track column.header) {
               <div class="csv-mapping-row">
-                <span class="csv-header-label">{{ header }}</span>
-                <select [ngModel]="csvFieldMapping()[header] ?? ''" (ngModelChange)="updateCsvMapping(header, $event)">
+                <span class="csv-header-label">
+                  {{ column.header }}
+                  @if (!column.onEverySheet) {
+                    <span class="csv-header-scope">only on {{ column.sheets.join(', ') }}</span>
+                  }
+                </span>
+                <select [ngModel]="csvFieldMapping()[column.header] ?? ''"
+                        (ngModelChange)="updateCsvMapping(column.header, $event)">
                   @for (field of csvMappableFields; track field.key) {
                     <option [value]="field.key">{{ field.label }}</option>
                   }
@@ -64,27 +170,118 @@
             }
           </div>
         </div>
-        @if (csvRows().length > 0) {
-          <div class="csv-preview">
-            <h3>Preview (first 5 rows)</h3>
-            <div class="csv-preview-table-wrap">
-              <table class="csv-preview-table">
-                <thead><tr>@for (header of csvHeaders(); track header) { <th>{{ header }}</th> }</tr></thead>
-                <tbody>
-                  @for (row of csvRows().slice(0, 5); track $index) {
-                    <tr>@for (cell of row; track $index) { <td>{{ cell }}</td> }</tr>
-                  }
-                </tbody>
-              </table>
+
+        <!-- One preview table per source, so a multi-sheet import shows each
+             sheet under its own heading row rather than pretending they are
+             one grid. -->
+        @for (source of importSources(); track source.sheetName ?? '') {
+          @if (source.rows.length > 0) {
+            <div class="csv-preview">
+              <h3>
+                @if (source.sheetName) { {{ source.sheetName }} &mdash; }
+                Preview (first 5 of {{ source.rows.length }} rows)
+              </h3>
+              <div class="csv-preview-table-wrap">
+                <table class="csv-preview-table">
+                  <thead><tr>@for (header of source.headers; track $index) { <th>{{ header }}</th> }</tr></thead>
+                  <tbody>
+                    @for (row of source.rows.slice(0, 5); track $index) {
+                      <tr>@for (cell of row; track $index) { <td>{{ cell }}</td> }</tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          }
         }
-        <!-- Rows that could not be imported.
-             A coin needs at least two of Year / Coin Type / Denomination to be
+
+        <!-- What this import will actually do, BEFORE it does it. A coin
+             needs at least two of Year / Coin Type / Denomination to be
              identifiable, and the backend refuses one with no denomination
-             outright. Rather than import such a row and leave it stranded in
-             the grid with no database record behind it, it is listed here with
-             the reason. The dialog stays open so this is actually read. -->
+             outright. The count shown here and the count imported come from
+             the same call, so the button cannot over-promise. -->
+        <div class="import-plan">
+          <h3>What will be imported</h3>
+          <p class="import-plan-summary">
+            <strong>{{ plannedImportCount() }}</strong>
+            {{ plannedImportCount() === 1 ? 'coin' : 'coins' }} will be created.
+            @if (plannedSkipCount() > 0) {
+              <strong>{{ plannedSkipCount() }}</strong>
+              {{ plannedSkipCount() === 1 ? 'row' : 'rows' }} will be skipped, because a
+              coin needs at least two of <strong>Year</strong>,
+              <strong>Coin Type</strong> and <strong>Denomination</strong>.
+              Map another column above, or fix those rows in your file, and the count
+              will change.
+            }
+          </p>
+
+          <!-- How many will link to a denomination in the reference list.
+               Plain text, no icon, no colour and no threshold: a coin that
+               links to nothing is a perfectly ordinary import. The number is
+               here because it is the cheapest check on the MAPPING -- a
+               column mapped onto the wrong field shows almost nothing
+               linking, while every row still imports. -->
+          @if (plannedImportCount() > 0) {
+            <p class="import-plan-summary import-plan-links">
+              <strong>{{ plannedLinkedCount() }}</strong> of
+              {{ plannedImportCount() }}
+              will be linked to a denomination in your reference list.
+              <!-- Deliberately does NOT spell out the "Other (...)" display
+                   form. That string is built in exactly one place
+                   (services/denominations/denomination-display.ts) and
+                   denomination-display.spec.ts greps the whole source tree,
+                   templates included, to keep it that way: a second copy is
+                   a fork, and the same coin ends up reading two ways on two
+                   screens. -->
+              @if (plannedLinkedCount() < plannedImportCount()) {
+                The rest keep the wording from your file and show it as-is
+                &mdash; nothing is lost, and you can pick a denomination for
+                them later.
+              }
+            </p>
+          }
+
+          @if (plannedPerSheet().length > 0) {
+            <ul class="import-plan-sheets">
+              @for (tally of plannedPerSheet(); track tally.sheetName ?? '') {
+                <li>
+                  <span class="sheet-name">{{ tally.sheetName }}</span>
+                  <span>{{ tally.accepted }} in</span>
+                  <!-- Deliberately NOT class="sheet-warn". The skipped count
+                       beside it is a warning; this one is a fact. -->
+                  @if (tally.accepted > 0) {
+                    <span class="sheet-note">{{ tally.linkedDenominations }} linked</span>
+                  }
+                  @if (tally.rejected > 0) { <span class="sheet-warn">{{ tally.rejected }} skipped</span> }
+                </li>
+              }
+            </ul>
+          }
+
+          @if (plannedSkipCount() > 0) {
+            <details class="import-plan-skips">
+              <summary>Show the {{ plannedSkipCount() }} rows that will be skipped</summary>
+              <ul class="csv-exception-list">
+                @for (skip of plannedSkips().slice(0, 50); track $index) {
+                  <li>
+                    <span class="csv-exception-row">
+                      @if (skip.sheetName) { {{ skip.sheetName }} &middot; }Row {{ skip.rowNumber }}
+                    </span>
+                    <span class="csv-exception-summary">{{ skip.summary }}</span>
+                    <span class="csv-exception-missing">{{ skip.missing }}</span>
+                  </li>
+                }
+              </ul>
+              @if (plannedSkipCount() > 50) {
+                <p class="csv-help-note">&hellip; and {{ plannedSkipCount() - 50 }} more.</p>
+              }
+            </details>
+          }
+        </div>
+
+        <!-- Rows that could not be imported, reported again after the fact.
+             The dialog stays open on a partial import so this is actually
+             read, rather than flashing past in a toast. -->
         @if (csvExceptions().length > 0) {
           <div class="csv-exceptions">
             <h3>Not imported &mdash; too little detail ({{ csvExceptions().length }})</h3>
@@ -105,9 +302,11 @@
               missing columns above, and import again.
             </p>
             <ul class="csv-exception-list">
-              @for (exception of csvExceptions(); track exception.rowNumber) {
+              @for (exception of csvExceptions(); track $index) {
                 <li>
-                  <span class="csv-exception-row">Row {{ exception.rowNumber }}</span>
+                  <span class="csv-exception-row">
+                    @if (exception.sheetName) { {{ exception.sheetName }} &middot; }Row {{ exception.rowNumber }}
+                  </span>
                   <span class="csv-exception-summary">{{ exception.summary }}</span>
                   <span class="csv-exception-missing">{{ exception.missing }}</span>
                 </li>
@@ -120,7 +319,10 @@
           <button type="button" class="secondary" (click)="close()">
             {{ csvExceptions().length > 0 ? 'Done' : 'Cancel' }}
           </button>
-          <button type="button" (click)="importCsv()">Import {{ csvPreviewCount() }} rows</button>
+          <button type="button" [disabled]="plannedImportCount() === 0" (click)="importCsv()">
+            Import {{ plannedImportCount() }}
+            {{ plannedImportCount() === 1 ? 'coin' : 'coins' }}
+          </button>
         </div>
       }
     </div>

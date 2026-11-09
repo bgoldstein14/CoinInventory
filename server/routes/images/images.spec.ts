@@ -27,9 +27,7 @@ vi.mock('mssql', async () => {
 import { app } from '../../server';
 import { MAX_PATHS_PER_REQUEST } from './exists';
 
-// ============================================================
 // Temp fixtures
-// ============================================================
 
 /** The throwaway directory holding this file's fixtures. */
 let tempDir = '';
@@ -79,9 +77,7 @@ afterAll(() => {
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
-// ============================================================
 // GET /api/images/file
-// ============================================================
 
 describe('GET /api/images/file', () => {
   it('streams an existing file with the right Content-Type, length and bytes', async () => {
@@ -183,9 +179,7 @@ describe('GET /api/images/file', () => {
   });
 });
 
-// ============================================================
 // POST /api/images/exists
-// ============================================================
 
 describe('POST /api/images/exists', () => {
   it('reports true/false per path in a single request', async () => {
@@ -211,16 +205,13 @@ describe('POST /api/images/exists', () => {
   });
 
   /**
-   * THE BUG THIS PINS
-   * The endpoint used to log only a count — "4 missing" — which is a dead end
-   * for whoever reads it: it says a problem exists but not which file, so
-   * there is no way to tell a renamed folder from a dropped share from a
-   * stale database row. The owner hit precisely that.
+   * A bare count — "4 missing" — is a dead end for whoever reads it: it says
+   * a problem exists but not which file, so there is no telling a renamed
+   * folder from a dropped share from a stale database row.
    *
    * The assertion is on `console.log` rather than on the logger module
-   * because the Terminal is where the owner actually read the message, and
-   * `log()` echoes every level there. Testing the console is testing the
-   * thing he asked for.
+   * because the terminal is where this message is actually read, and `log()`
+   * echoes every level there.
    */
   it('names each unreadable path in the log, not just a count', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});

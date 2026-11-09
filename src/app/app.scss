@@ -70,4 +70,38 @@
   font-size: 0.85rem;
 
   strong { white-space: nowrap; }
+
+  // The one technical line ("RangeError: Invalid string length in
+  // GET /api/coins"). AVAILABLE BUT NOT SHOUTED: a non-technical user needs
+  // to read the sentence beside it and nothing else, while whoever is
+  // debugging needs this exact string. Dimmed and monospaced rather than
+  // hidden behind a disclosure, because a detail nobody can find is a
+  // detail that gets re-derived from the log every time.
+  &__detail {
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 0.75rem;
+    opacity: 0.75;
+  }
+}
+
+/* "Some of your coins have no denomination."
+ *
+ * Deliberately NOT the red of .db-error-banner above. Nothing is broken: a
+ * coin with no linked denomination is a valid record (design §4.1) and the
+ * app is working exactly as intended. Dressing housekeeping as a fault
+ * teaches the user to ignore the colour, which is what they will then do
+ * when the database really is down. */
+.unlinked-banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  background: #fdf3e0;
+  border-bottom: 1px solid #ecd9b6;
+  color: #6b4d1c;
+  font-size: 0.85rem;
+
+  strong { white-space: nowrap; }
+  span { flex: 1 1 auto; }
 }

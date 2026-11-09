@@ -24,8 +24,14 @@
     Filters {{ filters().showAdvancedFilters() ? '▲' : '▼' }}
   </button>
 
-  <button type="button" class="secondary small-button" (click)="manageCategoriesRequested.emit()">Categories</button>
+  <!-- The label says "Reference Data" but the output is
+       `manageCategoriesRequested`: the dialog maintains six reference types,
+       of which categories are only the first. The names differ on purpose —
+       renaming the output would touch the shell and every test that drives
+       it for no behavioural gain. -->
+  <button type="button" class="secondary small-button" (click)="manageCategoriesRequested.emit()">Reference Data</button>
   <button type="button" class="secondary small-button" (click)="reportsRequested.emit()">Reports</button>
+  <button type="button" class="secondary small-button" (click)="statisticsRequested.emit()">Statistics</button>
   <button type="button" class="secondary small-button" (click)="spotPricesRequested.emit()">Spot Prices</button>
 </div>
 
@@ -62,6 +68,21 @@
           }
         </select>
       </label>
+      <!-- Collection status. Sits with the other closed-set dropdowns rather
+           than in the always-visible toolbar row: narrowing to the want list
+           is a deliberate act, not something to do by accident, and the
+           toolbar has no room left. The options come from the store (which
+           re-exports COLLECTION_STATUS_OPTIONS) so this list, the editor's
+           dropdown and the grid can never offer different values. -->
+      <label>
+        <span>Status</span>
+        <select [ngModel]="filters().collectionStatusFilter()" (ngModelChange)="filters().collectionStatusFilter.set($event)">
+          <option value="">All statuses</option>
+          @for (option of filters().collectionStatusOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </label>
       <label>
         <span>Set</span>
         <select [ngModel]="filters().coinSetFilter()" (ngModelChange)="filters().coinSetFilter.set($event)">
@@ -71,8 +92,6 @@
           }
         </select>
       </label>
-      <!-- A "Dealer" text box used to sit here. The coin-level dealer field was
-           removed, so there is nothing for it to search. -->
     </div>
   </div>
 }

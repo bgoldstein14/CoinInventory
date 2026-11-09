@@ -14,9 +14,9 @@
     is.
 
     - width/height : about half the display, in the photo's own proportions.
-    - max-width/height : the image's NATIVE resolution. This is the owner's
-      "grow it up to the highest resolution of the picture", and it is the
-      reason the viewer prefers the original file over the stored copy.
+    - max-width/height : the image's NATIVE resolution. Growing past it
+      reveals no more detail, and it is the reason the viewer prefers the
+      original file over the stored copy.
     - min-width/height : a usable floor, lowered automatically for an image
       whose native size is smaller than the floor itself.
 
@@ -49,9 +49,8 @@
 
     <!--
       Every control floats ON TOP of the image rather than sitting beside it,
-      so the image really does take up the full size of the window as asked.
-      They are all clear of the bottom-right corner, which belongs to the
-      resize grip.
+      so the image takes up the full size of the window. They are all clear
+      of the bottom-right corner, which belongs to the resize grip.
     -->
     <button type="button" class="photo-viewer__close" (click)="images().closePhotoViewer()" aria-label="Close">&times;</button>
 

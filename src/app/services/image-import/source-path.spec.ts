@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
   EXAMPLE_IMPORT_BASE_FOLDER,
   joinWindowsPath,
+  normalizeSourcePathForComparison,
   previewSourcePath,
   sourcePathForFile
 } from './source-path';
@@ -166,6 +167,68 @@ describe('joinWindowsPath with drive-letter bases', () => {
     // "D:" is a path segment like any other to segmentsOf(), so guard against a
     // relative path whose first segment happens to look similar.
     expect(joinWindowsPath('D:\\', 'D/a.jpg')).toBe('D:\\D\\a.jpg');
+  });
+});
+
+ /*
+ * normalizeSourcePathForComparison
+ *
+ * These rules decide whether a file the user just picked is ALREADY attached
+ * to the coin. Get them too strict and a re-imported folder duplicates every
+ * photo in it (the bug this was written for); get them too loose and a photo
+ * the user genuinely wants is silently skipped.
+  */
+describe('normalizeSourcePathForComparison', () => {
+  it('is case-insensitive, because Windows paths are', () => {
+    // The same file reached by two code paths: the import builds the path from
+    // the base-folder box (whatever the user typed) while the database holds
+    // whatever was stored months ago. Neither casing is more correct.
+    expect(normalizeSourcePathForComparison('D:\\Coin Pictures\\A.JPG'))
+      .toBe(normalizeSourcePathForComparison('d:\\coin pictures\\a.jpg'));
+  });
+
+  it('treats forward and back slashes as the same separator', () => {
+    // webkitRelativePath always uses forward slashes; the stored value is
+    // whatever joinWindowsPath produced, which is backslashes.
+    expect(normalizeSourcePathForComparison('D:/Coin Pictures/a.jpg'))
+      .toBe(normalizeSourcePathForComparison('D:\\Coin Pictures\\a.jpg'));
+  });
+
+  it('collapses repeated separators', () => {
+    expect(normalizeSourcePathForComparison('D:\\Coin Pictures\\\\a.jpg'))
+      .toBe(normalizeSourcePathForComparison('D:\\Coin Pictures\\a.jpg'));
+  });
+
+  it('ignores a trailing separator and surrounding whitespace', () => {
+    expect(normalizeSourcePathForComparison('  D:\\Coin Pictures\\Proofs\\  '))
+      .toBe(normalizeSourcePathForComparison('D:\\Coin Pictures\\Proofs'));
+  });
+
+  it('keeps the leading double separator of a UNC path', () => {
+    // \\NAS\pics\a.jpg and \NAS\pics\a.jpg are NOT the same location, so the
+    // collapse rule must not eat the UNC prefix.
+    expect(normalizeSourcePathForComparison('\\\\NAS\\pics\\a.jpg'))
+      .not.toBe(normalizeSourcePathForComparison('\\NAS\\pics\\a.jpg'));
+    expect(normalizeSourcePathForComparison('//NAS/pics/a.jpg'))
+      .toBe(normalizeSourcePathForComparison('\\\\NAS\\pics\\a.jpg'));
+  });
+
+  it('still distinguishes genuinely different files', () => {
+    expect(normalizeSourcePathForComparison('D:\\pics\\a.jpg'))
+      .not.toBe(normalizeSourcePathForComparison('D:\\pics\\b.jpg'));
+    // Same filename, different folder: a very common shape in this library,
+    // where every denomination has its own "Obverse.jpg".
+    expect(normalizeSourcePathForComparison('D:\\pics\\Halves\\Obverse.jpg'))
+      .not.toBe(normalizeSourcePathForComparison('D:\\pics\\Dimes\\Obverse.jpg'));
+  });
+
+  it('returns an empty string for nothing at all', () => {
+    // Null is what every image imported before the SourcePath column existed
+    // has. An empty normal form is the one value that must never match another
+    // empty one as "already attached" — the callers check for that explicitly.
+    expect(normalizeSourcePathForComparison(null)).toBe('');
+    expect(normalizeSourcePathForComparison(undefined)).toBe('');
+    expect(normalizeSourcePathForComparison('   ')).toBe('');
   });
 });
 

@@ -1,22 +1,18 @@
-/* ===========================================================================
+ /*
  * pm-backfill.ts — THE ONE-TIME "FILL IN THE MISSING METAL DATA" PASS
- * ---------------------------------------------------------------------------
+ *
  * WHAT PROBLEM THIS SOLVES
  *
  * The app can work out what a coin is made of from its country, denomination
- * and year (see pm-reference.ts). Until now it only ever DID that while
- * importing from Quicken. Every coin that was already in the owner's database
- * when that feature shipped still has its four alloy fields empty — and since
- * melt value is computed from `pmWeightGrams` + `metalContent`, every one of
- * those coins shows a blank melt figure. The only fix was to type the numbers
- * in by hand, one coin at a time.
+ * and year (see pm-reference.ts), but the import is the only path that does
+ * it as coins arrive. Coins that predate that feature have empty alloy
+ * fields, and since melt value is computed from `pmWeightGrams` +
+ * `metalContent`, every one of them shows a blank melt figure.
  *
  * This file is the fix: walk the inventory, run the SAME inference the import
  * runs, and write what is missing.
  *
- * ---------------------------------------------------------------------------
- * IT IS DELIBERATELY TIMID, AND THAT IS THE FEATURE
- * ---------------------------------------------------------------------------
+ * ---- IT IS DELIBERATELY TIMID, AND THAT IS THE FEATURE ----
  * Three refusals, each enforced somewhere you can point at:
  *
  *   1. It never overwrites. A field that already holds a value is not even
@@ -39,9 +35,7 @@
  * pm-reference.ts: a wrong purity silently produces a wrong melt value, and a
  * silent wrong number is worse than a visible blank.
  *
- * ---------------------------------------------------------------------------
- * SPLIT INTO A PLAN AND A RUN, ON PURPOSE
- * ---------------------------------------------------------------------------
+ * ---- SPLIT INTO A PLAN AND A RUN, ON PURPOSE ----
  * `planPmBackfill` is pure: it reads coins and returns what WOULD happen,
  * including the exact payload for each coin. `runPmBackfill` then writes
  * precisely that plan and nothing else.
@@ -50,7 +44,7 @@
  * are not a separate estimate that might disagree with the run — they are
  * literally the same objects the run then sends. A test asserts that the
  * number of writes equals the number of candidates the preview reported.
- * =========================================================================== */
+  */
 
 import { CoinRecord } from '../types/coin.model';
 import { PM_FIELD_KEYS, hasAllPmFields, pmFieldsToFill } from './pm-fill';
@@ -268,9 +262,7 @@ function blankPmFields(): Partial<CoinRecord> {
 /**
  * Write a plan, one coin at a time.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS LOOP IS SEQUENTIAL AND AWAITS EVERY WRITE
- * ---------------------------------------------------------------------------
+ * ---- WHY THIS LOOP IS SEQUENTIAL AND AWAITS EVERY WRITE ----
  * The obvious implementation — call `InventoryService.updateCoin()` for each
  * coin in a `for` loop — is wrong here, and the reason is worth spelling out
  * because it is not visible from the call site.

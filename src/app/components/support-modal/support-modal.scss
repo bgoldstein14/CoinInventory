@@ -1,0 +1,149 @@
+// Styles for the "Report a problem" dialog.
+//
+// Deliberately plain. This dialog is read, not admired: the one thing that
+// has to stand out is the attachment warning, because it is the only thing
+// between a user and publishing their financial position.
+@use '../../styles/controls' as *;
+@use '../../styles/modal' as *;
+
+// The dialog is position: fixed, so the host element must not take part in
+// the page layout. Same reasoning as settings-modal.scss.
+:host { display: contents; }
+
+.support-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  max-height: 72vh;
+  overflow-y: auto;
+}
+
+.support-intro {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.45;
+}
+
+.support-note {
+  margin: 0;
+  font-size: 0.82rem;
+  opacity: 0.8;
+}
+
+.support-error {
+  margin: 0;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #b4342b;
+  background: #fdeceb;
+  color: #7a201a;
+  font-size: 0.86rem;
+}
+
+.support-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+
+  > span {
+    font-weight: 600;
+    font-size: 0.86rem;
+  }
+
+  textarea {
+    width: 100%;
+    resize: vertical;
+    font: inherit;
+  }
+}
+
+// The report preview is read as text, so it gets a monospace face: a log
+// line that wraps mid-path in a proportional font is much harder to check.
+.support-report {
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.support-attach {
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 8px;
+  padding: 0.8rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+}
+
+// The one element on the screen that is allowed to shout.
+.support-warning {
+  margin: 0;
+  padding: 0.7rem 0.8rem;
+  border-left: 4px solid #b4342b;
+  border-radius: 4px;
+  background: #fff6f5;
+  color: #5c1b16;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.support-file-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+
+  li {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 0.84rem;
+  }
+}
+
+.support-file-size {
+  opacity: 0.7;
+  margin-left: auto;
+}
+
+.support-receipt {
+  font-size: 0.82rem;
+
+  summary {
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 0.4rem;
+  }
+
+  th,
+  td {
+    text-align: left;
+    padding: 0.2rem 0.4rem;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  }
+}
+
+.support-path code {
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.3rem;
+}

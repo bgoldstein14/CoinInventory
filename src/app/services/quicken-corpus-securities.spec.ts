@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * quicken-corpus-securities.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   That the QIF importer works against A WHOLE ACCOUNT, security name by
  *   security name, rather than against a handful of tidy examples. Every
@@ -28,23 +28,20 @@
  *   thing for photo filenames: the other spec files cover the ALGORITHM, this
  *   one covers a whole file's worth of awkward input.
  *
- * ---------------------------------------------------------------------------
- * THE TWO DEFECTS THIS FILE WAS WRITTEN FOR
- * ---------------------------------------------------------------------------
- *   1. Metal / Composition / PM % / PM weight were never filled in on import.
- *      Every row below now asserts them, because getting an alloy wrong is a
- *      silent error -- it produces a plausible-looking but wrong melt value.
+ * ---- THE TWO FAILURES THIS FILE GUARDS AGAINST ----
+ *   1. Metal / Composition / PM % / PM weight not filled in on import. Every
+ *      row below asserts them, because getting an alloy wrong is a silent
+ *      error -- it produces a plausible-looking but wrong melt value.
  *
- *   2. "1967 Peru 100 Soles - PCGS MS65" would not import at all. The parser
- *      hard-coded the country to "United States" and had no idea what a Sol
- *      was, so the record carried a Year and nothing else, failed the 2-of-3
- *      completeness rule, and landed in the exceptions list.
+ *   2. "1967 Peru 100 Soles - PCGS MS65" not importing at all. With the
+ *      country hard-coded to "United States" and no idea what a Sol is, the
+ *      record carries a Year and nothing else, fails the 2-of-3 completeness
+ *      rule, and lands in the exceptions list.
  *
  * `expectedCoinType: ''` is never an oversight. It means the parser is
- * SUPPOSED to leave Coin Type blank, which the owner explicitly accepted:
- * "the coin type might be left blank if the code couldn't try to figure
- * anything out."
- * =========================================================================== */
+ * SUPPOSED to leave Coin Type blank, which is an accepted outcome: the coin
+ * type is left blank when nothing in the name can settle it.
+  */
 
 import { describe, expect, it } from 'vitest';
 import { QuickenImportService } from './quicken-import.service';
@@ -101,10 +98,10 @@ interface SecurityCase {
  * ------------------------------------------------------------------------- */
 const GOLD_SECURITIES: SecurityCase[] = [
   // --- Gold Dollar ($1 gold, 1849-1889) ----------------------------------
-  // THE COLLISION THAT USED TO GET THESE WRONG: "$1" in these years is both
-  // a 26.73 g SILVER dollar and a 1.67 g GOLD dollar. Before the fix all
-  // three of these imported as "Liberty Seated" with 24.06 g of silver
-  // attached. The word "Gold" and the "G$" shorthand are what settle it.
+  // THE COLLISION THAT GETS THESE WRONG: "$1" in these years is both a
+  // 26.73 g SILVER dollar and a 1.67 g GOLD dollar. Read as the silver one,
+  // all three import as "Liberty Seated" with 24.06 g of silver attached.
+  // The word "Gold" and the "G$" shorthand are what settle it.
   {
     name: '1850-S $1 Gold - ANACS XF40',
     year: '1850', denomination: '$1', coinType: 'Liberty Head', country: 'United States',
@@ -386,10 +383,9 @@ const GOLD_SECURITIES: SecurityCase[] = [
 
   // --- THE ONE NON-US COIN IN THE FILE ------------------------------------
   {
-    // The shape of the record the owner reported as "the only coin that
-    // couldn't import properly". Country, denomination and alloy all now come
-    // out of the name; Coin Type is blank because the Peruvian 100 Soles has
-    // no sub-type to infer, which the owner explicitly accepted.
+    // A non-US record: country, denomination and alloy all come out of the
+    // name. Coin Type is blank because the Peruvian 100 Soles has no
+    // sub-type to infer.
     name: '1967 Peru 100 Soles - PCGS MS65',
     year: '1967', denomination: '100 Soles', coinType: '', country: 'Peru',
     metal: 'Gold', pmPercent: 90, pmWeightGrams: 42.13,
@@ -424,12 +420,10 @@ describe('GoldCoins.QIF — every security name in the account', () => {
       });
 
       it('fills in the coin\'s GROSS weight, in grams', () => {
-        /* THE FIFTH FIELD. Until the gross weights were moved out of prose
-         * comments and into pm-reference.ts as real data, every one of these
-         * 44 coins imported with an empty Weight. `weight` is in GRAMS from
-         * migration 008 onward, which is the same unit as pmWeightGrams, so
-         * the two can be compared directly -- and must be, because confusing
-         * them is the mistake behind the melt-value bug in the README. */
+        /* THE FIFTH FIELD. `weight` is in GRAMS from migration 008 onward,
+         * the same unit as pmWeightGrams, so the two can be compared
+         * directly -- and must be, because confusing them is the mistake
+         * behind the melt-value bug in the README. */
         const coin = importedCoin(testCase.name);
         expect(coin.weight, 'weight should not be blank').toBeDefined();
         expect(coin.weight).toBeCloseTo(testCase.grossWeightGrams, 3);
@@ -450,18 +444,16 @@ describe('GoldCoins.QIF — every security name in the account', () => {
 });
 
 /* ===========================================================================
- * THE FILL CENSUS — HOW MUCH OF THE OWNER'S OWN FILE GETS FILLED IN
+ * THE FILL CENSUS — HOW MUCH OF A REAL ACCOUNT GETS FILLED IN
  * ---------------------------------------------------------------------------
- * The brief this work was done against asked for a NUMBER, not a reassurance:
- * of the 44 distinct securities in the Gold Coins account, how many come out of the
- * import with each of the five fields populated?
+ * Of the 44 distinct securities in the Gold Coins account, how many come out
+ * of the import with each of the five fields populated? The answer is 44 of
+ * 44 for all five, and this block is what keeps it that way.
  *
- * The answer is 44 of 44 for all five, and this block is what keeps it that
- * way. It is a census rather than a spot check on purpose: a change to
- * pm-reference.ts that quietly stopped matching, say, the Classic Head half
- * eagle would drop one coin out of the count, and the per-coin tests above
- * would report it as one failure among forty-four passes. This reports it as
- * "43 of 44", which is the shape of the question the owner asked.
+ * A census rather than a spot check on purpose: a change to pm-reference.ts
+ * that quietly stopped matching, say, the Classic Head half eagle would drop
+ * one coin out of the count, and the per-coin tests above would report it as
+ * one failure among forty-four passes. This reports it as "43 of 44".
  *
  * It is driven off GOLD_SECURITIES rather than off the .QIF on disk, which
  * is the same choice `image-matching/real-filenames.spec.ts` makes: the data
@@ -513,8 +505,8 @@ describe('GoldCoins.QIF — fill rate across all 44 securities', () => {
 /* ===========================================================================
  * THE PERU RECORD, IN DETAIL
  * ===========================================================================
- * Item 2 of the defect report, given its own section because every part of it
- * failed for a different reason.
+ * The one non-US coin in the corpus, given its own section because every
+ * part of it used to fail for a different reason.
  * ======================================================================== */
 describe('the Peru 100 Soles — the record that would not import', () => {
   const PERU = '1967 Peru 100 Soles - PCGS MS65';

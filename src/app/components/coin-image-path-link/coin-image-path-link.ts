@@ -5,20 +5,16 @@ import { CoinImagePathsService } from '../../services/coin-image-paths.service';
  * CoinImagePathLink — shows where ONE photo's original file lives, and makes it
  * clickable when that file is still there.
  *
- * WHY THIS IS ITS OWN COMPONENT
  * Three places show a photo (the gallery list, the full-screen viewer, and the
  * detail sidebar's photo strip) and all three need identical behaviour: the
- * same three states, the same tooltip wording, the same muted colour. Putting
- * it in one component means there is exactly one copy of that logic and one
- * copy of the CSS, instead of three that drift apart.
+ * same three states, the same tooltip wording, the same muted colour.
  *
  * All this component takes is the image's `data:` URL. It looks the path up
  * through CoinImagePathsService, which already holds both the recorded paths
  * and the cached does-it-still-exist answers.
  *
- * ---------------------------------------------------------------------------
  * WHY THE LINK GOES THROUGH THE BACKEND
- * ---------------------------------------------------------------------------
+ *
  * The natural thing to write is `<a href="file:///C:/pics/x.jpg">`. It does not
  * work. Chrome and Edge block navigation from an `http://` page to a `file://`
  * URL, and they do it SILENTLY — the user clicks and absolutely nothing

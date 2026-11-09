@@ -101,10 +101,9 @@ describe('ImageImportModal', () => {
     expect(rowFor(modal, 'mercury_dime_1945.jpg').selectedCoinId).toBe(merc.id);
     expect(rowFor(modal, 'mercury_dime_1945.jpg').decision).toBe('auto');
 
-    // A file with no apparent match is skipped by the importer itself. Under
-    // the old two-bucket screen this sat in a queue waiting for a decision
-    // whose only honest answer was "yes, skip it"; with ~2,140 files that was
-    // hundreds of pointless clicks.
+    // A file with no apparent match is skipped by the importer itself rather
+    // than queued: with ~2,140 files, a question whose only honest answer is
+    // "yes, skip it" is hundreds of pointless clicks.
     const skipped = rowFor(modal, 'IMG_2024.jpg');
     expect(skipped.selectedCoinId).toBeNull();
     expect(skipped.decision).toBe('skipped');
@@ -247,14 +246,13 @@ describe('ImageImportModal', () => {
     expect(sess(modal).notImported()).toHaveLength(2);
   });
 
-  /* =======================================================================
-   * TIER 2: the near-match queue
-   * =====================================================================
-   * Two 1881 Morgan Dollars that differ only by mint mark, both PCGS MS63 -
-   * the ambiguity the product owner described. The filenames agree with both
-   * on year, coin type, denomination and grade, so they are near matches; the
-   * mint mark the records disagree on is what stops the matcher attaching
-   * them unasked.
+  /*
+   * TIER 2: the near-match queue.
+   *
+   * Two 1881 Morgan Dollars that differ only by mint mark, both PCGS MS63.
+   * The filenames agree with both on year, coin type, denomination and
+   * grade, so they are near matches; the mint mark the records disagree on
+   * is what stops the matcher attaching them unasked.
    */
   function addAmbiguousMorgans(inv: InventoryService) {
     return {
@@ -522,9 +520,7 @@ describe('ImageImportModal', () => {
     expect(sess(modal).coins.nameById('nonexistent')).toBe('Unknown');
   });
 
-  /* =======================================================================
-   * BATCH IMPORT: filtering, selection, bulk controls, confirmation
-   * ===================================================================== */
+  /* BATCH IMPORT: filtering, selection, bulk controls, confirmation */
 
   it('filters out non-displayable files and counts them with a reason', async () => {
     const { modal, inv } = createModal();
@@ -687,12 +683,11 @@ describe('ImageImportModal', () => {
 
     /* EACH COIN NEEDS A PHOTO OF THE COIN, not just of its slab label.
      *
-     * The owner ruled that a label shot "only alongside a coin photo" may
-     * identify a coin -- a photograph of the paperwork never names a coin by
-     * itself (see the LABEL gate in match-decider.ts). So a batch of nothing
-     * but label shots now attaches nothing at all, and this test, which is
-     * about bulk rules being scoped to ONE coin, would be testing an empty
-     * list instead.
+     * A label shot may identify a coin only alongside a coin photo -- a
+     * photograph of the paperwork never names a coin by itself (see the
+     * LABEL gate in match-decider.ts). So a batch of nothing but label shots
+     * attaches nothing at all, and this test, which is about bulk rules
+     * being scoped to ONE coin, would be testing an empty list.
      *
      * Adding the obverse of each coin restores what the test is actually
      * about, and incidentally exercises the ride-along: each label is placed

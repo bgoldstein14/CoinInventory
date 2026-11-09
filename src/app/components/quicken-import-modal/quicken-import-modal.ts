@@ -7,6 +7,9 @@ import {
   QuickenRejectedRecord
 } from '../../services/quicken-import.service';
 import { AmbiguousReading, CoinRecord, QuickenImportRecord } from '../../types/coin.model';
+// The ONE resolver, shared with the editor's picker, the CSV/Excel importer
+// and (transcribed into T-SQL, with a parity spec over it) migration 014.
+import { resolveDenominationId } from '../../services/denominations/denomination-index';
 
 const unassignedQuickenAccount = 'Unassigned';
 
@@ -33,27 +36,18 @@ export class QuickenImportModal {
    * "exceptions" list -- never silently discarded.
    */
   protected readonly rejectedRecords = signal<QuickenRejectedRecord[]>([]);
-  /* -------------------------------------------------------------------------
-   * THERE IS NO "IMPORT ANYWAY" ESCAPE HATCH, AND THERE MUST NOT BE ONE.
+  /* THERE IS NO "IMPORT ANYWAY" ESCAPE HATCH, AND THERE MUST NOT BE ONE.
    *
-   * This modal used to keep an `overriddenSecurities` list letting the user
-   * force a record that fails the 2-of-3 rule into the import. It looked like
-   * it worked and did not:
+   * THE UI MUST NEVER OFFER TO CREATE A COIN THE BACKEND WOULD REFUSE. The
+   * backend rejects a coin with no denomination outright --
+   * `400 {"error":"denomination is required"}` -- so a forced record appears
+   * in the grid as if it saved, no database row is ever created, and every
+   * later edit targets an id the server has never heard of.
    *
-   *   - the coin appeared in the grid, so the user thought it had saved;
-   *   - but the backend rejects a coin with no denomination outright --
-   *         400 {"error":"denomination is required"}
-   *     -- so no database row was ever created;
-   *   - every later edit then targeted an id the server had never heard of,
-   *     which is the "errors when trying to update the details" the owner
-   *     reported.
-   *
-   * The rule is now simply: THE UI MUST NEVER OFFER TO CREATE A COIN THE
-   * BACKEND WOULD REFUSE. A record that fails the check is reported in the
-   * exceptions panel -- with its raw security name and everything the parser
-   * did manage to read, so the user can fix the Quicken name and re-import --
-   * and that is the only outcome available.
-   * ---------------------------------------------------------------------- */
+   * A record that fails the check is reported in the exceptions panel, with
+   * its raw security name and everything the parser did manage to read, so
+   * the user can fix the Quicken name and re-import. That is the only
+   * outcome available. */
   protected readonly quickenWarnings = signal<string[]>([]);
   protected readonly quickenAccounts = signal<string[]>([]);
   protected readonly selectedAccounts = signal<string[]>([]);
@@ -65,20 +59,15 @@ export class QuickenImportModal {
   protected readonly importing = signal(false);
   protected readonly parsing = signal(false);
 
-  /* -------------------------------------------------------------------------
-   * THE TWO THINGS THE USER CAN DO ABOUT A GUESS.
-   *
-   * The parser flags a reading it was not sure about (see `AmbiguousReading`
-   * in coin.model.ts). The owner asked for three outcomes, and these two
-   * signals carry the first two of them; the third -- "fix it later" -- needs
-   * nothing here at all, because the coin editor already lets him change a
-   * denomination after the import.
+  /* The two things the user can do about a reading the parser was not sure
+   * about (see `AmbiguousReading` in coin.model.ts):
    *
    *   1. CHANGE IT NOW   `denominationChoices`, security name -> the
-   *                      denomination he picked instead.
-   *   2. CANCEL IT       `droppedSecurities`, the names he does not want
-   *                      imported at all. His words: "or just cancel the
-   *                      match".
+   *                      denomination they picked instead.
+   *   2. CANCEL IT       `droppedSecurities`, the names not to import.
+   *
+   * ("Fix it later" needs nothing here: the coin editor can change a
+   * denomination after the import.)
    *
    * BOTH ARE KEYED ON THE QUICKEN SECURITY NAME, NOT ON `record.id`.
    * `id` is a fresh `crypto.randomUUID()` on every parse, and `refreshPreview`
@@ -90,8 +79,7 @@ export class QuickenImportModal {
    * (its net-quantity map is keyed on it), so it is a true row identity.
    *
    * A DROPPED ROW IS STILL SHOWN, struck through, with an Undo. Hiding it
-   * would make the action irreversible from the screen that offered it.
-   * ---------------------------------------------------------------------- */
+   * would make the action irreversible from the screen that offered it. */
   protected readonly denominationChoices = signal<Record<string, string>>({});
   protected readonly droppedSecurities = signal<string[]>([]);
 
@@ -262,16 +250,48 @@ export class QuickenImportModal {
     //
     // `refreshPreview` re-applies the user's denomination corrections on the
     // way through (they are keyed on the security name precisely so they can
-    // survive this re-parse). What it does NOT do is remove the rows he
-    // cancelled -- those stay in the preview, struck through -- so the
+    // survive this re-parse). What it does NOT do is remove the cancelled
+    // rows -- those stay in the preview, struck through -- so the
     // cancellation is applied here, via `recordsToImport`.
     this.refreshPreview();
     const filtered = this.recordsToImport();
+
+    /* The lookup is read ONCE for the whole batch. `resolveDenominationId`
+     * indexes the list on its ARRAY IDENTITY, so holding the array here
+     * means the labels are folded once for the import rather than once per
+     * coin. An empty list -- the lookup has not arrived yet -- links nothing
+     * and reports nothing, which is the honest outcome and not a reason to
+     * delay or refuse the import. */
+    const denominations = this.inv.denominations();
 
     const newCoins: CoinRecord[] = filtered.map((record): CoinRecord => ({
       id: record.id,
       coinType: record.coinType,
       denomination: record.denomination,
+      /* The canonical link, written alongside the text above.
+       * `record.denomination` -- what the PARSER read out of the Quicken
+       * security name -- is kept unchanged; this resolves it to a
+       * Denominations row when one can be established.
+       *
+       * Pass `record.country`, NOT A CONSTANT. The parser reads a country out
+       * of the security name where one is named ("1967 Peru 100 Soles") and
+       * falls back to this collection's 'United States' default where none
+       * is. Both are the right answer FOR THAT COIN, and the resolver needs
+       * the real one: the country scopes the search before it widens, so a
+       * constant would resolve a Peruvian coin by luck and a Mexican one not
+       * at all.
+       *
+       * NULL IS ORDINARY. An `8 Reales` recorded as 'United States' was
+       * struck by six issuers, so it links to nothing, imports normally, and
+       * reads `Other (8 Reales)`. Over the whole QIF corpus 449 of 457 coins
+       * link; the eight that do not are five genuinely ambiguous values and
+       * three coins with no denomination at all. See
+       * services/denominations/qif-corpus-denomination-links.spec.ts. */
+      denominationId: resolveDenominationId(
+        record.denomination,
+        record.country,
+        denominations
+      ),
       year: record.year,
       category: this.categoryFromQuickenAccount(record.account),
       country: record.country,
@@ -283,10 +303,8 @@ export class QuickenImportModal {
       certNumber: '',
       variety: record.variety,
       mintMark: record.mintMark,
-      // Composition and metalContent are now worked out during the parse from
-      // country + denomination + year (see pm-reference.ts). They used to be
-      // hard-coded blank here, which is why every imported coin arrived with
-      // an empty Metal and Composition no matter what it was.
+      // Composition and metalContent are worked out during the parse from
+      // country + denomination + year (see pm-reference.ts).
       composition: record.composition ?? '',
       purchaseDate: record.purchaseDate ?? '',
       purchasePrice: record.purchasePrice,

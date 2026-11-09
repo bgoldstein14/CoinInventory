@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * match-scorer.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   STAGE 2: comparing ONE filename signature against ONE coin signature and
  *   producing a 0..1 score, a count of strong agreements, and a plain-English
@@ -19,7 +19,7 @@
  *   an attribute that only one side has must stay out of BOTH the numerator
  *   and the denominator. Every `if (both sides have it)` guard below is that
  *   rule.
- * =========================================================================== */
+  */
 
 import { Signature, formatYear } from './coin-signature';
 import { compareGrades } from './grade-tolerance';
@@ -50,13 +50,12 @@ export interface ScoreBreakdown {
    *
    * WHY IT IS REPORTED HERE RATHER THAN APPLIED HERE
    *   The verdict rides along on every breakdown so that nothing can score a
-   *   pair without being told it is disqualified -- there is no way to call
-   *   the scorer and miss it. But the SCORE itself is left untouched, which
-   *   is deliberate: scoring answers "how alike are these two?", and a
-   *   disqualified coin can still be very alike (the owner's 1861 proof and
-   *   his 1861 XF45 differ by one grade). Zeroing it here would destroy the
-   *   evidence the skip reporting needs to say "this coin came closest, and
-   *   here is exactly why it was thrown out".
+   *   pair without being told it is disqualified. But the SCORE itself is
+   *   left untouched, which is deliberate: scoring answers "how alike are
+   *   these two?", and a disqualified coin can still be very alike (an 1861
+   *   proof and an 1861 XF45 differ by one grade). Zeroing it here would
+   *   destroy the evidence the skip reporting needs to say "this coin came
+   *   closest, and here is exactly why it was thrown out".
    *
    *   ACTING on the verdict is match-decider.ts's job, and it acts on it
    *   completely: a vetoed coin is dropped before the gates run, so it can be
@@ -106,11 +105,11 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   }
 
   /* ---- Denomination ----------------------------------------------------
-   * Compared with `denominationsAgree`, never with `===`. The owner's rule:
-   * "3¢ can be equivalent to 3CS or 3CN". A filename saying three cents does
-   * not say WHICH three-cent piece, so it agrees with either specific record
-   * -- while 3CS and 3CN remain different coins and never agree with each
-   * other. The table and the full reasoning are in reference-tables.ts.
+   * Compared with `denominationsAgree`, never with `===`: "3¢" is equivalent
+   * to 3CS or 3CN, so a filename saying three cents does not say WHICH
+   * three-cent piece and agrees with either specific record -- while 3CS and
+   * 3CN remain different coins and never agree with each other. The table and
+   * the full reasoning are in reference-tables.ts.
    *
    * A generic/specific agreement earns the FULL weight and counts as a strong
    * attribute, because the two really do describe the same coin; only the
@@ -215,29 +214,21 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
 
   /* THE GRADE IS COMPARED WITH `compareGrades`, NEVER WITH `===`.
    *
-   * The owner's rule, verbatim:
-   *
-   *     "Keep in mind that the grade might slightly differ and still be
-   *      correct like 63CAM or 63 CAMEO or 63PL of 63 PL or something like
-   *      that."
-   *
-   * He measured what `===` cost him. These two files are PHOTOGRAPHS OF ONE
-   * COIN, and his record for it reads "1867 3CS - NGC PF65 Cameo":
+   * A grade may differ slightly and still be the same grade: 63CAM / 63 CAMEO,
+   * 63PL / 63 PL. These two files are PHOTOGRAPHS OF ONE COIN whose record
+   * reads "1867 3CS - NGC PF65 Cameo":
    *
    *     1867 3CS - NGC PF65CAM - Reverse.jpg      scored 0.84 -> skipped
    *     1867 3CS - NGC PF65 Cameo - Obverse.jpg   scored 0.88 -> attached
    *
-   * Nothing about the coin differed. One photo abbreviated the designation
-   * and the other spelled it out, and that alone moved the score by 0.03 --
-   * which is exactly the width of the gap across the 0.85 auto-match bar.
-   * His Early Proofs collection is full of the same thing: PR where PCGS
-   * prints it and PF where NGC does, CAM on one slab and Cameo on the next.
+   * Nothing about the coin differed. One abbreviated the designation and the
+   * other spelled it out, and that alone moved the score by 0.03 -- exactly
+   * the width of the gap across the 0.85 auto-match bar.
    *
    * WHERE THE TOLERANCE LIVES. grade-tolerance.ts, which near-match.ts's
-   * tier-2 test also calls. It was MOVED there out of near-match.ts rather
-   * than copied in here -- two implementations of "are these the same grade?"
-   * would drift, and the day they drifted the scorer would reward a pairing
-   * the near-match test refuses. See that file's header.
+   * tier-2 test also calls. Do not copy it in here: two implementations of
+   * "are these the same grade?" would drift, and the day they drifted the
+   * scorer would reward a pairing the near-match test refuses.
    *
    * THE TWO KINDS OF AGREEMENT ARE SCORED DIFFERENTLY, AND THAT IS THE POINT
    *
@@ -245,27 +236,21 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
    *                  "PF65 Cameo"; "PR65" and "PF65"; "MS63PL" and
    *                  "MS63 PROOFLIKE". Full weight, and eligible to form the
    *                  one strong attribute the cert-company/grade pair can
-   *                  earn, exactly as a character-for-character match always
-   *                  was. These two sides genuinely said the same thing.
+   *                  earn. These two sides genuinely said the same thing.
    *
    *   'extra-detail' the same grade, but ONE SIDE SAYS MORE: "MS64" against
    *                  "MS64 CAC", "PF64" against "PF64RB". Full weight,
-   *                  because the grades really are the same grade and
-   *                  pretending otherwise is what produced the bug above --
-   *                  but NEVER a strong attribute. The two sides did not say
-   *                  the same thing; one of them said more, and the
+   *                  because the grades really are the same grade -- but
+   *                  NEVER a strong attribute. The two sides did not say the
+   *                  same thing; one of them said more, and the
    *                  two-strong-attributes gate is where this matcher keeps
-   *                  its caution. The owner's tie-breaker decides it:
-   *                  "I can always force an image to be associated with a
-   *                  coin manually, but the automated process should be very
-   *                  descriminatory."
+   *                  its caution.
    *
    *   'different'    a different grade, or two decorations that contradict
    *                  (MS64 RB against MS64 BN). No weight, and it is listed
-   *                  as a disagreement, exactly as before.
+   *                  as a disagreement.
    *
-   * MIN_STRONG_ATTRIBUTES and every threshold are untouched; so is the rule
-   * that the grade can never earn a strong attribute by itself. */
+   * The grade can never earn a strong attribute by itself. */
   if (file.grade && coin.grade) {
     comparable += WEIGHTS.grade;
     const relation = compareGrades(file.grade, coin.grade).relation;
@@ -347,9 +332,9 @@ export function diceSimilarity(left: string[], right: string[]): number {
 /**
  * Render a coin's year (or year range) for the explanation text.
  *
- * MOVED to coin-signature.ts and re-exported here so the long-standing
- * `import { formatYear } from './match-scorer'` keeps working. It had to move
- * because match-vetoes.ts needs it too, and this file now imports the vetoes
- * -- leaving it here would have made the two files import each other.
+ * It lives in coin-signature.ts and is re-exported here so the long-standing
+ * `import { formatYear } from './match-scorer'` keeps working. It has to live
+ * there because match-vetoes.ts needs it too and this file imports the
+ * vetoes -- defining it here would make the two files import each other.
  */
 export { formatYear };

@@ -8,16 +8,18 @@ import {
   SpotPrices,
   TransactionRecord
 } from '../../types/coin.model';
+import { CatalogOption } from '../../types/catalog-reference';
 import { ApiService, describeHttpError } from '../api.service';
 import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
 import { CoinCollection } from './coin-collection';
 import { hasAnySpotPrice } from './inventory-metrics';
+import { describeLoadFailure, LoadFailure } from './load-failure';
 import { firstValueFrom } from 'rxjs';
 
-/* ===========================================================================
+ /*
  * ConnectionManager
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Start-up and the connection banner: `hydrate()` (load everything from the
  *   backend), `retryConnection()` (try again after a failure), and the three
@@ -30,7 +32,7 @@ import { firstValueFrom } from 'rxjs';
  *   is missing — everything still works). That distinction was easy to break
  *   by accident when this code sat in the middle of the service, so it now
  *   lives on its own, told as one story from top to bottom.
- * =========================================================================== */
+  */
 
 /**
  * Everything ConnectionManager writes into. These are the very same signal
@@ -41,11 +43,28 @@ export interface ConnectionTargets {
   connecting: WritableSignal<boolean>;
   connected: WritableSignal<boolean>;
   connectionError: WritableSignal<string | null>;
+   /*
+   * The SAME failure as `connectionError`, classified.
+   *
+   * `connectionError` is a bare string, and a bare string has to carry both
+   * "what failed" and "what that means for your collection" at once. It gets
+   * the second one flatly wrong when the database is handing over every coin
+   * and only the RESPONSE cannot be built.
+   *
+   * This carries the stage ('connection' / 'database' / 'delivery'), the
+   * heading, the short status-bar label, whether the data is KNOWN to be
+   * safe, and one technical line. `connectionError` stays as the message of
+   * whatever is in here, so every existing reader keeps working unchanged.
+   * See load-failure.ts.
+    */
+  loadFailure: WritableSignal<LoadFailure | null>;
   categoryOptions: WritableSignal<string[]>;
   coinSets: WritableSignal<string[]>;
   transactions: WritableSignal<TransactionRecord[]>;
   denominations: WritableSignal<Denomination[]>;
   mintMarks: WritableSignal<MintMarkOption[]>;
+  /** Reference catalogues (Sear, RIC, Hendin, Krause) — migration 012. */
+  catalogs: WritableSignal<CatalogOption[]>;
   metalContents: WritableSignal<string[]>;
   /**
    * Spot prices, loaded back from the database at start-up so melt values
@@ -91,13 +110,34 @@ export class ConnectionManager {
     try {
       coins = await firstValueFrom(t.apiService.getCoins());
     } catch (error) {
+       /*
+       * NOT NECESSARILY A CONNECTION FAILURE.
+       *
+       * Do not log "Failed to connect to database" for every way the coin
+       * fetch can fail. The database can be perfectly healthy and have
+       * returned every coin while the server's `res.json()` fails to build a
+       * string that long -- and a message naming the database then sends the
+       * reader hunting a connection problem that does not exist.
+       *
+       * describeLoadFailure() reads the stage the server reports and produces
+       * wording that matches it — including, for a delivery failure, the one
+       * thing the user actually wants to know: the data is safe. It never
+       * upgrades "unknown" to "the database is down".
+        */
+      const failure = describeLoadFailure(error);
       const msg = describeHttpError(error);
-      t.logger.error('Failed to connect to database', msg);
+
+      // The log line names the stage too, so the next person reading app.log
+       // is not sent down the same blind alley.
+      t.logger.error(`Coin list load failed (${failure.stage}): ${failure.title}`, failure.detail ?? msg);
       t.connecting.set(false);
       t.connected.set(false);
-      t.connectionError.set(`Cannot connect to database: ${msg}`);
-      t.notificationService.showError('Cannot connect to database — please check that the backend server is running. Use "Retry connection" once it is back up.');
-      throw new Error(`Database connection failed: ${msg}`);
+      t.loadFailure.set(failure);
+      // Kept in step with `loadFailure` so existing readers (and tests) that
+      // only know about this signal still see a truthful sentence.
+      t.connectionError.set(failure.message);
+      t.notificationService.showError(failure.message);
+      throw new Error(`Coin list load failed (${failure.stage}): ${msg}`);
     }
 
     // Coins arrived, so the connection is healthy. Nothing below this line is
@@ -105,6 +145,9 @@ export class ConnectionManager {
     t.logger.info(`Successfully loaded ${coins.length} coins from database`);
     t.connected.set(true);
     t.connectionError.set(null);
+    // Cleared together with the string, always. Two signals describing one
+    // failure must never disagree about whether there still is one.
+    t.loadFailure.set(null);
     t.coins.replaceAll(coins);
 
     // ---- Phase 2: lookup tables (non-fatal, independent) ----
@@ -115,6 +158,11 @@ export class ConnectionManager {
     if (Array.isArray(loaded.transactions)) t.transactions.set(loaded.transactions);
     t.denominations.set(Array.isArray(loaded.denominations) ? loaded.denominations : []);
     t.mintMarks.set(Array.isArray(loaded.mintMarks) ? loaded.mintMarks : []);
+    // An empty list is a perfectly workable state: the editor's catalogue
+    // picker simply offers nothing but "(none)", the user can still type a
+    // reference number, and the grid shows that number on its own. Nothing
+    // here is allowed to treat a missing catalogue list as an error.
+    t.catalogs.set(Array.isArray(loaded.catalogs) ? loaded.catalogs : []);
     t.metalContents.set(
       Array.isArray(loaded.metalContents) ? [...new Set(loaded.metalContents)].sort() : []
     );
@@ -152,6 +200,7 @@ export class ConnectionManager {
     // Clear the old message so the banner shows "connecting" rather than a
     // stale error while we try again.
     this.target.connectionError.set(null);
+    this.target.loadFailure.set(null);
 
     try {
       await this.hydrate();
@@ -169,9 +218,9 @@ export class ConnectionManager {
    * Without it the app started every session with
    * { gold: 0, silver: 0, platinum: 0, copper: 0 }, so every melt value in the
    * grid read "—" until the user remembered to open Spot Prices and press
-   * Fetch. The owner's requirement is that melt auto-calculates from whatever
-   * the LAST RETRIEVED prices were — they do not have to be live, they just
-   * have to still be there. That is exactly what this does.
+       * Fetch. Melt must auto-calculate from whatever the LAST RETRIEVED
+       * prices were — they do not have to be live, they just have to still
+       * be there. That is exactly what this does.
    *
    * WHAT IT WILL NOT DO
    * It will not overwrite the defaults with nothing. `latest` is null when the
@@ -257,7 +306,13 @@ export class ConnectionManager {
       // so a dead price lookup must never stop the app from starting.
       // `allSettled` guarantees that: this entry can reject on its own and the
       // other six still arrive.
-      firstValueFrom(apiService.getLatestSpotPrices())
+      firstValueFrom(apiService.getLatestSpotPrices()),
+      // Catalogues (migration 012). APPENDED, not slotted in beside the
+      // other lookups, on purpose: the results below are unwrapped by
+      // POSITION, so inserting an entry in the middle would silently
+      // re-point `metalContents` at the mint marks and so on. Adding at the
+      // end cannot renumber anything that already works.
+      firstValueFrom(apiService.getCatalogs())
     ]);
 
     const failedLookups: string[] = [];
@@ -280,6 +335,7 @@ export class ConnectionManager {
       // Fallback is null, not a zeroed price set: null means "we were told
       // nothing", and applySpotPrices() reads that as "leave the defaults".
       spotPrices: unwrap(settled[6], 'spot prices', null as LatestSpotPrices | null),
+      catalogs: unwrap(settled[7], 'catalogues', [] as CatalogOption[]),
       failedLookups
     };
   }
@@ -306,6 +362,8 @@ interface LoadedLookups {
   denominations: Denomination[];
   mintMarks: MintMarkOption[];
   metalContents: string[];
+  /** Reference catalogues; an empty list is a usable state, not a failure. */
+  catalogs: CatalogOption[];
   /** Newest saved prices, or null when the table is empty or the call failed. */
   spotPrices: LatestSpotPrices | null;
   /** Friendly names of the lookups that failed, for the warning toast. */

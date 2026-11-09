@@ -1,10 +1,8 @@
 // Styles for the search/filter toolbar and the collapsible advanced filters.
-// Moved here from `styles/_layout.scss` when this markup left app.html.
 @use '../../styles/controls' as *;
 
-// The component host is not part of the original markup, so take it out of the
-// layout and let `.toolbar` / `.advanced-filters` sit directly in the app
-// shell's flex column exactly as they used to.
+// Take the component host out of the layout so `.toolbar` /
+// `.advanced-filters` sit directly in the app shell's flex column.
 :host { display: contents; }
 
 // ---- Toolbar ----
@@ -78,7 +76,7 @@
 }
 
 // ---- Print ----
-// Filtering controls are pointless on paper. (Moved from `_overlays.scss`.)
+// Filtering controls are pointless on paper.
 
 @media print {
   .toolbar, .advanced-filters { display: none !important; }

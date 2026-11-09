@@ -1,10 +1,9 @@
 // Styles for the editable field grid inside the detail sidebar.
-// Moved here from the old `styles/_detail-panel.scss` partial.
 @use '../../styles/controls' as *;
 @use '../../styles/field' as *;
 
-// Not part of the original markup — keep the host out of the layout so
-// `.detail-editor` and `.detail-notes` remain direct children of the panel.
+// Keep the host out of the layout so `.detail-editor` and `.detail-notes`
+// remain direct children of the panel.
 :host { display: contents; }
 
 // ---- Editor grid ----
@@ -33,23 +32,17 @@
 // ("Gold", "Copper-Nickel") and needs very little room; Composition holds free
 // text that the alloy inference fills with things like
 // "91.67% Gold, 8.33% Silver and Copper". Splitting the row evenly truncated
-// the long one while leaving a whole empty third beside it (a hidden spacer
-// element, now removed). `minmax(0, …)` on both tracks is what lets the input
-// actually shrink inside the grid rather than forcing the row wider.
+// the long one. `minmax(0, …)` on both tracks is what lets the input actually
+// shrink inside the grid rather than forcing the row wider.
 .detail-editor__row--metadata {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr);
 }
 
 // ---- Row 1: Year / Coin Type / Denomination / Mint mark ----
 //
-// Four controls on the line that used to hold three. The owner asked for Coin
-// Type to join Year on the first line, paid for by "slightly expand the width
-// of the details area and shrink the Denomination and Mint Mark entry areas".
-// The sidebar grew from 360px to 420px (see styles/_layout.scss).
-//
-// These are explicit pixel tracks rather than `1fr` columns plus per-field
-// max-widths, because the four fields have genuinely different needs and
-// sizing them as four independent rules is how they drift out of step:
+// Explicit pixel tracks rather than `1fr` columns plus per-field max-widths,
+// because the four fields have genuinely different needs and sizing them as
+// four independent rules is how they drift out of step:
 //
 //   64px  Year        — four digits; a range like "1916-1945" scrolls inside
 //                       the input, which is normal text-input behaviour.
@@ -57,13 +50,9 @@
 //                       free-text field here with no natural maximum.
 //   132px Denomination— sized from the ACTUAL lookup table, whose longest
 //                       active label is "2/6 (Half Crown)" (16 characters).
-//                       NOTE: this is the one place the owner's "shrink by
-//                       about 40%" could not be honoured — 40% off would be
-//                       ~63px and would clip that label to "2/6 (Half...".
-//                       The brief also says to keep it readable, and the two
-//                       instructions conflict; readability won.
+//                       Narrower than this clips it to "2/6 (Half...".
 //   68px  Mint mark   — labels are "", P, D, S, W, O, CC, C, Other plus the
-//                       "Other…" entry. This IS the ~40% cut (was ~105px).
+//                       "Other…" entry.
 //
 // The tighter column gap and select padding below buy back the handful of
 // pixels that keeps Coin Type usable at the 420px sidebar width.
@@ -87,6 +76,44 @@
   // The grid track above owns the width; a max-width here would fight it.
   max-width: none;
   min-width: 0;
+}
+
+// ---- The denomination type-ahead ----
+//
+// A search box stacked above the denomination <select>, inside the SAME 132px
+// track as before: `.detail-field` is a grid, so an extra child simply stacks,
+// and the row grows by one short input rather than the whole layout being
+// re-argued.
+//
+// It needs to be visibly a different KIND of control from the three inputs
+// beside it, because it is the only one on this line that does not edit the
+// coin — typing in it saves nothing. Hence the lighter weight, the smaller
+// text and the tint rather than the solid field background.
+.detail-field__search {
+  font-size: 0.68rem;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  background: #f6efe4;
+  color: #5c4935;
+
+  // The browser's own clear button on type="search". Keep it: clearing the
+  // filter in one click is the most common thing the user will want, and the
+  // alternative is selecting and deleting inside a 132px box.
+  &::-webkit-search-cancel-button {
+    cursor: pointer;
+  }
+}
+
+// The one-line explanation under the picker and under the custom box. It
+// carries information the control cannot show any other way — "your search
+// matched nothing so this is everything", "there are more than fit" and
+// "here is how this coin will read" — so it must stay legible rather than
+// become decoration.
+.detail-field__note {
+  font-size: 0.62rem;
+  font-weight: 500;
+  color: #8a7355;
+  line-height: 1.25;
 }
 
 // ---- Grade line ----
@@ -156,14 +183,11 @@
 .detail-field--cert-company {
   max-width: 200px;
 
-  // The input used to carry an inline `width: 7.5ch` (plus matching min/max),
-  // which clipped the final letter of "ANACS".
-  //
-  // Two things made 7.5ch too narrow: `ch` is the width of the digit "0",
-  // but grader names are UPPERCASE letters, which are wider; and the global
-  // `box-sizing: border-box` means that width had to cover the input's
-  // 7px horizontal padding and 1px border on each side as well as the text.
-  // 12ch leaves comfortable room for the longest grader name in use.
+  // 12ch, not the 7.5ch that looks right: `ch` is the width of the digit
+  // "0", but grader names are UPPERCASE letters, which are wider, and the
+  // global `box-sizing: border-box` means this width also has to cover the
+  // input's 7px horizontal padding and 1px border on each side. Anything
+  // tighter clips the final letter of "ANACS".
   input {
     width: 12ch;
     text-transform: uppercase;
@@ -172,6 +196,31 @@
 
 .detail-field--cert-number {
   max-width: 220px;
+}
+
+// ---- The catalogue reference ----
+// The picker holds names up to "Krause (KM)", so it needs a little more room
+// than a mint mark but nothing like the width of the cert number beside it.
+.detail-field--catalog {
+  max-width: 180px;
+}
+
+// SIZED TO THE DATA, NOT TO THE COLUMN. The real references are short: "1A",
+// "6819", "II.1 234", "RRC 44/5", eight characters at the outside. 11ch covers
+// that with room to spare once the input's 7px padding and 1px border on each
+// side are accounted for (global `box-sizing: border-box` means the width has
+// to pay for those).
+//
+// The COLUMN is NVARCHAR(50) and the input's maxlength is 50 to match. The
+// box being narrower than its maximum is the intended effect: it looks like
+// a reference field rather than a notes field, and it still accepts a long
+// one by scrolling.
+.detail-field--catalog-number {
+  max-width: 150px;
+
+  input {
+    width: 11ch;
+  }
 }
 
 .detail-field--pm-weight {
@@ -217,7 +266,6 @@
 
 // ---- Responsive ----
 // On a narrow screen the two/three-column field grid collapses to one column.
-// (Moved from `_overlays.scss`.)
 
 @media (max-width: 900px) {
   .detail-editor { grid-template-columns: 1fr; }

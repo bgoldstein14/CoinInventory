@@ -2,7 +2,7 @@
  * Tests that adding or removing a Set / Album reaches the DATABASE.
  *
  * THE BUG THESE EXIST FOR
- * -----------------------
+ *
  * `LookupManager.addCoinSet` and `removeCoinSet` used to update the in-memory
  * signal and stop there. A comment claimed that was deliberate — "a coin set
  * exists because some coin references it" — but the app has a CoinSets table,

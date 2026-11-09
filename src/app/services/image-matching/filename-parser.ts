@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * filename-parser.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   STAGE 1 for the image side: turning "1881-S Morgan Dollar obverse.jpg"
  *   into typed attributes. Public entry point is `parseFilename`, plus
@@ -40,7 +40,7 @@
  *       denomination-units.ts;
  *     - catalogue references are folded BEFORE bare digits are discarded,
  *       or the "6819" of "Sear 6819" would be gone before it could be joined.
- * =========================================================================== */
+  */
 
 import { ParsedImageAttributes } from '../../types/coin.model';
 import { findCatalogRefs, findEraDate, foldCatalogRefs } from './catalog-refs';
@@ -79,26 +79,20 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
   const tokens = tokenize(separated);
 
   /* -- IS THIS A PHOTOGRAPH OF ONE COIN AT ALL? --------------------------
-   * Moved to the TOP of the function (it used to sit further down, beside
-   * the other descriptive readers) because the denomination block below now
-   * depends on its answer.
+   * It has to run at the TOP of the function, because the denomination block
+   * below depends on its answer.
    *
-   * WHY. The owner confirmed that he writes face values with a space --
-   * "Yes, read them as face values" for "2 cent", "3 cent", "20 cent" -- and
-   * the hyphen in "20-cent" was previously the whole of the matcher's
-   * defence against this real filename:
+   * WHY. Face values are written with a space -- "2 cent", "3 cent",
+   * "20 cent" -- and reading those means the hyphen in "20-cent" can no
+   * longer be the whole of the matcher's defence against this real filename:
    *
    *     Stamp - 11 - 3 cent.jpg
    *
-   * Reading his spaced forms means that defence has to come from somewhere
-   * else, and this is the somewhere else: the detector reads the words that
-   * say what the thing IS ("stamp", "paper", "fractional", "bond", "note"),
-   * which is better evidence than punctuation ever was. A filename it has
-   * NOT cleared never gets the spaced reading. See the SPACED_CENT comment
-   * in denomination-units.ts for the full argument.
-   *
-   * Nothing else about this call changed, and the result is reported on the
-   * parsed attributes exactly as before. */
+   * The defence is here instead: the detector reads the words that say what
+   * the thing IS ("stamp", "paper", "fractional", "bond", "note"), which is
+   * better evidence than punctuation ever was. A filename it has NOT cleared
+   * never gets the spaced reading. See the SPACED_CENT comment in
+   * denomination-units.ts for the full argument. */
   const nonCoin = detectNonCoin(rawText);
 
   /* -- IS THIS PHOTOGRAPH ONE THE AUTOMATED IMPORT SHOULD TOUCH AT ALL? --
@@ -110,13 +104,9 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
    * REPORTED HERE, ENFORCED IN match-decider.ts. This is deliberately only a
    * READING of the name. It changes nothing about how the file is parsed,
    * scored or listed, and in particular it does NOT feed `allowSpacedCent`
-   * below the way `isNonCoin` does -- every existing parse comes out byte for
-   * byte as before. The owner's rule is about what the AUTOMATED DECISION may
-   * do with the photograph, never about the photograph itself:
-   *
-   *   "I never want a picture file to be off limits from choosing to attach
-   *    to a coin even if the descriptor has nothing relevant to the coin
-   *    itself."
+   * below the way `isNonCoin` does. The rule governs what the AUTOMATED
+   * DECISION may do with a photograph, never what the user may do: no
+   * picture file is ever off limits from being attached by hand.
    *
    * `rawText` is the BASENAME, which is what makes folder names irrelevant:
    * "Proofs/1870 Proof Set/Archive/IM000037.JPG" is judged on "IM000037"
@@ -138,21 +128,20 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
    *                               raw, because tokenizing deletes the very
    *                               sign that gives the number its meaning.
    *
-   * The words are read FIRST and handed to the unit-bound reader, which is
-   * the one ordering change this pair has ever needed. It is not a change of
-   * authority: a stated face value is still the better evidence and still
-   * wins whenever it survives. It is CONTEXT. "$20" in a name that says
-   * nothing else is a Double Eagle; "$50" in a name that already says
-   * "Morgan Dollar" is what the owner PAID, because a coin has exactly one
-   * face value and that name has already given it. Only the words can reveal
-   * that, so the dollar rule has to see them before it decides. The whole
-   * rule, and why it is true of coins rather than merely of this code, is in
-   * the DOLLAR_FACE_VALUES header in denomination-units.ts.
+   * The words are read FIRST and handed to the unit-bound reader. That is
+   * not a change of authority: a stated face value is still the better
+   * evidence and still wins whenever it survives. It is CONTEXT. "$20" in a
+   * name that says nothing else is a Double Eagle; "$50" in a name that
+   * already says "Morgan Dollar" is what the coin COST, because a coin has
+   * exactly one face value and that name has already given it. Only the words
+   * can reveal that, so the dollar rule has to see them before it decides.
+   * The whole rule is in the DOLLAR_FACE_VALUES header in
+   * denomination-units.ts.
    *
-   * `wordBased` stays null whenever the unit-bound reader answered, exactly
-   * as before: it is also what tells `extractCoinTypeTokens` below WHICH
-   * words to strike out as the denomination, and only the reader that
-   * actually supplied the answer may do that. */
+   * `wordBased` stays null whenever the unit-bound reader answered: it is
+   * also what tells `extractCoinTypeTokens` below WHICH words to strike out
+   * as the denomination, and only the reader that actually supplied the
+   * answer may do that. */
   const wordMatch = findDenomination(tokens);
 
   /* The face-value reader is told what the WORDS said, so it can tell a face
@@ -195,10 +184,9 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
    * The face-value reader sees "3-cent" and answers the vague 'three cent';
    * the word table sees "3 cent silver" and answers 'three cent silver'. The
    * two AGREE -- one is the general form of the other -- but only the second
-   * one names the coin, and the owner reported the consequence of preferring
-   * the first: his 1867 Three Cent NICKEL record kept being offered
-   * photographs of his 1867 Three Cent SILVER proof, because the vague key is
-   * compatible with either and so the denomination veto never fired.
+   * names the coin, and the vague key is compatible with a Three Cent NICKEL
+   * record too, so the denomination veto never fires and a 3CN record is
+   * offered photographs of a 3CS proof.
    *
    * So when the words give a SPECIFIC form of what the face value gave, the
    * words win. This is not the face value losing its authority -- the two
@@ -249,19 +237,17 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
    * only meaningful as the whole grade.
    *
    * A NAME THAT SAYS NOTHING ABOUT THE STRIKE ANSWERS 'business', NOT
-   * 'unknown'. This is the image half of the owner's rule: "The Proof
-   * descriptor should always be part of the image file name as well as part
-   * of the inventory description otherwise it's assumed the coin is a
-   * business strike." Since every real filename has SOME text, essentially
-   * every photograph now makes a positive statement about its strike -- and
-   * a quiet filename is therefore disqualified from a proof record by
+   * 'unknown'. This is the image half of the silence-is-a-statement rule in
+   * proof-strike.ts. Since every real filename has SOME text, essentially
+   * every photograph makes a positive statement about its strike -- and a
+   * quiet filename is therefore disqualified from a proof record by
    * match-vetoes.ts. That is deliberate; see the carve-out note in that file.
    *
    * NOTE FOR ANYONE WORRIED ABOUT THE "Early Proofs" FOLDER: directory names
    * never reach here. `baseName(imagePath)` at the top of this function keeps
    * every path component except the final filename out of the parser, so a
    * folder called "Early Proofs" cannot make its contents look like proofs.
-   * That is deliberate and there is a test for it. */
+   * There is a test for it. */
   const strike = detectStrike(rawText, grade);
 
   // -- coin type = whatever meaningful words are left ---------------------
@@ -323,16 +309,14 @@ export function toSignature(parsed: ParsedImageAttributes): Signature {
     tokens: parsed.tokens,
     /* `strike` is optional on the public ParsedImageAttributes (every field
      * added after the original shape is, so old callers keep compiling), but
-     * `parseFilename` always fills it in -- and since the owner's rule makes
-     * a quiet filename a BUSINESS strike, what it fills in is essentially
-     * never 'unknown'.
+     * `parseFilename` always fills it in -- and since a quiet filename is a
+     * BUSINESS strike, what it fills in is essentially never 'unknown'.
      *
      * The default stays 'unknown' all the same, and that is the one place it
      * is still the right answer. A hand-built attributes object that omits
      * the field has not stayed QUIET about the strike; it has no filename
      * behind it at all. 'unknown' disagrees with nothing, so such an object
-     * can never cause a veto -- which is what we want from a caller that
-     * never promised to fill the field in. */
+     * can never cause a veto. */
     strike: parsed.strike ?? 'unknown'
   };
 }

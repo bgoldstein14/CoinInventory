@@ -2,9 +2,7 @@
  * routes/coins/image-payload.ts — normalising whatever the client sent us for
  * "an image" into one predictable shape.
  *
- * ------------------------------------------------------------------
  * The problem this solves
- * ------------------------------------------------------------------
  * An image now has TWO pieces of information attached to it:
  *
  *   imageData  — a downscaled base64 data URL, which is what gets displayed
@@ -65,9 +63,16 @@ export const SOURCE_PATH_MAX_LENGTH = 400;
  * A bare string simply means "I have no idea where the original file is", so it
  * normalises to sourcePath: null — exactly the state of every pre-existing row.
  *
+ * NOTE that `sourcePath: null` coming out of here does NOT mean "write SQL
+ * NULL" on the update path. It means "unknown", and PUT /api/coins/:id treats
+ * unknown as "keep whatever the database already recorded for this image" —
+ * see replaceImages() in write-helpers.ts, and the data-loss bug it prevents.
+ * An explicit `sourcePath: null` in the request body is indistinguishable from
+ * an absent one here, on purpose: the shipped client sends an explicit null to
+ * mean "unknown", so reading it as "clear it" would re-open that bug.
+ *
  * Anything else (null, a number, an object with no usable imageData) returns
- * null and is skipped by the caller. Skipping rather than throwing matches the
- * previous behaviour of the insert loops, which did `if (!imageData) continue;`.
+ * null and is skipped by the caller rather than throwing.
  */
 export function normalizeImageEntry(entry: unknown): NormalizedImage | null {
   // ----- The compatibility path: a bare base64 string --------------------

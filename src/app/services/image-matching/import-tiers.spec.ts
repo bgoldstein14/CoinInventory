@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * import-tiers.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   That the three review tiers actually divide THIS COLLECTION the way the
  *   redesign claims they do, measured across the whole verbatim filename
@@ -10,24 +10,23 @@
  *   tolerance, both directions). This file covers the CONSEQUENCE: how much
  *   manual work is actually left.
  *
- * ---------------------------------------------------------------------------
  * THE MEASUREMENT, AND ITS HONEST LIMITS
- * ---------------------------------------------------------------------------
+ *
  *   There is no copy of the user's 200-odd coin records in the repository, so
  *   the inventory here is DERIVED from the filenames themselves: one coin per
  *   distinct (year, denomination, coin type) the parser reads out of the
  *   corpus, carrying the mint mark / grade / cert details of the first
  *   filename that produced it.
  *
- *   That is a fair stand-in and it reproduces both of the ambiguous situations
- *   the owner described, because the corpus really does contain several shots
- *   of one coin and several coins that differ only in the details:
+ *   That is a fair stand-in and it reproduces both of the ambiguous
+ *   situations that matter, because the corpus really does contain several
+ *   shots of one coin and several coins that differ only in the details:
  *     - multiple images for one coin (six "1913 50-Cent Canadian" shots),
  *     - images whose extra attributes disagree with the record they match.
  *
  *   What it is NOT is a prediction of the exact split on all 2,140 files. Read
  *   the printed table as "this is the shape", not "this is the forecast".
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord, ImportTier } from '../../types/coin.model';
@@ -192,9 +191,9 @@ describe('import tiers - how the real corpus divides', () => {
   it('prints why each coin-like file was skipped, so the cost is visible', () => {
     /* The useful operational number. Most tier-3 rows are group shots and
      * stamps, which is as it should be -- but some are real single-coin photos
-     * that failed the four-attribute bar, and the owner needs to see how many
-     * and why, because the fix for those is in the DATA (fill in the record's
-     * grade, or rename the file) and not in the matcher. */
+     * that failed the four-attribute bar, and the count matters, because the
+     * fix for those is in the DATA (fill in the record's grade, or rename the
+     * file) and not in the matcher. */
     /* THREE BUCKETS, NOT TWO, SINCE THE EXCLUSION RULE LANDED.
      *
      * A counterfeit or multi-coin photo is `excludedFromAutoImport` but is
@@ -266,10 +265,10 @@ describe('import tiers - how the real corpus divides', () => {
 });
 
 /* =========================================================================
- * THE AMBIGUOUS CASES THE OWNER NAMED
+ * THE AMBIGUOUS CASES
  * =======================================================================
  * The measurement above runs against an inventory with no duplicates in it,
- * which is why tier 2 barely fires there. The two situations the owner
+ * which is why tier 2 barely fires there. Both ambiguous situations
  * actually described both need near-identical records to be PRESENT, in the
  * same way real-filenames.spec.ts stocks a "baited" inventory to prove the
  * non-coin veto is doing the work.
@@ -323,14 +322,14 @@ describe('import tiers - the two ambiguous situations', () => {
   /* ---------------------------------------------------------------------
    * THE NOTATION MISMATCH, END TO END
    * ---------------------------------------------------------------------
-   * The owner: "the grade might slightly differ and still be correct like
-   * 63CAM or 63 CAMEO or 63PL of 63 PL".
+   * A grade may slightly differ and still be correct -- 63CAM against
+   * 63 CAMEO, 63PL against 63 PL.
    *
    * WHY THIS IS NOT VISIBLE IN THE CENSUS ABOVE
    *   The census builds its inventory OUT OF THE FILENAMES, so both sides of
    *   every comparison are spelled by the same parser and a notation mismatch
-   *   is impossible by construction. The owner's real records are typed by
-   *   hand and his filenames are not, which is exactly where the two spellings
+   *   is impossible by construction. Real records are typed by hand and
+   *   filenames are not, which is exactly where the two spellings
    *   come apart. These cases supply the mismatch the census cannot.
    * ------------------------------------------------------------------- */
   /** Two coins differing only by mint mark, graded in the VERBOSE notation. */

@@ -12,18 +12,15 @@ import {
   LatestSpotPrices,
   LogEntry
 } from '../types/coin.model';
+import { CatalogOption } from '../types/catalog-reference';
+import { IssuerRecord, NewIssuer, ReferenceUsageCounts } from '../types/reference-data.model';
 import { CoinImageRecord } from '../types/coin-image.model';
 import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
 
-// ============================================================================
-// Shared helpers
-// ============================================================================
-// These used to be defined here. They now live in ./http-utils so that
-// services which only need a helper (e.g. LoggingService) can import it
-// without dragging ApiService -- and therefore Angular's HttpClient/XHR
-// backend -- into the module graph. Re-exported so existing imports of
-// `describeHttpError` / `resolveApiBaseUrl` / `retryTransientFailures` from
-// './api.service' keep working unchanged.
+// Shared HTTP helpers live in ./http-utils so that a service needing only a
+// helper (e.g. LoggingService) can import it without dragging ApiService --
+// and therefore Angular's HttpClient/XHR backend -- into the module graph.
+// Re-exported here so imports from './api.service' keep working.
 export { describeHttpError, resolveApiBaseUrl, retryTransientFailures, isHttpErrorResponse, isRetryableError } from './http-utils';
 
 /**
@@ -57,23 +54,31 @@ export class ApiService {
 
   constructor(private http: HttpClient) {}
 
-  // ========================================
-  // Coin Operations
-  // ========================================
+  // ---- Coin Operations ----
 
   /**
    * Fetch all coins from the inventory.
-   * @returns Observable of coin array
+   *
+   * *** THE RETURNED RECORDS HAVE NO `imagePaths` KEY. ***
+   *
+   * Not an empty array — the key is absent. `GET /api/coins` must not inline
+   * photographs: on a collection of ~100 coins the concatenated base64 pushes
+   * `JSON.stringify` past V8's maximum string length and it throws
+   * `RangeError: Invalid string length`, so the whole response fails with a
+   * 500 that looks to the client like a dead database.
+   *
+   * Every coin still carries `imageCount`, which answers "does this coin have
+   * photographs, and how many" for free. The photographs themselves come from
+   * `getCoinImages()` below, one coin at a time, and the grid's row
+   * thumbnails from `coinThumbnailUrl()`.
+   *
+   * @returns Observable of coin array, with image counts but no image data
    */
   getCoins(): Observable<CoinRecord[]> {
     return this.http.get<CoinRecord[]>(`${this.baseUrl}/api/coins`);
   }
 
-  /**
-   * Fetch a single coin by ID.
-   * @param id - The coin's unique identifier
-   * @returns Observable of the coin record
-   */
+  /** Fetch a single coin by ID. */
   getCoin(id: string): Observable<CoinRecord> {
     return this.http.get<CoinRecord>(`${this.baseUrl}/api/coins/${id}`);
   }
@@ -81,8 +86,6 @@ export class ApiService {
   /**
    * Create a new coin in the inventory.
    * Retries automatically on network/5xx failures (see retryTransientFailures).
-   * @param coin - Partial coin record with required fields
-   * @returns Observable with the newly created coin's ID
    */
   createCoin(coin: Partial<CoinRecord>): Observable<{ id: string }> {
     return this.http
@@ -99,10 +102,6 @@ export class ApiService {
    * is responsible for computing that minimal diff.
    *
    * Retries automatically on network/5xx failures.
-   *
-   * @param id - The coin's unique identifier
-   * @param coin - Partial coin record containing ONLY changed fields
-   * @returns Observable that completes when update is done
    */
   updateCoin(id: string, coin: Partial<CoinRecord>): Observable<void> {
     return this.http
@@ -113,8 +112,6 @@ export class ApiService {
   /**
    * Delete a coin from the inventory.
    * Retries automatically on network/5xx failures.
-   * @param id - The coin's unique identifier
-   * @returns Observable that completes when deletion is done
    */
   deleteCoin(id: string): Observable<void> {
     return this.http
@@ -122,9 +119,7 @@ export class ApiService {
       .pipe(retryTransientFailures());
   }
 
-  // ========================================
-  // Coin Image Operations (and the ORIGINAL file behind each image)
-  // ========================================
+  // ---- Coin Image Operations (and the ORIGINAL file behind each image) ----
 
   /**
    * Fetch the full image records for ONE coin: the displayable base64 data
@@ -135,13 +130,45 @@ export class ApiService {
    * can be asked to omit image payloads, so this is the endpoint that fills in
    * the detail for the single coin the user is looking at.
    *
-   * @param coinId - The coin's unique identifier
    * @returns Observable of the coin's images, in display order
    */
   getCoinImages(coinId: string): Observable<CoinImageRecord[]> {
     return this.http.get<CoinImageRecord[]>(
       `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/images`
     );
+  }
+
+  /**
+   * The URL of ONE coin's main photograph, as binary image bytes, for the
+   * `src` of a grid row thumbnail.
+   *
+   * *** WHY A URL AND NOT AN OBSERVABLE ***
+   *
+   * Everything else here fetches data for TypeScript to hold. This returns a
+   * string for the BROWSER to fetch, and that difference is the whole point:
+   *
+   *   - The grid renders these with `loading="lazy"`, so rows below the fold
+   *     cost nothing until the user scrolls to them.
+   *   - The browser caches each one, so scrolling back up costs a 304 with
+   *     an empty body (the server sends `Cache-Control: no-cache` plus an
+   *     ETag, so a photograph the user just changed still updates at once).
+   *   - Nothing ever concatenates them. A JSON endpoint returning one
+   *     thumbnail per coin would rebuild the oversized string that `getCoins`
+   *     above exists to avoid; one image per HTTP response cannot, at any
+   *     collection size.
+   *
+   * CALL IT ONLY FOR COINS THAT HAVE PHOTOGRAPHS. `imageCount` comes free on
+   * every coin from `getCoins()`, so the grid renders no `<img>` at all for a
+   * coin with none and makes no request. The endpoint answers 404 if asked
+   * anyway, which is harmless but pointless.
+   *
+   * The id is URL-encoded: coin ids are free text and a `/` or `?` in one
+   * would otherwise change which endpoint is being addressed.
+   *
+   * @returns An absolute, same-origin URL safe to put in `src`
+   */
+  coinThumbnailUrl(coinId: string): string {
+    return `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/thumbnail`;
   }
 
   /**
@@ -165,6 +192,37 @@ export class ApiService {
     return this.http.post<{ results: Record<string, boolean> }>(
       `${this.baseUrl}/api/images/exists`,
       { paths }
+    );
+  }
+
+  /**
+   * Ask which ORIGINAL files are already attached to each of a list of coins,
+   * in ONE round trip.
+   *
+   * WHY THIS EXISTS: the batch image import needs to tell a photo it has
+   * already stored from one it has not, and the only thing that identifies a
+   * source file is `CoinImages.SourcePath`. That value is not available in
+   * the browser — `CoinRecord.imagePaths` carries the downscaled `data:` URLs
+   * and nothing else, deliberately (see services/image-source-paths.ts).
+   * Without this endpoint, re-importing a folder offers every already-attached
+   * photo again.
+   *
+   * WHY NOT `getCoinImages()` ABOVE: that one is per coin, and a review screen
+   * covers ~112 of them. 112 requests to decide what to skip would cost more
+   * than the duplicate import did.
+   *
+   * The response deliberately carries NO `imageData`. Those base64 blobs are
+   * the bulk of the database, and this question is about file names.
+   *
+   * @param coinIds - Coins to ask about (max 500; the server rejects more)
+   * @returns Observable of `{ results: { [coinId]: string[] } }`, with an
+   *          entry for every id asked about — an empty array means "asked,
+   *          nothing attached", which is not the same as a missing key.
+   */
+  getCoinImageSourcePaths(coinIds: string[]): Observable<{ results: Record<string, string[]> }> {
+    return this.http.post<{ results: Record<string, string[]> }>(
+      `${this.baseUrl}/api/coins/image-source-paths`,
+      { coinIds }
     );
   }
 
@@ -198,163 +256,187 @@ export class ApiService {
     return `${this.baseUrl}/api/images/file?path=${encodeURIComponent(sourcePath)}`;
   }
 
-  // ========================================
-  // Denomination Operations
-  // ========================================
+  // ---- Denomination Operations ----
 
-  /**
-   * Fetch all available denominations (Quarter, Half Dollar, etc.).
-   * @returns Observable of denomination array
-   */
+  /** Fetch all available denominations (Quarter, Half Dollar, etc.). */
   getDenominations(): Observable<Denomination[]> {
     return this.http.get<Denomination[]>(`${this.baseUrl}/api/denominations`);
   }
 
-  /**
-   * Create a new denomination.
-   * @param d - Partial denomination with required fields
-   * @returns Observable with the newly created denomination
-   */
+  /** Create a new denomination. */
   createDenomination(d: Partial<Denomination>): Observable<Denomination> {
     return this.http.post<Denomination>(`${this.baseUrl}/api/denominations`, d);
   }
 
-  /**
-   * Update an existing denomination.
-   * @param id - The denomination's ID
-   * @param d - Partial denomination with fields to update
-   * @returns Observable that completes when update is done
-   */
+  /** Update an existing denomination. */
   updateDenomination(id: number, d: Partial<Denomination>): Observable<void> {
     return this.http.put<void>(`${this.baseUrl}/api/denominations/${id}`, d);
   }
 
-  /**
-   * Delete a denomination.
-   * @param id - The denomination's ID
-   * @returns Observable that completes when deletion is done
-   */
+  /** Delete a denomination. */
   deleteDenomination(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/denominations/${id}`);
   }
 
-  // ========================================
-  // Mint Mark Operations
+  // ---- Issuer Operations (migration 011, design §4.5a) ----
+  // Who struck the coin. These are read ONLY by the reference-data
+  // maintenance screen, which is why there is no `issuers` signal on
+  // InventoryService to go with them: 61 rows with their usage counts are
+  // not worth fetching at startup for the large majority of sessions that
+  // never open Settings. The screen loads them when it opens and drops them
+  // when it closes.
   // ========================================
 
   /**
-   * Fetch all available mint marks (D, S, P, W, etc.).
-   * @returns Observable of mint mark array
+   * Fetch the ACTIVE issuers, each with its denomination and coin counts.
+   * @returns Observable of issuer array, in picker order
    */
+  getIssuers(): Observable<IssuerRecord[]> {
+    return this.http.get<IssuerRecord[]>(`${this.baseUrl}/api/issuers`);
+  }
+
+  /**
+   * Create an issuer the seed missed.
+   *
+   * The server answers 409 for a duplicate name rather than letting
+   * UQ_Issuers_Name turn into a 500, and 400 for an ISO code that is not
+   * exactly two letters. Both are expected answers, not faults.
+   */
+  createIssuer(issuer: NewIssuer): Observable<IssuerRecord> {
+    return this.http.post<IssuerRecord>(`${this.baseUrl}/api/issuers`, issuer);
+  }
+
+  /**
+   * Edit an issuer IN PLACE, keeping its id.
+   *
+   * Denominations reference an issuer by id, so remove-and-re-add — which is
+   * all the text-keyed lookups offer — would orphan every denomination filed
+   * under it.
+   */
+  updateIssuer(id: number, issuer: NewIssuer): Observable<IssuerRecord> {
+    return this.http.put<IssuerRecord>(`${this.baseUrl}/api/issuers/${id}`, issuer);
+  }
+
+  /**
+   * Remove an issuer. Soft on the server, and REFUSED with a 409 while
+   * denominations still point at it — see the long note on the handler in
+   * server/routes/lookups/issuers.ts for why that one case refuses instead
+   * of warning.
+   */
+  deleteIssuer(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/api/issuers/${id}`);
+  }
+
+  /**
+   * How many coins use each entry of each reference list.
+   *
+   * One round trip for all five types. Counted in SQL rather than from the
+   * loaded coins because the number shown beside Remove has to be the
+   * number of rows Remove will touch, and Remove is a server-side UPDATE —
+   * so both have to come from the same place or they can disagree.
+   */
+  getReferenceUsage(): Observable<ReferenceUsageCounts> {
+    return this.http.get<ReferenceUsageCounts>(`${this.baseUrl}/api/reference-usage`);
+  }
+
+  // ---- Catalogue Operations ----
+  // The reference catalogues a coin can be attributed to -- Sear, RIC,
+  // Hendin, Krause. Identical in shape to the denomination and mint-mark
+  // calls above and below, on purpose: it is the same kind of lookup table,
+  // maintained from the same kind of screen, with the same soft delete.
+  // ========================================
+
+  /** Fetch the ACTIVE catalogues, in seeded order. */
+  getCatalogs(): Observable<CatalogOption[]> {
+    return this.http.get<CatalogOption[]>(`${this.baseUrl}/api/catalogs`);
+  }
+
+  /**
+   * Create a new catalogue the seed did not include.
+   * @param c - Partial catalogue; `name` is required
+   */
+  createCatalog(c: Partial<CatalogOption>): Observable<CatalogOption> {
+    return this.http.post<CatalogOption>(`${this.baseUrl}/api/catalogs`, c);
+  }
+
+  /** Rename a catalogue (or change where it sits in the picker). */
+  updateCatalog(id: number, c: Partial<CatalogOption>): Observable<void> {
+    return this.http.put<void>(`${this.baseUrl}/api/catalogs/${id}`, c);
+  }
+
+  /**
+   * Remove a catalogue. SOFT delete on the server (IsActive = 0), so coins
+   * already attributed to it keep reading "Sear 6819" and a mistake is
+   * recoverable by reactivating the row.
+   */
+  deleteCatalog(id: number): Observable<void> {
+    return this.http.delete<void>(`${this.baseUrl}/api/catalogs/${id}`);
+  }
+
+  // ---- Mint Mark Operations ----
+
+  /** Fetch all available mint marks (D, S, P, W, etc.). */
   getMintMarks(): Observable<MintMarkOption[]> {
     return this.http.get<MintMarkOption[]>(`${this.baseUrl}/api/mintmarks`);
   }
 
-  /**
-   * Create a new mint mark.
-   * @param m - Partial mint mark with required fields
-   * @returns Observable with the newly created mint mark
-   */
+  /** Create a new mint mark. */
   createMintMark(m: Partial<MintMarkOption>): Observable<MintMarkOption> {
     return this.http.post<MintMarkOption>(`${this.baseUrl}/api/mintmarks`, m);
   }
 
-  /**
-   * Update an existing mint mark.
-   * @param id - The mint mark's ID
-   * @param m - Partial mint mark with fields to update
-   * @returns Observable that completes when update is done
-   */
+  /** Update an existing mint mark. */
   updateMintMark(id: number, m: Partial<MintMarkOption>): Observable<void> {
     return this.http.put<void>(`${this.baseUrl}/api/mintmarks/${id}`, m);
   }
 
-  /**
-   * Delete a mint mark.
-   * @param id - The mint mark's ID
-   * @returns Observable that completes when deletion is done
-   */
+  /** Delete a mint mark. */
   deleteMintMark(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/mintmarks/${id}`);
   }
 
-  // ========================================
-  // Category Operations
-  // ========================================
+  // ---- Category Operations ----
 
-  /**
-   * Fetch all available categories.
-   * @returns Observable of category name array
-   */
+  /** Fetch all available categories. */
   getCategories(): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseUrl}/api/categories`);
   }
 
-  /**
-   * Fetch all canonical metal content values from the database.
-   * @returns Observable of metal content name array
-   */
+  /** Fetch all canonical metal content values from the database. */
   getMetalContents(): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseUrl}/api/metalcontents`);
   }
 
-  /**
-   * Create a new category.
-   * @param name - Category name
-   * @returns Observable that completes when creation is done
-   */
+  /** Create a new category. */
   createCategory(name: string): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/categories`, { name });
   }
 
-  /**
-   * Delete a category.
-   * @param name - Category name
-   * @returns Observable that completes when deletion is done
-   */
+  /** Delete a category. */
   deleteCategory(name: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/categories/${name}`);
   }
 
-  // ========================================
-  // Coin Set Operations
-  // ========================================
+  // ---- Coin Set Operations ----
 
-  /**
-   * Fetch all available coin sets.
-   * @returns Observable of coin set name array
-   */
+  /** Fetch all available coin sets. */
   getCoinSets(): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseUrl}/api/coin-sets`);
   }
 
-  /**
-   * Create a new coin set.
-   * @param name - Coin set name
-   * @returns Observable that completes when creation is done
-   */
+  /** Create a new coin set. */
   createCoinSet(name: string): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/coin-sets`, { name });
   }
 
-  /**
-   * Delete a coin set.
-   * @param name - Coin set name
-   * @returns Observable that completes when deletion is done
-   */
+  /** Delete a coin set. */
   deleteCoinSet(name: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/coin-sets/${name}`);
   }
 
-  // ========================================
-  // Transaction Operations
-  // ========================================
+  // ---- Transaction Operations ----
 
-  /**
-   * Fetch transactions, optionally filtered by coin ID.
-   * @param coinId - Optional coin ID to filter transactions
-   * @returns Observable of transaction array
-   */
+  /** Fetch transactions, optionally filtered by coin ID. */
   getTransactions(coinId?: string): Observable<TransactionRecord[]> {
     const url = coinId
       ? `${this.baseUrl}/api/transactions?coinId=${coinId}`
@@ -362,32 +444,21 @@ export class ApiService {
     return this.http.get<TransactionRecord[]>(url);
   }
 
-  /**
-   * Create a new transaction record.
-   * @param t - Partial transaction with required fields
-   * @returns Observable that completes when creation is done
-   */
+  /** Create a new transaction record. */
   createTransaction(t: Partial<TransactionRecord>): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/transactions`, t);
   }
 
-  /**
-   * Delete a transaction.
-   * @param id - The transaction's unique identifier
-   * @returns Observable that completes when deletion is done
-   */
+  /** Delete a transaction. */
   deleteTransaction(id: string): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/transactions/${id}`);
   }
 
-  // ========================================
-  // Spot Price Operations
-  // ========================================
+  // ---- Spot Price Operations ----
 
   /**
    * Fetch current spot prices from external API.
    * This triggers the backend to read live COMEX/NYMEX futures prices.
-   * @returns Observable with spot price result
    */
   fetchSpotPrices(): Observable<SpotPriceResult> {
     return this.http.get<SpotPriceResult>(`${this.baseUrl}/api/spot-prices/fetch`);
@@ -432,23 +503,17 @@ export class ApiService {
     return this.http.post<void>(`${this.baseUrl}/api/spot-prices`, prices);
   }
 
-  // ========================================
-  // Logging Operations
-  // ========================================
+  // ---- Logging Operations ----
 
   /**
    * Send a log entry to the backend.
    * Used by LoggingService to persist frontend logs.
-   * @param entry - Partial log entry with required fields
-   * @returns Observable that completes when log is saved
    */
   postLog(entry: Partial<LogEntry>): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/log`, entry);
   }
 
-  // ========================================
-  // Health Check
-  // ========================================
+  // ---- Health Check ----
 
   /**
    * Check if the backend API is alive.
@@ -476,9 +541,7 @@ export class ApiService {
     );
   }
 
-  // ========================================
-  // App Info
-  // ========================================
+  // ---- App Info ----
 
   /**
    * Ask the backend which folder the app itself is installed in, on the machine
@@ -492,13 +555,12 @@ export class ApiService {
    * import screen has to ask the user for the front half of the path. (The full
    * story is in services/image-import/source-path.ts.)
    *
-   * That box used to be prefilled with a hardcoded UNC path, which was right on
-   * the developer's workstation and wrong on the host, and then with nothing at
-   * all. It is now prefilled with this endpoint's answer: the app's own folder
-   * is not where the photos are, but it IS a real path on the right machine with
-   * the right drive letter, so the user has something correct to edit instead of
-   * an empty box. Once they edit it, their choice is remembered and this value
-   * is never consulted again.
+   * The app's own folder is not where the photos are, but it IS a real path
+   * on the right machine with the right drive letter, so it is used to
+   * prefill that box: the user has something correct to edit instead of an
+   * empty one. Once they edit it, their choice is remembered and this value
+   * is never consulted again. Do not hardcode a default here -- anything
+   * hardcoded is right on one workstation and wrong on the host.
    *
    * *** WHY THIS OBSERVABLE NEVER ERRORS ***
    *

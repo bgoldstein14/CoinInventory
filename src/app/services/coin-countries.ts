@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * coin-countries.ts — WHICH COUNTRY IS THIS, AND WHAT IS ITS DENOMINATION?
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Two readings taken from a Quicken security name:
  *
@@ -10,39 +10,31 @@
  *   Both return '' when they cannot tell, and the caller is expected to leave
  *   the field alone rather than invent something.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS EXISTS
- * ---------------------------------------------------------------------------
- * The QIF parser used to hard-code `country: 'United States'` for every row,
- * and its denomination table only understood US face values ("$20", "50c",
- * "Dollar"). That is fine for 43 of the 44 coins in this collection and wrong
- * for the 44th:
+ * ---- WHY THIS EXISTS ----
+ * Without it the QIF parser hard-codes `country: 'United States'` and its
+ * denomination table understands only US face values ("$20", "50c",
+ * "Dollar"). A name like
  *
  *     Y1969 Peru 100 Soles - NGC MS64
  *
- * It parsed with a Year and nothing else, failed the 2-of-3 completeness rule
- * (Year / Coin Type / Denomination), and landed in the exceptions list. With
- * the country and the denomination both read correctly it now imports on two
- * of three, with Coin Type legitimately blank.
+ * then parses with a Year and nothing else, fails the 2-of-3 completeness
+ * rule (Year / Coin Type / Denomination), and lands in the exceptions list.
+ * With the country and the denomination both read it imports on two of
+ * three, with Coin Type legitimately blank.
  *
- * ---------------------------------------------------------------------------
- * WHY NOT REUSE image-matching/denomination-units.ts
- * ---------------------------------------------------------------------------
- * That file was read first, and it is doing a genuinely different job. It
- * reads US face values out of PHOTO FILENAMES, where its governing rule is
- * "a bare number means nothing, a number bound to a unit means a lot" -- the
- * unit being "$", the cent sign, or a hyphen welding a digit to the word
- * "cent". Its vocabulary is US-only by design and it is forbidden from ever
- * reading a bare digit.
+ * ---- WHY NOT REUSE image-matching/denomination-units.ts ----
+ * It is doing a genuinely different job. It reads US face values out of PHOTO
+ * FILENAMES, where its governing rule is "a bare number means nothing, a
+ * number bound to a unit means a lot" -- the unit being "$", the cent sign,
+ * or a hyphen welding a digit to the word "cent". Its vocabulary is US-only
+ * by design and it is forbidden from ever reading a bare digit.
  *
  * This file keeps the same *principle* -- a number is only a denomination
  * when it is bound to a currency unit -- but applies it to a world-coinage
  * vocabulary that file does not have and should not grow. Nothing is
  * duplicated: there is no overlap between "100 Soles" and "$20".
  *
- * ---------------------------------------------------------------------------
- * THE CONSERVATISM RULE, APPLIED TO CURRENCY UNITS
- * ---------------------------------------------------------------------------
+ * ---- THE CONSERVATISM RULE, APPLIED TO CURRENCY UNITS ----
  * Some currency units name their country unambiguously. "Soles" is Peru;
  * nowhere else has ever struck a Sol. Those units are allowed to IMPLY a
  * country even when the name never says it.
@@ -54,7 +46,7 @@
  * outright. Guessing "Mexico" for an Argentine coin would quietly attach the
  * wrong melt reference to it, which is the failure mode this whole project
  * tries to avoid.
- * =========================================================================== */
+  */
 
 /** A country the parser can recognise by name. */
 interface CountryEntry {
@@ -68,7 +60,7 @@ interface CountryEntry {
    * The two-letter ISO code this country is ALSO known by in this app.
    *
    * THE CODE-VERSUS-NAME MISMATCH, IN ONE PLACE
-   * -------------------------------------------
+   *
    * The app stores a country two different ways depending on which table you
    * are looking at, and nothing joins them without this field:
    *
@@ -99,9 +91,9 @@ interface CountryEntry {
   patterns: readonly RegExp[];
 }
 
-/* ---------------------------------------------------------------------------
+ /*
  * THE COUNTRY VOCABULARY
- * ---------------------------------------------------------------------------
+ *
  * Deliberately broad -- this is a gold collection and world gold turns up in
  * all of these -- but every entry was checked against one question: COULD
  * THIS WORD APPEAR IN A US COIN'S NAME? Several nearly could, and those are
@@ -119,7 +111,7 @@ interface CountryEntry {
  *   "Guinea"   -> OMITTED ENTIRELY. The Guinea is an English GOLD COIN, and
  *                 a name reading "1760 Guinea" means the coin, not the
  *                 African republic.
- * ------------------------------------------------------------------------- */
+  */
 const COUNTRIES: readonly CountryEntry[] = [
   // --- The Americas ---
   { canonical: 'United States', code: 'US', patterns: [/\bunited\s+states\b/i, /\bu\.?s\.?a\.?\b/i, /\bamerican?\b/i] },
@@ -208,9 +200,9 @@ const COUNTRIES: readonly CountryEntry[] = [
   { canonical: 'New Zealand', code: 'NZ', patterns: [/\bnew\s+zealand\b/i] }
 ];
 
-/* ---------------------------------------------------------------------------
+ /*
  * THE CURRENCY-UNIT VOCABULARY
- * ---------------------------------------------------------------------------
+ *
  * `singular`/`plural` are the spellings accepted in the text. `canonical` is
  * what gets written into the Denomination field, so "100 soles" and
  * "100 SOLES" both normalise to "100 Soles".
@@ -219,7 +211,7 @@ const COUNTRIES: readonly CountryEntry[] = [
  * set ONLY where the unit has exactly one issuer in practice. Anything shared
  * -- Peso, Franc, Mark, Pound, Dinar, Krona, Rupee, Escudo, Lira, Ducat,
  * Real, Crown, Dollar -- deliberately leaves it undefined.
- * ------------------------------------------------------------------------- */
+  */
 interface CurrencyUnit {
   canonical: string;
   singular: string;
@@ -285,7 +277,7 @@ const CURRENCY_UNITS: readonly CurrencyUnit[] = [
   { canonical: 'Ducats', singular: 'ducat', plural: 'ducats' },
   /* The euro has no impliesCountry, deliberately. Twenty-odd states issue
    * one, so "50 Euro" proves the denomination and nothing about the mint --
-   * exactly the situation the francs and pesos above are in. The owner's
+   * exactly the situation the francs and pesos above are in. A name like
    * "2025 Italy 50 Euro 1/2 oz. Gold Proof" names its country anyway, and
    * detectCountry reads that from the word "Italy" without help from here. */
   { canonical: 'Euro', singular: 'euro', plural: 'euro', aliases: ['euros'] }

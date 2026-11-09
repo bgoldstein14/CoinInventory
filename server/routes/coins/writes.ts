@@ -8,54 +8,38 @@
  *   PUT    /:id   -> PUT    /api/coins/:id   partial update of a coin
  *   DELETE /:id   -> DELETE /api/coins/:id   delete a coin (cascades)
  *
- * ------------------------------------------------------------------
- * Two things in here are load-bearing; please read before editing.
- * ------------------------------------------------------------------
+ * Three things in here are load-bearing; please read before editing.
  *
  * 1. Every handler runs its database work inside `withDb(async (db) => ...)`.
- *    withDb hands us a healthy pool and, if the *connection* dies mid-call,
+ *    withDb hands over a healthy pool and, if the *connection* dies mid-call,
  *    rebuilds the pool and retries exactly once. It does NOT retry ordinary
- *    query errors.
- *
- *    This replaced the old pattern of `await getPool()` plus `await resetPool()`
- *    in every catch block. resetPool() destroys the pool shared by the entire
- *    process, so a single validation error or constraint violation used to
- *    break every other request that was in flight at the time. There must be
- *    no resetPool() calls in this file.
+ *    query errors. There must be no resetPool() calls in this file:
+ *    resetPool() destroys the pool shared by the entire process, so one
+ *    validation error or constraint violation would break every other request
+ *    in flight. See db/index.ts.
  *
  * 2. PUT /:id builds its UPDATE statement from ONLY the keys actually present
- *    in the request body. A previous refactor wrote every column on every save
- *    and blanked out the user's data. Do not "simplify" that filter.
+ *    in the request body. Writing every column on every save blanks out the
+ *    user's data. Do not "simplify" that filter.
  *
- * ------------------------------------------------------------------
- * `imagePaths` and the new SourcePath column — what was decided and why
- * ------------------------------------------------------------------
- * `imagePaths` is a historical misnomer: despite the name it holds the base64
- * IMAGE DATA, not paths. Images now also have a `sourcePath` (where the
- * original full-resolution file lives on the host machine), and the question
- * was how to get that through this endpoint.
+ * 3. PUT /:id REPLACES the image set, but does NOT throw away the SourcePath
+ *    values the database already held. An incoming entry that supplies no path
+ *    inherits the one recorded for the same image data; a supplied path wins.
+ *    Without that, re-ordering or deleting a single photo — both of which
+ *    re-send the whole array, usually as bare strings — wipes the recorded
+ *    original-file location of every other photo on the coin. The rescue lives
+ *    in replaceImages() in write-helpers.ts, which also documents the rules
+ *    (absent vs explicit null, duplicate image data).
  *
- * DECISION: `imagePaths` stays a single array and is now POLYMORPHIC — each
- * element may be either the bare base64 string it has always been, or an
- * object `{ imageData, sourcePath }`. It is NOT split into a second parallel
- * `imageSourcePaths` array.
- *
- * Why:
- *   - Nothing breaks. A client that keeps sending strings behaves exactly as
- *     before, which matters because three other pieces of work depend on this
- *     request shape and the Angular client has not migrated yet.
- *   - An image and its source path belong to the same thing, so they travel in
- *     the same object. Two parallel arrays can fall out of alignment (different
- *     lengths, a skipped empty entry shifting every path by one) and that
- *     failure would silently attach the wrong path to the wrong photo —
- *     precisely the kind of quiet data corruption this codebase has been bitten
- *     by before.
- *   - One replacement semantic stays one replacement semantic: sending
- *     `imagePaths` still means "these are now the coin's images, in this
- *     order", with no second key that could be present or absent independently.
- *
- * The per-element normalisation lives in image-payload.ts, and insertImages()
- * in write-helpers.ts is the only place that consumes it.
+ * `imagePaths` is a historical misnomer: it holds the base64 IMAGE DATA, not
+ * paths. It is POLYMORPHIC — each element is either a bare base64 string or an
+ * object `{ imageData, sourcePath }` — and deliberately NOT split into a
+ * second parallel `imageSourcePaths` array: two parallel arrays can fall out
+ * of alignment (different lengths, a skipped empty entry shifting every path
+ * by one) and silently attach the wrong path to the wrong photo. Keeping one
+ * array also keeps one replacement semantic, with no second key that could be
+ * present or absent independently. Per-element normalisation lives in
+ * image-payload.ts; insertImages() in write-helpers.ts is its only consumer.
  */
 
 import { Router, Request, Response } from 'express';
@@ -65,13 +49,11 @@ import { logInfo, logWarn } from '../../logger';
 import { withDb, COIN_FIELDS, DB_BINDINGS, normalizeCoinValue } from '../../db';
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
-import { safeRollback, insertImages } from './write-helpers';
+import { safeRollback, insertImages, replaceImages } from './write-helpers';
 
 const router = Router();
 
-// ============================================================
 // POST /api/coins — create a new coin with optional images
-// ============================================================
 router.post('/', async (req: Request, res: Response) => {
   const body = req.body ?? {};
 
@@ -140,9 +122,7 @@ router.post('/', async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================
 // PUT /api/coins/:id — update an existing coin
-// ============================================================
 router.put('/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
   const body = req.body ?? {};
@@ -166,14 +146,11 @@ router.put('/:id', async (req: Request, res: Response) => {
         await transaction.begin();
         began = true;
 
-        // ****************************************************************
         // *** PARTIAL-UPDATE SEMANTICS — DO NOT SIMPLIFY ***
         // Only columns whose key is actually present in the request body are
-        // written. If the frontend sends { coinType: 'Morgan' } we must emit
+        // written. A body of { coinType: 'Morgan' } must emit
         // `UPDATE Coins SET CoinType = @coinType`, NOT a statement that also
-        // sets Denomination, Year, Notes, ... to null. A previous refactor
-        // did exactly that and wiped out the user's data.
-        // ****************************************************************
+        // sets Denomination, Year, Notes, ... to null.
         const updateEntries = Object.entries(COIN_FIELDS)
           .filter(([key]) => Object.prototype.hasOwnProperty.call(body, key))
           .map(([key, binding]) => ({ key, ...binding }));
@@ -196,26 +173,15 @@ router.put('/:id', async (req: Request, res: Response) => {
         // Images are replaced (delete-then-insert), so this block must ONLY
         // run when the caller explicitly sent an imagePaths key. Running it
         // unconditionally would delete every image on a partial edit.
-        if (Object.prototype.hasOwnProperty.call(body, 'imagePaths')) {
-          await new sql.Request(transaction)
-            .input('coinId', DB_BINDINGS.coinId, id)
-            .query('DELETE FROM CoinImages WHERE CoinId = @coinId');
-
-          await insertImages(transaction, id, body.imagePaths ?? []);
-        }
-
-        // There was a matching `if (hasOwnProperty(body, 'tags'))` block here,
-        // doing DELETE FROM CoinTags followed by a re-insert. The tag feature
-        // was removed, so it went with it.
         //
-        // Removing it changes nothing about how any OTHER field is written. It
-        // was a self-contained block guarded by its own key check, inside the
-        // same transaction as everything else: the Coins UPDATE above and the
-        // images replacement before it still run under one begin/commit, so a
-        // partial edit is still all-or-nothing. A body that still carries a
-        // stray `tags` key (an old client, or a replayed request) is simply
-        // ignored now — COIN_FIELDS has no entry for it, so it was never part
-        // of the generated UPDATE in the first place.
+        // replaceImages() does the read, the delete AND the re-insert. The
+        // read has to happen before the DELETE on this same transaction, and
+        // keeping the three steps in one function is what makes that
+        // impossible to get wrong — see write-helpers.ts for the data-loss
+        // bug it prevents.
+        if (Object.prototype.hasOwnProperty.call(body, 'imagePaths')) {
+          await replaceImages(transaction, id, body.imagePaths ?? []);
+        }
 
         await transaction.commit();
         return true;
@@ -238,9 +204,7 @@ router.put('/:id', async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================
 // DELETE /api/coins/:id — deletes coin (images cascade)
-// ============================================================
 router.delete('/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 

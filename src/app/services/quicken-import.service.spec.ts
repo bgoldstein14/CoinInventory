@@ -748,14 +748,10 @@ T125.00
     expect(coin.denomination).toBe('8 Reales');
   });
 
-  // -------------------------------------------------------------------
   // The 2-of-3 main-detail rule (Year / Coin Type / Denomination).
   //
-  // Background: a coin described by a year alone used to be imported and
-  // then rejected by the backend with `400 {"error":"denomination is
-  // required"}`. The old guard only rejected coins missing BOTH year and
-  // denomination, and ignored coin type entirely.
-  // -------------------------------------------------------------------
+  // Without it a coin described by a year alone is imported and then
+  // rejected by the backend with `400 {"error":"denomination is required"}`.
 
   describe('main-detail presence helper', () => {
     it('treats a populated value as present', () => {
@@ -826,7 +822,7 @@ T50.00
 
   it('excepts a year-only coin with a reason naming the missing details', () => {
     const service = new QuickenImportService();
-    // The exact case the user reported: a row carrying nothing but a year.
+    // A row carrying nothing but a year.
     const qif = `!Type:Invst
 D01/15/2024
 NBuy
@@ -968,7 +964,7 @@ T100.00
     expect(result.importedRecords[1].denomination).toBe('50¢');
   });
 
-  /* =========================================================================
+   /*
    * CERTIFICATION COMPANY  +  CAC STICKER
    *
    * The security names used below are copied (or lightly trimmed) from the
@@ -981,7 +977,7 @@ T100.00
    *   2. The CAC vs CACG distinction. CAC is a green STICKER stuck on someone
    *      else's slab; CACG is CAC's own GRADING SERVICE. They mean different
    *      things and must never be confused for one another.
-   * ========================================================================= */
+    */
   describe('certification company and CAC sticker', () => {
     /**
      * Wraps a security name in the smallest valid QIF transaction and returns
@@ -1061,12 +1057,9 @@ T100.00
     });
 
     // --- Grade designations ------------------------------------------------
-    // Proof and copper coins are graded with a designation suffix, and these
-    // used to parse as an EMPTY grade. The old expression ended in `\b`
-    // straight after the digits, and in "PF65RB" there is no word boundary
-    // between "5" and "R", so the whole match failed and the grade was lost.
-    // The collection is full of these, so this silently discarded the grade
-    // for a large share of it.
+    // Proof and copper coins are graded with a designation suffix. A grade
+    // expression terminated with `\b` loses them: in "PF65RB" there is no
+    // word boundary between "5" and "R", so the whole match fails.
     it('captures numeric grades that carry a designation suffix', () => {
       const cases: [string, string][] = [
         ['1870 1¢ - NGC PF65RB', 'PF65RB'],            // red-brown
@@ -1112,9 +1105,8 @@ T100.00
       // A behaviour-independent guard: whatever the grade regex makes of
       // these suffixes, adding the company in front must not change it.
       // (Some of these grades -- "PF65RB", "PF64Cameo" -- the grade regex
-      // does not recognise at all today. That is a pre-existing limitation
-      // unrelated to this change; the point of the test is that the company
-      // detection neither helps nor hurts.)
+      // does not recognise at all; the point here is that company detection
+      // neither helps nor hurts.)
       const pairs: { withCompany: string; without: string }[] = [
         { withCompany: '1870 1¢ - NGC PF65RB',    without: '1870 1¢ - PF65RB' },
         { withCompany: '1867 3CS - NGC PF64Cameo', without: '1867 3CS - PF64Cameo' },
@@ -1215,19 +1207,13 @@ T100.00
   /* =========================================================================
    * NAMES WHOSE DENOMINATION IS NOT WRITTEN AS A FACE VALUE
    * -------------------------------------------------------------------------
-   * Every name below is a REAL security out of the owner's own QIF exports,
-   * not an invented probe. Each one was reading wrong, or reading as nothing
-   * at all, before the branches these rows cover were added to the ladder.
+   * Every name below is a REAL security out of a QIF export, not an invented
+   * probe. The rules being pinned:
    *
-   * The rules being pinned are his, stated in his words:
-   *
-   *   "Silver Eagle only refers to $1, where a (Gold) Eagle is $10 and a
-   *    (Gold) Double Eagle is $20, a (Gold) Half Eagle is $5, and a (Gold)
-   *    Quarter Eagle is $2.50."
-   *
-   *   "It's true that a modern Gold Eagle actually refers to the $50 bullion
-   *    coin, but that should be easy to determine because of the modern year
-   *    (they only were minted starting in 1986)."
+   *   Silver Eagle is $1; a (Gold) Eagle is $10, a Double Eagle $20, a Half
+   *   Eagle $5 and a Quarter Eagle $2.50. The modern Gold Eagle is the $50
+   *   bullion coin, told apart by its year -- it has only been struck since
+   *   1986.
    *
    * This is deliberately ONE table rather than a file or a describe-block per
    * coin: the rules are general, so the cases that exercise them belong
@@ -1313,22 +1299,18 @@ T100.00
    * The three-cent piece is the first and, today, the only caller of the
    * ambiguous-reading channel (`AmbiguousReading` in coin.model.ts), so this
    * is where that channel gets exercised end to end. It is NOT a file, or a
-   * describe block, about three-cent coins -- the owner was explicit that he
-   * does not want per-denomination machinery:
-   *
-   *   "I wouldn't expect there to be a special file to single out a
-   *    particular type of coin... That's too specific and will just add a lot
-   *    of noise to this project if we had files for every denomination.
-   *    Likely, whatever rules are in there can be applied across the board."
+   * describe block, about three-cent coins: there is deliberately no
+   * per-denomination machinery in this project, because the rules are general
+   * and a file per denomination would be pure noise.
    *
    * WHAT IS BEING PINNED
-   *   1. The two CERTAIN bands still answer, and answer without a flag:
+   *   1. The two CERTAIN bands answer, and answer without a flag:
    *      1851-1864 is silver-only, 1874-1889 is nickel-only.
    *   2. The OVERLAP, 1865-1873, still answers -- a guess is not a refusal
    *      and the row must still import -- but it carries the flag.
-   *   3. Inside the overlap the tie-break is the owner's: "after 1862, the
-   *      3CS coins are very scarce with the exception of Proofs." So proof
-   *      means silver, and anything else means nickel.
+   *   3. Inside the overlap the tie-break is scarcity with proofs as the
+   *      exception: three-cent silver business strikes after 1862 are very
+   *      scarce, so proof means silver and anything else means nickel.
    *   4. A name that SPELLS OUT 3CS or 3CN is never flagged. There is
    *      nothing to be unsure about.
    *   5. The user's answer, fed back in, moves the denomination AND
@@ -1446,10 +1428,9 @@ T100.00
 
     it('treats a three-cent name with no year as maximally ambiguous', () => {
       // No year means the whole 1851-1889 span is open, so the same tie-break
-      // and the same flag apply. (A sweep of all seven of the owner's QIF
-      // exports found no bare three-cent name at all, dated or undated -- all
-      // 117 of his three-cent securities spell out 3CS or 3CN -- so this pins
-      // behaviour rather than describing anything he owns.)
+      // and the same flag apply. This pins behaviour rather than describing a
+      // real security: every three-cent name in the corpus spells out 3CS
+      // or 3CN.
       const record = parseOne('3¢ - VF');
       expect(record.denomination).toBe('3CN');
       const flag = record.ambiguities?.find(a => a.field === 'denomination');
@@ -1473,14 +1454,12 @@ T100.00
     /* -----------------------------------------------------------------------
      * THE USER'S ANSWER, AND WHAT IT HAS TO DRAG ALONG WITH IT.
      *
-     *   "...so they can either fix the choice right away or later..."
-     *
-     * Fixing it right away cannot mean overwriting one string. The coin type
-     * and the five alloy / weight fields are all DERIVED from the
-     * denomination -- an 1870 three-cent silver is 90% silver weighing
-     * 0.75 g, while the three-cent nickel is copper-nickel with no precious
-     * metal in it at all -- so the answer has to go back through the parser
-     * rather than being painted onto its output.
+     * Fixing the choice cannot mean overwriting one string. The coin type and
+     * the five alloy / weight fields are all DERIVED from the denomination --
+     * an 1870 three-cent silver is 90% silver weighing 0.75 g, while the
+     * three-cent nickel is copper-nickel with no precious metal in it at all
+     * -- so the answer has to go back through the parser rather than being
+     * painted onto its output.
      * --------------------------------------------------------------------- */
     const overlapQif = `!Type:Invst\nD01/15/2024\nNBuy\nY1870 3¢ - AU\nT100.00\n^\n`;
 

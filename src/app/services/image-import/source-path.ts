@@ -1,8 +1,8 @@
-/* ===========================================================================
+ /*
  * source-path.ts — reconstructing the ORIGINAL file's absolute path.
- * ---------------------------------------------------------------------------
+ *
  * WHY THIS FILE HAS TO EXIST AT ALL (read this before changing anything here)
- * ---------------------------------------------------------------------------
+ *
  * A browser NEVER tells JavaScript where a file really lives on disk. This is
  * a deliberate, non-negotiable security rule: if a web page could read
  * `C:\Users\you\...` out of a file picker it would learn your username, your
@@ -24,51 +24,38 @@
  * Individually-picked files (a plain multi-file picker rather than a directory
  * one) have an EMPTY `webkitRelativePath`, so we fall back to `File.name`.
  *
- * ---------------------------------------------------------------------------
  * WHOSE MACHINE IS THIS PATH FOR?
- * ---------------------------------------------------------------------------
+ *
  * The stored path is resolved by the BACKEND (see server/routes/images/file.ts
  * and .../exists.ts), not by the browser. So it has to be a path that makes
  * sense on the machine hosting the Express server. On this user's setup those
  * are the same machine, but the import screen says so explicitly, because a
  * drive letter that is mapped on a workstation and not on the host is the one
  * way to get a folder full of paths that all read as "file is missing".
- * =========================================================================== */
+  */
 
-/* ---------------------------------------------------------------------------
- * WHERE THE PREFILLED VALUE COMES FROM — the history, because it has changed
- * three times and each change was for a reason worth keeping
- * ---------------------------------------------------------------------------
- * 1. It used to be a hardcoded `\\NAS\Coin Pictures`, the UNC path the
- *    photo library is reachable at from the DEVELOPER's workstation. The host
- *    that actually runs this app keeps those files on a local drive whose letter
- *    is not fixed, so the prefill was wrong on the only machine whose opinion
- *    counts. A wrong base folder does not fail loudly — it stamps every imported
- *    row with a path that resolves to nothing, and you find out ~1,700 rows
- *    later when every photo reports "file is missing".
+ /*
+ * WHERE THE PREFILLED VALUE COMES FROM
  *
- * 2. So it became EMPTY, with no default at all. Safe, but unhelpful: the user
- *    faced a blank box and a warning on every fresh install.
+ * *** NEVER HARDCODE A BASE FOLDER. *** A wrong base folder does not fail
+ * loudly -- it stamps every imported row with a path that resolves to
+ * nothing, and you find out ~1,700 rows later when every photo reports "file
+ * is missing".
  *
- * 3. It is now seeded from the SERVER — `GET /api/app-info` reports the folder
- *    the app itself is installed in (see server/routes/app-info.ts). That is
- *    almost certainly not where the photos live, and the import screen says so
- *    plainly. But it is a genuine path on the right machine, in the right shape,
- *    with a drive letter the host really has, which is exactly what a hardcoded
- *    guess could never be. The user edits it down to the right folder.
+ * The box is seeded from the SERVER: `GET /api/app-info` reports the folder
+ * the app itself is installed in (see server/routes/app-info.ts). That is
+ * almost certainly not where the photos live, and the import screen says so
+ * plainly -- but it is a genuine path on the right machine, in the right
+ * shape, with a drive letter the host really has. The user edits it down.
  *
- * Whichever way the box gets its first value, step 4 is the one that matters in
- * daily use: the user's own choice is saved and wins from then on. See
- * import-base-folder.ts — the saved value takes priority over the server's
- * answer, always.
+ * The user's own choice is saved and WINS from then on; see
+ * import-base-folder.ts, where the saved value takes priority over the
+ * server's answer, always.
  *
- * There is deliberately no `DEFAULT_IMPORT_BASE_FOLDER` constant any more. It
- * held `''` and was named as though it were the default, which stopped being
- * true once the real default started coming from the server; keeping it would
- * have meant a misleading name pointing at a value that is now only the
- * last-resort fallback. The fallback is written as a plain `''` at the one place
- * it is used, in import-base-folder.ts.
- * ------------------------------------------------------------------------- */
+ * There is deliberately no `DEFAULT_IMPORT_BASE_FOLDER` constant. It would be
+ * named as though it were the default while holding only the last-resort
+ * fallback, which is written as a plain `''` at the one place it is used.
+  */
 
 /**
  * A purely illustrative path, shown as placeholder text and in the hint on the
@@ -128,9 +115,8 @@ function segmentsOf(path: string): string[] {
  *     relative path returns just the base. Neither is useful, but neither
  *     should produce a path with a stray separator on the end.
  *
- * ---------------------------------------------------------------------------
  * RULE 3, THE DOUBLED FOLDER NAME — why it is worth the special case
- * ---------------------------------------------------------------------------
+ *
  * `webkitRelativePath` INCLUDES the name of the folder the user picked. So if
  * they point the picker at the share root `\\NAS\Coin Pictures`, every
  * file comes back as `Coin Pictures/<subfolder>/<file>.jpg`, and a naive join
@@ -196,6 +182,79 @@ export function sourcePathForFile(baseFolder: string, file: File): string | null
   const relative = file.webkitRelativePath || file.name;
   const joined = joinWindowsPath(baseFolder, relative);
   return joined.length > 0 ? joined : null;
+}
+
+/* ---------------------------------------------------------------------------
+ * COMPARING TWO STORED PATHS — "is this file already attached to that coin?"
+ * ---------------------------------------------------------------------------
+ * THE BUG THIS PREVENTS
+ * Adding a handful of photos to a folder that has already been imported makes
+ * an append-only attach try to import every image again: it has no way to
+ * recognise a file it has already stored. So the comparison is on the
+ * ORIGINAL file's absolute path -- the only thing that identifies a source
+ * file -- against the paths the coin's existing images were recorded with
+ * (CoinImages.SourcePath, fetched in bulk by
+ * POST /api/coins/image-source-paths).
+ *
+ * WHY A COMPARISON NEEDS ITS OWN NORMAL FORM, AND WHY IT LIVES HERE
+ * Two strings naming the same file routinely differ, because the two sides of
+ * the comparison are produced by different code at different times:
+ *
+ *   - CASE. Windows paths are case-insensitive, and nothing enforces a casing
+ *     anywhere in this app. The base-folder box holds whatever the user typed
+ *     ("d:\coin pictures" one month, "D:\Coin Pictures" the next), and the
+ *     filenames come off a camera that shouts (IMG_0042.JPG).
+ *   - SEPARATORS. `webkitRelativePath` always uses forward slashes; everything
+ *     joinWindowsPath() produces uses backslashes; and a path pasted out of
+ *     Explorer can carry a trailing one.
+ *   - STRAY REPEATS. A base folder typed with a trailing separator produces
+ *     a doubled separator in the middle of the path, and rows written before
+ *     stripTrailingSeparators() existed still hold exactly that.
+ *
+ * It lives in THIS file rather than next to the dedup logic because the rules
+ * above are the same rules joinWindowsPath() already encodes — one set of
+ * ideas about what a path is, in one place. A second set would drift, and the
+ * cost of drift here is either duplicated photos or silently skipped ones.
+ *
+ * WHAT IS DELIBERATELY NOT DONE
+ * No filesystem resolution: no `..` collapsing, no short-name (8.3) expansion,
+ * no symlink or junction following, no mapped-drive-to-UNC translation. Those
+ * need the disk, and this runs in a browser. They are also not how these paths
+ * are produced — both sides come from joinWindowsPath(), so they are already
+ * in the same shape, and the normalisation here only has to absorb the drift
+ * listed above. A miss simply means a photo is attached again, which is the
+ * behaviour the user had before this feature; a false match would skip a photo
+ * he wanted, which is worse. So when in doubt, this errs towards NOT matching.
+ * ------------------------------------------------------------------------- */
+
+/**
+ * The form in which two source paths are compared.
+ *
+ * Returns `''` for null, undefined or blank — "no path recorded", which is
+ * what every image imported before the SourcePath column existed has. Callers
+ * must treat an empty normal form as "unknown" and never as a match, or two
+ * path-less images would count as the same file.
+ */
+export function normalizeSourcePathForComparison(path: string | null | undefined): string {
+  if (!path) return '';
+
+  const windows = toWindowsSeparators(path);
+
+  // A UNC path begins with exactly two separators and they are load-bearing:
+  // \\NAS\pics\a.jpg and \NAS\pics\a.jpg are different locations. Hold the
+  // prefix aside so the collapse below cannot eat it.
+  const isUnc = windows.startsWith(SEPARATOR + SEPARATOR);
+  const body = isUnc ? windows.slice(2) : windows;
+
+  const collapsed = body
+    .replace(/\\+/g, SEPARATOR)   // ...Pictures\\Business -> ...Pictures\Business
+    .replace(/\\+$/, '');         // a trailing separator names the same folder
+
+  const normalized = (isUnc ? SEPARATOR + SEPARATOR + collapsed : collapsed).toLowerCase();
+
+  // A string that was nothing but whitespace and separators carries no
+  // information; collapse it to the same "unknown" the null case produces.
+  return normalized === SEPARATOR || normalized === SEPARATOR + SEPARATOR ? '' : normalized;
 }
 
 /**

@@ -178,12 +178,18 @@ describe('BatchImageImportService.attachSelected', () => {
   });
 
   it('appends to a coin that already has photos instead of replacing them', async () => {
+    // `existingPhotoMode: 'add'` is now required to get this. It used to be
+    // unconditional, and that is the bug that was reported: re-importing a
+    // folder re-attached every photo in it. The DEFAULT is 'leave', which
+    // would not touch this coin at all — so the behaviour this test describes
+    // is still exactly right, it is just no longer what happens unasked. See
+    // services/image-import/existing-photo-mode.ts.
     const { service, rows, files } = await plan();
     const existing = { ...morgan, imagePaths: ['data:image/jpeg;base64,ALREADY-HERE'] };
     const attach = vi.fn();
 
     await service.attachSelected(rows, {
-      files, inventory: [existing], attach, encode: okEncoder
+      files, inventory: [existing], attach, encode: okEncoder, existingPhotoMode: 'add'
     });
 
     const imagePaths = attach.mock.calls[0][1] as string[];
@@ -296,6 +302,15 @@ describe('BatchImageImportService.attachSelected', () => {
   });
 
   it('does not duplicate a photo that is already attached', async () => {
+    // This is the WITHIN-RUN de-duplication: two entries that are the same
+    // data URL collapse to one. It needs `existingPhotoMode: 'add'` now,
+    // because the default no longer writes to a coin that has photos at all.
+    //
+    // Worth being clear about what this does NOT cover, since the names are
+    // so close: a real second import produces freshly encoded strings, so the
+    // old entry and the new one are different strings for the same
+    // photograph and this Set sees nothing wrong. Recognising THAT is the
+    // source-path skip in already-attached.ts.
     const { service, rows, files } = await plan();
     const attach = vi.fn();
     // Pretend the obverse was imported on a previous run.
@@ -305,7 +320,7 @@ describe('BatchImageImportService.attachSelected', () => {
     };
 
     await service.attachSelected(rows, {
-      files, inventory: [existing], attach, encode: okEncoder
+      files, inventory: [existing], attach, encode: okEncoder, existingPhotoMode: 'add'
     });
 
     const imagePaths = attach.mock.calls[0][1] as string[];

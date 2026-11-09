@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * grade-parser.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Reading the GRADE and the CERTIFICATION COMPANY out of a raw filename,
  *   and normalizing a grade so the filename side and the coin-record side can
@@ -22,9 +22,8 @@
  *       signed              1875 20c - VF+ - Obverse - Orig.jpg
  *       bare                1812 50c VG - Obverse - Small.jpg
  *
- * ---------------------------------------------------------------------------
  * HOW MUCH A GRADE IS WORTH (and why)
- * ---------------------------------------------------------------------------
+ *
  *   A GRADE ON ITS OWN IS WEAK EVIDENCE. Half the collection is XF or VF; a
  *   grade agreeing tells you almost nothing about WHICH coin this is. So the
  *   grade carries a small weight and, on its own, never counts as one of the
@@ -35,7 +34,7 @@
  *   TOGETHER THEY ARE STRONG. "PCGS MS63" narrows a collection down hard --
  *   the same company AND the same numeric grade is real corroboration. That
  *   combination rule lives in match-scorer.ts; this file only reads the values.
- * =========================================================================== */
+  */
 
 import {
   GRADE_DESIGNATION_WORDS,
@@ -54,12 +53,12 @@ export interface ParsedGrade {
   consumedTokens: string[];
 }
 
-/* ---------------------------------------------------------------------------
+ /*
  * GRADE BUILDING BLOCKS
- * ---------------------------------------------------------------------------
+ *
  * Assembled into regex alternations once, at module load, so we are not
  * rebuilding the same strings for every one of 2,000 filenames.
- * ------------------------------------------------------------------------- */
+  */
 
 /**
  * Grade letters that are SAFE to recognise on their own.

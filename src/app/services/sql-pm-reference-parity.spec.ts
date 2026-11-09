@@ -1,7 +1,7 @@
-/* ===========================================================================
+ /*
  * sql-pm-reference-parity.spec.ts — THE SQL MIGRATION MUST AGREE WITH THIS
  * APP, AND THIS TEST IS WHAT MAKES THAT TRUE
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE IS FOR
  *
  * `server/migrations/007-infer-coin-metal-data.sql` fills in MetalContent,
@@ -19,9 +19,7 @@
  * off disk — the TypeScript and the SQL — and asserts they say the same
  * thing. If they ever diverge by a single character, this goes red.
  *
- * ---------------------------------------------------------------------------
- * THE FOUR LAYERS OF CHECK
- * ---------------------------------------------------------------------------
+ * ---- THE FOUR LAYERS OF CHECK ----
  *   1. TRANSCRIPTION. Every row of the SQL table matches the corresponding
  *      entry of PM_REFERENCE_DATA: same order, same denomination, same year
  *      range, same metal, same composition string character for character,
@@ -36,8 +34,8 @@
  *      also copied the SELECTION logic, including the year-range precedence
  *      and the undated fallback.
  *
- *   3. THE REFUSALS. The cases the owner specifically asked to be left alone
- *      are asserted by name, so that if someone "helpfully" adds a 1942
+ *   3. THE REFUSALS. The cases that are deliberately left alone are
+ *      asserted by name, so that if someone "helpfully" adds a 1942
  *      nickel row to either file, a test says so out loud rather than a melt
  *      value silently appearing.
  *
@@ -47,9 +45,7 @@
  *      a year. That is only safe while the ambiguous denominations are NOT
  *      uniform. Asserted directly.
  *
- * ---------------------------------------------------------------------------
- * WHY IT PARSES THE TYPESCRIPT INSTEAD OF IMPORTING IT
- * ---------------------------------------------------------------------------
+ * ---- WHY IT PARSES THE TYPESCRIPT INSTEAD OF IMPORTING IT ----
  * `PM_REFERENCE_DATA` is deliberately not exported — pm-reference.ts exposes
  * two functions and keeps its table private. Widening that public surface
  * just to let a test read it would be the tail wagging the dog, and it would
@@ -59,7 +55,7 @@
  * So the array literal is extracted from the file text and evaluated. It is
  * plain JavaScript object-literal syntax, so this works, and the alternative
  * (a TypeScript parser dependency) would be enormously heavier for no gain.
- * =========================================================================== */
+  */
 
 import { readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -72,9 +68,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const TS_PATH = resolve(HERE, 'pm-reference.ts');
 const SQL_PATH = resolve(HERE, '../../../server/migrations/007-infer-coin-metal-data.sql');
 
-/* ===========================================================================
- * READING THE TYPESCRIPT
- * ======================================================================== */
+/* ---- READING THE TYPESCRIPT ---- */
 
 interface TsEntry {
   denomination: string;
@@ -123,9 +117,7 @@ function readTsEntries(): TsEntry[] {
   return entries;
 }
 
-/* ===========================================================================
- * READING THE SQL
- * ======================================================================== */
+/* ---- READING THE SQL ---- */
 
 interface SqlRow {
   entryOrder: number;
@@ -255,9 +247,7 @@ function foldDenomination(denomination: string): string {
 const TS_ENTRIES = readTsEntries();
 const SQL_ROWS = readSqlRows();
 
-/* ===========================================================================
- * 1. TRANSCRIPTION
- * ======================================================================== */
+/* ---- 1. TRANSCRIPTION ---- */
 
 describe('007-infer-coin-metal-data.sql transcribes pm-reference.ts exactly', () => {
   it('found a non-trivial table on both sides', () => {
@@ -434,9 +424,9 @@ describe('the SQL lookup resolves identically to lookupCoinAlloy', () => {
 /* ===========================================================================
  * 3. THE REFUSALS
  * ---------------------------------------------------------------------------
- * Every case the owner explicitly asked to be left alone. The sweep above
- * would catch a change to any of these, but it would report it as one line
- * buried in thousands; these name them, so a regression says WHAT broke.
+ * Every case that is deliberately left alone. The sweep above would catch
+ * a change to any of these, but it would report it as one line buried in
+ * thousands; these name them, so a regression says WHAT broke.
  * ======================================================================== */
 
 describe('the migration leaves the genuinely ambiguous coins alone', () => {
@@ -525,8 +515,8 @@ describe('the uniform-metal shortcut can never reach an ambiguous denomination',
   );
 
   it('every denomination that holds a deliberate gap is non-uniform', () => {
-    // Restating the safety property directly: the three gaps the owner named
-    // all live in denominations the shortcut cannot touch.
+    // Restating the safety property directly: the three deliberate gaps all
+    // live in denominations the shortcut cannot touch.
     for (const denomKey of ['5c', '1c', '$1']) {
       expect(metalsFor(denomKey).size, denomKey).toBeGreaterThan(1);
     }

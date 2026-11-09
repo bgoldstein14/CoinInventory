@@ -1,11 +1,6 @@
-/**
- * Notification Toast Styles
- *
- * Provides a stacked toast notification system with color-coded types.
- * Fixed positioning at top-right with smooth animations.
- */
+// Stacked toasts, colour-coded by type, fixed at the top-right.
 
-// Container for all toasts - fixed at top-right of viewport
+// Container for all toasts
 .notification-container {
   position: fixed;
   top: 1rem;
@@ -17,7 +12,6 @@
   max-width: 400px; // Prevent toasts from being too wide
   pointer-events: none; // Allow clicks to pass through empty space
 
-  // Make individual toasts clickable
   > * {
     pointer-events: auto;
   }
@@ -34,7 +28,6 @@
   backdrop-filter: blur(8px);
   animation: slide-in 0.3s ease-out;
 
-  // Smooth transitions for color changes
   transition: all 0.2s ease;
 }
 
@@ -133,7 +126,7 @@
   }
 }
 
-// Dark mode support (if your app has a dark mode)
+// Dark mode
 @media (prefers-color-scheme: dark) {
   .toast-info {
     background-color: rgba(30, 58, 138, 0.95); // blue-900 with opacity

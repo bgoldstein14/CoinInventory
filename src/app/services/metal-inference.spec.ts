@@ -1,15 +1,13 @@
-/* ===========================================================================
+ /*
  * metal-inference.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *
  * Two things, and they pull in opposite directions on purpose:
  *
  *   1. THAT IT ANSWERS. A coin whose metal is obvious from its own description
  *      — "a US $20 is gold", "a Morgan is silver", "a Gold Eagle says so" —
- *      gets a Metal Content even when the exact alloy is not catalogued. That
- *      is the defect the owner reported: he imported a file of gold coins and
- *      expected every one of them to come out marked Gold.
+ *      gets a Metal Content even when the exact alloy is not catalogued.
  *
  *   2. THAT IT REFUSES. Everywhere two metals genuinely shared a date or a
  *      face value, it answers nothing, because Metal Content feeds the melt
@@ -22,7 +20,7 @@
  * a verbatim copy of a `Y` line in `testing/qif-corpus/GoldCoins.QIF`, and
  * nothing in it should be "cleaned up". The corpus is synthetic but the
  * SHAPES are not invented -- see `qif-corpus/generate-corpus.mjs`.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import {
@@ -35,12 +33,12 @@ import {
 import { composePmFields } from './pm-fill';
 import { QuickenImportService } from './quicken-import.service';
 
-/* ===========================================================================
+ /*
  * RULE 1 — AN EXPLICIT METAL WORD
- * ---------------------------------------------------------------------------
- * The strongest evidence, because it is not an inference: the source text, or
- * the owner, named the metal.
- * ======================================================================== */
+ *
+ * The strongest evidence, because it is not an inference: the source text
+ * named the metal.
+  */
 
 describe('rule 1 — an explicit metal word', () => {
   it('takes the metal the caller already read out of the source text', () => {
@@ -53,8 +51,8 @@ describe('rule 1 — an explicit metal word', () => {
     expect(result?.rule).toBe('explicit-metal-hint');
   });
 
-  it('reads a metal word out of the COIN TYPE — the field the owner pointed at', () => {
-    // "the coin type would have made that obvious" — the owner's own words.
+  it('reads a metal word out of the COIN TYPE field', () => {
+    // The coin type often makes the metal obvious when nothing else does.
     expect(inferMetalContent({ coinType: 'Gold Eagle' })).toBe('Gold');
     expect(inferMetalContent({ coinType: 'American Silver Eagle' })).toBe('Silver');
     expect(inferMetalContent({ coinType: 'Gold Dollar' })).toBe('Gold');
@@ -92,12 +90,12 @@ describe('rule 1 — an explicit metal word', () => {
   });
 });
 
-/* ===========================================================================
+ /*
  * RULE 2 — A DENOMINATION THAT IS GOLD BY DEFINITION
- * ---------------------------------------------------------------------------
+ *
  * Not a statistical claim: these face values were never struck in anything but
  * gold by the United States.
- * ======================================================================== */
+  */
 
 describe('rule 2 — a US denomination that is gold by definition', () => {
   const goldByFaceValue: { denomination: string; why: string }[] = [
@@ -167,9 +165,7 @@ describe('rule 2 — a US denomination that is gold by definition', () => {
   });
 });
 
-/* ===========================================================================
- * RULE 3 — SERIES NAMES THAT IMPLY A METAL
- * ======================================================================== */
+/* ---- RULE 3 — SERIES NAMES THAT IMPLY A METAL ---- */
 
 describe('rule 3 — series names that imply a metal', () => {
   const alwaysGold: string[] = [
@@ -441,9 +437,7 @@ describe('the deliberate refusals', () => {
   });
 });
 
-/* ===========================================================================
- * THE WIRING — composePmFields keeps the reference table authoritative
- * ======================================================================== */
+/* ---- THE WIRING — composePmFields keeps the reference table authoritative ---- */
 
 describe('composePmFields — the fallback never displaces the reference table', () => {
   it('uses the catalogued answer unchanged when there is one', () => {

@@ -8,7 +8,11 @@
       @if (importMenuOpen()) {
         <div class="split-menu">
           <button type="button" class="menu-item" (click)="handleImportSelection('qif')">QIF</button>
-          <button type="button" class="menu-item" (click)="handleImportSelection('csv')">CSV</button>
+          <!-- One entry, both formats. The modal behind it takes an .xlsx
+               workbook or a .csv and converges them onto the same mapping
+               screen, so splitting this into two menu items would ask the
+               user to classify their own file before opening it. -->
+          <button type="button" class="menu-item" (click)="handleImportSelection('csv')">Excel or CSV</button>
           <button type="button" class="menu-item" (click)="handleImportSelection('json')">JSON</button>
           <!-- Photos, not coin records. Listed last and separated, because
                the three above read a file of coins while this one reads a
@@ -41,6 +45,18 @@
       aria-label="Open settings"
     >
       ⚙ Settings
+    </button>
+
+    <!-- Help > Report a problem. Last, next to Settings, because it is the
+         other thing that is about the application rather than about coins. -->
+    <button
+      type="button"
+      class="secondary small-button help-button"
+      (click)="requestHelp()"
+      title="Report a problem"
+      aria-label="Report a problem"
+    >
+      ? Help
     </button>
   </div>
 </div>

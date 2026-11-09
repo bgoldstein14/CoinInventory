@@ -1,39 +1,22 @@
 <aside class="panel detail-panel">
-  <!-- The header is now nothing but the action buttons.
-
-       Three things used to sit on its left and all three were removed as
-       redundant, in two passes:
-
-         * a "Selected coin" eyebrow and an <h2> repeating coin type and
-           denomination; and
-         * a summary row of badges for grade, certification and CAC.
-
-       Every one of those values is an editable field in the form immediately
-       below, so the header was restating, in a form you could not correct,
-       what is already on screen a row or two down. The grade pill and the
-       green-bean icon still appear where they genuinely add something: the
-       inventory grid, where there is no form and you are scanning many coins
-       at once. -->
+  <!-- The header is nothing but the action buttons: every value worth
+       showing is an editable field in the form immediately below, and a
+       read-only restatement of it here would only be something the user
+       cannot correct. -->
   <div class="detail-header">
     <div class="detail-header-actions">
       <!--
         Show / hide this coin's photos.
 
-        TWO CHANGES WORTH KNOWING ABOUT:
+        Not disabled for a coin with no photos: the gallery is also where
+        photos are ADDED to one specific coin, so the empty coin is the case
+        that needs the button most. `canOpenImageGallery` means "is a coin
+        selected" — the `[disabled]` binding is kept only because the store's
+        signature still allows null, not because a photo-less coin should be
+        turned away.
 
-        1. It is no longer disabled for a coin with no photos. The gallery is
-           also where photos are ADDED to one specific coin, so the empty coin
-           is the case that needs the button most — it was the one state from
-           which a first photo could never be attached. `canOpenImageGallery`
-           now means "is a coin selected", and the gallery shows its own empty
-           state. The disabled branch is kept rather than dropped because a
-           detail panel always has a coin in practice but the store's
-           signature still allows null.
-
-        2. It calls toggleImageGallery(), not openImageGallery(). The label
-           has always flipped to "Hide images" while the gallery is open, but
-           the click handler only ever opened it — so pressing the button
-           reading "Hide images" did nothing at all.
+        The label flips to "Hide images", so the handler must be
+        toggleImageGallery(), not openImageGallery().
       -->
       <button type="button" class="secondary small-button" [disabled]="!images().canOpenImageGallery(coin())" (click)="images().toggleImageGallery()">
         {{ images().showImageGallery() ? 'Hide images' : 'Show images' }}
@@ -45,7 +28,7 @@
 
   <app-coin-editor-form [coin]="coin()" />
 
-  <!-- ================= ORIGINAL IMAGE FILES =================
+  <!-- ORIGINAL IMAGE FILES
        The database only holds a downscaled copy of each photo. This section
        documents where the real, full-resolution file lives on the machine
        hosting the app, and lets the user click through to it.
@@ -53,21 +36,24 @@
        Each path is clickable only while the file is actually there; once it
        has been moved or deleted the path is still listed (that is the point —
        it records where the photo used to be) but is shown muted and is not a
-       link. See CoinImagePathLink. -->
-  @if (coin().imagePaths.length > 0) {
+       link. See CoinImagePathLink.
+
+       `photos()` rather than `coin().imagePaths`: the list endpoint does not
+       send photographs, so the key is absent until this coin's fetch lands
+       (see server/routes/coins/list-query.ts). -->
+  @if (photos().length > 0) {
     <div class="detail-image-paths">
       <h3>Original image files</h3>
       <!--
         The list is rendered UNCONDITIONALLY, and that is deliberate. Each
-        CoinImagePathLink is what triggers the lazy fetch of this coin's paths,
-        and it renders nothing at all when there is no path to show. Gating the
-        list on `anyPathRecorded()` would mean no link is ever created, so the
-        fetch would never run and the answer would never change — the classic
-        chicken-and-egg. Rendering it always means the section fills itself in
-        a moment later.
+        CoinImagePathLink is what triggers the lazy fetch of this coin's
+        paths, and it renders nothing when there is no path to show. Gating
+        the list on `anyPathRecorded()` would mean no link is ever created,
+        so the fetch would never run and the answer would never change — the
+        classic chicken-and-egg.
       -->
       <div class="image-path-list">
-        @for (imagePath of coin().imagePaths; track imagePath) {
+        @for (imagePath of photos(); track imagePath) {
           <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
         }
       </div>
@@ -100,9 +86,9 @@
       }
       <!--
         Each control carries a visible caption, matching the coin editor's
-        `.detail-field` pattern (shared via styles/_field.scss). These inputs
-        previously used `placeholder` as their only label, which vanishes as
-        soon as you type and leaves the row unlabelled.
+        `.detail-field` pattern (shared via styles/_field.scss). Never use
+        `placeholder` as the only label: it vanishes as soon as you type and
+        leaves the row unlabelled.
       -->
       <div class="add-transaction-form">
         <label class="detail-field">

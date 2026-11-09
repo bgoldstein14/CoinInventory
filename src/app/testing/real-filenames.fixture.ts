@@ -1,53 +1,41 @@
-/* ===========================================================================
- * real-filenames.fixture.ts
- * ---------------------------------------------------------------------------
- * WHAT THIS FILE IS
- *   Every filename used by real-filenames.spec.ts, as one flat list, so that
- *   other specs can measure things ACROSS the whole corpus instead of one
- *   assertion at a time.
+/*
+ * Every filename used by real-filenames.spec.ts, as one flat list, so that
+ * other specs can measure things ACROSS the whole corpus instead of one
+ * assertion at a time.
  *
- *   PROVENANCE — READ THIS BEFORE QUOTING ANY NUMBER MEASURED FROM THIS LIST.
- *
- *   This file USED to claim that "every entry is VERBATIM from a survey of the
- *   user's image share, nothing here is invented". That claim was false, and it
- *   misled real work: checked against the share on 2026-10-17, **33 of the 58
- *   names below exist there and 25 do not**.
- *
- *   The 25 are not mistakes. They are deliberately CONSTRUCTED PROBES, and
- *   several are obviously so once you look — "1881 Morgan Dollar NGC 2599001"
- *   exercises a bare cert number, "1925-S Peace Dollar $25.00" a price caught
- *   in a filename, "1913 50-Cent Canadian - Obverse - Sharpened" the photo
- *   markers, and "1870 10-cent - Obverse" a gradeless shot beside a graded
- *   sibling. As parsing cases they are legitimate and worth keeping.
+ * PROVENANCE — READ THIS BEFORE QUOTING ANY NUMBER MEASURED FROM THIS LIST.
+ *   This list is NOT the owner's image share. Of the 58 names below, 33 were
+ *   taken verbatim off the share and 25 are deliberately CONSTRUCTED PROBES:
+ *   "1881 Morgan Dollar NGC 2599001" exercises a bare cert number, "1925-S
+ *   Peace Dollar $25.00" a price caught in a filename, "1913 50-Cent Canadian
+ *   - Obverse - Sharpened" the photo markers, "1870 10-cent - Obverse" a
+ *   gradeless shot beside a graded sibling. As parsing cases they are
+ *   legitimate and worth keeping.
  *
  *   The DANGER is the measurement. import-tiers.spec.ts prints a census over
  *   these 58 names, and that census reads naturally as a statement about the
- *   owner's corpus. It is not one. When a matching rule changed, two files
- *   moved out of "matched" and were reported to him as a real cost; both were
- *   constructed names that do not exist on his share, and the true cost on
- *   real files was zero.
+ *   real corpus. It is not one — a rule change that moves constructed names
+ *   between tiers costs nothing on real files. A number taken from this list
+ *   describes a TEST CORPUS. To measure the share, enumerate the share.
  *
- *   So: the names that ARE real must not be "tidied" — the missing space in
+ *   The names that ARE real must not be "tidied": the missing space in
  *   "PF62CAM- Obverse", the mixed-case ".JPG", the cent signs and the lone
- *   "1875CC" with no separator are all genuine, and each one broke something
- *   once. But a number taken from this list describes a TEST CORPUS, not the
- *   share. To measure the share, enumerate the share.
+ *   "1875CC" with no separator are all genuine, and each one broke something.
  *
  * WHY IT IS A .ts AND NOT PART OF THE .spec.ts
  *   import-tiers.spec.ts needs the same names to count how many files land in
- *   each of the three review tiers. Importing from a spec file is a smell, so
- *   the data moved here and real-filenames.spec.ts keeps a guard test proving
- *   that every name it asserts on is also in this list — if someone adds a
- *   case there and forgets here, that guard fails rather than the measurement
- *   quietly going stale.
+ *   each of the three review tiers, and importing from a spec file is a
+ *   smell. real-filenames.spec.ts keeps a guard test proving that every name
+ *   it asserts on is also in this list — if someone adds a case there and
+ *   forgets here, that guard fails rather than the measurement quietly going
+ *   stale.
  *
  * WHY IT LIVES UNDER src/app/testing/ RATHER THAN NEXT TO THE MATCHER
  *   tsconfig.app.json excludes `src/app/testing/**`, so this never reaches the
  *   shipped bundle. A plain .ts sitting in services/image-matching/ WOULD be
- *   compiled into the application, and the build says so ("part of the
- *   TypeScript compilation but it's unused"). It is test data, so it belongs
- *   with the test data.
- * =========================================================================== */
+ *   compiled into the application ("part of the TypeScript compilation but
+ *   it's unused"). It is test data, so it belongs with the test data.
+ */
 
 /** Photographs of ONE identifiable coin. */
 export const REAL_SINGLE_COIN_FILENAMES: readonly string[] = [

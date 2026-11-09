@@ -1,7 +1,8 @@
-import { Component, signal } from '@angular/core';
+import { Component, computed, signal } from '@angular/core';
 import { AppToolbar, ExportKind, ImportKind } from './components/app-toolbar/app-toolbar';
 import { BulkEditBar } from './components/bulk-edit-bar/bulk-edit-bar';
 import { CategoryModal } from './components/category-modal/category-modal';
+import { DEFAULT_REFERENCE_SECTION } from './components/category-modal/reference-sections';
 import { CoinDetailPanel } from './components/coin-detail-panel/coin-detail-panel';
 import { CoinImageGallery } from './components/coin-image-gallery/coin-image-gallery';
 import { CoinPhotoViewer } from './components/coin-photo-viewer/coin-photo-viewer';
@@ -14,6 +15,8 @@ import { QuickenImportModal } from './components/quicken-import-modal/quicken-im
 import { ReportModal } from './components/report-modal/report-modal';
 import { SettingsModal } from './components/settings-modal/settings-modal';
 import { SpotPriceModalComponent } from './components/spot-price-modal/spot-price-modal';
+import { StatisticsModal } from './components/statistics-modal/statistics-modal';
+import { SupportModal } from './components/support-modal/support-modal';
 import { AppSettings } from './features/app-settings';
 import { confirmAction } from './features/confirm-action';
 import { CoinImagesStore } from './features/inventory/coin-images.store';
@@ -21,6 +24,11 @@ import { InventoryColumnsStore } from './features/inventory/inventory-columns.st
 import { InventoryFileIo } from './features/inventory/inventory-file-io';
 import { InventoryFilterStore } from './features/inventory/inventory-filter.store';
 import { InventorySelectionStore } from './features/inventory/inventory-selection.store';
+import { coinPhotoCount } from './services/coin-photos';
+import {
+  censusUnlinkedDenominations,
+  describeUnlinkedCensus
+} from './services/denominations/unlinked-denominations';
 import { CsvService } from './services/csv.service';
 import { InventoryService } from './services/inventory.service';
 import { StorageKeys, StorageService } from './services/storage.service';
@@ -58,7 +66,7 @@ import { CoinRecord } from './types/coin.model';
     AppToolbar, BulkEditBar, CategoryModal, CoinDetailPanel, CoinImageGallery,
     CoinPhotoViewer, CsvImportModal, ImageImportModal, InventoryFilterBar,
     InventoryTable, NotificationToast, QuickenImportModal, ReportModal,
-    SettingsModal, SpotPriceModalComponent
+    SettingsModal, SpotPriceModalComponent, StatisticsModal, SupportModal
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss'
@@ -89,6 +97,63 @@ export class App {
   protected readonly showCsvImportModal = signal(false);
   protected readonly showReportModal = signal(false);
   protected readonly showSpotPriceModal = signal(false);
+  protected readonly showStatisticsModal = signal(false);
+  /*
+   * "Help > Report a problem" (components/support-modal).
+   *
+   * Owned here like every other dialog: the toolbar only reports that it was
+   * asked for. Worth saying out loud because the batch image import once had
+   * a modal, a signal and an open/close pair with nothing ever calling the
+   * opener — see handleImportSelection below — so the join is the part that
+   * goes missing, not the component.
+   */
+  protected readonly showSupportModal = signal(false);
+
+  /*
+   * "SOME OF YOUR COINS HAVE NO DENOMINATION" — THE PROMPT
+   * WHY THE SHELL CARRIES THIS AT ALL
+   * The screen that FIXES unlinked coins lives inside Reference Data, because
+   * every fix it offers is a reference-data fix (see reference-sections.ts).
+   * That is the right home and it is a home a non-technical user would never
+   * open. Migration 014's report had exactly that problem in a worse form:
+   * the diagnosis existed, in SQL output nobody would ever encounter.
+   *
+   * So the shell asks the same question the pane does, and raises a banner
+   * when the answer is not zero. The banner is the only thing in the app
+   * that tells somebody the problem exists; the pane is where it is fixed.
+   *
+   * IT IS SILENT AT ZERO, AND THAT IS NOT AN INCONSISTENCY
+   * The pane reports zero loudly — "Every coin has a denomination" is what
+   * the user went there to find out. A permanent green bar on the main
+   * screen saying the same thing is noise, and noise is what makes the
+   * non-zero case invisible. Different question, different answer.
+   *
+   * It is also silent until the lookup has landed; `censusUnlinkedDenominations`
+   * handles that and explains why.
+    */
+  protected readonly unlinkedCensus = computed(() =>
+    censusUnlinkedDenominations(
+      this.inv.inventory(),
+      this.inv.denominations(),
+      (coinId) => this.inv.isDraftCoin(coinId)
+    )
+  );
+
+  protected readonly unlinkedCount = computed(() => this.unlinkedCensus().unlinkedCount);
+
+  /** The banner's sentence, or '' when there is nothing to say. */
+  protected readonly unlinkedPrompt = computed(() =>
+    this.unlinkedCount() === 0 ? '' : describeUnlinkedCensus(this.unlinkedCensus())
+  );
+
+  /** Which Reference Data pane the dialog should open on. */
+  protected readonly categoryModalSection = signal<string>(DEFAULT_REFERENCE_SECTION);
+
+  /** The banner's button: straight to the pane that fixes them. */
+  protected openUnlinkedCoins(): void {
+    this.categoryModalSection.set('unlinked');
+    this.showCategoryModal.set(true);
+  }
 
   /**
    * Resolves once start-up hydration has finished. Tests await this; nothing in
@@ -104,6 +169,20 @@ export class App {
 
   public get selectedCoin(): CoinRecord | null {
     return this.inv.selectedCoin();
+  }
+
+  /**
+   * How many photographs a coin has, for the template's "is the viewer worth
+   * showing" guard.
+   *
+   * Exposed here because `coin.imagePaths` is ABSENT until that coin's
+   * photographs are fetched — the list endpoint stopped carrying them after
+   * a 105-coin collection made its response impossible to serialise (see
+   * server/routes/coins/list-query.ts) — so `.length` in a template would
+   * throw. `coinPhotoCount` falls back to the `imageCount` the list DID send.
+   */
+  protected photoCount(coin: CoinRecord): number {
+    return coinPhotoCount(coin);
   }
 
   constructor(
@@ -125,7 +204,13 @@ export class App {
   protected closeQuickenModal(): void { this.showQuickenModal.set(false); }
   protected openImageImportModal(): void { this.showImageImportModal.set(true); }
   protected closeImageImportModal(): void { this.showImageImportModal.set(false); }
-  protected openCategoryModal(): void { this.showCategoryModal.set(true); }
+  protected openCategoryModal(): void {
+    // Back to the default pane. Without this, using the banner once would
+    // make the filter bar's "Manage categories" button silently open the
+    // unlinked-coins screen from then on.
+    this.categoryModalSection.set(DEFAULT_REFERENCE_SECTION);
+    this.showCategoryModal.set(true);
+  }
   protected closeCategoryModal(): void { this.showCategoryModal.set(false); }
   protected openCsvImportModal(): void { this.showCsvImportModal.set(true); }
   protected closeCsvImportModal(): void { this.showCsvImportModal.set(false); }
@@ -133,6 +218,10 @@ export class App {
   protected closeReportModal(): void { this.showReportModal.set(false); }
   protected openSpotPriceModal(): void { this.showSpotPriceModal.set(true); }
   protected closeSpotPriceModal(): void { this.showSpotPriceModal.set(false); }
+  protected openStatisticsModal(): void { this.showStatisticsModal.set(true); }
+  protected closeStatisticsModal(): void { this.showStatisticsModal.set(false); }
+  protected openSupportModal(): void { this.showSupportModal.set(true); }
+  protected closeSupportModal(): void { this.showSupportModal.set(false); }
   protected openSettingsModal(): void { this.showSettingsModal.set(true); }
   protected closeSettingsModal(): void { this.showSettingsModal.set(false); }
 

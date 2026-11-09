@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * denomination-units.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PINS DOWN
  *   The one rule that tells a coin's FACE VALUE from a PRICE:
  *
@@ -24,7 +24,7 @@
  *   Both are the real entry points, so these assertions fail if any layer
  *   between the filename and the answer stops honouring the rule -- not just
  *   if the table changes.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -115,7 +115,7 @@ describe('an amount written with cents is money', () => {
 
 describe('a coin has one face value, so a second, different amount is the price', () => {
   it('the real filename this rule was written for stays an ordinary Peace dollar', () => {
-    // Verbatim from the owner's share. The words say "Dollar"; $25.00 is what
+    // Verbatim from the share. The words say "Dollar"; $25.00 is what
     // he paid for it.
     expect(fileKey('1925-S Peace Dollar $25.00.jpg')).toBe('dollar');
     expect(fileKey('1925-S Peace Dollar NGC 2599001 $25.00.jpg')).toBe('dollar');
@@ -211,40 +211,25 @@ describe('the cent forms are unaffected -- nobody prices a coin at "50c"', () =>
   });
 });
 
-/* ===========================================================================
+ /*
  * THE SPACED FACE VALUE -- "2 cent", "3 cent", "20 cent"
- * ---------------------------------------------------------------------------
- * THESE ASSERTIONS USED TO LIVE IN `three-cent-proofs.spec.ts`, a spec named
- * after one collection of coins. The owner saw that file and said:
  *
- *   "I wouldn't expect there to be a special file to single out a particular
- *    type of coin like the three-cent-proofs.spec.ts. That's too specific and
- *    will just add a lot of noise to this project if we had files for every
- *    denomination. Likely, whatever rules are in there can be applied across
- *    the board."
+ * These are facts about how a FACE VALUE is read, which is what this file
+ * owns; nothing here is specific to three-cent pieces. Collection-shaped
+ * tests live in inventory-accounts.spec.ts.
  *
- * He is right, and none of these is about three-cent pieces: they are facts
- * about how a FACE VALUE is read, which is what this file owns. The tests
- * that genuinely needed his inventory moved to inventory-accounts.spec.ts.
+ * THE SPACED FORM IS A FACE VALUE, AND THE HYPHEN IS NO LONGER THE GUARD
  *
- * ---------------------------------------------------------------------------
- * THE HISTORY, BECAUSE THE ANSWER HERE WAS ONCE THE OPPOSITE
- * ---------------------------------------------------------------------------
- *   The spaced form used to be REFUSED, and the refusal was deliberate: the
- *   bare word "cent" is a spelling of the ONE CENT piece, so "2 cent" came out
- *   as a penny -- and a wrong denomination is a HARD VETO, which disqualified
- *   his two-cent photographs from their own records. Reading nothing was the
- *   safe answer available at the time.
+ *   Refusing the spaced form was once deliberate: the bare word "cent" is a
+ *   spelling of the ONE CENT piece, so "2 cent" came out as a penny -- and a
+ *   wrong denomination is a HARD VETO, which disqualified two-cent
+ *   photographs from their own records.
  *
- *   He was then asked the question directly, and answered it:
- *
- *       "Yes, read them as face values"
- *
- *   So "2 cent" is the Two Cent piece, "3 cent" a three-cent piece and
+ *   "2 cent" IS the Two Cent piece, "3 cent" a three-cent piece and
  *   "20 cent" the Twenty Cent. The hyphen that used to be required is no
  *   longer what keeps stamps and paper money out; the non-coin detector is,
  *   and the last block below names the exact files it has to refuse.
- * ========================================================================= */
+  */
 describe('a spaced face value is a face value, because he said so', () => {
   it.each([
     ['1864 2 cent - Obverse.jpg',          'two cent'],
@@ -285,7 +270,7 @@ describe('the spaced form must not let a stamp or paper money in', () => {
   /* THE DEFENCE THE SPACED FACE VALUE WOULD OTHERWISE HAVE BROKEN.
    *
    * The first of these is a POSTAGE STAMP and the other two are FRACTIONAL
-   * CURRENCY -- paper, not coins -- and all three are verbatim from his
+   * CURRENCY -- paper, not coins -- and all three are verbatim from the
    * share. The hyphen rule in denomination-units.ts was once documented as
    * "the entire defence" against the first one, because "3 cent" with a
    * space was refused outright.

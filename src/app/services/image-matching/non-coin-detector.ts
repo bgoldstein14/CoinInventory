@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * non-coin-detector.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Deciding that an image is NOT a photograph of one identifiable coin, so
  *   the matcher must not auto-assign it to anything. Public entry point is
@@ -37,7 +37,7 @@
  *   "Dimes"), but `text-tokens.singularize` has already destroyed them by the
  *   time tokens exist -- "coins" arrives as "coin", which is a perfectly
  *   normal word for a single-coin photo. So this module reads the raw name.
- * =========================================================================== */
+  */
 
 import {
   COUNTERFEIT_MARKER_WORDS,
@@ -136,51 +136,36 @@ export function detectNonCoin(rawText: string): NonCoinVerdict {
   return IS_A_COIN;
 }
 
-/* ===========================================================================
+ /*
  * EXCLUSION FROM THE AUTOMATED IMPORT
- * ---------------------------------------------------------------------------
+ *
  * A SECOND, STRONGER VERDICT -- AND WHY IT IS NOT JUST `isNonCoin`.
  *
- * The owner was asked about two groups of photographs on his share, and gave
- * the same answer about both:
+ * Two groups of photographs on the share get the same treatment:
+ * COUNTERFEITS (8 files) and MULTI-COIN SHOTS (22 files) are never attached
+ * automatically AND never offered as attachable in the automated import.
  *
- *   COUNTERFEITS (8 files)
- *     "Ignore the Fake coins."
- *
- *   MULTI-COIN SHOTS (22 files)
- *     "Never automatically attach nor offer as attachable in the automated
- *      import. A user can try to manually choose such a photo manually at a
- *      later time to attach to a coin(s)."
- *
- * One answer, so ONE channel -- hence one function rather than two.
- *
- * `isNonCoin` already means "never auto-assign this". What it does NOT mean is
- * "never OFFER this": a tier-3 row still carries the opt-in "Attach anyway..."
- * link, and that link IS the "offer as attachable in the automated import"
- * he ruled out. So this verdict is reported separately, and the decision layer
- * suppresses the rescue affordance for it. That is the only difference between
- * the two verdicts, and it is the whole reason this is not simply four more
- * entries in GROUP_SHOT_WORDS.
+ * `isNonCoin` already means "never auto-assign this". What it does NOT mean
+ * is "never OFFER this": a tier-3 row still carries the opt-in "Attach
+ * anyway..." link, and that link IS the offer these rows must not get. So
+ * this verdict is reported separately, and the decision layer suppresses the
+ * rescue affordance for it. That difference is the whole reason this is not
+ * simply four more entries in GROUP_SHOT_WORDS.
  *
  * *** WHAT THIS VERDICT IS NOT ***
- * It is advice to the AUTOMATED MATCHER and nothing else. The owner:
+ * It is advice to the AUTOMATED MATCHER and nothing else. No picture file may
+ * ever be off limits from being attached to a coin by hand, however
+ * irrelevant its descriptor -- it may be an article about the coin rather
+ * than a photograph of it. So an excluded file is still read, still listed,
+ * still has its parse shown, and is still freely attachable from the per-coin
+ * image gallery, which never consults this module. The row stays VISIBLE in
+ * the "Not imported" table with a plain reason, because "where did my photo
+ * go?" is the one question the importer must never leave a user asking.
  *
- *   "I never want a picture file to be off limits from choosing to attach to
- *    a coin even if the descriptor has nothing relevant to the coin itself."
- *   "Maybe it's an article about the coin or something like that that I'd want
- *    to attach."
- *
- * So an excluded file is still read, still listed, still has its parse shown,
- * and is still freely attachable by hand from the per-coin image gallery --
- * which never consults this module. The row stays VISIBLE in the "Not
- * imported" table with a plain reason, because "where did my photo go?" is the
- * one question the importer must never leave him asking.
- *
- * His governing principle, which is where both halves come from:
- *
- *   "I can always force an image to be associated with a coin manually, but
- *    the automated process should be very descriminatory."
- * =========================================================================== */
+ * The governing principle, which is where both halves come from: an image can
+ * always be forced onto a coin manually, but the automated process should be
+ * very discriminatory.
+  */
 
 /** Which kind of thing the exclusion marker said this photograph was. */
 export type AutoImportExclusionKind = 'counterfeit' | 'multi-coin';
@@ -222,8 +207,8 @@ export function detectAutoImportExclusion(rawText: string): AutoImportExclusion 
   /* COUNTERFEITS. Checked first because they are the dangerous half: a fake
    * carries a complete and perfectly valid descriptor ("FAKE - 1860 3CS - VF
    * - Obverse") and would otherwise score exactly as well against a genuine
-   * 1860 three-cent silver as a photograph of one. The owner holds five real
-   * 1861 3CS records, which is precisely where that collision lands. */
+   * 1860 three-cent silver as a photograph of one. The inventory holds five
+   * real 1861 3CS records, which is precisely where that collision lands. */
   const fake = firstWordIn(text, COUNTERFEIT_MARKER_WORDS);
   if (fake) {
     return {

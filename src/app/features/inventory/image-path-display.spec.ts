@@ -1,9 +1,9 @@
 /**
  * Tests for how one image's original-file path is rendered.
  *
- * The three states are what the user actually asked for: a clickable link
- * while the file is there, the same text in a different colour and NOT
- * clickable once it is gone, and nothing at all when no path was recorded.
+ * Three states: a clickable link while the file is there, the same text in a
+ * different colour and NOT clickable once it is gone, and nothing at all
+ * when no path was recorded.
  *
  * These assert the render model rather than poking at real DOM nodes: the
  * frontend test suite runs in Node with no browser, and the template is a

@@ -193,7 +193,9 @@ Scripts:
 | `routes/param-utils.ts` | Shared request-parameter helpers |
 | `migrations/` | Idempotent schema changes for a database that already has data in it |
 | `process-safety.ts` | `unhandledRejection` / `uncaughtException` handlers |
-| `logger.ts` | Appends timestamped lines to `logs/app.log` |
+| `logger.ts` | Appends timestamped lines to a rotated daily log in `logs/` |
+| `log-rotation.ts` | Daily log naming, the per-file size cap, and retention |
+| `support/` | The problem-report bundle: redaction, report text, zip writer |
 | `test-support/mssql-mock.ts` | The shared mssql mock used by every spec |
 
 ## The connection pool (read before changing `db/pool.ts`)
@@ -257,7 +259,13 @@ Like `/api/images`, this route **never touches the database**, so it keeps answe
 
 ## Logging
 
-`logger.ts` appends timestamped lines to `logs/app.log` (synchronously, so writes are ordered) and echoes to the console. Every `/api` request is logged, along with all warnings and errors.
+`logger.ts` appends timestamped lines to `logs/app-YYYY-MM-DD.log` (synchronously, so writes are ordered) and echoes to the console. Every `/api` request is logged, along with all warnings and errors.
+
+**Rotation.** One file per UTC day, each capped at 5 MB — overflow rolls to `app-YYYY-MM-DD.1.log` — and roughly fourteen days kept. The policy lives in `log-rotation.ts`.
+
+The single unbounded `app.log` this replaced reached 7.9 MB and 42,772 lines in ordinary use, which is two problems at once: nobody can attach an unbounded file to a support issue, and every path in it carries the Windows user name, so an append-only log accumulates those forever. Retention is the privacy control, not housekeeping.
+
+A pre-rotation `app.log` is renamed into the dated scheme on first write, so the retention rule finally applies to it rather than leaving it on disk indefinitely. Set `COIN_LOG_DIR` to write logs somewhere other than `server/logs` — §4.10a of the packaging design puts them under `%LOCALAPPDATA%` in the packaged build.
 
 `POST /api/log` lets the Angular app write into the same file, so frontend and backend messages appear in one timeline. It always returns 204 and never fails the caller.
 

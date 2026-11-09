@@ -34,25 +34,19 @@ import coinsRouter from './routes/coins';
 import lookupsRouter from './routes/lookups';
 import dataRouter from './routes/data';
 import imagesRouter from './routes/images';
+import supportRouter from './routes/support';
 import { globalErrorHandler } from './routes/error-handler';
 
-// Re-export getPool so tests and other consumers can still import from './server'
+// Re-exported so tests and other consumers can import it from './server'.
 export { getPool } from './db';
 
-// ============================================================
-// Process-level safety net
-// ============================================================
-//
 // Installs the 'unhandledRejection' / 'uncaughtException' handlers that make
 // a fatal error show up in app.log instead of silently ending the process.
-// See process-safety.ts for the full story. Done here at module load so the
-// handlers are active for the whole lifetime of the process (including during
-// tests).
+// At module load, so they are active for the whole lifetime of the process
+// (including during tests). See process-safety.ts.
 installProcessSafetyNet();
 
-// ============================================================
 // Express app
-// ============================================================
 
 const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
 
@@ -63,17 +57,13 @@ app.use(express.json({ limit: '50mb' }));
 const angularDistPath = path.resolve(__dirname, '..', 'dist', 'coin-inventory-app');
 app.use(express.static(angularDistPath));
 
-// Request logging middleware — logs every API request
 app.use('/api', (req, _res, next) => {
   logInfo(`${req.method} ${req.path}`);
   next();
 });
 
-// ============================================================
-// Mount route modules
-// ============================================================
 // Health first, so the launcher's readiness probe is registered before
-// anything else — same order as when it was declared inline here.
+// anything else.
 app.use('/api', healthRouter);
 // /api/app-info tells the browser where the app is installed on THIS machine.
 // Like /api/images below it never touches the database — it answers a question
@@ -88,31 +78,26 @@ app.use('/api', dataRouter);
 // routes/images/index.ts, and routes/images/file.ts for why the browser cannot
 // just open a file:// link itself.
 app.use('/api/images', imagesRouter);
+// /api/support/* — "Help > Report a problem". Like /api/app-info it must keep
+// working when the database does not, because "the database is not working"
+// is one of the likeliest reasons somebody is filing a report. It reads the
+// collection as COUNTS ONLY and writes nothing until the user has seen and
+// approved the text. See routes/support/index.ts.
+app.use('/api', supportRouter);
 
-// ============================================================
 // Angular SPA fallback — must be LAST route
-// ============================================================
 app.get('*', (_req: Request, res: Response) => {
   res.sendFile(path.join(angularDistPath, 'index.html'));
 });
 
-// ============================================================
-// Global error handler
-// ============================================================
-// Lives in routes/error-handler.ts. It honours the `status` a middleware error
-// already carries instead of flattening everything to 500 — most importantly
-// body-parser's 413 "payload too large", which used to be reported as a generic
-// server error during batch image imports.
+// Honours the `status` a middleware error already carries instead of
+// flattening everything to 500 — most importantly body-parser's 413 "payload
+// too large", which a batch image import can hit. See routes/error-handler.ts.
 app.use(globalErrorHandler);
 
-// ============================================================
-// Export for testing
-// ============================================================
 export { app };
 
-// ============================================================
 // Start (only when run directly)
-// ============================================================
 const isMainModule = require.main === module || process.argv[1]?.endsWith('server.ts');
 if (isMainModule) {
   app.listen(PORT, () => {

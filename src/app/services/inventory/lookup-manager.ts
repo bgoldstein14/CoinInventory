@@ -1,19 +1,20 @@
 import { WritableSignal } from '@angular/core';
 import { Denomination, MintMarkOption } from '../../types/coin.model';
+import { CatalogOption } from '../../types/catalog-reference';
 import { ApiService, describeHttpError } from '../api.service';
 import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
 import { firstValueFrom } from 'rxjs';
 
-/* ===========================================================================
+ /*
  * LookupManager
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   The four "reference lists" the inventory picks values from, all four of
  *   them database-backed: added and removed on the server as well as locally.
  *     * categories
- *     * coin sets     (was local-only until it turned out that lost data —
- *                      see the long note above addCoinSet)
+ *     * coin sets     (database-backed in both directions — see the note
+ *                      above addCoinSet)
  *     * denominations
  *     * mint marks
  *
@@ -26,7 +27,7 @@ import { firstValueFrom } from 'rxjs';
  * The signals themselves still live on InventoryService (they are part of its
  * public API); this class is handed the same signal objects and writes
  * through them, so there is only ever one list.
- * =========================================================================== */
+  */
 
 export class LookupManager {
   constructor(
@@ -34,14 +35,13 @@ export class LookupManager {
     private readonly coinSets: WritableSignal<string[]>,
     private readonly denominations: WritableSignal<Denomination[]>,
     private readonly mintMarks: WritableSignal<MintMarkOption[]>,
+    private readonly catalogs: WritableSignal<CatalogOption[]>,
     private readonly apiService: ApiService,
     private readonly logger: LoggingService,
     private readonly notificationService: NotificationService
   ) {}
 
-  /* =========================================================================
-   * Categories
-   * ======================================================================= */
+  /* ---- Categories ---- */
 
   /**
    * Add any category names we have not seen before, and persist the new ones.
@@ -93,30 +93,23 @@ export class LookupManager {
   /* =========================================================================
    * Coin sets
    * -------------------------------------------------------------------------
-   * THESE USED TO BE LOCAL-ONLY, AND THAT WAS A BUG
+   * COIN SETS ARE DATABASE-BACKED, AND BOTH HALVES MUST STAY THAT WAY.
    *
-   * The old comment here claimed the omission was deliberate: "a coin set
-   * exists because some coin references it, so it is saved as part of the coin,
-   * not as its own row." That reasoning does not survive contact with the rest
-   * of the system:
+   * There is a CoinSets table with `/api/coin-sets` GET/POST/DELETE routes
+   * behind `ApiService.getCoinSets` / `createCoinSet` / `deleteCoinSet`, and
+   * hydration READS from it (ConnectionManager.hydrate only falls back to
+   * deriving the list from the coins when that call fails). The UI also
+   * offers "Add set" with no coin attached, which a derive-from-coins model
+   * cannot persist at all.
    *
-   *   * there IS a CoinSets table, with `/api/coin-sets` GET/POST/DELETE routes
-   *     behind `ApiService.getCoinSets` / `createCoinSet` / `deleteCoinSet`;
-   *   * hydration already READS from it (see ConnectionManager.hydrate, which
-   *     calls getCoinSets and only falls back to deriving the list from the
-   *     coins when that call fails); and
-   *   * the UI offers "Add set" with no coin attached, which under a
-   *     derive-from-coins model cannot persist at all.
+   * Drop the WRITE half and the user adds a set, sees it appear, reloads and
+   * finds it gone -- the next hydration replaces the local list with the
+   * database's, which was never told. An empty set created ahead of filing
+   * coins into it vanishes every time.
    *
-   * So the write path was the only half missing. The user would add a set, see
-   * it appear, reload, and find it gone — because the next hydration replaced
-   * the local list with the database's, which had never been told. An empty set
-   * created ahead of filing coins into it vanished every single time.
-   *
-   * Both methods now mirror the category pattern above exactly: update the
-   * signal immediately so the UI stays responsive, then persist in the
-   * background and report a failure rather than silently diverging from the
-   * database.
+   * Both methods mirror the category pattern above exactly: update the signal
+   * immediately so the UI stays responsive, then persist in the background
+   * and report a failure rather than silently diverging from the database.
    * ======================================================================= */
 
   addCoinSet(name: string): void {
@@ -152,9 +145,7 @@ export class LookupManager {
       });
   }
 
-  /* =========================================================================
-   * Denomination Management
-   * ======================================================================= */
+  /* ---- Denomination Management ---- */
 
   async loadDenominations(): Promise<void> {
     try {
@@ -165,6 +156,25 @@ export class LookupManager {
       this.logger.error('Failed to load denominations', describeHttpError(error));
       this.notificationService.showError('Failed to load denominations');
     }
+  }
+
+  /**
+   * The denominations lookup, for code that needs to READ it.
+   *
+   * The signal itself belongs to InventoryService and is written only here.
+   * This getter exists because `CoinCollection.importInventoryData` has to
+   * resolve a restored coin's denomination text to an id (design §4.1) and
+   * is handed this class rather than the signal.
+   *
+   * *** RETURNS THE ARRAY, NOT A COPY. *** The resolver indexes the lookup
+   * on its ARRAY IDENTITY so that 1,161 labels are folded once per fetch
+   * rather than once per coin; handing back `[...list]` would defeat that
+   * silently, turning a restore of 2,000 coins into 2.3 million alias
+   * folds. Nothing mutates it — `loadDenominations`, `addDenomination` and
+   * `removeDenomination` all REPLACE the array.
+   */
+  denominationList(): readonly Denomination[] {
+    return this.denominations();
   }
 
   async addDenomination(d: Partial<Denomination>): Promise<void> {
@@ -191,9 +201,7 @@ export class LookupManager {
     }
   }
 
-  /* =========================================================================
-   * Mint Mark Management
-   * ======================================================================= */
+  /* ---- Mint Mark Management ---- */
 
   async loadMintMarks(): Promise<void> {
     try {
@@ -227,6 +235,84 @@ export class LookupManager {
     } catch (error) {
       this.logger.error('Failed to delete mint mark', describeHttpError(error));
       this.notificationService.showError('Failed to delete mint mark');
+    }
+  }
+
+  /* =========================================================================
+   * Catalogue Management  (migration 012)
+   * -------------------------------------------------------------------------
+   * A fifth list in exactly the shape of the four above -- which is the whole
+   * design decision. Catalogues (Sear, RIC, Hendin, Krause) are reference
+   * data the user maintains, no different in kind from denominations, so
+   * they get the same four methods, the same optimistic signal update, the
+   * same background persist, and the same "tell the user, do not swallow it"
+   * error handling. Anyone who understands the denomination block understands
+   * this one.
+   *
+   * The ONE extra method is rename. Catalogues get it because the seeded
+   * names are abbreviations a user may reasonably want to expand ("RIC" ->
+   * "RIC (Roman Imperial Coinage)") without losing the attribution on every
+   * coin that points at the row -- which is exactly what remove-and-re-add
+   * would do, since the coins reference the ID.
+   * ======================================================================= */
+
+  async loadCatalogs(): Promise<void> {
+    try {
+      const catalogs = await firstValueFrom(this.apiService.getCatalogs());
+      this.catalogs.set(catalogs);
+      this.logger.info(`Loaded ${catalogs.length} catalogues from database`);
+    } catch (error) {
+      this.logger.error('Failed to load catalogues', describeHttpError(error));
+      this.notificationService.showError('Failed to load catalogues');
+    }
+  }
+
+  async addCatalog(c: Partial<CatalogOption>): Promise<void> {
+    try {
+      const created = await firstValueFrom(this.apiService.createCatalog(c));
+      this.catalogs.set([...this.catalogs(), created]);
+      this.logger.info(`Created catalogue: ${created.name}`);
+      this.notificationService.showInfo(`Added catalogue: ${created.name}`);
+    } catch (error) {
+      this.logger.error('Failed to create catalogue', describeHttpError(error));
+      this.notificationService.showError('Failed to create catalogue');
+    }
+  }
+
+  /**
+   * Rename a catalogue in place, keeping its id.
+   *
+   * KEEPING THE ID IS THE POINT. Coins store `CatalogId`, so renaming the row
+   * re-labels every coin attributed to it at once; deleting it and adding a
+   * new one would silently orphan all of them (they would start reading as a
+   * bare number). That is why there is no "remove then add" shortcut in the
+   * maintenance screen.
+   */
+  async renameCatalog(id: number, name: string): Promise<void> {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+
+    try {
+      await firstValueFrom(this.apiService.updateCatalog(id, { name: trimmed }));
+      this.catalogs.set(
+        this.catalogs().map(c => (c.catalogId === id ? { ...c, name: trimmed } : c))
+      );
+      this.logger.info(`Renamed catalogue ${id} to ${trimmed}`);
+    } catch (error) {
+      this.logger.error('Failed to rename catalogue', describeHttpError(error));
+      this.notificationService.showError('Failed to rename catalogue');
+    }
+  }
+
+  async removeCatalog(id: number): Promise<void> {
+    try {
+      await firstValueFrom(this.apiService.deleteCatalog(id));
+      this.catalogs.set(this.catalogs().filter(c => c.catalogId !== id));
+      this.logger.info(`Deleted catalogue: ${id}`);
+      this.notificationService.showInfo('Catalogue removed');
+    } catch (error) {
+      this.logger.error('Failed to delete catalogue', describeHttpError(error));
+      this.notificationService.showError('Failed to delete catalogue');
     }
   }
 }

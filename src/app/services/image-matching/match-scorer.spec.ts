@@ -1,33 +1,21 @@
-/* ===========================================================================
+ /*
  * match-scorer.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   That `scorePair` applies the GRADE TOLERANCE the same way tier 2 does,
- *   and that it is stingy in the one place the owner asked it to be: extra
- *   detail on one side earns the grade's WEIGHT but not a STRONG ATTRIBUTE.
+ *   and that it is stingy in the one place that matters: extra detail on one
+ *   side earns the grade's WEIGHT but not a STRONG ATTRIBUTE.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS FILE EXISTS AT ALL
- * ---------------------------------------------------------------------------
- *   These assertions used to live in `three-cent-proofs.spec.ts`, a spec
- *   named after one collection of coins. The owner saw that file and said:
- *
- *     "I wouldn't expect there to be a special file to single out a
- *      particular type of coin like the three-cent-proofs.spec.ts. That's
- *      too specific and will just add a lot of noise to this project if we
- *      had files for every denomination. Likely, whatever rules are in there
- *      can be applied across the board."
- *
- *   He is right, and these were the clearest example of the problem: not one
- *   of them is about three-cent pieces. They are facts about the SCORER, and
- *   they belong in a file named after the scorer. The collection-shaped tests
- *   that really did need his inventory moved to inventory-accounts.spec.ts,
- *   which runs every account through one data-driven suite.
+ *   There is deliberately no spec file named after a collection of coins.
+ *   Nothing here is about three-cent pieces; these are facts about the
+ *   SCORER, and they belong in a file named after the scorer.
+ *   Collection-shaped tests live in inventory-accounts.spec.ts, which runs
+ *   every account through one data-driven suite.
  *
  *   `near-match.spec.ts` owns the grade comparison itself (every relation,
  *   both directions, every synonym table). This file owns only what the
  *   SCORER does with the answer.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -55,21 +43,21 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
 
 describe('there is exactly ONE implementation of grade equivalence', () => {
   it('the scorer and tier 2 call the same function object', () => {
-    /* THE REGRESSION TEST FOR THE REASON THIS WAS A MOVE AND NOT A COPY.
+    /* THE REGRESSION TEST FOR WHY THIS IS ONE FUNCTION AND NOT TWO.
      *
-     * The tolerance used to live in near-match.ts, where only the tier-2
-     * four-attribute test could reach it, while match-scorer.ts still
-     * compared grade strings with a plain `===`. The owner measured the
-     * consequence himself on two photographs of ONE coin:
+     * If the tolerance lived only in near-match.ts, where the tier-2
+     * four-attribute test can reach it, match-scorer.ts would go on
+     * comparing grade strings with a plain `===`. Two photographs of ONE
+     * coin then land on opposite sides of the bar:
      *
      *     1867 3CS - NGC PF65CAM - Reverse.jpg       scored 0.84 -> skipped
      *     1867 3CS - NGC PF65 Cameo - Obverse.jpg    scored 0.88 -> attached
      *
      * 0.03 apart, which is exactly the distance across the 0.85 auto-match
-     * bar. The fix could have been to copy the comparison into the scorer.
-     * It was not, because TWO IMPLEMENTATIONS OF "ARE THESE THE SAME GRADE?"
-     * WOULD DRIFT -- and the day they drifted, the scorer would be rewarding
-     * a pairing the near-match test refuses, or the reverse.
+     * bar. Do not copy the comparison into the scorer: TWO IMPLEMENTATIONS
+     * OF "ARE THESE THE SAME GRADE?" WOULD DRIFT -- and the day they
+     * drifted, the scorer would be rewarding a pairing the near-match test
+     * refuses, or the reverse.
      *
      * `compareGrades` now lives in grade-tolerance.ts; near-match.ts
      * re-exports it and match-scorer.ts imports it. If someone ever writes a

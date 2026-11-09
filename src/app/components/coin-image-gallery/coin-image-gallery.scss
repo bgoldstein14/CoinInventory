@@ -2,35 +2,19 @@
 @use '../../styles/controls' as *;
 @use '../../styles/modal' as *;
 
-// Not part of the original markup, and everything inside is position: fixed
-// anyway — keep the host out of the layout.
+// Everything inside is position: fixed anyway — keep the host out of layout.
 :host { display: contents; }
 
-// ---------------------------------------------------------------------------
-// WHY THE MODAL PARTIAL IS IMPORTED ABOVE (it used to be deliberately absent)
-// ---------------------------------------------------------------------------
-// This overlay has always used the `.modal-backdrop` / `.modal` /
-// `.modal-header` class names, but nothing ever supplied their styles: the
-// markup originally lived in app.html, and `app.scss` never imported
-// `styles/_modal.scss`. When the gallery was extracted into this component the
-// omission was carried across on purpose, so the refactor would change nothing
-// visually, and a comment here recorded that as "a one-line change, left out
-// on purpose".
-//
-// It was not merely cosmetic, and it is very likely part of what prompted the
-// owner's complaint that the Images button shows him "all images". With no
-// `.modal-backdrop` rule there was no fixed positioning, no dimmed overlay and
-// no card chrome: the gallery rendered INLINE, underneath the inventory table.
-// The inventory table has a Photo column, so what was actually on screen was
-// every coin's thumbnail with a small unstyled strip of this coin's photos
-// tacked on below — which reads exactly like "all the images". The same
-// omission had already been found and fixed in the Settings dialog for the
-// same reason; see the matching note in settings-modal.scss.
-// ---------------------------------------------------------------------------
+// Angular scopes styles per component, so `styles/_modal.scss` MUST be
+// imported above even though the markup only uses its class names. Without it
+// there is no `.modal-backdrop` rule at all: no fixed positioning, no dimmed
+// overlay, no card chrome, and the gallery renders INLINE underneath the
+// inventory table — which, since that table has a Photo column of its own,
+// looks to a user like the dialog is showing every coin's images.
 
-// The gallery is now the screen for looking at one coin's photos properly, so
-// it is given more room than the shared 800px `.modal--wide`: wide enough for
-// four of the tiles below side by side, and still capped at the viewport.
+// The screen for looking at one coin's photos properly, so it gets more room
+// than the shared 800px `.modal--wide`: wide enough for four of the tiles
+// below side by side, and still capped at the viewport.
 .image-gallery-modal {
   max-width: min(1100px, 94vw);
 }
@@ -69,21 +53,12 @@
   text-align: center;
 }
 
-// ---------------------------------------------------------------------------
-// THE TILES
-// ---------------------------------------------------------------------------
-// This used to be a vertical list of rows with a 48px square thumbnail. It is
-// now a wrapping grid of tiles, and the photos are deliberately MUCH bigger
-// than anywhere else in the app:
-//
-//     near-match review rows   88px
-//     import matched-coin tiles 128px
-//     here                     220px tile, 200px of photo
-//
-// The import screens are for SCANNING a folder — you want many at once and
-// only enough detail to say "yes, that's the coin". This screen is the
-// opposite: one coin, however many shots of it, and you are here to actually
-// look at them. Hence roughly double the size.
+// THE TILES — a wrapping grid, with photos deliberately MUCH bigger than
+// anywhere else in the app (220px tile, 200px of photo, against 128px import
+// tiles and 88px near-match rows). The import screens are for SCANNING a
+// folder: many at once, only enough detail to say "yes, that's the coin".
+// This screen is the opposite — one coin, however many shots of it, and you
+// are here to actually look at them.
 .image-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -154,8 +129,7 @@
 // `object-fit: contain`, NEVER `cover`. Coins are round and photographed
 // centred, so filling a fixed box by cropping shaves the rim off every one of
 // them — and the rim, the date and the mint mark are precisely what this
-// screen exists to show. (`cover` is what the import tiles used to do, and it
-// was changed there for the same reason.)
+// screen exists to show.
 .coin-thumb {
   display: block;
   width: 100%;
@@ -169,12 +143,9 @@
 
 // ---- Empty state ----
 //
-// Shown by @for's `@empty` branch when the coin has no photos — a state this
-// dialog could not even be opened in until now. Its one job is to make
-// "add the first photo" unmissable, so it restates the picker in the middle
-// of the dialog where the eye already is. Dashed border because the whole
-// `.image-gallery` box is also a drop target, and dashed is the convention
-// for "you can drop things here".
+// Shown by @for's `@empty` branch when the coin has no photos. Dashed border
+// because the whole `.image-gallery` box is also a drop target, and dashed is
+// the convention for "you can drop things here".
 .image-gallery__empty {
   grid-column: 1 / -1;
   display: grid;

@@ -23,9 +23,7 @@ beforeEach(() => {
   resetMssqlMock();
 });
 
-// ============================================================
 // Categories API
-// ============================================================
 
 describe('GET /api/categories', () => {
   it('returns category names', async () => {
@@ -69,13 +67,39 @@ describe('GET /api/denominations', () => {
   });
 
   it('returns the database denomination rows without injecting a duplicate static catalog', async () => {
+    // Still an exact `toEqual`, which is the point of the test: the response
+    // is the database rows and nothing else. It gained issuerId, issuerName
+    // and faceValue when the maintenance screen was rebuilt to group by
+    // issuer — three columns of the same row, not an injected
+    // extra entry.
     mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ DenominationId: 9, Label: '25¢', Country: 'US', SortOrder: 9 }],
+      recordset: [
+        {
+          DenominationId: 9,
+          Label: '25¢',
+          Country: 'US',
+          IssuerId: 1,
+          IssuerName: 'United States',
+          FaceValue: 0.25,
+          SortOrder: 9,
+        },
+      ],
     });
 
     const res = await request(app).get('/api/denominations');
     expect(res.status).toBe(200);
-    expect(res.body).toEqual([{ denominationId: 9, label: '25¢', country: 'US', sortOrder: 9, isActive: true }]);
+    expect(res.body).toEqual([
+      {
+        denominationId: 9,
+        label: '25¢',
+        country: 'US',
+        issuerId: 1,
+        issuerName: 'United States',
+        faceValue: 0.25,
+        sortOrder: 9,
+        isActive: true,
+      },
+    ]);
   });
 });
 
@@ -144,9 +168,7 @@ describe('DELETE /api/categories/:name', () => {
   });
 });
 
-// ============================================================
 // Coin Sets API
-// ============================================================
 
 describe('GET /api/coin-sets', () => {
   it('returns set names', async () => {

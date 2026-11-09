@@ -3,16 +3,8 @@
  * between the original file and the stored copy.
  *
  * WHY THESE ARE WORTH TESTING
- * ---------------------------
- * Everything here was stated by the owner as a rule, in words:
- *
- *   "...a resizable window where the image takes up the full size of the
- *    window (which should start off only taking about 1/2 the display) allow
- *    me to shrink and grow the image window up to the highest resolution of
- *    the picture"
- *
  * The resizing itself is one line of CSS (`resize: both`) and cannot be
- * tested without a browser. The three numbers that CSS is given — the opening
+ * tested here at all — this suite runs under Node with no DOM. The three numbers that CSS is given — the opening
  * size, the maximum and the minimum — are pure arithmetic, and they are the
  * part that can silently be wrong. In particular the MAXIMUM is the whole
  * reason the viewer bothers to fetch the original file at all, so it gets the
@@ -130,8 +122,8 @@ describe('maxViewerSize — "up to the highest resolution of the picture"', () =
   });
 
   it('caps a fallback stored copy at ITS native size, which is much smaller', () => {
-    // The promise the owner cares about: no stretching a 600px image to
-    // 4000px and wondering why it went soft. Nothing special implements this
+    // The promise that matters: no stretching a 600px image to 4000px and
+    // wondering why it went soft. Nothing special implements this
     // — the cap is simply the natural size of whatever actually loaded, so
     // the fallback caps itself.
     expect(maxViewerSize({ width: 600, height: 450 }))

@@ -22,9 +22,7 @@ beforeEach(() => {
   resetMssqlMock();
 });
 
-// ============================================================
 // Transactions API
-// ============================================================
 
 describe('GET /api/transactions', () => {
   it('returns all transactions', async () => {
@@ -90,9 +88,7 @@ describe('DELETE /api/transactions/:id', () => {
   });
 });
 
-// ============================================================
 // Spot Prices API
-// ============================================================
 
 describe('GET /api/spot-prices/latest', () => {
   it('returns zeros when no prices exist', async () => {
@@ -139,9 +135,7 @@ describe('POST /api/spot-prices', () => {
     expect(res.body.id).toBe(1);
   });
 
-  // ----------------------------------------------------------------
   // "A zero is not a price"
-  // ----------------------------------------------------------------
   // A precious metal never trades at zero, so a zero means "no price". This
   // endpoint is the one place that matters most, because /spot-prices/latest
   // reads the newest row back and the client applies it at start-up: a single
@@ -203,9 +197,7 @@ describe('POST /api/spot-prices', () => {
   });
 });
 
-// ============================================================
 // Settings API
-// ============================================================
 
 describe('GET /api/settings/:key', () => {
   it('returns 404 for non-existent setting', async () => {

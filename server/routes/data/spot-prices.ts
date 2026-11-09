@@ -23,7 +23,7 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn, logError } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { fetchSpotPrices } from './spot-price-source';
 
 const router = Router();
@@ -54,9 +54,9 @@ router.get('/spot-prices/latest', async (_req: Request, res: Response) => {
       return;
     }
 
-    res.json(prices);
+    sendJson(res, 'GET /api/spot-prices/latest', prices, 'spot prices');
   } catch (err) {
-    sendDbError(res, 'GET /api/spot-prices/latest', err, 'Failed to retrieve spot prices');
+    sendDbError(res, 'GET /api/spot-prices/latest', err, 'Failed to retrieve spot prices', 'spot prices');
   }
 });
 
@@ -65,13 +65,13 @@ router.get('/spot-prices/latest', async (_req: Request, res: Response) => {
  *
  * The actual outbound call lives in ./spot-price-source so this route stays
  * about HTTP shape, and so the upstream can be swapped without touching
- * routing code. See that file for why metals.live was replaced.
+ * routing code.
  *
- * Still answers 200 on failure, with zeroed prices and an `error` field: the
+ * Answers 200 on failure, with zeroed prices and an `error` field: the
  * frontend treats missing prices as "unknown", and a dead third-party API
- * should not make the app look broken. But it now also reports *which* metals
- * failed, so a zero is never silently presented as a real price -- that is
- * exactly how the dead metals.live endpoint went unnoticed.
+ * should not make the app look broken. It also reports *which* metals
+ * failed, so a zero is never silently presented as a real price — that is
+ * how a dead upstream goes unnoticed for months.
  */
 router.get('/spot-prices/fetch', async (_req: Request, res: Response) => {
   try {
@@ -163,11 +163,10 @@ router.post('/spot-prices', async (req: Request, res: Response) => {
           VALUES (@gold, @silver, @platinum, @copper, @source)
         `);
 
-      // The OUTPUT clause should always give us exactly one row, but if the
-      // driver hands back an empty recordset (it does happen when a trigger or
-      // a driver quirk swallows the OUTPUT) then reading [0]['SpotPriceId']
-      // throws "Cannot read properties of undefined". That used to bubble up as
-      // an unhandled failure and spam the log. Return null and handle it below.
+      // The OUTPUT clause should always give exactly one row, but a trigger or
+      // a driver quirk can swallow it, and reading [0]['SpotPriceId'] off an
+      // empty recordset throws "Cannot read properties of undefined". Return
+      // null and handle it below.
       return result.recordset[0] ?? null;
     });
 

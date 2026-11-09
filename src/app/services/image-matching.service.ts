@@ -4,27 +4,29 @@ import {
   ImageMatchResult,
   ParsedImageAttributes
 } from '../types/coin.model';
-import { buildCoinSignatures, describeCoin } from './image-matching/coin-signature';
+import {
+  buildCoinSignatures,
+  describeCoin,
+  type DenominationLabels
+} from './image-matching/coin-signature';
 import { parseFilename } from './image-matching/filename-parser';
 import { matchOneImage } from './image-matching/match-decider';
 import { inferFromSiblings } from './image-matching/sibling-inference';
 
-/* ===========================================================================
+ /*
  * ImageMatchingService
- * ---------------------------------------------------------------------------
+ *
  * Job: given a list of image FILENAMES and the coin inventory, decide which
  * image belongs to which coin -- but only claim a match when we are very
  * nearly certain. Anything less goes to the user with a ranked shortlist.
  *
- * The guiding rule (from the product owner):
+ * The guiding rule:
  *   "Silently filing an image under the wrong coin is much worse than asking."
  *
  * So the matcher is deliberately pessimistic. It would rather send 20 images
  * to a one-click review queue than mis-attach one.
  *
- * ---------------------------------------------------------------------------
- * HOW IT WORKS (three stages)
- * ---------------------------------------------------------------------------
+ * ---- HOW IT WORKS (three stages) ----
  * 1. PARSE   -- turn "1881-S Morgan Dollar obverse.jpg" into typed attributes:
  *               { year: 1881, mintMark: 's', denomination: 'dollar',
  *                 coinTypeTokens: ['morgan'] }
@@ -41,9 +43,7 @@ import { inferFromSiblings } from './image-matching/sibling-inference';
  *               (a) high score, (b) at least two independent strong
  *               attributes agree, (c) the runner-up is clearly behind.
  *
- * ---------------------------------------------------------------------------
- * WHERE THE CODE LIVES
- * ---------------------------------------------------------------------------
+ * ---- WHERE THE CODE LIVES ----
  * This class is now a thin front door. The actual work lives in small,
  * single-purpose modules under `./image-matching/`, each with its own header
  * comment explaining what it owns:
@@ -92,13 +92,11 @@ import { inferFromSiblings } from './image-matching/sibling-inference';
  * They export plain functions rather than classes, so this service stays
  * stateless and can still be built with a bare `new ImageMatchingService()`
  * (which is exactly what the spec file does).
- * =========================================================================== */
+  */
 
 @Injectable({ providedIn: 'root' })
 export class ImageMatchingService {
-  /* =========================================================================
-   * PUBLIC API
-   * ======================================================================= */
+  /* ---- PUBLIC API ---- */
 
   /**
    * Match a batch of image filenames against the inventory.
@@ -106,27 +104,39 @@ export class ImageMatchingService {
    * Returns one result per input path, in the same order. The result type
    * extends the older `ImageMatchCandidate`, so any caller that only reads
    * `imagePath` / `matchedRecordId` / `confidence` / `reason` still works.
+   *
+   * @param denominationLabels an id -> Label SNAPSHOT of the denominations
+   *   lookup, taken once by the caller. A linked coin is then identified by
+   *   the denomination its `DenominationId` names rather than by whatever
+   *   text the source happened to write (design §6).
+   *
+   *   OPTIONAL, AND OMITTING IT IS NOT A DEGRADED MODE -- it is the matcher
+   *   exactly as it behaved before `DenominationId` existed, which is also
+   *   what an unlinked collection and a lookup that failed to load produce.
+   *   The matcher deliberately does NOT read the lookup itself: see the
+   *   "THE MATCHER DOES NOT PERFORM THE LOOKUP" note in coin-signature.ts
+   *   for the chunk-boundary bug that would otherwise be possible.
    */
-  matchImages(imagePaths: string[], inventory: CoinRecord[]): ImageMatchResult[] {
+  matchImages(
+    imagePaths: string[],
+    inventory: CoinRecord[],
+    denominationLabels?: DenominationLabels | null
+  ): ImageMatchResult[] {
     // Defect #8: parse every coin ONCE, not once per image. With 2,000 coins
     // and 500 images the old code did a million redundant parses.
-    const coinSignatures = buildCoinSignatures(inventory);
+    const coinSignatures = buildCoinSignatures(inventory, denominationLabels);
 
     const decided = imagePaths.map(path => matchOneImage(path, coinSignatures));
 
     /* STAGE 5, AND THE ONLY STAGE THAT SEES MORE THAN ONE IMAGE.
      *
      * Everything above decides each photograph entirely on its own, which is
-     * what makes the three safety gates easy to reason about. But the owner
-     * photographs a coin two or three times:
-     *
-     *     "if I match it with an image, all related image files of similar
-     *      names (including for both obverse/reverse/slab designations)
-     *      should automatically be attached at that point"
-     *
-     * so a second shot that merely omits the grade -- or a shot of the slab
-     * LABEL, which he has since ruled may never identify a coin by itself --
-     * is left stranded by a per-image decision however obvious it is to a
+     * what makes the three safety gates easy to reason about. But a coin is
+     * usually photographed two or three times, and once one of those shots
+     * is matched the related files — obverse, reverse, slab — should attach
+     * with it. A second shot that merely omits the grade, or a shot of the
+     * slab LABEL (which may never identify a coin by itself), is otherwise
+     * left stranded by a per-image decision however obvious it is to a
      * human. This pass places those, and only those.
      *
      * It runs LAST and over the finished results, so it can only turn a row

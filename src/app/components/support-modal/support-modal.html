@@ -1,0 +1,186 @@
+<!--
+  Help > Report a problem.
+
+  THE ORDER OF THE STEPS IS THE CONSENT MODEL, not a layout choice:
+  describe -> review the real text -> write the file. Nothing is written
+  before the user has read what is in it, and nothing of theirs is attached
+  unless they picked it after acknowledging the warning.
+-->
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
+    <div class="modal-header">
+      <h2>Report a problem</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="modal-body support-modal-body">
+
+      @if (errorMessage()) {
+        <p class="support-error" role="alert">{{ errorMessage() }}</p>
+      }
+
+      <!-- STEP 1 — describe, and optionally attach -->
+      @if (step() === 'describe') {
+        <p class="support-intro">
+          This builds a report you can attach to a GitHub issue. It collects your app and
+          Windows versions, the errors this session, and the most recent log lines — your
+          collection only as counts, never its contents. Your user name, computer name and
+          folder paths are replaced before anything is written, and you will see the whole
+          thing before it leaves this machine.
+        </p>
+        <!--
+          Plain text, not a link: the documentation lives in the repository
+          and the repository URL is not known at build time, so a hard-coded
+          href would be a dead link in the shipped app.
+        -->
+        <p class="support-note">
+          The full list is in <code>docs/what-support-collects.md</code>.
+        </p>
+
+        <label class="support-field">
+          <span>What happened?</span>
+          <textarea
+            rows="5"
+            placeholder="What were you doing, and what did you expect to happen instead?"
+            [ngModel]="description()"
+            (ngModelChange)="description.set($event)"></textarea>
+        </label>
+
+        <p class="support-note">
+          {{ recentErrorCount() }} error(s) recorded this session will be included.
+        </p>
+
+        <!-- Attaching your own files. Separate, gated, and blunt. -->
+        <section class="support-attach">
+          <h3>Attach your own files (optional)</h3>
+
+          <p class="support-warning" role="note">
+            <strong>Read this first.</strong>
+            Anything you attach goes into a <strong>public</strong> GitHub issue that anyone
+            can read, download and keep. A QIF export or a spreadsheet can contain far more
+            than coins — real exports have turned out to hold stock holdings, retirement
+            accounts, a home address and private company names. The app does not edit these
+            files; they go up exactly as they are on your disk.
+            <strong>Open the file and look at it before you attach it.</strong>
+          </p>
+
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              [checked]="attachmentsUnderstood()"
+              (change)="setAttachmentsUnderstood($any($event.target).checked)" />
+            <span>I have read the above and I want to choose files myself.</span>
+          </label>
+
+          <!-- The picker is genuinely disabled until the box is ticked; the
+               checkbox is not an opinion poll. -->
+          <input
+            type="file"
+            multiple
+            [disabled]="!attachmentsUnderstood()"
+            (change)="onFileInput($event)" />
+
+          @if (attachmentCount() > 0) {
+            <ul class="support-file-list">
+              @for (file of attachments(); track $index) {
+                <li>
+                  <span>{{ file.name }}</span>
+                  <span class="support-file-size">{{ file.bytes }} bytes</span>
+                  <button type="button" class="small-button" (click)="removeAttachment($index)">Remove</button>
+                </li>
+              }
+            </ul>
+          } @else {
+            <p class="support-note">No files attached. Nothing is attached automatically.</p>
+          }
+        </section>
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="close()">Cancel</button>
+          <button type="button" [disabled]="busy()" (click)="buildPreview()">
+            {{ busy() ? 'Preparing…' : 'Preview the report' }}
+          </button>
+        </div>
+      }
+
+      <!-- STEP 2 — the actual text, editable -->
+      @if (step() === 'review') {
+        <p class="support-intro">
+          This is the whole report. <strong>Edit or delete anything you do not want to send.</strong>
+          Nothing has been written to disk yet.
+        </p>
+
+        @if (receipt().length > 0) {
+          <details class="support-receipt" open>
+            <summary>What was replaced before you saw this</summary>
+            <table>
+              <thead>
+                <tr><th>Placeholder</th><th>Stands for</th><th>Times</th></tr>
+              </thead>
+              <tbody>
+                @for (entry of receipt(); track entry.placeholder) {
+                  <tr>
+                    <td><code>{{ entry.placeholder }}</code></td>
+                    <td>{{ entry.what }}</td>
+                    <td>{{ entry.occurrences }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </details>
+        } @else {
+          <p class="support-note">Nothing needed replacing in this report.</p>
+        }
+
+        <label class="support-field">
+          <span>The report</span>
+          <textarea
+            class="support-report"
+            rows="18"
+            spellcheck="false"
+            [ngModel]="reportText()"
+            (ngModelChange)="reportText.set($event)"></textarea>
+        </label>
+
+        @if (attachmentCount() > 0) {
+          <p class="support-note">
+            {{ attachmentCount() }} file(s) you chose will be put in the zip unchanged.
+          </p>
+        }
+
+        <div class="modal-actions">
+          <button type="button" class="secondary" (click)="backToDescribe()">Back</button>
+          <button type="button" [disabled]="busy()" (click)="sendReport()">
+            {{ busy() ? 'Saving…' : 'Save the report and open GitHub' }}
+          </button>
+        </div>
+      }
+
+      <!-- STEP 3 — where the file is, and what to do with it -->
+      @if (step() === 'done') {
+        <h3>Your report is saved</h3>
+        <p class="support-note">{{ submissionNote() }}</p>
+
+        @if (result(); as bundle) {
+          <p class="support-path"><code>{{ bundle.path }}</code></p>
+          <p class="support-note">The zip contains: {{ bundle.entries.join(', ') }}.</p>
+        }
+
+        @if (rejected().length > 0) {
+          <!-- Never drop an attachment silently: a user who does not see
+               their file in the zip will assume the feature is broken. -->
+          <p class="support-warning">Some files could not be included:</p>
+          <ul class="support-file-list">
+            @for (item of rejected(); track item.name) {
+              <li><span>{{ item.name }}</span><span>{{ item.reason }}</span></li>
+            }
+          </ul>
+        }
+
+        <div class="modal-actions">
+          <button type="button" (click)="close()">Done</button>
+        </div>
+      }
+    </div>
+  </div>
+</div>

@@ -1,9 +1,7 @@
 /**
  * db/coin-fields.spec.ts — guards COIN_FIELDS against schema drift.
  *
- * ============================================================
  * Parameter types vs. the SQL schema
- * ============================================================
  *
  * Declaring a parameter shorter than its column silently truncates the user's
  * data; declaring it longer makes SQL Server raise error 8152 and abort the

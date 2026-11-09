@@ -2,7 +2,6 @@
  * Tests for "let the user choose which photo appears in the main grid".
  *
  * WHAT IS BEING PROVED, AND WHY IT IS WORTH A SPEC
- * ------------------------------------------------
  * The feature itself is one line of array shuffling. The risk is entirely in
  * what gets SENT, because `PUT /api/coins/:id` REPLACES a coin's whole image
  * set — it deletes every CoinImages row and re-inserts the array it is given.
@@ -12,11 +11,10 @@
  *      lives on disk) must still be attached to every entry in the outgoing
  *      array. An entry sent as a bare string is re-inserted with
  *      `SourcePath NULL`, so a careless re-order would wipe the recorded
- *      location of EVERY photo on the coin. That is the data-loss bug this
- *      project has hit before.
+ *      location of EVERY photo on the coin.
  *
  *   2. The request must carry ONLY the `imagePaths` key. Sending a whole coin
- *      record is the other historic way data got clobbered.
+ *      record is the other way data gets clobbered.
  *
  * There is no jsdom here, so nothing below renders the gallery. The button in
  * `coin-image-gallery.html` is a one-line call to `setMainImage()` /

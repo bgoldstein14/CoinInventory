@@ -1,3 +1,10 @@
+<!--
+  Written for somebody who does not know what a report designer is: each card
+  says in one sentence WHAT IS ON THE PAGE and WHO IT IS FOR, then lists the
+  facts that decide between them — how many coins, whether photographs are
+  included, whether the current filter applies. Keep that when editing; a bare
+  "Export" button leaves the user to find out by opening the file.
+-->
 <div class="modal-backdrop" (click)="closed.emit()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -5,45 +12,154 @@
       <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <div class="report-summary">
-        <div class="report-grid">
-          <div class="report-stat"><span>Total coins</span><strong>{{ reportStats().totalCoins }}</strong></div>
-          <div class="report-stat"><span>Total cost</span><strong>${{ reportStats().totalCost | number: '1.2-2' }}</strong></div>
-          <div class="report-stat"><span>Current value</span><strong>${{ reportStats().totalValue | number: '1.2-2' }}</strong></div>
-          <div class="report-stat" [class.gain]="reportStats().totalProfit >= 0" [class.loss]="reportStats().totalProfit < 0">
-            <span>Total gain/loss</span>
-            <strong>{{ reportStats().totalProfit >= 0 ? '+' : '' }}${{ reportStats().totalProfit | number: '1.2-2' }}</strong>
+      <!--
+        NOTHING BELOW THIS POINT MAY BE SHOWN BEFORE THE COINS ARRIVE.
+
+        Every figure on this screen is computed over `inv.inventory()`,
+        which is an empty array until hydration finishes. Rendered then,
+        the summary states with complete confidence that the collection
+        holds 0 coins worth $0.00 — something the app does not know.
+
+        The print buttons are inside the guard too, and that is the
+        sharper half. Pressing one before the coins land produces an
+        Insurance &amp; Appraisal Schedule listing nothing — a document
+        that goes to an insurer.
+
+        `notReadyNotice()` is non-null exactly while that is the case.
+
+        The modal-actions row stays OUTSIDE this guard: the close button
+        has to work whatever the connection is doing.
+      -->
+      @if (notReadyNotice(); as notice) {
+        <p class="empty-state">{{ notice }}</p>
+      } @else {
+
+        <section class="report-choices">
+          <h3>Print a report</h3>
+          <p class="report-choices__intro">
+            Each of these opens your browser’s print window. Choose
+            <strong>“Save as PDF”</strong> there to keep a copy as a file, or send it
+            straight to a printer.
+          </p>
+
+          <div class="report-card">
+            <div class="report-card__text">
+              <h4>Insurance &amp; Appraisal Schedule</h4>
+              <p>
+                A dated list of the coins you actually own, with the details that
+                identify each one, its grade and certification, what you paid, what
+                it is worth — and photographs. This is the document to give an
+                insurer or an appraiser.
+              </p>
+              <ul class="report-card__facts">
+                <li>{{ insurableCount() }} coins (want-list, on-order and sold coins are left out, and the page says so)</li>
+                <li>Your private notes are <strong>not</strong> included</li>
+                <li>Covers your whole collection, not just what is filtered on screen</li>
+              </ul>
+              <label class="report-card__option">
+                <input type="checkbox" [checked]="includePhotos()" (change)="includePhotos.set(!includePhotos())">
+                Include photographs (up to 2 per coin — slower, but this is what an insurer wants)
+              </label>
+            </div>
+            <button
+              type="button"
+              class="report-card__action"
+              [disabled]="buildingReport() !== null"
+              (click)="printInsuranceReport()"
+            >
+              {{ buildingReport() === 'insurance' ? 'Preparing…' : 'Print schedule' }}
+            </button>
           </div>
-          <div class="report-stat"><span>Sold</span><strong>{{ reportStats().soldCount }} (${{ reportStats().totalSold | number: '1.2-2' }})</strong></div>
-          <div class="report-stat"><span>Certified</span><strong>{{ reportStats().gradedCount }}</strong></div>
-          <div class="report-stat"><span>With photos</span><strong>{{ reportStats().withImagesCount }}</strong></div>
-        </div>
-        @if (reportStats().byCategory.length > 0) {
-          <h3>By Category</h3>
-          <table class="report-table">
-            <thead><tr><th>Category</th><th>Count</th><th>Value</th></tr></thead>
-            <tbody>
-              @for (entry of reportStats().byCategory; track entry[0]) {
-                <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
-              }
-            </tbody>
-          </table>
-        }
-        @if (reportStats().byDenomination.length > 0) {
-          <h3>By Denomination</h3>
-          <table class="report-table">
-            <thead><tr><th>Denomination</th><th>Count</th><th>Value</th></tr></thead>
-            <tbody>
-              @for (entry of reportStats().byDenomination; track entry[0]) {
-                <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
-              }
-            </tbody>
-          </table>
-        }
-      </div>
+
+          <div class="report-card">
+            <div class="report-card__text">
+              <h4>Full Inventory Listing</h4>
+              <p>
+                Everything currently showing in the table, printed in the same
+                order and through the same columns. A reference copy for your own
+                files, or for anyone who needs to read the collection on paper.
+              </p>
+              <ul class="report-card__facts">
+                <li>{{ listingCount() }} coins — whatever your filters and sort are set to right now</li>
+                <li>The filter and sort in use are printed on the page</li>
+                <li>No photographs, so it is quick to produce and quick to read</li>
+              </ul>
+            </div>
+            <button
+              type="button"
+              class="report-card__action"
+              [disabled]="buildingReport() !== null"
+              (click)="printInventoryReport()"
+            >
+              {{ buildingReport() === 'inventory' ? 'Preparing…' : 'Print listing' }}
+            </button>
+          </div>
+        </section>
+
+        <section class="report-choices">
+          <h3>Export as a spreadsheet file</h3>
+          <p class="report-choices__intro">
+            Comma-separated files, for opening in Excel or loading into another
+            program. These cannot carry photographs.
+          </p>
+
+          <div class="report-card report-card--compact">
+            <div class="report-card__text">
+              <h4>Full CSV</h4>
+              <p>Every coin and every field, in a file this app can read back in. Use this to move or back up the collection.</p>
+            </div>
+            <button type="button" class="report-card__action secondary" (click)="exportCsvRequested.emit()">Export CSV</button>
+          </div>
+
+          <div class="report-card report-card--compact">
+            <div class="report-card__text">
+              <h4>Insurance CSV</h4>
+              <p>The same coins as the printed schedule, as a spreadsheet. Useful if an insurer asks for data rather than a document.</p>
+            </div>
+            <button type="button" class="report-card__action secondary" (click)="exportInsuranceCsvRequested.emit()">Export CSV</button>
+          </div>
+        </section>
+
+        <section class="report-summary">
+          <h3>Collection summary</h3>
+          <div class="report-grid">
+            <div class="report-stat"><span>Total coins</span><strong>{{ reportStats().totalCoins }}</strong></div>
+            <div class="report-stat"><span>Total cost</span><strong>${{ reportStats().totalCost | number: '1.2-2' }}</strong></div>
+            <div class="report-stat"><span>Current value</span><strong>${{ reportStats().totalValue | number: '1.2-2' }}</strong></div>
+            <div class="report-stat" [class.gain]="reportStats().totalProfit >= 0" [class.loss]="reportStats().totalProfit < 0">
+              <span>Total gain/loss</span>
+              <strong>{{ reportStats().totalProfit >= 0 ? '+' : '' }}${{ reportStats().totalProfit | number: '1.2-2' }}</strong>
+            </div>
+            <div class="report-stat"><span>Sold</span><strong>{{ reportStats().soldCount }} (${{ reportStats().totalSold | number: '1.2-2' }})</strong></div>
+            <div class="report-stat"><span>Certified</span><strong>{{ reportStats().gradedCount }}</strong></div>
+            <div class="report-stat"><span>With photos</span><strong>{{ reportStats().withImagesCount }}</strong></div>
+          </div>
+          @if (reportStats().byCategory.length > 0) {
+            <h3>By Category</h3>
+            <table class="report-table">
+              <thead><tr><th>Category</th><th>Count</th><th>Value</th></tr></thead>
+              <tbody>
+                @for (entry of reportStats().byCategory; track entry[0]) {
+                  <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
+                }
+              </tbody>
+            </table>
+          }
+          @if (reportStats().byDenomination.length > 0) {
+            <h3>By Denomination</h3>
+            <table class="report-table">
+              <thead><tr><th>Denomination</th><th>Count</th><th>Value</th></tr></thead>
+              <tbody>
+                @for (entry of reportStats().byDenomination; track entry[0]) {
+                  <tr><td>{{ entry[0] }}</td><td>{{ entry[1].count }}</td><td>${{ entry[1].value | number: '1.2-2' }}</td></tr>
+                }
+              </tbody>
+            </table>
+          }
+        </section>
+
+      }
       <div class="modal-actions">
-        <button type="button" class="secondary" (click)="exportCsvRequested.emit()">Export Full CSV</button>
-        <button type="button" class="secondary" (click)="exportInsuranceCsvRequested.emit()">Export Insurance Schedule</button>
         <button type="button" (click)="closed.emit()">Close</button>
       </div>
     </div>

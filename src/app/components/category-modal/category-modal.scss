@@ -1,38 +1,295 @@
 @use '../../styles/modal' as *;
 
-// ---- Category & set admin (inside modal) ----
+/* The reference-data maintenance screen.
+ *
+ * There are no inline styles in the template and there must not be: every
+ * piece of spacing on this screen is here, so it can be changed in one place
+ * and cannot drift between panes. */
 
-.category-admin-form {
+/* The two-column shell: sidebar + pane. Grid rather than flex so the sidebar
+   keeps its width while the pane takes everything else, and so the narrow
+   layout at the bottom of this file is a one-property change. */
+.reference-layout {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  min-height: 420px;
+}
+
+/* ----- The sidebar of types --------------------------------------------- */
+.reference-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 8px 14px 14px;
+  border-right: 1px solid #ede5d8;
+  background: #fbf7f1;
+}
+
+.reference-nav__item {
+  appearance: none;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 10px;
+  text-align: left;
+  font-size: 0.88rem;
+  color: #5c4a33;
+  cursor: pointer;
+
+  &:hover {
+    background: #f2e9dc;
+    color: #2c1c0e;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+.reference-nav__item--active {
+  background: #fff;
+  color: #2c1c0e;
+  font-weight: 600;
+  /* The marker is a border rather than a background change so the active
+     entry still reads as active in a high-contrast or forced-colours mode,
+     where background colours are discarded. */
+  box-shadow: inset 3px 0 0 #b07d3a;
+}
+
+/* ----- The pane --------------------------------------------------------- */
+.reference-pane {
+  padding: 16px 20px 24px;
+  /* The pane scrolls, not the dialog. A thousand denominations behind a
+     sidebar that scrolled away with them would leave no way back. */
+  max-height: calc(100vh - 220px);
+  overflow-y: auto;
+}
+
+.reference-pane__header {
+  margin-bottom: 4px;
+
+  h3 {
+    margin: 0 0 4px;
+    font-size: 1rem;
+  }
+
+  .hint-text {
+    margin: 0;
+  }
+}
+
+/* ----- Add / search forms ----------------------------------------------- */
+.reference-form {
   display: flex;
   gap: 8px;
   margin: 12px 0;
+  align-items: center;
+}
+
+.reference-form--wrap {
   flex-wrap: wrap;
 }
 
-.category-admin-input {
-  flex: 1 1 200px;
+.reference-input {
+  flex: 1 1 180px;
+  min-width: 0;
   padding: 8px 12px;
   border: 1px solid #d9c7a5;
   border-radius: 8px;
   background: #fdfaf6;
+  font: inherit;
 }
 
-.category-admin-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+/* Sized to their content rather than to the column, so the form reads as a
+   sentence instead of five identical boxes. */
+.reference-input--iso   { flex: 0 0 56px; text-transform: uppercase; }
+.reference-input--year  { flex: 0 0 72px; }
+.reference-input--kind  { flex: 0 0 120px; }
+.reference-input--mark  { flex: 0 0 90px; }
+.reference-input--issuer { flex: 0 1 200px; }
 
-  li {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: #faf6f1;
-    border: 1px solid #ecdcc0;
-    border-radius: 999px;
-    padding: 4px 4px 4px 12px;
-    font-size: 0.82rem;
+.reference-error {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #e3c2a0;
+  background: #fdf3e7;
+  color: #7a4a14;
+  font-size: 0.84rem;
+}
+
+.reference-count {
+  margin: 4px 0 8px;
+  font-size: 0.8rem;
+  color: #8a7a63;
+}
+
+/* ----- The rows -----
+ * ROWS, NOT CHIPS: every entry carries a name, an in-use count and one or
+ * two buttons, and three columns of varying width cannot wrap into a pill
+ * without the count landing on its own line beside the wrong name. */
+.reference-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+}
+
+.reference-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 4px 6px 10px;
+  border-bottom: 1px solid #f3ece1;
+  font-size: 0.86rem;
+
+  &:last-child {
+    border-bottom: none;
+  }
+
+  &:hover {
+    background: #fdfaf6;
+  }
+}
+
+.reference-row__name {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* The in-use count. Right-aligned and in a quieter colour than the name:
+   it is the thing to glance at before pressing Remove, not the thing to
+   read first. */
+.reference-row__usage {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: #8a7a63;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.reference-row__tag {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8a7a63;
+  border: 1px solid #ecdcc0;
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.reference-row__years {
+  font-size: 0.75rem;
+  color: #8a7a63;
+}
+
+/* ----- Issuer groups on the denominations pane -------------------------- */
+.issuer-group {
+  margin-bottom: 6px;
+  border: 1px solid #f0e7d9;
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.issuer-group__header {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  background: #faf6f1;
+  border: none;
+  border-bottom: 1px solid #f0e7d9;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  color: #2c1c0e;
+  text-align: left;
+
+  &:hover {
+    background: #f4ecdf;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+.issuer-group__caret {
+  flex: 0 0 12px;
+  color: #a8936f;
+}
+
+.issuer-group__name {
+  flex: 1 1 auto;
+  font-weight: 600;
+}
+
+.issuer-group__meta {
+  flex: 0 0 auto;
+  font-size: 0.76rem;
+  color: #8a7a63;
+  white-space: nowrap;
+}
+
+/* ----- The fix panel on the unlinked-coins pane -----
+ * Opens inside an .issuer-group, so it inherits the group's border and only
+ * has to space its own rows. */
+.unlinked-fix {
+  padding: 10px 12px 12px;
+  background: #fffdf9;
+
+  .hint-text {
+    margin: 0 0 6px;
+  }
+
+  .reference-form {
+    margin: 8px 0;
+  }
+
+  .reference-list {
+    margin-top: 10px;
+    border-top: 1px dashed #efe4d2;
+    padding-top: 8px;
+  }
+}
+
+.unlinked-fix__option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: #5a4a35;
+  cursor: pointer;
+
+  input {
+    width: auto;
+    margin: 0;
+  }
+}
+
+/* ----- Narrow viewports -----
+ * The sidebar becomes a horizontal strip above the pane — the tab layout,
+ * chosen here as the FALLBACK rather than the default. See
+ * reference-sections.ts. */
+@media (max-width: 680px) {
+  .reference-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .reference-nav {
+    flex-direction: row;
+    overflow-x: auto;
+    border-right: none;
+    border-bottom: 1px solid #ede5d8;
+    padding: 10px 12px;
+  }
+
+  .reference-nav__item {
+    white-space: nowrap;
+  }
+
+  .reference-nav__item--active {
+    box-shadow: inset 0 -3px 0 #b07d3a;
   }
 }

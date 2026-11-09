@@ -1,28 +1,14 @@
-// Styles for the Settings dialog. Moved here from `app.scss`.
+// Styles for the Settings dialog.
 @use '../../styles/controls' as *;
 @use '../../styles/modal' as *;
 
-// Not part of the original markup, and the dialog is position: fixed — keep
-// the host element out of the layout.
+// The dialog is position: fixed — keep the host element out of the layout.
 :host { display: contents; }
 
-// ---------------------------------------------------------------------------
-// WHY THE MODAL PARTIAL IS IMPORTED ABOVE (it used to be deliberately absent)
-// ---------------------------------------------------------------------------
-// This dialog has always used the `.modal-backdrop` / `.modal` / `.modal-header`
-// class names, but nothing ever supplied their styles: the markup originally
-// lived in app.html, and `app.scss` never imported `styles/_modal.scss`. When
-// the dialog was extracted into this component the omission was carried across
-// intentionally, so that the refactor changed nothing visually. A comment here
-// recorded that and called the fix "a one-line change, left out on purpose".
-//
-// The consequence was not cosmetic. With no `.modal-backdrop` rule the dialog
-// had no fixed positioning, no dimmed overlay and no card chrome at all — it
-// rendered inline in the page, so there was nothing to tell the user they had
-// moved into a separate window. That is exactly what the owner reported. The
-// import is now in place, and the rules below build a deliberately emphatic
+// The `styles/modal` partial above supplies .modal-backdrop / .modal /
+// .modal-header. Without it this dialog renders inline in the page, with no
+// overlay and no card chrome. The rules below layer an emphatic
 // focused-window treatment on top of it.
-// ---------------------------------------------------------------------------
 
 // A darker overlay than the shared default (which is rgba(20, 14, 8, 0.5)).
 // The Settings dialog is the one modal that edits app-wide reference data
@@ -32,7 +18,7 @@
   background: rgba(20, 14, 8, 0.62);
 }
 
-// The "meaningful border" the owner asked for.
+// A deliberately emphatic border.
 //
 // Three cues layered on purpose, because a border alone is easy to miss
 // against a light page:
@@ -80,10 +66,6 @@
   gap: 12px;
 }
 
-// The `color` here was #ddd, a near-white grey. That dated from when this
-// markup lived in app.html with no modal chrome behind it; now that the dialog
-// is a white card it was light grey text on white, effectively invisible. Both
-// label colours are now the app's dark brown.
 .settings-list-grid label {
   display: flex;
   flex-direction: column;
@@ -100,9 +82,7 @@
 }
 
 // ---- The "add one" row ----
-// Input and Add button side by side, the input taking whatever is left. It had
-// no rule at all, so the two stacked at full width and each list header took
-// three lines instead of one.
+// Input and Add button side by side, the input taking whatever is left.
 .settings-inline-add {
   display: flex;
   gap: 6px;
@@ -120,20 +100,15 @@
 
 // ---- The removable value chips ----
 //
-// These had NO styling whatsoever, so every value rendered as a full-size
-// default browser button on its own line. With five lists on screen that is
-// what the owner described as clogging up the screen.
-//
-// Three things fix it: a small font, tight padding, and `flex-wrap` so the
-// values flow across the available width instead of stacking. A chip is now
-// roughly a third the height of the button it was.
+// A small font, tight padding and `flex-wrap`, so the values flow across the
+// available width instead of stacking one full-width button per value.
 .settings-chip-list {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
 
-  // Caps a long list (there are 38 seeded denominations) so one list cannot
-  // push the Save button off the bottom of the dialog.
+  // Caps a long list so one of them cannot push the Save button off the
+  // bottom of the dialog.
   max-height: 132px;
   overflow-y: auto;
 }
@@ -178,7 +153,6 @@
   }
 }
 
-// ---------------------------------------------------------------------------
 // ---- Maintenance section ----
 //
 // The one block in this dialog that changes COIN RECORDS rather than the
@@ -187,7 +161,6 @@
 // that "backfill several hundred coins" cannot be mistaken for one more chip
 // list. Everything here reuses the dialog's existing palette (#3b2a14 text,
 // #d9c7a5 borders, the #8e5b2d accent) so it reads as part of the same card.
-// ---------------------------------------------------------------------------
 
 .settings-maintenance {
   border-top: 1px solid #e3d6bf;
@@ -315,9 +288,6 @@
 }
 
 // ---- Responsive & print ----
-// These two rules used to live in `_overlays.scss` and did reach this markup
-// while it was part of app.html, so they move across with it.
-
 @media (max-width: 900px) {
   .modal { max-width: 100%; border-radius: 14px; }
 }

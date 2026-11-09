@@ -33,9 +33,7 @@ beforeEach(() => {
   resetMssqlMock();
 });
 
-// ============================================================
 // Health check
-// ============================================================
 
 describe('GET /api/health', () => {
   it('reports ok when SELECT 1 succeeds', async () => {

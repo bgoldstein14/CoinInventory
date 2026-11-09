@@ -1,13 +1,12 @@
-/* ===========================================================================
+ /*
  * image-downscaler.ts
- * ---------------------------------------------------------------------------
+ *
  * Shrinks a photo IN THE BROWSER before it is stored, using only a <canvas>.
  * No new dependencies, and the user's original file on the share is never
  * touched - we read it, draw a smaller copy, and throw the big one away.
  *
- * ---------------------------------------------------------------------------
  * WHY (the numbers that drove this decision)
- * ---------------------------------------------------------------------------
+ *
  * The share holds 4.2 GB of JPEGs: ~2.5 MB average, largest 46 MB. Images are
  * stored in SQL Server as base64 TEXT, and base64 inflates bytes by 4/3
  * (every 3 bytes become 4 characters). So attaching them untouched would mean:
@@ -16,9 +15,8 @@
  *
  * ...for pictures that are displayed in a gallery a few hundred pixels wide.
  *
- * ---------------------------------------------------------------------------
  * THE MATHS
- * ---------------------------------------------------------------------------
+ *
  * We cap the LONG edge at 1600 px and keep the aspect ratio:
  *
  *     scale = MAX_LONG_EDGE / max(width, height)
@@ -39,7 +37,7 @@
  * indistinguishable from 1.0 for most eyes, but roughly a third of the bytes.
  * Below ~0.75 JPEG blocking starts showing up in the flat fields of a coin,
  * which is exactly where a collector looks for surface detail.
- * =========================================================================== */
+  */
 
 import { Injectable } from '@angular/core';
 

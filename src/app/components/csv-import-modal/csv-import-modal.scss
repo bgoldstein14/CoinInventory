@@ -70,10 +70,8 @@
   }
 }
 
-// ---- First-run guidance ----------------------------------------------
-// Shown only before a file has been selected. The modal used to open with
-// nothing but a file button, leaving a new user no idea what the CSV should
-// contain.
+// ---- First-run guidance ----
+// Shown only before a file has been selected.
 
 .csv-help {
   margin-bottom: 14px;
@@ -190,3 +188,162 @@
 }
 
 .csv-exception-missing { color: #8a2c22; }
+
+// ---- Excel: the worksheet step ----
+// Only ever on screen for a workbook with more than one worksheet.
+
+.csv-file-error {
+  margin: 12px 0 0;
+  padding: 9px 12px;
+  border: 1px solid #e3b7b0;
+  border-radius: 8px;
+  background: #fdf3f1;
+  color: #8a2c22;
+  font-size: 0.82rem;
+}
+
+.sheet-picker {
+  margin-top: 6px;
+
+  h3 { margin: 0 0 6px; font-size: 0.88rem; }
+  h4 { margin: 0 0 6px; font-size: 0.82rem; }
+}
+
+.sheet-picker-hint {
+  margin: 0 0 10px;
+  font-size: 0.8rem;
+  color: #6a5a47;
+}
+
+.sheet-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  // Capped so a workbook of thirty tabs cannot push the buttons off the
+  // bottom of the dialog -- the same reasoning as .csv-exception-list.
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.sheet-row {
+  padding: 6px 10px;
+  margin-bottom: 6px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 8px;
+
+  label {
+    display: flex;
+    align-items: baseline;
+    gap: 9px;
+    cursor: pointer;
+  }
+}
+
+// A sheet that cannot be imported is still SHOWN -- one that vanished from
+// the list would read as a bug rather than as a decision -- but it is
+// visibly inert.
+.sheet-row--unusable {
+  opacity: 0.62;
+  label { cursor: default; }
+}
+
+.sheet-name { font-weight: 600; font-size: 0.84rem; }
+
+.sheet-meta { font-size: 0.78rem; color: #6a5a47; }
+
+.sheet-warn { font-size: 0.78rem; color: #8a5a22; }
+
+/* A FACT, NOT A WARNING. Deliberately the same muted colour as
+   .sheet-meta rather than the amber of .sheet-warn: a row that links to no
+   denomination still imports, keeps its text and reads "Other (...)". */
+.sheet-note { font-size: 0.78rem; color: #6a5a47; }
+
+.sheet-picker-actions {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+
+.sheet-mismatch {
+  margin-top: 12px;
+  padding: 9px 12px;
+  border: 1px solid #e8cf9a;
+  border-radius: 8px;
+  background: #fdf8ec;
+  font-size: 0.8rem;
+  color: #6a5a47;
+
+  ul { margin: 0; padding-left: 18px; }
+  p { margin: 6px 0 0; }
+}
+
+.sheet-mismatch-note { color: #8a7a63; }
+
+.sheet-summary {
+  margin: 0 0 4px;
+  font-size: 0.8rem;
+  color: #6a5a47;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  padding: 0 0 0 6px;
+  color: #8a5a22;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+// A column that is not on every selected sheet. Importing it is perfectly
+// valid -- rows without the column just leave that field blank -- but it
+// looks like a bug if nobody says so.
+.csv-header-scope {
+  display: block;
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: #8a7a63;
+}
+
+// ---- What the import will do, before it does it ----
+
+.import-plan {
+  margin-top: 14px;
+  padding: 10px 12px;
+  border: 1px solid #ecdcc0;
+  border-radius: 8px;
+  background: #faf6f1;
+
+  h3 { margin: 0 0 6px; font-size: 0.88rem; }
+}
+
+.import-plan-summary {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #6a5a47;
+}
+
+/* The link count sits under the summary and reads as part of it. */
+.import-plan-links { margin-top: 4px; }
+
+.import-plan-sheets {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 0.8rem;
+
+  li {
+    display: flex;
+    gap: 10px;
+    padding: 3px 0;
+    color: #6a5a47;
+  }
+}
+
+.import-plan-skips {
+  margin-top: 8px;
+  font-size: 0.8rem;
+
+  summary { cursor: pointer; color: #8a5a22; }
+}

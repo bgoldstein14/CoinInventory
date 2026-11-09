@@ -10,47 +10,19 @@ import {
 } from '../../services/pm-backfill';
 
 /**
- * SettingsModal — the Settings dialog: one display preference plus the five
- * editable reference lists (categories, denominations, mint marks, metals and
- * sets/albums).
+ * SettingsModal — the Settings dialog: one display preference plus four
+ * editable reference lists (categories, mint marks, metals and sets/albums).
  *
- * WHY THIS FILE EXISTS
- * Reference-list maintenance was roughly a third of the App component. None of
- * it is needed until the user opens Settings, and none of it is interesting to
- * anything else on the page.
+ * ONE EDITING STYLE: THE CHIPS, AND NOTHING ELSE.
+ * A chip adds or removes ONE entry at a time through InventoryService, which
+ * persists the change and leaves every other field of the record alone. Do
+ * not reintroduce a bulk, newline-separated text editor for these lists: a
+ * reference record is not just its label, and rebuilding one from a line of
+ * text discards its id, its country and anything else the row carries.
  *
- * ---------------------------------------------------------------------------
- * ONE EDITING STYLE: THE CHIPS. THE BULK TEXTAREAS ARE GONE.
- * ---------------------------------------------------------------------------
- * Each list used to be editable two ways — chips that applied immediately, and
- * a newline-separated textarea underneath applied on Save. The owner found the
- * textareas redundant, and they were also the source of a family of bugs,
- * because a reference record is not just its label and rebuilding one from a
- * line of text threw away everything else:
- *
- *   * DENOMINATIONS lost their country. Rebuilt rows were stamped
- *     'United States' while the data uses 'US' and 'GB', and the coin editor
- *     groups its dropdown by that value — so one press of Save produced a
- *     denomination dropdown showing country headings with nothing under them.
- *   * DENOMINATION AND MINT MARK IDS were renumbered from line position, so
- *     they stopped matching the database rows they stand for and a later
- *     delete could target the wrong record.
- *   * DENOMINATION LABELS were read back from DISPLAY text: the textarea was
- *     filled via formatDenominationDisplay, which rewrites '1/-' as '1 sh', so
- *     saving stored the prettified string as the real label.
- *   * CATEGORIES, METALS AND MINT MARKS were applied with a plain signal.set(),
- *     which changed the in-memory list and never told the backend, so a bulk
- *     edit silently reverted on the next reload.
- *
- * The chips have none of those problems: they add and remove one entry at a
- * time through InventoryService, which persists each change and leaves every
- * other field of the record alone. Deleting the textareas removed the bugs
- * rather than patching them.
- *
- * WHAT "SAVE" DOES NOW
+ * WHAT "SAVE" DOES
  * Only the display preference. Every list edit has already been applied and
- * persisted by the time you press it — which is why Cancel does not undo them,
- * and never did.
+ * persisted by the time you press it — which is why Cancel does not undo them.
  */
 @Component({
   selector: 'app-settings-modal',
@@ -73,7 +45,6 @@ export class SettingsModal {
 
   // --- "Add one item" inputs, one per list ---
   protected readonly categoryDraft = signal('');
-  protected readonly denominationDraft = signal('');
   protected readonly mintMarkDraft = signal('');
   protected readonly metalContentDraft = signal('');
   protected readonly coinSetDraft = signal('');
@@ -120,34 +91,23 @@ export class SettingsModal {
     this.inv.removeCategoryOption(category);
   }
 
-  // ===================== Denominations =====================
-
-  protected addDenomination(): void {
-    const label = this.denominationDraft().trim();
-    if (!label) return;
-
-    // Put the new denomination at the end of the sort order, leaving a gap of
-    // 10 so future entries can be slotted in between without renumbering.
-    const nextSortOrder = Math.max(0, ...this.inv.denominations().map(d => d.sortOrder)) + 10;
-
-    // 'US', not 'United States'. The seeded data uses the short code (see the
-    // Denominations block in server/setup-database.sql) and the coin editor
-    // groups its dropdown by this value, so a full country name here would
-    // file the new entry under a group of its own. Use the Categories & Sets
-    // dialog to add one for another country — it has a country picker.
-    void this.inv.addDenomination({
-      label,
-      country: 'US',
-      sortOrder: nextSortOrder,
-      isActive: true
-    });
-
-    this.denominationDraft.set('');
-  }
-
-  protected removeDenominationEntry(id: number): void {
-    void this.inv.removeDenomination(id);
-  }
+  /*
+   * DENOMINATIONS ARE DELIBERATELY NOT EDITED HERE, and a chip list for them
+   * must not come back.
+   *
+   * A denomination is not a bare string: it belongs to an ISSUER, it carries
+   * a country the coin editor groups its dropdown by, and there are over a
+   * thousand of them. A chip list cannot ask for an issuer, cannot scale, and
+   * would file every new row under "No issuer yet". The Reference Data screen
+   * (components/category-modal) groups by issuer, searches, requires an
+   * issuer and shows an in-use count before offering to delete anything. A
+   * second, worse editor for the same rows is not a convenience; it is a way
+   * to enter data the good one would have refused. The count and a pointer
+   * are left in the template so the list has not silently vanished.
+   *
+   * THE OTHER FOUR LISTS STAY. A category, a set, a mint mark and a metal are
+   * each a single string with no foreign key and no scale problem.
+   */
 
   // ===================== Mint marks =====================
 
@@ -188,8 +148,8 @@ export class SettingsModal {
   // These are the values offered by the "Set / Album" picker in the coin
   // detail panel. Add and remove go through InventoryService (and therefore
   // LookupManager), which updates the signal AND persists to `/api/coin-sets`.
-  // Until recently that write never happened and a newly added set disappeared
-  // on the next reload.
+  // Setting the signal directly would change the list in memory only, and it
+  // would revert on the next reload.
 
   protected addCoinSet(): void {
     const name = this.coinSetDraft().trim();
@@ -203,24 +163,17 @@ export class SettingsModal {
     this.inv.removeCoinSet(name);
   }
 
-  /* =========================================================================
-   * MAINTENANCE — backfill precious-metal data
-   * -------------------------------------------------------------------------
-   * WHY THIS LIVES IN SETTINGS
+  /*
+   * MAINTENANCE — backfill precious-metal data.
    *
-   * It is a one-off, app-wide housekeeping job, not a per-coin edit. Settings
-   * is already where app-wide housekeeping lives, it is the only dialog the
-   * user opens expecting to change many things at once, and it is deliberately
-   * out of the way -- which suits an action that rewrites part of several
-   * hundred rows. The coin detail panel would have been wrong: it edits ONE
-   * coin, and a button there that quietly touched four hundred others would be
-   * a trap. It sits in its own bordered section, below the reference lists, so
-   * it cannot be mistaken for one of them.
+   * WHY THIS LIVES IN SETTINGS. It is a one-off, app-wide housekeeping job,
+   * not a per-coin edit. The coin detail panel would have been wrong: it
+   * edits ONE coin, and a button there that quietly touched several hundred
+   * others would be a trap. It sits in its own bordered section, below the
+   * reference lists, so it cannot be mistaken for one of them.
    *
-   * -------------------------------------------------------------------------
-   * PREVIEW, THEN CONFIRM, THEN REPORT
-   *
-   * Three states, in order, and the user has to press a button between each:
+   * PREVIEW, THEN CONFIRM, THEN REPORT. Three states, in order, with a button
+   * press between each:
    *
    *   1. idle      -- a "Preview" button and an explanation.
    *   2. previewed -- the counts, plus Run and Cancel. The counts are not an
@@ -230,7 +183,7 @@ export class SettingsModal {
    *   3. done      -- what actually changed, including any failures.
    *
    * Nothing is written before step 2's confirm. The preview is pure.
-   * ======================================================================= */
+   */
 
   /** The pending plan: non-null means the preview is on screen. */
   protected readonly backfillPlan = signal<PmBackfillPlan | null>(null);

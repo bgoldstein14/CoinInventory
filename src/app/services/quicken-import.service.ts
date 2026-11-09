@@ -26,29 +26,22 @@
  */
 import { Injectable } from '@angular/core';
 import { AmbiguousReading, QuickenImportRecord } from '../types/coin.model';
-// "Was this coin struck as a proof?" is a question this project already has
-// exactly one answer to, and it lives in proof-strike.ts. The three-cent rule
-// below needs that answer, so it ASKS rather than writing a second copy of
-// the detection -- a second copy is how the import side and the image matcher
-// would come to disagree about the same slab label. Nothing in proof-strike.ts
-// changes; this is a read-only consumer of settled rules.
+// Proof detection has exactly one implementation, shared with the image
+// matcher. Do not write a second one here: two readers of the same slab label
+// drift apart.
 import { detectStrike } from './image-matching/proof-strike';
 // `composePmFields` asks pm-reference.ts "what is this coin made of?" -- for
-// BOTH precious and base metal coins -- and hands the answer back already
-// named the way a coin record names it: Metal Content / Composition / PM % /
-// PM weight.
-//
-// It lives in its own file (pm-fill.ts) rather than inline here because the
-// Settings > Maintenance "backfill precious-metal data" action needs the
-// identical mapping to fill in the blanks on coins that pre-date this import.
-// Two hand-written copies of the same mapping is how the two paths would come
-// to disagree about the same physical coin, so there is exactly one.
+// BOTH precious and base metal coins -- and returns it already named the way a
+// coin record names it: Metal Content / Composition / PM % / PM weight. It
+// lives in pm-fill.ts rather than inline because Settings > Maintenance
+// "backfill precious-metal data" needs the identical mapping for coins that
+// pre-date this import.
 import { composePmFields } from './pm-fill';
 // Country and foreign-denomination vocabulary -- see coin-countries.ts for
 // why "1969 Peru 100 Soles" needs its own reader.
 import { detectCountry, detectForeignDenomination } from './coin-countries';
 // The 2-of-3 "is this really a coin?" rule is shared with the manual
-// add-a-coin flow — see the re-export block further down for why.
+// add-a-coin flow -- see the re-export block further down.
 import { checkMainCoinDetails } from './coin-completeness';
 
 interface CoinTypeRange {
@@ -178,86 +171,39 @@ function inferCoinTypeByYear(denomination: string, year: number): string {
   return '';
 }
 
-/* ===========================================================================
+ /*
  * A BARE "3¢": SILVER OR NICKEL?
- * ---------------------------------------------------------------------------
- * There were two three-cent pieces, and a name that just says "3¢" (or
- * "3c", or "three cent") does not say which one is in the holder:
+ *
+ * There were two three-cent pieces, and a name that just says "3¢" (or "3c",
+ * or "three cent") does not say which one is in the holder:
  *
  *     THREE CENT SILVER   "3CS", the trime   struck 1851 - 1873
  *     THREE CENT NICKEL   "3CN"              struck 1865 - 1889
  *
- * They OVERLAP from 1865 to 1873. Nine years in which the date tells you
- * nothing at all.
- *
- * WHAT THIS CODE USED TO DO, AND WHY IT WAS WRONG
- *   denomination = yearNum && yearNum >= 1865 ? '3CN' : '3CS';
- *
- *   One line, no comment, no flag. Every single year of the overlap came out
- *   "3CN" and the guess was then indistinguishable from a fact: the preview
- *   printed it like any other denomination, the database stored it like any
- *   other denomination, and the image matcher -- which has a whole mechanism
- *   (`describeUndecidedGeneric` in match-decider.ts) for REFUSING to choose
- *   between 3CS and 3CN -- never got the chance to use it, because by the
- *   time it saw the record the choice had already been made for it.
- *
- *   reference-tables.ts names this exact mistake, in a block titled "THE YEAR
- *   CANNOT RESCUE YOU", and uses 3CS vs 3CN as its first example.
- *
- * WHAT IT DOES NOW -- THREE BANDS, TWO OF THEM CERTAIN
+ * They OVERLAP from 1865 to 1873, so for those nine years the date tells you
+ * nothing. Hence three bands, two of them certain:
  *
  *   year <= 1864   ->  3CS, CERTAIN.  The nickel did not exist yet.
  *   year >= 1874   ->  3CN, CERTAIN.  The silver had ended.
  *   1865 - 1873    ->  a GUESS, and flagged as one.
  *
- *   Note what changed at the edges: a bare "3¢" dated 1874-1889 used to be
- *   read as 3CN by the same line that guessed the overlap, and it still is --
- *   but it is no longer tarred with the guess, because for those years there
- *   is nothing to guess.
+ * The tie-break inside the overlap is scarcity, with proofs as the exception:
+ * three-cent SILVER business strikes after 1862 are tiny (hundreds a year)
+ * against three-cent NICKEL business strikes in the millions -- but three-cent
+ * silver PROOFS kept being struck in normal quantities right through 1873. So
+ * a proof designation means 3CS and anything else means 3CN.
  *
- * HOW THE GUESS IS MADE, IN THE OWNER'S OWN WORDS
- *   Asked whether the importer should stop guessing altogether, he said:
+ * A name with no year at all is treated as the widest possible ambiguity (the
+ * whole 1851-1889 span) and gets the same tie-break and the same flag.
  *
- *     "For 3-cent coins, it's save to assume to pick the more common
- *      variation. For instance, after 1862, the 3CS coins are very scarce
- *      with the exception of Proofs. It's okay to make an assumption and note
- *      to the user that there was ambiguity in a choice so they can either
- *      fix the choice right away or later or just cancel the match."
- *
- *   Read the middle sentence carefully, because the exception clause is the
- *   whole rule. Three-cent SILVER business strikes after 1862 are tiny --
- *   hundreds of coins a year, versus three-cent NICKEL business strikes in
- *   the millions. But three-cent silver PROOFS kept being struck in normal
- *   proof quantities right through 1873. So:
- *
- *     the name carries a proof designation  ->  3CS
- *     anything else                         ->  3CN
- *
- *   HIS OWN COLLECTION IS THE EVIDENCE. Every single three-cent SILVER coin
- *   he holds inside the overlap window is a proof -- 1865 PF64, 1866 PF65,
- *   1867 PF65 Cameo, 1868 PR65, 1870 PF64, 1871 PF64 -- while his overlap-era
- *   three-cent NICKELS are a mix of circulated grades and proofs. That is
- *   exactly the shape his sentence predicts.
- *
- *   The question "is this a proof?" is NOT re-implemented here. It is asked
- *   of `detectStrike` (proof-strike.ts), which already reads both the grade
- *   ("PF64", "PR65") and the words ("Proof", but never "prooflike") and is
- *   the same reader the image matcher uses.
- *
- * A NAME WITH NO YEAR AT ALL
- *   Treated as the widest possible ambiguity -- the whole 1851-1889 span is
- *   open -- so it gets the same tie-break and the same flag. (This does
- *   change the old behaviour, which quietly answered 3CS for an undated bare
- *   "3¢". It is flagged now either way, and a sweep of all seven of his QIF
- *   files found ZERO bare three-cent names of any kind: every one of his 117
- *   three-cent securities spells out "3CS" or "3CN", so no real row moves.)
- *
- * WHETHER THE GUESS IS RIGHT IS NOT THIS FUNCTION'S PROBLEM ANY MORE.
- *   It returns the guess AND the reasoning, the preview shows both, and the
- *   user re-points or drops the row. That is the arrangement the owner asked
- *   for, in place of the two alternatives he rejected: refusing to guess, and
- *   dropping the record.
- * ======================================================================== */
+ * Whether the guess is right is not this function's problem: it returns the
+ * guess AND the reasoning, the preview shows both, and the user re-points or
+ * drops the row. Do NOT collapse this back to a bare year comparison with no
+ * flag -- that makes a guess indistinguishable from a fact, and it also robs
+ * the image matcher of its own refusal path for this pair
+ * (`describeUndecidedGeneric` in match-decider.ts), because by the time the
+ * matcher sees the record the choice has already been made for it.
+  */
 
 /** First year the three-cent SILVER was struck. Nothing before it. */
 const THREE_CENT_SILVER_FIRST_YEAR = 1851;
@@ -329,38 +275,19 @@ function resolveBareThreeCent(
 /* ---------------------------------------------------------------------------
  * CERTIFICATION (GRADING) COMPANIES
  *
- * These are the third-party grading services whose names actually appear in
- * this collection's Quicken security names, e.g.
+ * The third-party grading services that actually appear in this collection's
+ * Quicken security names, e.g. "1927 $20 - PCGS MS64", "1875 20¢ - ANACS VG8",
+ * "1909 S-VDB 1¢ - PCGS/CAC AU58".
  *
- *     "1927 $20 - PCGS MS64"
- *     "1875 20¢ - ANACS VG8"
- *     "1886 $1 - ICG MS64DMPL"
- *     "1909 S-VDB 1¢ - PCGS/CAC AU58"
+ * Regexes, not plain `includes()`: a substring test would fire on "NGC" buried
+ * inside a longer word, and would be case-sensitive against hand-typed names.
+ * Each token is anchored with `\b` on both sides so it matches as a whole
+ * token -- the separators these names use (space, hyphen, slash, backslash,
+ * parenthesis) are all non-word characters, so "- PCGS", "-PCGS", "PCGS/CAC"
+ * and "(CLEANED/PCGS)" all match while "XPCGSY" does not.
  *
- * WHY THIS IS A LIST OF REGEXES AND NOT A LIST OF STRINGS
- * A plain `securityName.includes('NGC')` would be wrong in two ways:
- *   1. It would fire on "NGC" buried inside a longer word (the bug the
- *      requirements call out explicitly).
- *   2. It would be case-sensitive, and Quicken names are hand-typed.
- *
- * So every entry is anchored with `\b` on both sides -- a WHOLE-TOKEN match --
- * and compiled case-insensitively. `\b` is a word boundary, meaning the
- * position between a word character ([A-Za-z0-9_]) and anything else. That is
- * exactly what we want here, because the separators these names actually use
- * -- space, hyphen, slash, backslash, parenthesis -- are all NON-word
- * characters. All of these therefore match:
- *
- *     "- PCGS MS64"        (space on both sides)
- *     "-PCGS PF65"         (hyphen before)
- *     "PCGS/CAC AU58"      (slash after)
- *     "(CLEANED/PCGS)"     (slash before, paren after)
- *
- * ...while "XPCGSY" does not.
- *
- * ORDER MATTERS ONLY FOR CACG. It is listed FIRST so that a name reading
- * "CACG MS65" is credited to CACG rather than to some other company that also
- * happened to appear. (CACG cannot be confused with the CAC *sticker* -- see
- * the CAC_STICKER_PATTERN comment below for that distinction.)
+ * ORDER MATTERS ONLY FOR CACG, listed first so "CACG MS65" is credited to CACG
+ * rather than to another company that also appeared in the name.
  * ------------------------------------------------------------------------- */
 const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
   // CAC's own grading service (a slab), NOT the CAC sticker (a sticker on
@@ -379,33 +306,20 @@ const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
  *
  * CAC (Certified Acceptance Corporation) puts a small green sticker on a slab
  * it agrees is solid for the grade. It is a SEPARATE thing from the grading
- * company, and it is the single most common "extra" in this collection's
- * Quicken names -- overwhelmingly written with a slash after the grader:
+ * company, and it is the most common "extra" in this collection's Quicken
+ * names -- usually written with a slash after the grader ("PCGS/CAC AU58"),
+ * but also seen as `CAC`, `CAC'd`, `CACd`, `w/CAC`, `+CAC`, `(CAC)`, and
+ * `CAC Gold` / `Gold CAC`.
  *
- *     "1909 S-VDB 1¢ - PCGS/CAC AU58"
- *     "1835 $5 - NGC/CAC XF45"
- *     "1870 $1 - PCGS/CAC PF62+"
+ * *** CAC vs CACG -- the one trap in this file ***
+ * `CACG` is CAC's GRADING SERVICE. A CACG-slabbed coin is not a CAC-stickered
+ * coin, so "CACG" must set `certCompany = 'CACG'` and leave `hasCacSticker`
+ * FALSE. The whole-token `\b` gives that for free: "G" is a word character, so
+ * there is no boundary after "CAC" in "CACG" and `\bCAC\b` does not match.
  *
- * ...but also seen in the wild as `CAC`, `CAC'd`, `CACd`, `w/CAC`, `+CAC`,
- * `(CAC)`, and `CAC Gold` / `Gold CAC`.
- *
- * *** CAC  vs  CACG -- the one trap in this whole file ***
- * `CACG` is CAC's GRADING SERVICE. A CACG-slabbed coin is not a
- * CAC-stickered coin, so seeing "CACG" must set `certCompany = 'CACG'` and
- * must leave `hasCacSticker` FALSE.
- *
- * The whole-token `\b` rule already gives us that for free, and it is worth
- * spelling out why:
- *   - In "CACG", the character after "CAC" is "G". Both "C" and "G" are word
- *     characters, so there is NO word boundary between them, so `\bCAC\b`
- *     fails to match. Correct.
- *   - In "PCGS/CAC", the character after "CAC" is the end of the string (or a
- *     space) and the one before it is "/", so both boundaries hold. Matches.
- *
- * The only form `\bCAC\b` does NOT cover on its own is `CACd` ("CAC'd" with
- * the apostrophe dropped), because "d" is a word character -- the same reason
- * CACG is excluded. So the optional `(?:'?d)?` group is spliced in to accept
- * `CAC`, `CAC'd` and `CACd` while still rejecting `CACG`.
+ * The optional `(?:'?d)?` group exists only to accept `CAC'd` and `CACd`,
+ * which `\bCAC\b` would otherwise reject for that same reason. Widening this
+ * pattern any further risks swallowing CACG.
  * ------------------------------------------------------------------------- */
 const CAC_STICKER_PATTERN = /\bCAC(?:'?d)?\b/i;
 
@@ -431,19 +345,10 @@ const DISPOSITION_ACTIONS = new Set(['sell', 'sellx', 'shrsout', 'shtsell', 'rtr
 /** Action codes for cash-only transfers — no security involved, skip silently. */
 const CASH_TRANSFER_ACTIONS = new Set(['xin', 'xout']);
 
-/* ---------------------------------------------------------------------------
- * THE 2-OF-3 MAIN-DETAIL RULE USED TO BE WRITTEN OUT IN THIS FILE.
- *
- * It now lives in `coin-completeness.ts`, because the manual "Add coin"
- * button needs the very same rule to decide when a half-typed new row has
- * become worth saving to the database. Two copies of a validation rule is
- * exactly how they drift apart, so there is now precisely one copy and both
- * callers import it.
- *
- * These re-exports keep this service's public surface (and its tests)
- * unchanged: `import { checkMainCoinDetails } from './quicken-import.service'`
- * still works and still resolves to the one shared implementation.
- * ------------------------------------------------------------------------- */
+/* The 2-of-3 main-detail rule lives in `coin-completeness.ts` because the
+ * manual "Add coin" button needs the same rule to decide when a half-typed row
+ * is worth saving. These re-exports keep this service's public surface
+ * unchanged for callers that still import it from here. */
 export {
   MINIMUM_MAIN_DETAILS,
   isCoinDetailPresent,
@@ -613,13 +518,11 @@ export class QuickenImportService {
       // NOTE: there is deliberately NO "is this coin detailed enough?" test
       // here. That rule lives in exactly one place -- the final assembly loop
       // below -- so that no code path can reach `importedRecords` without
-      // passing it. (The previous version tested `!year && !denomination`
-      // here, which only rejected coins missing BOTH fields, and then bolted
-      // on a regex for bare "1934"-style names. See the assembly loop.)
+      // passing it.
 
       const purchaseDate = fields.date ? this.normalizeDate(fields.date) : '';
 
-      /* -------------------------------------------------------------------
+       /*
        * WHAT IS IT MADE OF?
        *
        * The alloy follows from the country, the denomination and the YEAR --
@@ -636,27 +539,27 @@ export class QuickenImportService {
        * the fields stay blank on purpose. An empty field is something the user
        * can see and fix -- a wrong purity silently produces a wrong melt
        * value.
-       * ----------------------------------------------------------------- */
+        */
       const alloy = composePmFields(
         attrs.denomination,
         attrs.year,
         attrs.country,
         attrs.metalHint,
-        /* -----------------------------------------------------------------
+         /*
          * THE COARSE FALLBACK'S EXTRA EVIDENCE.
          *
          * The reference table is keyed on denomination + year, so an issue it
          * carries no row for -- foreign gold, an unusual face value, a type
-         * not yet tabulated -- used to contribute NOTHING and the coin
-         * imported with all four alloy fields blank. The COIN TYPE is exactly
-         * what the owner said makes the metal obvious ("Gold Eagle",
-         * "Saint-Gaudens", "Double Eagle"), so it is handed over too.
+         * not yet tabulated -- would otherwise import with all four alloy
+         * fields blank. The COIN TYPE is what makes the metal obvious in
+         * those cases ("Gold Eagle", "Saint-Gaudens", "Double Eagle"), so it
+         * is handed over too.
          *
-         * It only ever gets a turn when `lookupCoinAlloy` has already
-         * declined, and all it can add is Metal Content. There is no
-         * composition on a brand-new import, so that half is always empty
-         * here; the Settings backfill is where it earns its keep.
-         * --------------------------------------------------------------- */
+         * It only gets a turn when `lookupCoinAlloy` has already declined,
+         * and all it can add is Metal Content. There is no composition on a
+         * brand-new import, so that half is always empty here; the Settings
+         * backfill is where it earns its keep.
+          */
         { coinType: attrs.coinType }
       );
 
@@ -706,10 +609,7 @@ export class QuickenImportService {
          * Undefined -- not [] -- on the overwhelming majority of coins, so a
          * reader can test `record.ambiguities?.length` and get an honest
          * answer. When it IS set, the row still imports: an ambiguous reading
-         * is a flag, not a rejection. The owner was explicit that a record
-         * must not be dropped for being ambiguous; it must be surfaced so he
-         * "can either fix the choice right away or later or just cancel the
-         * match". See `AmbiguousReading` in coin.model.ts. */
+         * is a flag, NOT a rejection. See `AmbiguousReading` in coin.model.ts. */
         ambiguities: attrs.ambiguities.length > 0 ? attrs.ambiguities : undefined
       };
 
@@ -746,7 +646,6 @@ export class QuickenImportService {
       }
     }
 
-    // ---------------------------------------------------------------------
     // THE SINGLE CHOKE POINT.
     //
     // Every record that ends up in `importedRecords` passes through this one
@@ -758,7 +657,6 @@ export class QuickenImportService {
     //      Year / Coin Type / Denomination, or it goes to `rejectedRecords`
     //      (an exception the user can see -- and optionally override in the
     //      import modal) rather than being silently dropped.
-    // ---------------------------------------------------------------------
     const importedRecords: QuickenImportRecord[] = [];
     const skippedRecords: QuickenImportRecord[] = [];
     const rejectedRecords: QuickenRejectedRecord[] = [];
@@ -909,8 +807,8 @@ export class QuickenImportService {
 
     if (/^\d{4}$/.test(parts[0])) {
       // Already ISO-ish (`YYYY-MM-DD`). Some exporters -- and our own test
-      // fixtures -- use this. Reading it as M/D/Y produced nonsense like
-      // "2001-2024-02", which then compared wrongly against the date filters.
+      // fixtures -- use this; reading it as M/D/Y yields dates like
+      // "2001-2024-02" that then compare wrongly against the date filters.
       [year, month, day] = parts;
     } else {
       // Quicken's native order: M/D/Y.
@@ -1027,21 +925,14 @@ export class QuickenImportService {
     // PASS 1 handles a numeric grade carrying a DESIGNATION suffix:
     //   PF65RB, PF64Cameo, PF65 Cameo, PF69DCAM, MS64DMPL, MS70-FS, MS64+
     //
-    //   These used to come out EMPTY. The old expression ended in `\b`
-    //   immediately after the digits, and in "PF65RB" there is no word
-    //   boundary between "5" and "R" (both are word characters), so the whole
-    //   match failed and the grade was silently lost. Proof and copper coins
-    //   are overwhelmingly graded with designations, so this discarded the
-    //   grade for a large part of the collection.
+    //   The trailing `(?![A-Z0-9])` must NOT be replaced by `\b`: in "PF65RB"
+    //   there is no word boundary between "5" and "R" (both are word
+    //   characters), so `\b` loses the grade entirely -- and proof and copper
+    //   coins are overwhelmingly graded with designations. `(?![A-Z0-9])`
+    //   also succeeds after a "+" (MS64+), which `\b` cannot.
     //
-    //   The trailing `(?![A-Z0-9])` replaces `\b`: it asserts the grade is not
-    //   followed by another letter or digit. Unlike `\b` it also succeeds
-    //   after a "+" (as in MS64+), which `\b` cannot do because "+" is not a
-    //   word character.
-    //
-    // PASS 2 is the original expression, used only when pass 1 finds nothing.
-    // It keeps plain grades (XF, AU53, VF/EF, CH+AU) working exactly as
-    // before, so nothing that used to parse can regress.
+    // PASS 2 is the plain-grade expression, used only when pass 1 finds
+    // nothing. It keeps XF, AU53, VF/EF and CH+AU working.
     const GRADE_CORE =
       String.raw`(?:CH\+)?(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G)` +
       String.raw`(?:\/(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G))?`;
@@ -1123,16 +1014,12 @@ export class QuickenImportService {
     /* -----------------------------------------------------------------------
      * COUNTRY
      *
-     * This parser used to hard-code "United States" for every row. That was
-     * right for 43 of the 44 coins in this collection and wrong for the one
-     * that would not import:
-     *
-     *     "1969 Peru 100 Soles - NGC MS64"
-     *
      * `detectCountry` reads a country named in the text, and failing that
      * accepts a currency unit that can only belong to one country ("Soles"
-     * proves Peru on its own). When it finds nothing we keep the old default,
-     * because this is an American collector's export.
+     * proves Peru on its own). When it finds nothing we default to the United
+     * States, because this is an American collector's export -- but do not
+     * hard-code that default in place of the lookup: "1969 Peru 100 Soles"
+     * then imports as a US coin and fails the 2-of-3 rule on denomination.
      * --------------------------------------------------------------------- */
     const country = detectCountry(securityName) || 'United States';
 
@@ -1170,11 +1057,9 @@ export class QuickenImportService {
      *
      * Read BEFORE the US table below, but only used ahead of it when the coin
      * is not American. The US table understands "$20" and "50¢"; it has no
-     * idea what a Sol is, which is exactly why the Peru record came out with
-     * a blank denomination and failed the 2-of-3 rule.
-     *
-     * For a US coin the foreign reader almost never fires, and if it somehow
-     * did we would rather trust the US table -- hence the country test.
+     * idea what a Sol is. For a US coin the foreign reader almost never
+     * fires, and if it somehow did we would rather trust the US table --
+     * hence the country test.
      * --------------------------------------------------------------------- */
     const foreign = detectForeignDenomination(securityName);
 
@@ -1189,9 +1074,8 @@ export class QuickenImportService {
      * suffix or a mintmark, and loosening it there would cost far more than
      * this one coin is worth.
      *
-     * So the rule is narrow ON PURPOSE: the name must ALSO say Israel. The
-     * owner confirmed the reading himself, and without the country guard "5S"
-     * would start claiming sheqalim out of every other account he owns.
+     * The rule is narrow ON PURPOSE: the name must ALSO say Israel. Without
+     * that guard "5S" would start claiming sheqalim across every account.
      * --------------------------------------------------------------------- */
     const sheqalim = /\bisrael/i.test(securityName)
       ? /\b(\d{1,4})\s?S\b/.exec(securityName)
@@ -1212,8 +1096,7 @@ export class QuickenImportService {
     /* A bare 3¢ / "three cent" / "3c" with no silver-or-nickel qualifier.
      * The date settles it outside 1865-1873 and is worthless inside it, so
      * this delegates to `resolveBareThreeCent` above -- which returns the
-     * guess AND, when it really was a guess, the flag that says so. Read the
-     * block comment on that function; it quotes the owner's rule in full. */
+     * guess AND, when it really was a guess, the flag that says so. */
     } else if (/3¢/.test(securityName) || /three[\s-]?cent/i.test(lowerName) || /\b3c\b/.test(lowerName)) {
       const threeCent = resolveBareThreeCent(yearNum, securityName, grade);
       denomination = threeCent.denomination;
@@ -1226,27 +1109,18 @@ export class QuickenImportService {
      * THE ORDER OF THESE BRANCHES IS THE WHOLE RULE: LONGEST SPELLING FIRST.
      *
      * This is an if/else ladder over SUBSTRING tests, so a shorter cent
-     * spelling that happens to sit inside a longer one wins whenever it is
-     * tried first -- and two of his real securities were landing on exactly
-     * that, which is why the order below is now explicit and commented:
+     * spelling that sits inside a longer one wins whenever it is tried first:
      *
      *   "1868 25¢ - NGC/CAC PF64 Cameo"  CONTAINS "5¢", so with /5¢/ tried
-     *                                    first his QUARTER was imported as
-     *                                    a five-cent piece
-     *   "1860 ½10¢ - PCGS/CAC PF64"      the half-dime spelling was in no
-     *                                    branch at all, so it fell through
-     *                                    to /10¢/ and his HALF DIME was
-     *                                    imported as a DIME
+     *                                    first a QUARTER imports as a
+     *                                    five-cent piece
+     *   "1860 ½10¢ - PCGS/CAC PF64"      with no half-dime branch at all it
+     *                                    falls through to /10¢/ and a HALF
+     *                                    DIME imports as a DIME
      *
-     * Both were silent, and both produced silent damage downstream. His
-     * `Early Proofs` account holds nine ½10¢ half dimes and two 25¢
-     * quarters alongside genuine 10¢ dimes and a genuine 5¢ -- so the
-     * mis-reads did not merely lose information, they collided with real
-     * coins. The image matcher then did exactly what it is supposed to do
-     * with the data it was given: it attached the photographs of
-     * "1868 ½10¢" to the record that claimed to be an 1868 five-cent piece,
-     * which is really his 1868 quarter. One wrong denomination, two coins
-     * cross-filed.
+     * Both failures are silent, and both do damage downstream: a mis-read
+     * denomination collides with the real coins of that denomination in the
+     * same account, and the image matcher then cross-files the photographs.
      *
      * RULE FOR ANYONE ADDING A ROW: put it above every spelling it contains
      * a copy of. "½10¢" contains "10¢"; "25¢" contains "5¢". When in doubt,
@@ -1254,21 +1128,17 @@ export class QuickenImportService {
      * --------------------------------------------------------------------- */
     } else if (/½¢|1\/2¢/.test(securityName) || /half[\s-]?cent/i.test(lowerName)) {
       denomination = '½¢';
-    /* THE HALF DIME, written as half of a dime. The owner: "Half Dime can be
-     * ½10¢ or 5¢". It is literal -- a half dime IS half of ten cents -- and
-     * it must be tried before /10¢/ below, which would otherwise read the
-     * trailing "10¢" and report twice the face value. (The matcher's own
-     * reader, denomination-units.ts, has had this rule and this ordering
-     * warning since the half-dime work; this is the import side catching
-     * up with it.) */
+    /* THE HALF DIME, written as half of a dime: "Half Dime can be ½10¢ or
+     * 5¢". It is literal -- a half dime IS half of ten cents -- and it must
+     * be tried before /10¢/ below, which would otherwise read the trailing
+     * "10¢" and report twice the face value. The matcher's own reader,
+     * denomination-units.ts, carries the same rule and ordering warning. */
     } else if (/½\s*10¢|1\/2\s*10¢/.test(securityName) || /half[\s-]?dime/i.test(lowerName)) {
       denomination = '5¢';
     /* ATB -- "America the Beautiful". Every coin in the series is a QUARTER,
      * including the five-ounce silver pieces, whose bullion weight says
-     * nothing about the face value stamped on them. The abbreviation is how
-     * the owner writes them ("2011 5oz. ATB Vicksburg"), and without this
-     * branch those three came in with no denomination at all. Matched
-     * case-SENSITIVELY, as an initialism. */
+     * nothing about the face value stamped on them ("2011 5oz. ATB
+     * Vicksburg"). Matched case-SENSITIVELY, as an initialism. */
     } else if (/\bATB\b/.test(securityName)) {
       denomination = '25¢';
     /* 25¢ ABOVE 5¢, because "25¢" contains "5¢". */
@@ -1293,22 +1163,19 @@ export class QuickenImportService {
      * THE EAGLES, AND WHY THEY NEED THEIR OWN ORDERING
      *
      * "Eagle" is not one denomination, it is a family, and the metal and the
-     * YEAR decide which member you are holding. The owner's own words:
+     * YEAR decide which member you are holding:
      *
-     *   "Silver Eagle only refers to $1, where a (Gold) Eagle is $10 and a
-     *    (Gold) Double Eagle is $20, a (Gold) Half Eagle is $5, and a (Gold)
-     *    Quarter Eagle is $2.50."
+     *   Silver Eagle        $1      (bullion, whatever else the name says)
+     *   Quarter Eagle       $2.50   gold
+     *   Half Eagle          $5      gold
+     *   Eagle               $10     gold, the classic series
+     *   Double Eagle        $20     gold
+     *   modern Gold Eagle   $50     one-ounce bullion, struck only since 1986
      *
-     *   "It's true that a modern Gold Eagle actually refers to the $50 bullion
-     *    coin, but that should be easy to determine because of the modern year
-     *    (they only were minted starting in 1986)."
-     *
-     * Before this block existed, the bare eagle test below swallowed the
-     * silver ones, and three of his real securities -- "1987 Proof Silver
-     * Eagle", "2006 Proof Silver Eagle" and "2008 Proof Silver Eagle" -- were
-     * imported as TEN DOLLAR GOLD PIECES. Silver therefore has to be asked
-     * about FIRST and the modern gold year-rule second, leaving the classic
-     * $10 Eagle as the fall-through it always was.
+     * Silver must therefore be asked about FIRST (a bare "eagle" test
+     * swallows "Proof Silver Eagle" and imports it as a $10 gold piece), the
+     * modern gold year-rule second, leaving the classic $10 Eagle as the
+     * fall-through.
      * --------------------------------------------------------------------- */
     /* A multi-coin SET is the one eagle that is deliberately given NOTHING.
      *
@@ -1339,10 +1206,7 @@ export class QuickenImportService {
       denomination = '$10';
     /* $50 and $25 ABOVE $5 and $2.50, per this ladder's longest-first rule.
      * These two are the modern bullion face values -- the $50 one-ounce gold
-     * (Eagle and Buffalo) and the $25 half-ounce -- and until the matching
-     * denominations were seeded by migration 009 the importer had nowhere to
-     * put them, so names like "1986S Au $50-PF" and "2025 $50 Gold Buffalo"
-     * came in with no denomination at all. */
+     * (Eagle and Buffalo) and the $25 half-ounce. */
     } else if (/[\$£]50\b/.test(securityName)) {
       denomination = '$50';
     } else if (/[\$£]25\b/.test(securityName)) {
@@ -1380,12 +1244,11 @@ export class QuickenImportService {
     /* -----------------------------------------------------------------------
      * THE USER OVERRULES THE GUESS.
      *
-     * This is the "fix the choice right away" half of what the owner asked
-     * for. It sits HERE -- after the ladder, before anything derived from the
+     * This sits HERE -- after the ladder, before anything derived from the
      * denomination -- for one reason: the coin type below and the alloy /
      * weight fields back in `parse` are both computed from `denomination`, so
      * correcting it any later would leave them describing the coin the parser
-     * guessed rather than the coin he says it is.
+     * guessed rather than the coin the user says it is.
      *
      * TWO GUARDS, AND THEY MATTER. The value is accepted only when
      *   (a) this name actually produced a denomination ambiguity -- a
@@ -1393,8 +1256,8 @@ export class QuickenImportService {
      *   (b) the value is one of the alternatives the parser itself listed.
      * Without them a stale entry from an earlier QIF, or a hand-edited one,
      * could set any denomination on any row. Correcting a guess is not the
-     * same thing as free-text editing the import, and the coin editor is
-     * where the latter belongs.
+     * same thing as free-text editing the import; the coin editor is where
+     * the latter belongs.
      * --------------------------------------------------------------------- */
     if (chosenDenomination) {
       const flagged = ambiguities.find(
@@ -1509,38 +1372,25 @@ export class QuickenImportService {
      * "$1" between 1849 and 1889 is two completely different coins: the
      * silver dollar (Liberty Seated, then Morgan) and the Gold Dollar, a
      * 13 mm sliver of 90% gold. The year-based table below only knows the
-     * silver series, so before this check "1849-O $1 Gold" imported as a
-     * "Liberty Seated" -- with 24 g of silver attached to it.
+     * silver series, so without this check "1849-O $1 Gold" comes out a
+     * "Liberty Seated" with 24 g of silver attached to it.
      *
      * The three Gold Dollar types:
      *   Type 1  1849-1854  Liberty Head
      *   Type 2  1854-1856  Indian Princess, Small Head
      *   Type 3  1856-1889  Indian Princess, Large Head
      *
-     * 1854 through 1856 is left BLANK on purpose: those three dates overlap
-     * two (in 1854, three) types and a Quicken name does not say which.
-     * Blank is fine -- Year and Denomination already satisfy the 2-of-3 rule,
-     * so the coin still imports and the user picks the type.
+     * 1854 through 1856 is left BLANK on purpose: those dates overlap two
+     * (in 1854, three) types and a Quicken name does not say which. Blank is
+     * fine -- Year and Denomination already satisfy the 2-of-3 rule, so the
+     * coin still imports and the user picks the type.
      *
-     * SHOULD THIS USE THE AMBIGUOUS-READING CHANNEL? CONSIDERED; NO.
-     *   `AmbiguousReading` (coin.model.ts) exists so that a GUESS can be
-     *   shown to the user as a guess. This branch does not guess -- it
-     *   declines, and the decline is already visible: the preview prints an
-     *   em dash in the Coin Type column, which is the agreed way this project
-     *   says "nothing here, fill it in". The problem the channel was built to
-     *   solve is a guess WEARING THE CLOTHES OF A FACT, and a blank cell is
-     *   the opposite of that.
-     *
-     *   The two cases are also not the same shape. A three-cent reading has
-     *   exactly two candidates and picking the wrong one silently mis-files
-     *   photographs; a Gold Dollar in 1854 has two or three candidates and a
-     *   blank coin type costs nothing downstream. Flagging a blank would add
-     *   a "check this" banner to rows where there is nothing to check beyond
-     *   what the dash already says.
-     *
-     *   The channel stays available to it: `AmbiguousReading.field` is a
-     *   union including 'coinType' precisely so this branch (or any other)
-     *   can start using it the day declining stops being good enough.
+     * We deliberately do NOT route that blank through `AmbiguousReading`.
+     * That channel exists so a GUESS can be shown to the user as a guess;
+     * this branch declines rather than guesses, and the decline is already
+     * visible as an em dash in the preview's Coin Type column. The field
+     * union does include 'coinType', so the channel stays available if
+     * declining ever stops being good enough.
      * --------------------------------------------------------------------- */
     if (denomination === '$1' && metalHint === 'Gold') {
       if (yearNum >= 1849 && yearNum <= 1853) return 'Liberty Head';

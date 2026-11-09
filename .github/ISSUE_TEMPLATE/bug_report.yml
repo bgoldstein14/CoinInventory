@@ -1,0 +1,70 @@
+name: Bug report
+description: Something in Coin Inventory does not work the way it should.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Before you paste anything:** this issue is public. Screenshots and
+        exported files can contain more than coins — real QIF exports have
+        turned out to hold stock holdings, retirement accounts and home
+        addresses. Look at a file before you attach it.
+
+        The quickest way to fill this in is **Help → Report a problem** inside
+        the app. It gathers the versions, the recent errors and a log tail for
+        you, replaces your user name, computer name and folder paths with
+        placeholders, shows you the result, and saves a zip to your Desktop
+        that you can drag in below.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What were you doing, and what did you expect instead?
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: app-version
+    attributes:
+      label: App version
+      description: Shown in the report from Help → Report a problem.
+    validations:
+      required: true
+
+  - type: input
+    id: windows-version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 10.0.26200"
+    validations:
+      required: true
+
+  - type: textarea
+    id: report
+    attributes:
+      label: Problem report
+      description: >
+        Paste the report from Help → Report a problem, and drag the .zip from
+        your Desktop into this box if you have one.
+      render: text
+
+  - type: checkboxes
+    id: checked-attachments
+    attributes:
+      label: Before submitting
+      options:
+        - label: I have looked at anything I am attaching and I am happy for it to be public.
+          required: true

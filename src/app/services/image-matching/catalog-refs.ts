@@ -1,14 +1,13 @@
-/* ===========================================================================
+ /*
  * catalog-refs.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Ancient and world coins, which are catalogued completely differently from
  *   US coins. Public entry points: `findCatalogRefs`, `findEraDate`,
  *   `foldCatalogRefs`.
  *
- * ---------------------------------------------------------------------------
  * WHY ANCIENTS NEED SPECIAL HANDLING
- * ---------------------------------------------------------------------------
+ *
  *   Every rule in this matcher leans on a mint year and a denomination:
  *
  *       1881-S Morgan Dollar        year 1881, mint S, denomination Dollar
@@ -25,9 +24,8 @@
  *   into a standard reference work. "Sear 6819" identifies one specific coin
  *   type as precisely as "1881-S Morgan Dollar" does.
  *
- * ---------------------------------------------------------------------------
  * THE DECISION: ANCIENTS MATCH ON COIN-TYPE TEXT ONLY, AND NEVER AUTO-ASSIGN
- * ---------------------------------------------------------------------------
+ *
  *   1. The era date is REPORTED but never scored. "67-68 CE" is not a mint
  *      year and must never be compared against one -- feeding it into the year
  *      attribute would invite a 67 AD coin to match a coin recorded as 1967.
@@ -49,7 +47,7 @@
  *      ranked shortlist and are never auto-assigned. That is the intended
  *      outcome, not a limitation: with no year and no denomination there is
  *      not enough independent evidence to file a photo unattended.
- * =========================================================================== */
+  */
 
 import { CATALOG_PREFIXES } from './filename-vocabulary';
 

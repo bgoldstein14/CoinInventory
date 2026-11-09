@@ -71,20 +71,19 @@ describe('import base folder persistence', () => {
     await expect(loadImportBaseFolder(storage)).resolves.toBe('');
   });
 
-  /* =====================================================================
+   /*
    * THERE IS NO APP-FOLDER FALLBACK ANY MORE, AND THAT IS THE POINT
-   * =====================================================================
+   *
    * The original requirement was "start out from the app folder and then
-   * memorize subsequent choices", and this file used to have six tests
-   * pinning that behaviour. It was removed after it caused a real data bug
-   * twice in one day: the owner imported a folder and every row was stamped
-   * under his development directory, because the box was still holding that
-   * seed. A plausible-looking path that is never correct is worse than a
-   * blank one, because nobody checks it.
+   * memorize subsequent choices". It was removed after it caused a real data
+   * bug: an import stamped every row under the development directory,
+   * because the box was still holding that seed. A plausible-looking path
+   * that is never correct is worse than a blank one, because nobody checks
+   * it.
    *
    * The tests below pin the REPLACEMENT behaviour, including the sneaky
    * second-order bug the old fallback caused.
-   * =================================================================== */
+    */
 
   it('starts empty when nothing has ever been saved', async () => {
     await expect(loadImportBaseFolder(storage)).resolves.toBe('');

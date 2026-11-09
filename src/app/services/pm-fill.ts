@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * pm-fill.ts — TURNING "WHAT IS IT MADE OF?" INTO FOUR COIN FIELDS
- * ---------------------------------------------------------------------------
+ *
  * WHY THIS FILE EXISTS
  *
  * `pm-reference.ts` answers one question: given a country, a denomination and
@@ -16,18 +16,17 @@
  *     3. the PM BACKFILL in Settings, which fills in the blanks on coins that
  *        were already in the database before the import learned how to do it.
  *
- * Before this file, step (1) wrote that mapping out by hand inside
- * `quicken-import.service.ts`. A second hand-written copy for the backfill is
- * exactly how the two would drift: someone adds a fifth field, or changes
- * which lookup is called, fixes one caller and not the other, and from then on
- * an imported coin and a backfilled coin disagree about the same physical
- * object. So the mapping lives here, once, and both callers import it.
+ * The mapping lives here, once, and all three callers import it. A second
+ * hand-written copy is exactly how two of them would drift: someone adds a
+ * sixth field, or changes which lookup is called, fixes one caller and not
+ * the other, and from then on an imported coin and a backfilled coin
+ * disagree about the same physical object.
  *
  * NOTHING IN THIS FILE DECIDES WHAT A COIN IS MADE OF.
  * Every alloy rule — and in particular every deliberate refusal to guess — is
  * still owned by `pm-reference.ts`. This file only reshapes that answer and
  * works out which fields are safe to write.
- * =========================================================================== */
+  */
 
 import { CoinRecord } from '../types/coin.model';
 import { lookupCoinAlloy } from './pm-reference';
@@ -50,19 +49,12 @@ import { inferMetalContent } from './metal-inference';
  * A test asserts that a backfill payload's `Object.keys()` is a subset of this
  * list, so adding a key here is a deliberate act with a visible consequence.
  *
- * ---------------------------------------------------------------------------
- * WHY `weight` IS ON THIS LIST
- * ---------------------------------------------------------------------------
- * It was four keys until the reference table learned gross weights. `weight`
- * is the coin's whole weight, alloy included, and it belongs here for exactly
- * the reason the other four do: it follows from country + denomination + year,
- * the import should fill it, and the Settings backfill should fill it in on
- * the coins that were imported before any of this existed.
- *
- * It is the one key on the list that is NOT about precious metal, which is
- * worth knowing when reading the name "PM_FIELD_KEYS". It is nonetheless
- * governed by all the same rules: never overwritten, never invented, and
- * never sent in a payload alongside anything else.
+ * ---- WHY `weight` IS ON THIS LIST ----
+ * `weight` is the coin's whole weight, alloy included, and it belongs here
+ * for the reason the other four do: it follows from country + denomination +
+ * year. It is the one key on the list that is NOT about precious metal,
+ * despite the name "PM_FIELD_KEYS", and it is governed by all the same rules:
+ * never overwritten, never invented, never sent alongside anything else.
  *
  * *** UNITS: GRAMS ***
  * `CoinRecord.weight` counted TROY OUNCES until migration 008 and counts
@@ -95,15 +87,10 @@ export type PmFieldKey = (typeof PM_FIELD_KEYS)[number];
  * has no PM weight, and writing 0 would make `computeMeltValue` treat it as a
  * recorded fact rather than as an absence.
  *
- * ---------------------------------------------------------------------------
- * WHY ONLY `metalContent` IS REQUIRED
- * ---------------------------------------------------------------------------
- * This used to declare all of them as required, which quietly encoded the
- * assumption that the facts are learned together or not at all. They are
- * not. There are two quite different sources now:
+ * ---- WHY ONLY `metalContent` IS REQUIRED ----
+ * The facts are not always learned together. There are two sources:
  *
- *   * the REFERENCE TABLE (`lookupCoinAlloy`) answers all five at once, which
- *     is what it has always done; and
+ *   * the REFERENCE TABLE (`lookupCoinAlloy`) answers all five at once; and
  *   * the COARSE METAL INFERENCE (`metal-inference.ts`) answers the metal ONLY
  *     — "a US $20 is gold" says nothing whatsoever about how many grams of
  *     gold are in this particular one, nor what the whole coin weighs.
@@ -167,14 +154,9 @@ export interface PmFillContext {
  *
  * Both the Quicken import and the Settings backfill call this and nothing
  * else, so the two can never disagree about which lookup is authoritative or
- * about which field gets which value. (Verified: `quicken-import.service.ts`
- * calls this once, in its single record-assembly loop, and `pm-backfill.ts`
- * reaches it through `pmFieldsToFill` below. There is no third caller and no
- * second copy of the mapping.)
+ * about which field gets which value.
  *
- * ---------------------------------------------------------------------------
- * TWO SOURCES, AND THE ORDER BETWEEN THEM NEVER CHANGES
- * ---------------------------------------------------------------------------
+ * ---- TWO SOURCES, AND THE ORDER BETWEEN THEM NEVER CHANGES ----
  * 1. `lookupCoinAlloy` (pm-reference.ts) IS AUTHORITATIVE. When it finds a
  *    catalogued row, its answer is used exactly as given — all five fields,
  *    unchanged. Nothing below may override, adjust or second-guess it.
@@ -185,15 +167,13 @@ export interface PmFillContext {
  *    genuinely unknown: knowing that a US $20 is gold says nothing about how
  *    many grams of gold are in this particular one, nor what it weighs.
  *
- * WHY THE FALLBACK EXISTS AT ALL. This function used to be all-or-nothing: the
- * moment the reference table declined, it returned null and the coin got no
- * METAL either. The reference table covers specific US issues well, so
- * anything outside it — foreign gold, unusual face values, types not yet
- * tabulated — imported with every precious-metal field blank. That is the
- * defect the owner reported: "every one of those should have had the content
- * set to Gold automatically since the coin type would have made that obvious."
+ * WHY THE FALLBACK EXISTS AT ALL. The reference table covers specific US
+ * issues well, so anything outside it — foreign gold, unusual face values,
+ * types not yet tabulated — would otherwise import with every precious-metal
+ * field blank, including the metal, even where the coin type makes the metal
+ * obvious.
  *
- * The timidity is unchanged, only relocated. Both sources still answer
+ * The timidity is unchanged by that fallback. Both sources still answer
  * nothing for combinations that had two alloys in circulation at once (the
  * 1942 nickel, the 1982 cent, the 1971-78 Eisenhower dollar, a bare `$1` in
  * the gold-dollar era), because:
@@ -257,9 +237,7 @@ export function composePmFields(
 /**
  * Is this field EMPTY — i.e. does the coin record say nothing at all about it?
  *
- * ---------------------------------------------------------------------------
- * WHY ZERO COUNTS AS A VALUE, NOT AS A BLANK
- * ---------------------------------------------------------------------------
+ * ---- WHY ZERO COUNTS AS A VALUE, NOT AS A BLANK ----
  * The backfill's governing rule is "only fill blanks, never overwrite", because
  * a figure already in the record may have been typed in by hand and a
  * hand-entered figure outranks an inferred one. A `pmWeightGrams` of 0 is a
@@ -286,13 +264,73 @@ export function hasAllPmFields(coin: Partial<CoinRecord>): boolean {
   return PM_FIELD_KEYS.every((key) => !isPmFieldBlank(coin[key]));
 }
 
+/** Knobs on `inferPmFields`. One knob, and it exists for exactly one caller. */
+export interface InferPmOptions {
+  /**
+   * Should the coin's OWN `metalContent` be passed to the lookup as evidence?
+   *
+   * Defaults to `true`, which is what every bulk path wants: the stored metal
+   * is normally the owner's own hand-typed statement, and it is the only thing
+   * that can settle an 1855 "$1" (gold dollar or silver dollar — nothing else
+   * in the record says which).
+   *
+   * The EDITOR's autofill sets it to `false` on its first attempt, and the
+   * reason is specific. After the user changes the denomination from "$1" to
+   * "$20", the metal still on the record says "Silver" — not because anyone
+   * believes it, but because it is the PREVIOUS inference's own output. Fed
+   * back in as a hint it matches no $20 row, the table declines, only the
+   * coarse fallback answers, and the 26.73 g silver-dollar weight stays on a
+   * double eagle. A stale output must not be allowed to veto its replacement.
+   * See `planPmAutofill` in pm-autofill.ts, which falls back to the hinted
+   * question when the hintless one answers nothing.
+   */
+  useRecordedMetalAsHint?: boolean;
+}
+
+/**
+ * Ask "what is this coin made of?" using a COIN RECORD as the question.
+ *
+ * Turning a `CoinRecord` into `composePmFields`' five arguments — which
+ * column is the hint, which columns are context, what to do with `undefined`
+ * — is a decision that MUST come out the same way for every caller. There are
+ * two: the Settings backfill and the editor's autofill, which asks the same
+ * question the moment the user edits a key field. Two copies of this
+ * marshalling would drift (add `variety` to the context, fix one caller, and
+ * the same coin gets two answers depending on which screen asked).
+ *
+ * It decides NOTHING about what is written. That is `pmFieldsToFill`'s job
+ * (blanks only) or `planPmAutofill`'s (blanks silently, differences by
+ * consent). This function only asks the question.
+ */
+export function inferPmFields(
+  coin: Partial<CoinRecord>,
+  options?: InferPmOptions
+): CoinPmFields | null {
+  const useHint = options?.useRecordedMetalAsHint ?? true;
+  const metalHint =
+    useHint && typeof coin.metalContent === 'string' ? coin.metalContent.trim() : '';
+
+  return composePmFields(
+    coin.denomination ?? '',
+    coin.year ?? '',
+    coin.country ?? '',
+    metalHint || undefined,
+    // The coin's own Coin Type and Composition, which is the evidence the
+    // coarse metal fallback reads when the reference table has no row. A coin
+    // typed "Gold Eagle" or "Saint-Gaudens" names its metal in that field even
+    // when nothing else in the record pins down the alloy.
+    {
+      coinType: coin.coinType,
+      composition: typeof coin.composition === 'string' ? coin.composition : undefined
+    }
+  );
+}
+
 /**
  * Work out exactly which of the five fields may be written for one coin, and
  * with what.
  *
- * ---------------------------------------------------------------------------
- * THREE CALLERS, ONE RULE
- * ---------------------------------------------------------------------------
+ * ---- THREE CALLERS, ONE RULE ----
  * The Settings backfill calls this for every coin already in the database.
  * The CSV import calls it for each freshly-mapped row, so that a spreadsheet
  * that only lists year / denomination / grade still produces a coin with its
@@ -307,38 +345,28 @@ export function hasAllPmFields(coin: Partial<CoinRecord>): boolean {
  * or weight of its own, so there is nothing there for a blanks-only rule to
  * protect and no reason to run the "is it blank?" test.)
  *
- * ---------------------------------------------------------------------------
- * THE THREE RULES, ALL ENFORCED HERE
- * ---------------------------------------------------------------------------
+ * ---- THE THREE RULES, ALL ENFORCED HERE ----
  * 1. ONLY BLANKS ARE FILLED. A field that already holds anything is omitted
  *    from the result entirely, so it cannot be sent and cannot be overwritten.
  *
  * 2. PARTIALLY-FILLED COINS GET THEIR GAPS COMPLETED, not skipped. The five
  *    fields are independent statements, and a blank one is unambiguously "no
- *    information" — filling it destroys nothing. Skipping the whole coin would
- *    be worse than useless in the very case the owner complained about: melt
- *    value needs BOTH `metalContent` AND `pmWeightGrams`, so a coin where only
- *    the metal was ever typed in still shows a blank melt figure, and that coin
- *    would be exactly the one a "skip if partly filled" rule refused to fix.
- *
- *    This matters more now than it did with four fields. A CSV row that names
- *    a weight and nothing else, or a coin whose metal was typed in by hand
- *    years ago, is a PARTIAL record by construction — and it is the normal
- *    case, not the exception.
+ *    information" — filling it destroys nothing. A "skip if partly filled"
+ *    rule would refuse exactly the coins that need help most: melt value
+ *    needs BOTH `metalContent` AND `pmWeightGrams`, so a coin where only the
+ *    metal was ever typed in still shows a blank melt figure. A CSV row that
+ *    names a weight and nothing else, or a coin whose metal was hand-typed
+ *    years ago, is partial by construction — the normal case, not the
+ *    exception.
  *
  * 3. NOTHING IS INVENTED. Where the inference itself has no value — the PM
  *    weight and PM % of a bronze cent, the gross weight of a large cent, or
  *    all four of composition / PM % / PM weight / weight when only the coarse
  *    metal fallback could answer — the key is simply absent from the result.
- *    The field stays blank, which is the truth. This is why `CoinPmFields`
+ *    The field stays blank, which is the truth. That is why `CoinPmFields`
  *    has four optional members and one required one: a PARTIAL answer is a
- *    legitimate answer, and the loop below already skipped `undefined`, so a
- *    partial answer needed no new logic here. It needed the TYPE to stop
- *    claiming the other four are always present.
- *
- * ---------------------------------------------------------------------------
- * THE EXISTING METAL IS USED AS A HINT
- * ---------------------------------------------------------------------------
+ *    legitimate answer.
+ * ---- THE EXISTING METAL IS USED AS A HINT ----
  * When the coin already names a metal, that value is passed to the lookup as
  * `metalHint`. This is the backfill's only source of evidence beyond year and
  * denomination, and it is a good one: it is what the owner typed. It settles
@@ -363,19 +391,10 @@ export function pmFieldsToFill(coin: Partial<CoinRecord>): Partial<CoinRecord> {
   // Nothing to do, and no reason to spend a lookup on it.
   if (hasAllPmFields(coin)) return {};
 
-  const metalHint = typeof coin.metalContent === 'string' ? coin.metalContent.trim() : '';
-
-  const inferred = composePmFields(
-    coin.denomination ?? '',
-    coin.year ?? '',
-    coin.country ?? '',
-    metalHint || undefined,
-    // The coin's own Coin Type and Composition, which is the evidence the
-    // coarse metal fallback reads when the reference table has no row. A coin
-    // typed "Gold Eagle" or "Saint-Gaudens" names its metal in that field even
-    // when nothing else in the record pins down the alloy.
-    { coinType: coin.coinType, composition: typeof coin.composition === 'string' ? coin.composition : undefined }
-  );
+  // The stored metal IS passed as a hint here: on this path it is the owner's
+  // own statement about a coin nobody has just re-described. See
+  // `InferPmOptions.useRecordedMetalAsHint` for the one caller that differs.
+  const inferred = inferPmFields(coin);
 
   // Neither the reference table nor the coarse metal inference would commit
   // (two alloys struck with that date, an unknown coin, no year to work from).

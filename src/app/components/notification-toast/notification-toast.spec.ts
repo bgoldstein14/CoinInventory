@@ -4,16 +4,9 @@ import { NotificationToast } from './notification-toast';
 import { NotificationService } from '../../services/notification.service';
 
 /**
- * Tests for NotificationToast component.
- *
- * This component displays notifications from NotificationService as toast messages.
- * It supports:
- * - Three severity levels: info (blue), warning (yellow), error (red)
- * - Manual dismiss via close button
- * - Auto-dismiss for transient notifications
- *
- * NotificationToast uses constructor injection for NotificationService,
- * so we pass the mock service directly via the constructor.
+ * NotificationToast uses constructor injection rather than `inject()`, so the
+ * service can be handed over directly — no injection context, and no DOM,
+ * which is what makes this testable under Node.
  */
 describe('NotificationToast', () => {
   let component: NotificationToast;
@@ -21,7 +14,6 @@ describe('NotificationToast', () => {
 
   beforeEach(() => {
     service = new NotificationService();
-    // Create component with the service via constructor injection
     component = new (NotificationToast as any)(service);
   });
 

@@ -1,5 +1,4 @@
-// Styles for the inventory grid. Moved here wholesale from the old
-// `styles/_inventory-table.scss` partial, which only this component used.
+// Styles for the inventory grid.
 //
 // `controls` supplies the shared button / badge / checkbox look, plus the
 // `box-sizing: border-box` reset — Angular scopes styles per component, so each
@@ -9,7 +8,7 @@
 
 // The host element is an artefact of making this a component; `display: contents`
 // removes it from layout so `<section class="panel">` remains a direct child of
-// the `.main-content` grid, exactly as it was in app.html.
+// the `.main-content` grid.
 :host { display: contents; }
 
 // ---- Inventory panel header ----
@@ -117,43 +116,22 @@
 // HOW WIDTH WORKS IN THIS GRID, because it is not obvious from reading the
 // template. The table is `width: 100%` with the DEFAULT (auto) layout
 // algorithm, so every column is sized from its contents and then the leftover
-// space is shared out in proportion to those contents. Nothing declared a
-// width for a data column until now -- `.check-column` and `.thumb-column` are
-// the two fixed, non-data columns -- which means a column full of long text
-// (Type, Variety, Source) quietly claims space from short ones.
+// space is shared out in proportion to those contents -- which means a column
+// full of long text (Type, Variety, Source) quietly claims space from short
+// ones. (`.check-column` and `.thumb-column` are the two fixed, non-data
+// columns.)
 //
 // `width: 1%` is the idiom for opting out of that share-out. In an auto-layout
 // table a width smaller than the column's min-content is clamped UP to
 // min-content, so 1% does not mean "1% wide": it means "take only what you
-// need and give the surplus to the other columns". That is deliberately not a
-// pixel value -- a hard px figure here would either be ignored (if below
-// min-content) or clip nothing and mislead the next reader into thinking the
-// number was measured.
-//
-// The two columns below are the cert/grade pair, narrowed at the owner's
-// request: "It doesn't have to be very wide ... and maybe shrink the grade
-// column a bit to ensure the grid has enough room." Adding a column only takes
-// room away from the others, so the new one pays for itself.
+// need and give the surplus to the other columns". Deliberately not a pixel
+// value -- a hard px figure here would either be ignored (if below min-content)
+// or mislead the next reader into thinking the number was measured.
 
 // Contents are a short badge -- "MS65", "AU58", plus the optional CAC bean --
-// against a 5-character header, so this column was being handed far more room
-// than it can ever use.
+// against a 5-character header, so this column would otherwise be handed far
+// more room than it can ever use.
 .column-grade { width: 1%; }
-
-// Contents are a 3-5 letter company: NGC, PCGS, ANACS, ICG.
-//
-// This used to override `.sortable-header`'s `white-space: nowrap` so the
-// header could wrap: "CERTIFIED BY" on one line set a width floor about twice
-// that of any value beneath it, which fought the "doesn't have to be very
-// wide" this column was asked for. The owner saw the two-line header and
-// preferred to shorten the label instead -- it is 'Cert. By' now (see
-// inventoryColumnLabels), which is narrow enough to sit on one line without
-// widening the column. So the override is gone and the header behaves like
-// every other one.
-//
-// If the label is ever lengthened again, re-add `white-space: normal` here
-// rather than letting the column grow.
-.column-certCompany { width: 1%; }
 
 .check-column {
   width: 32px;
@@ -202,6 +180,16 @@
   color: #8a7a63;
   padding: 32px 12px;
   cursor: default;
+}
+
+// The second line of the empty row, used by the "could not be loaded" state
+// to point at the banner rather than restate the error.
+// See features/inventory/collection-zero-state.ts.
+.empty-row__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.85rem;
+  opacity: 0.8;
 }
 
 // ---- "Unsaved" chip on draft rows ----
@@ -261,7 +249,6 @@
 
 // ---- Print ----
 // On paper the table should fill the page and lose its selection column.
-// (Moved from `_overlays.scss`.)
 
 @media print {
   .inventory-panel { border: none; box-shadow: none; padding: 0; margin: 0; }

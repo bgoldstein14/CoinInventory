@@ -1,56 +1,45 @@
-/* ===========================================================================
+ /*
  * import-progress.ts — "the import is working, here is how far it has got"
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO FIX
- * ---------------------------------------------------------------------------
- * The owner's report, verbatim:
  *
- *     "The coin image import largely worked great. We need to show a busy
- *      indicator when it's loading since the screen was basically frozen with
- *      no indication that anything was going on."
+ * THE TWO FAILURES THIS EXISTS TO PREVENT
  *
- * The import already HAD a progress bar. It was frozen anyway, for two
- * different reasons that both have to be fixed or neither matters:
+ * A progress bar is not enough on its own. A screen can have one and still
+ * look frozen, for two independent reasons that both have to be addressed:
  *
- *   1. THE INDICATOR DID NOT COVER THE SLOW PARTS. `progress` was only ever
- *      set for two of the four stages, and even for those it was set late:
+ *   1. THE INDICATOR MUST COVER THE SLOW PARTS, AND START EARLY.
  *
- *        - picking a folder ran `filterImageFiles` over ~2,140 File handles
- *          with nothing on screen;
- *        - `runAttach` did not report anything until the FIRST file had been
- *          read off the share, decoded and downscaled. For a 46 MB JPEG over
- *          SMB that is several seconds of dead screen — and, because
- *          `busy()` reads off `progress`, several seconds with the Save
- *          button still live, so an impatient second click started the entire
- *          import a second time;
- *        - the longest wait of all, Angular building the review screen out of
- *          2,140 finished rows, happened AFTER `progress` had been set back
- *          to null.
+ *        - picking a folder runs `filterImageFiles` over ~2,140 File handles;
+ *        - `runAttach` reads, decodes and downscales the FIRST file off the
+ *          share before it has anything to report. For a 46 MB JPEG over SMB
+ *          that is several seconds of dead screen -- and, because `busy()`
+ *          reads off `progress`, several seconds with the Save button still
+ *          live, so an impatient second click starts the entire import again;
+ *        - the longest wait of all is Angular building the review screen out
+ *          of 2,140 finished rows, which happens AFTER the rows are handed
+ *          over.
  *
  *   2. SETTING A SIGNAL DOES NOT DRAW ANYTHING. JavaScript is single
  *      threaded. A write to `progress` only becomes pixels when the current
- *      task ends and the browser gets a frame. The old code set the matching
- *      progress and then ran the first 200-filename chunk in the SAME task;
- *      that chunk measures ~1.1 s against a 2,000-coin inventory, so the bar's
- *      first appearance was already a second late. An indicator with no yield
- *      in front of it is not an indicator, it is a comment.
+ *      task ends and the browser gets a frame. Setting the matching progress
+ *      and then running the first 200-filename chunk in the SAME task (~1.1 s
+ *      against a 2,000-coin inventory) means the bar's first appearance is
+ *      already a second late. An indicator with no yield in front of it is
+ *      not an indicator, it is a comment.
  *
- * So the fix is in two halves, and this file is the first one: a single
- * vocabulary for "which stage, how far, what do we call it", with a factory
- * per stage so that adding a stage without announcing it is awkward. The
- * second half — `await yieldToBrowser()` in front of every stage so the
- * browser can actually paint what this file describes — lives in
+ * This file is the first half of the answer: a single vocabulary for "which
+ * stage, how far, what do we call it", with a factory per stage so that
+ * adding a stage without announcing it is awkward. The second half --
+ * `await yieldToBrowser()` in front of every stage -- lives in
  * batch-import-session.ts and attach-runner.ts.
  *
- * ---------------------------------------------------------------------------
  * WHY THIS IS A STANDALONE FILE OF PLAIN FUNCTIONS
- * ---------------------------------------------------------------------------
+ *
  * The same reason coin-editor-form/custom-option-mode.ts is: the unit suite
  * runs under Node with no jsdom, so a template cannot be rendered and a
  * spinner cannot be asserted on. Pulled out here, every rule that decides what
  * the user sees — the wording, the bar width, whether the buttons are
  * disabled — is an ordinary function with an ordinary test.
- * =========================================================================== */
+  */
 
 import { BatchImportProgress } from '../../types/coin.model';
 
@@ -62,9 +51,9 @@ function base(phase: BatchImportProgress['phase'], total: number): BatchImportPr
   return { total, processed: 0, attached: 0, failed: 0, currentFile: '', phase };
 }
 
-/* =========================================================================
+ /*
  * THE FACTORIES — one per stage that can keep the main thread
- * ======================================================================= */
+  */
 
 /**
  * Stage 0: the picker has handed over File handles and we are deciding which
@@ -108,9 +97,9 @@ export const buildingProgress = (rowCount: number): BatchImportProgress =>
 export const startingAttachProgress = (total: number): BatchImportProgress =>
   base('attaching', total);
 
-/* =========================================================================
+ /*
  * WHAT THE SCREEN DOES WITH IT
- * ======================================================================= */
+  */
 
 /** The four phases during which the buttons must be dead. */
 const WORKING_PHASES: ReadonlySet<BatchImportProgress['phase']> = new Set([
@@ -157,12 +146,12 @@ export function progressPercent(progress: BatchImportProgress | null | undefined
 /**
  * The line of text above the bar.
  *
- * The owner asked for a real count rather than a spinner, and the count is
- * ONE-BASED for the attaching stage. `processed` counts files FINISHED, so
- * while the first file is being read `processed` is 0 — and "Processing 0 of
- * 317" is precisely the message that reads as nothing happening. The file
- * being worked on right now is `processed + 1`, capped at the total so the
- * final tick cannot claim to be on file 318 of 317.
+ * A real count rather than a spinner, and the count is ONE-BASED for the
+ * attaching stage. `processed` counts files FINISHED, so while the first file
+ * is being read `processed` is 0 -- and "Processing 0 of 317" is precisely
+ * the message that reads as nothing happening. The file being worked on right
+ * now is `processed + 1`, capped at the total so the final tick cannot claim
+ * to be on file 318 of 317.
  */
 export function progressLabel(progress: BatchImportProgress | null | undefined): string {
   if (!progress) return '';
@@ -189,6 +178,48 @@ export function progressLabel(progress: BatchImportProgress | null | undefined):
     default:
       return '';
   }
+}
+
+/**
+ * What the Save button itself should say.
+ *
+ * ---------------------------------------------------------------------------
+ * WHY THE BUTTON NEEDS ITS OWN LABEL WHEN THERE IS ALREADY A PROGRESS BAR
+ * ---------------------------------------------------------------------------
+ * Because the bar is at the top of the dialog and the button is at the bottom
+ * of it, and in between sits a review list that routinely runs to hundreds of
+ * rows inside a scrolling container. By the time the user reaches Save they
+ * have scrolled several screens past the place the feedback appears, and an
+ * indicator that cannot be seen from where the user is standing is not an
+ * indicator.
+ *
+ * A label on the button cannot have that problem: it is attached to the
+ * control that was pressed, so it is on screen by construction. The top bar
+ * is pinned as well, but this is the half that does not depend on scroll
+ * position at all, and it is the one to keep if the two ever have to be
+ * reconciled.
+ *
+ * @param progress    the live progress, or null when idle
+ * @param attachCount how many photos pressing Save would write
+ */
+export function saveButtonLabel(
+  progress: BatchImportProgress | null | undefined,
+  attachCount: number
+): string {
+  if (progress?.phase === 'attaching') {
+    // One-based, and clamped: `processed` counts files FINISHED, so the last
+    // file would otherwise read "Saving 318 of 317". Same convention as
+    // progressLabel() above — the two must not disagree on screen.
+    const current = Math.min(progress.processed + 1, progress.total);
+    return `Saving ${count(current)} of ${count(progress.total)}…`;
+  }
+
+  // Scanning / matching / building have the top indicator to themselves, but
+  // the button is disabled throughout them, so it must not go on offering an
+  // action that cannot be taken.
+  if (isBusy(progress)) return 'Working…';
+
+  return `Save ${count(attachCount)} photo${attachCount === 1 ? '' : 's'}`;
 }
 
 /**

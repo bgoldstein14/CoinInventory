@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * metal-inference.ts — "WHAT METAL IS THIS?", ASKED ON ITS OWN
- * ---------------------------------------------------------------------------
+ *
  * WHY THIS FILE EXISTS
  *
  * `pm-reference.ts` answers a HARD question: *exactly* how much pure precious
@@ -17,18 +17,14 @@
  *     "1884 Morgan"                   -> every Morgan dollar is 90% silver
  *     "1913 France 20 Francs"         -> ...we have no idea. Leave it blank.
  *
- * THE DEFECT THIS WAS WRITTEN FOR
- * The owner imported a file of gold coins and reported that Metal Content was
- * not being set. The cause was that `composePmFields` was all-or-nothing: it
- * asked `lookupCoinAlloy` for the full four-field answer and, the moment that
- * found no catalogued row, returned null — so a coin whose exact weight and
- * purity were unknown ended up with no METAL either, even when the metal was
- * never in doubt. This module is the coarse fallback that fixes that half of
- * the problem without pretending to know the other half.
+ * THIS IS THE COARSE FALLBACK, AND IT IS NOT ALL-OR-NOTHING
+ * `composePmFields` asks `lookupCoinAlloy` for the full four-field answer;
+ * when there is no catalogued row that returns null, and without this module
+ * a coin whose exact weight and purity are unknown would end up with no METAL
+ * either, even when the metal was never in doubt. This module fills in that
+ * half without pretending to know the other half.
  *
- * ---------------------------------------------------------------------------
- * THE GOVERNING PRINCIPLE IS UNCHANGED: WHEN IN DOUBT, ANSWER NOTHING
- * ---------------------------------------------------------------------------
+ * ---- THE GOVERNING PRINCIPLE IS UNCHANGED: WHEN IN DOUBT, ANSWER NOTHING ----
  * This project already follows that rule for image matching ("only assume a
  * match if it is very close, otherwise let the user decide") and for the alloy
  * table. It applies here too, and the reason is the same:
@@ -42,9 +38,7 @@
  * "$1" in the gold-dollar era — this file answers null, exactly as
  * `pm-reference.ts` does, and for exactly the same reason.
  *
- * ---------------------------------------------------------------------------
- * WHAT THIS FILE NEVER LOOKS AT
- * ---------------------------------------------------------------------------
+ * ---- WHAT THIS FILE NEVER LOOKS AT ----
  *   * `category`. A coin filed under a "Gold Coins" category is a statement
  *     about the owner's filing cabinet, not about the coin. Collections
  *     routinely contain a silver token or a copper medal in a gold folder, and
@@ -54,14 +48,12 @@
  *     alone proves how badly a metal word in free text can mislead (it is a
  *     STICKER tier, and it sits on silver coins all the time).
  *
- * ---------------------------------------------------------------------------
- * OUTPUT VOCABULARY
- * ---------------------------------------------------------------------------
+ * ---- OUTPUT VOCABULARY ----
  * Every value this file can return is a `CoinMetal`, which is the exact list
  * seeded into the `MetalContents` table by `server/setup-database.sql`. The
  * coin editor renders Metal as a <select> fed by that table, so a value
  * outside the list would be un-displayable and un-editable.
- * =========================================================================== */
+  */
 
 import { CoinMetal } from './pm-reference';
 
@@ -129,9 +121,7 @@ export interface MetalInference {
   because: string;
 }
 
-/* ===========================================================================
- * SMALL HELPERS
- * ======================================================================== */
+/* ---- SMALL HELPERS ---- */
 
 /**
  * Reads the leading 4-digit year, tolerating the forms the parsers actually
@@ -191,9 +181,9 @@ function isUnitedStatesOrUnknown(country: string | undefined): boolean {
   return text === '' || text === 'united states' || text === 'usa' || text === 'us';
 }
 
-/* ===========================================================================
+ /*
  * RULE 1 — AN EXPLICIT METAL WORD
- * ---------------------------------------------------------------------------
+ *
  * The strongest evidence there is, because it is not an inference at all: the
  * source text, or the owner, named the metal.
  *
@@ -208,15 +198,15 @@ function isUnitedStatesOrUnknown(country: string | undefined): boolean {
  *      let it break a gold-vs-silver tie, so trusting it here is consistent.
  *
  *   b) a metal word inside the COIN TYPE — "Gold Eagle", "Silver Eagle",
- *      "Gold Dollar", "Three Cent Silver". This is the field the owner pointed
- *      at: "the coin type would have made that obvious".
+ *      "Gold Dollar", "Three Cent Silver" -- the coin type often makes the
+ *      metal obvious when nothing else does.
  *
  * *** WHY ONLY THE FOUR PRECIOUS METALS ARE READ OUT OF A TYPE NAME ***
  * "Nickel" in a coin type is a DENOMINATION, not an alloy. A "Jefferson
  * Nickel" dated 1943 is 35% SILVER, and a "Three Cent Nickel" is 75% copper.
  * Reading the word as a metal would therefore be wrong in both directions, so
  * base-metal words in a type name are ignored entirely.
- * ======================================================================== */
+  */
 
 /** Precious-metal words, in the order they are searched for. */
 const PRECIOUS_WORD_PATTERNS: readonly { pattern: RegExp; metal: CoinMetal }[] = [
@@ -261,9 +251,9 @@ function firstPreciousWord(text: string): CoinMetal | null {
   return best?.metal ?? null;
 }
 
-/* ===========================================================================
+ /*
  * RULE 2 — A DENOMINATION THAT IS GOLD BY DEFINITION
- * ---------------------------------------------------------------------------
+ *
  * US coinage never struck these face values in anything but gold. This is not
  * a statistical claim; it is what the Mint Acts say.
  *
@@ -286,7 +276,7 @@ function firstPreciousWord(text: string): CoinMetal | null {
  * refuses that case by design and so does this file. A bare "$1" gets nothing.
  *
  * A LEADING "G" IS THE COLLECTOR'S SHORTHAND for the gold issue — "G$1",
- * "G$2.50", "G$3" — and four of the owner's securities are written that way.
+ * "G$2.50", "G$3" — and real securities are written that way.
  * The Quicken parser normally converts that into a plain denomination plus a
  * metal hint, but the shorthand is accepted here too in case it reaches the
  * denomination field verbatim.
@@ -304,7 +294,7 @@ function firstPreciousWord(text: string): CoinMetal | null {
  * $25 and $50 are deliberately absent for the same reason, with no safe year
  * cutoff available: $50 is the 1 oz Gold Eagle, the 1 oz Gold Buffalo, the
  * 1/2 oz Platinum Eagle AND the 1915 Panama-Pacific commemorative.
- * ======================================================================== */
+  */
 
 /** Normalised US denominations that can only ever have been struck in gold. */
 const GOLD_ONLY_US_DENOMINATIONS: readonly string[] = ['$20', '$10', '$5', '$3', '$2.5'];
@@ -312,9 +302,9 @@ const GOLD_ONLY_US_DENOMINATIONS: readonly string[] = ['$20', '$10', '$5', '$3',
 /** First year of the modern bullion programmes, which reused old face values. */
 const BULLION_ERA_FIRST_YEAR = 1986;
 
-/* ===========================================================================
+ /*
  * RULE 3 — SERIES NAMES THAT IMPLY A METAL
- * ---------------------------------------------------------------------------
+ *
  * A series name is often more specific than a face value. "Saint-Gaudens" can
  * only be a $20 gold piece; "Morgan" can only be a silver dollar.
  *
@@ -329,8 +319,8 @@ const BULLION_ERA_FIRST_YEAR = 1986;
  *     2016  gold Walking Liberty half dollar centennial
  *
  * So "Mercury" on its own does NOT prove silver; "Mercury" dated 1916-1945
- * does. That is why the brief's instruction was to read the year alongside the
- * type name rather than assume. A silver rule with a year band simply declines
+ * does. Read the year alongside the type name rather than assuming; a silver
+ * rule with a year band simply declines
  * when the record has no year — which is the honest answer.
  *
  * The gold entries need no band because none of those names was ever reused:
@@ -364,7 +354,7 @@ const BULLION_ERA_FIRST_YEAR = 1986;
  * In every one of those cases the DENOMINATION plus the YEAR does settle the
  * question wherever it can be settled — and that is exactly what
  * `lookupCoinAlloy` already does, before this file is ever consulted.
- * ======================================================================== */
+  */
 
 interface SeriesRule {
   /** Matched against the coin type (whole words, case-insensitive). */
@@ -507,14 +497,14 @@ const SERIES_RULES: readonly SeriesRule[] = [
   }
 ];
 
-/* ===========================================================================
+ /*
  * RULE 4 — THE COMPOSITION TEXT
- * ---------------------------------------------------------------------------
+ *
  * The weakest of the four, and the only one that reads a field the user may
  * have typed freehand. It is last because a composition is usually present
  * only when somebody already filled part of this in by hand.
  *
- * *** THE TRAP THE BRIEF CALLS OUT ***
+ * *** THE TRAP ***
  * Composition strings name SEVERAL metals, majority first:
  *
  *     "90% Gold, 10% Copper"                        a double eagle
@@ -543,7 +533,7 @@ const SERIES_RULES: readonly SeriesRule[] = [
  *
  *   4. Otherwise, the base metal with the largest stated percentage, and
  *      failing that the first one named — the majority-first convention.
- * ======================================================================== */
+  */
 
 /** Compound alloy names that must be recognised before their ingredients. */
 const ALLOY_NAME_PATTERNS: readonly { pattern: RegExp; metal: CoinMetal }[] = [
@@ -644,9 +634,7 @@ export function metalFromComposition(composition: string | undefined): CoinMetal
   return firstMatchByPosition(text, BASE_METAL_WORD_PATTERNS);
 }
 
-/* ===========================================================================
- * THE INFERENCE ITSELF
- * ======================================================================== */
+/* ---- THE INFERENCE ITSELF ---- */
 
 /**
  * What metal is this coin, and which rule said so?

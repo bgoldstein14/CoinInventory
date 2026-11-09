@@ -1,8 +1,7 @@
 // Styles for the resizable full-size photo window.
 @use '../../styles/controls' as *;
 
-// Not part of the original markup, and the backdrop is position: fixed — keep
-// the host element out of the layout entirely.
+// The backdrop is position: fixed — keep the component host out of layout.
 :host { display: contents; }
 
 // ---- The backdrop -----------------------------------------------------------
@@ -11,8 +10,8 @@
 // grown all the way to the image's native resolution, and a camera original is
 // routinely 4032 x 3024 — larger than the monitor. Without a scrollable
 // backdrop the parts of the window past the screen edge would simply be
-// unreachable, and "grow it up to the highest resolution" would be a promise
-// the UI could not keep. See maxViewerSize() in photo-viewer-window.ts.
+// unreachable, and growing to the full resolution would be a promise the UI
+// could not keep. See maxViewerSize() in photo-viewer-window.ts.
 //
 // `place-items: center` keeps a normal-sized window centred; once the window
 // is bigger than the backdrop, the flex/grid centring would push its top-left
@@ -26,8 +25,8 @@
   display: grid;
   place-items: safe center;
   // ABOVE the gallery overlay, which sits at z-index 1100 (styles/_modal.scss).
-  // The viewer is opened FROM the gallery and must cover it; at the old 1000 it
-  // would open behind the gallery and look like nothing had happened.
+  // The viewer is opened FROM the gallery and must cover it; any lower and it
+  // opens behind the gallery, which looks like nothing happened.
   z-index: 1200;
   padding: 24px;
   overflow: auto;
@@ -102,9 +101,9 @@
   &:hover { transform: none; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15); }
 }
 
-// Inside the window now, not hanging off its edges: the window has
-// `overflow: hidden` (required by `resize`), so anything outside it is clipped
-// away rather than merely overlapping the backdrop as it used to.
+// Inside the window, not hanging off its edges: the window has
+// `overflow: hidden` (required by `resize`), so anything positioned outside
+// it is clipped away entirely.
 .photo-viewer__close { top: 8px; right: 8px; }
 .photo-viewer__nav--prev { left: 8px; top: 50%; transform: translateY(-50%); }
 .photo-viewer__nav--next { right: 8px; top: 50%; transform: translateY(-50%); }

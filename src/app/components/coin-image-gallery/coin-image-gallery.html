@@ -7,10 +7,9 @@
   <div class="modal modal--wide image-gallery-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
       <!--
-        Naming the coin in the title matters more than it looks. The complaint
-        that started this work was "I expect to only see the images for that
-        coin, not all images" — so the dialog now says out loud whose photos
-        these are, and the count says how many there are.
+        Naming the coin in the title matters more than it looks: without it
+        a user cannot tell whose photos these are, and an overlay full of
+        images reads as "all the images". The count says how many.
       -->
       <h2>Images &mdash; {{ coinLabel() }}</h2>
       <button type="button" class="modal-close" (click)="images().closeImageGallery()" aria-label="Close images">&times;</button>
@@ -29,14 +28,13 @@
         </div>
 
         <!--
-          The tiles. `@empty` is Angular's built-in "the list was empty" branch
-          of @for, which is exactly the case this screen could not previously
-          reach at all: the overlay used to be gated on the coin already
-          having photos, so a coin with none had no way to get its first one.
-          See CoinImagesStore.canOpenImageGallery.
+          The tiles. `@empty` is Angular's built-in "the list was empty"
+          branch of @for. The overlay is NOT gated on the coin already having
+          photos — it is the only place to attach the first one. See
+          CoinImagesStore.canOpenImageGallery.
         -->
         <div class="image-list">
-          @for (imagePath of coin().imagePaths; track imagePath; let i = $index) {
+          @for (imagePath of photos(); track imagePath; let i = $index) {
             <!--
               `is-main` highlights the photo the main grid uses as this coin's
               thumbnail. That is always the FIRST image in the list, because
@@ -45,11 +43,10 @@
             -->
             <div class="image-item" [class.image-item--main]="images().isMainImage(imagePath)">
               <!--
-                Deliberately much larger than the import screens' previews
-                (128px tiles there, 88px rows on the near-match list). This is
-                the screen for looking at ONE coin properly rather than
-                scanning a folder, so the photo gets the room. Clicking opens
-                the resizable full-size window.
+                Deliberately much larger than the import screens' previews:
+                this is the screen for looking at ONE coin properly rather
+                than scanning a folder. Clicking opens the resizable
+                full-size window.
               -->
               <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
 
@@ -94,17 +91,31 @@
               </div>
             </div>
           } @empty {
+            @if (stillLoading()) {
+              <!--
+                NOT the empty state. The list endpoint does not carry
+                photographs (see server/routes/coins/list-query.ts), so there
+                is a moment between opening the gallery and the fetch landing
+                when there is nothing to draw. Showing the "No photos yet"
+                invitation there would be a lie — this coin HAS photos, we
+                just do not have them in hand — and the user's reasonable
+                response to that lie is to attach a duplicate. `imageCount`
+                comes with the list and is what tells the two apart.
+              -->
+              <div class="image-gallery__empty">
+                <p class="image-gallery__empty-title">Loading photos&hellip;</p>
+                <p class="image-gallery__empty-hint">
+                  This coin has {{ photoCount() }} photo(s) on file.
+                </p>
+              </div>
+            } @else {
             <!--
-              THE EMPTY STATE.
-
-              One job: make "add the first photo" the obvious thing to do. It
-              therefore repeats the same `Add images` picker that sits in the
-              header, because a user who opened an empty gallery is looking at
-              the middle of the dialog, not at its top-right corner.
-
-              It reuses the EXISTING picker and the EXISTING drag-and-drop
-              target (the whole `.image-gallery` box listens for `drop`), so
-              there is no third way to attach a photo to maintain.
+              THE EMPTY STATE. One job: make "add the first photo" the
+              obvious thing to do, so it repeats the header's picker in the
+              middle of the dialog where the eye already is. It reuses the
+              EXISTING picker and the EXISTING drag-and-drop target (the
+              whole `.image-gallery` box listens for `drop`), so there is no
+              third way to attach a photo to maintain.
             -->
             <div class="image-gallery__empty">
               <p class="image-gallery__empty-title">No photos yet for this coin.</p>
@@ -116,6 +127,7 @@
                 Add images
               </label>
             </div>
+            }
           }
         </div>
       </div>

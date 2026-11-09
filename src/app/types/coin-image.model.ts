@@ -8,9 +8,7 @@
  * one, and the viewer that renders one. Keeping them together here means the
  * whole original-file-path story is readable in one short file.
  *
- * ---------------------------------------------------------------------------
  * A NOTE ON `CoinRecord.imagePaths`, WHICH IS *NOT* CHANGED BY THIS FEATURE
- * ---------------------------------------------------------------------------
  * `CoinRecord.imagePaths` stays `string[]` — an array of downscaled `data:`
  * URLs, which is what every `<img [src]>` in the app binds to. It is
  * deliberately NOT widened to hold objects: the gallery, the photo viewer, the
@@ -33,7 +31,32 @@
  * "unknown" to handle rather than three).
  */
 export interface CoinImageRecord {
-  /** Database id, needed by DELETE /api/coins/:id/images/:imageId. */
+  /**
+   * Database id, needed by DELETE /api/coins/:id/images/:imageId.
+   *
+   * *** THIS VALUE IS NOT STABLE ACROSS A COIN SAVE. DO NOT CACHE IT. ***
+   *
+   * `PUT /api/coins/:id` carrying `imagePaths` REPLACES the coin's whole image
+   * set — it deletes every CoinImages row and re-inserts them (see
+   * server/routes/coins/write-helpers.ts, `replaceImages`). `ImageId` is an
+   * IDENTITY column, so every row comes back with a BRAND NEW id. An id read
+   * before a save refers to nothing afterwards.
+   *
+   * Nothing calls the DELETE endpoint today — that is the only reason this is
+   * harmless right now, and it is why it was left alone rather than fixed.
+   * Whoever wires up "delete this one photo" is the person this warning is for:
+   * re-read the coin's images immediately before issuing the DELETE, or the
+   * call will silently affect ZERO rows and the photo will still be there.
+   * (It cannot delete the WRONG photo — a stale IDENTITY value matches nothing
+   * rather than matching something else — so the failure is a button that
+   * appears to do nothing, which is its own kind of bad.)
+   *
+   * The proper fix, if this ever becomes load-bearing, is to make the PUT
+   * reconcile rows (match on ImageData, UPDATE SortOrder, insert the new,
+   * delete the departed) instead of replacing them wholesale. That preserves
+   * ids, and it is a deliberately larger change than it looks: the replacement
+   * semantics are documented as intentional in routes/coins/writes.ts.
+   */
   imageId: number;
   /** The downscaled `data:` URL that gets displayed. */
   imageData: string;

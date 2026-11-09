@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * BaseFolderState — the one piece of information the browser cannot give us.
- * ---------------------------------------------------------------------------
+ *
  * Browsers never reveal where a file really lives on disk. A directory picker
  * hands us only `File.webkitRelativePath` — the path RELATIVE to the folder the
  * user chose ("Business Strikes/1865 3CN - Obverse.jpg"). To store an absolute
@@ -15,7 +15,7 @@
  * self-contained little unit — one value, one preview derived from it, one
  * save, one load. Keeping it here means the session file stays about the import
  * flow.
- * =========================================================================== */
+  */
 
 import { Signal, computed, signal } from '@angular/core';
 import { StorageService } from '../storage.service';
@@ -55,10 +55,10 @@ export class BaseFolderState {
    * @param storage    where the value is remembered. Optional: without it the
    *                   folder simply resets each time.
    *
-   * There used to be a third parameter, an `AppFolderProvider` that seeded a
-   * fresh install with the app's own install directory. It was removed because
-   * that seed is never the right answer and, being a plausible-looking path,
-   * was worse than an empty box — see the header of import-base-folder.ts.
+   * DO NOT add a third parameter seeding a fresh install with the app's own
+   * install directory. That seed is never the right answer and, being a
+   * plausible-looking path, is worse than an empty box -- see the header of
+   * import-base-folder.ts.
    */
   constructor(
     firstFile: Signal<File | undefined>,

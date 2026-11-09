@@ -10,9 +10,9 @@ import { TransactionManager } from './transaction-manager';
 import { createBlankCoin, normalizeImportedCoins } from './coin-factory';
 import { firstValueFrom } from 'rxjs';
 
-/* ===========================================================================
+ /*
  * CoinCollection
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Whole-coin operations — the ones that add a coin to the list or take one
  *   away, and the selection that follows from them:
@@ -31,7 +31,7 @@ import { firstValueFrom } from 'rxjs';
  *
  * As with the other helpers, the signals belong to InventoryService; this
  * class is handed the same signal objects to read and write.
- * =========================================================================== */
+  */
 
 export class CoinCollection {
   constructor(
@@ -47,9 +47,7 @@ export class CoinCollection {
     private readonly notificationService: NotificationService
   ) {}
 
-  /* =========================================================================
-   * Selection
-   * ======================================================================= */
+  /* ---- Selection ---- */
 
   selectCoin(coinId: string): void {
     this.selectedCoinId.set(coinId);
@@ -67,9 +65,7 @@ export class CoinCollection {
     }
   }
 
-  /* =========================================================================
-   * Loading a fresh list
-   * ======================================================================= */
+  /* ---- Loading a fresh list ---- */
 
   /**
    * Replace the entire list with coins straight from the server and
@@ -86,18 +82,15 @@ export class CoinCollection {
     this.ensureSelectedCoin();
   }
 
-  /* =========================================================================
-   * Creating coins
-   * ======================================================================= */
+  /* ---- Creating coins ---- */
 
   /**
    * Add an empty row for the user to fill in — and send NOTHING to the
    * server.
    *
-   * THE BUG THIS FIXES
-   * This used to POST the blank record immediately. The backend answered
-   * `400 {"error":"denomination is required"}`, so clicking "Add coin"
-   * produced a red error toast before the user had typed anything.
+   * SEND NOTHING TO THE SERVER. POSTing the blank record here gets
+   * `400 {"error":"denomination is required"}` back, so clicking "Add coin"
+   * produces a red error toast before the user has typed anything.
    *
    * A brand new coin is now a LOCAL DRAFT. It appears in the list and is
    * selected exactly as before, but it only reaches the database once it
@@ -197,7 +190,13 @@ export class CoinCollection {
       const parsed = JSON.parse(json) as CoinRecord[];
       if (!Array.isArray(parsed) || parsed.length === 0) return;
 
-      const normalized = normalizeImportedCoins(parsed);
+      /* A restore is an import, so the coins are linked to the
+       * denominations lookup on the way in, exactly as the QIF and
+       * spreadsheet paths do (design §4.1, §6). An id the backup already
+       * carried is kept; see normalizeImportedCoins. If the lookup has not
+       * loaded yet the list is empty, nothing links, and every coin still
+       * restores -- which is the right way round. */
+      const normalized = normalizeImportedCoins(parsed, this.lookups.denominationList());
 
       this.inventory.set(normalized);
       this.tracker.reset(normalized);
@@ -228,9 +227,7 @@ export class CoinCollection {
     }
   }
 
-  /* =========================================================================
-   * Deleting coins
-   * ======================================================================= */
+  /* ---- Deleting coins ---- */
 
   /**
    * Remove a coin everywhere: from the list, from its transactions, from the

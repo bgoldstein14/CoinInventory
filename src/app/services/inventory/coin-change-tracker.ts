@@ -1,8 +1,8 @@
 import { CoinRecord } from '../../types/coin.model';
 
-/* ===========================================================================
+ /*
  * CoinChangeTracker
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   All the bookkeeping that answers "what has the user changed, and what has
  *   the server actually accepted?". It holds no HTTP code and no Angular
@@ -14,7 +14,6 @@ import { CoinRecord } from '../../types/coin.model';
  *   signals makes the rule it enforces impossible to miss: we diff against
  *   what the SERVER confirmed, never against what the SCREEN shows.
  *
- * ---------------------------------------------------------------------------
  * WHY THREE MAPS? The UI updates "optimistically": the moment you type, the
  * on-screen value changes, and only a second later do we PUT it to the
  * server. That means there are TWO versions of every coin:
@@ -27,7 +26,7 @@ import { CoinRecord } from '../../types/coin.model';
  * so re-typing the same value produced an empty diff and NOTHING was ever
  * re-sent — the edit was silently lost forever. Diffing against the
  * server-confirmed copy instead makes a retry actually retry.
- * =========================================================================== */
+  */
 
 /**
  * Compare two field values. Arrays (imagePaths) are compared by content rather
@@ -71,9 +70,7 @@ export class CoinChangeTracker {
   /** Debounce timers, so rapid typing produces one request instead of ten. */
   private readonly pendingCoinUpdates = new Map<string, { timer: ReturnType<typeof setTimeout> }>();
 
-  /* =========================================================================
-   * CONFIRMED (server-acknowledged) STATE
-   * ======================================================================= */
+  /* ---- CONFIRMED (server-acknowledged) STATE ---- */
 
   /**
    * Remember the server-confirmed state for a coin, seeding it from the
@@ -101,9 +98,7 @@ export class CoinChangeTracker {
     this.confirmedCoins.set(coin.id, { ...coin });
   }
 
-  /* =========================================================================
-   * DIRTY FIELDS
-   * ======================================================================= */
+  /* ---- DIRTY FIELDS ---- */
 
   /**
    * Fold one edit into the dirty-field set for a coin.
@@ -186,9 +181,7 @@ export class CoinChangeTracker {
     this.notifiedSaveFailures.delete(coinId);
   }
 
-  /* =========================================================================
-   * FAILURE-TOAST DE-DUPLICATION
-   * ======================================================================= */
+  /* ---- FAILURE-TOAST DE-DUPLICATION ---- */
 
   /**
    * True the FIRST time a coin's save fails, false for every failure after
@@ -201,9 +194,7 @@ export class CoinChangeTracker {
     return true;
   }
 
-  /* =========================================================================
-   * DEBOUNCE TIMERS
-   * ======================================================================= */
+  /* ---- DEBOUNCE TIMERS ---- */
 
   /**
    * Queue a write for `delayMs` from now, replacing any write already queued
@@ -230,9 +221,7 @@ export class CoinChangeTracker {
     }
   }
 
-  /* =========================================================================
-   * LIFECYCLE
-   * ======================================================================= */
+  /* ---- LIFECYCLE ---- */
 
   /** Forget everything we knew about a coin's save state. */
   clear(coinId: string): void {

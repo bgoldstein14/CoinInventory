@@ -2,7 +2,15 @@ import { computed, signal } from '@angular/core';
 import { InventoryService } from '../../services/inventory.service';
 import { StorageKeys, StorageService } from '../../services/storage.service';
 import { CoinRecord } from '../../types/coin.model';
-import { InventoryColumn, SortState, inventoryColumnOrder } from '../../types/inventory-columns';
+import { coinCatalogReference } from '../../types/catalog-reference';
+import { COLLECTION_STATUS_OPTIONS, normalizeCollectionStatus } from '../../types/collection-status';
+import { NO_DENOMINATION } from '../../services/denominations/denomination-display';
+import {
+  InventoryColumn,
+  SortState,
+  coinDenominationDisplay,
+  inventoryColumnOrder
+} from '../../types/inventory-columns';
 import { compareColumnValues, compareDenominationValues, compareText } from './denomination-sort';
 
 /** Sentinel value meaning "don't filter by category at all". */
@@ -15,11 +23,10 @@ export const allSetsFilter = 'All';
  * How a brand-new installation sorts the grid, before the user has ever
  * clicked a column header.
  *
- * Year ascending, at the owner's request. It is the most useful default for a
- * coin collection: a numismatic inventory reads naturally in date order, and
- * unlike Coin Type (the previous default) every coin has one. Note that Year
- * is stored as TEXT, not a number, so that ranges and designations like
- * "1878-S" survive — `compareColumnValues` handles the ordering.
+ * Year ascending: a numismatic inventory reads naturally in date order, and
+ * every coin has a year. Note that Year is stored as TEXT, not a number, so
+ * that ranges and designations like "1878-S" survive — `compareColumnValues`
+ * handles the ordering.
  */
 export const DEFAULT_SORT_STATE: SortState = { column: 'year', direction: 'asc' };
 
@@ -52,10 +59,27 @@ export class InventoryFilterStore {
   readonly sourceFilter = signal<string>('');
   readonly countryFilter = signal<string>('');
   readonly coinSetFilter = signal<string>(allSetsFilter);
-  // NOTE: there used to be a `dealerFilter` here, driving a "Search dealers"
-  // text box in the advanced panel. The coin-level dealer field was removed, so
-  // there is nothing left for it to match against. (Transactions still record a
-  // dealer, but transactions are not what this store filters.)
+  /**
+   * Which collection status to show, or '' for "all of them".
+   *
+   * EMPTY STRING IS THE "no filter" VALUE, matching sourceFilter and
+   * countryFilter directly above rather than the 'All' sentinel that category
+   * and set use. Those two sentinels exist because a category or a set could
+   * in principle BE the literal text "All"; a collection status cannot — it is
+   * one of five fixed tokens, none of which is empty — so the extra sentinel
+   * would be ceremony with no hazard behind it.
+   *
+   * Holds a raw `string`, not `CollectionStatus`, for the same reason: the
+   * "show everything" value is not a status, and widening the type here is
+   * honest about that. The comparison below normalises the coin's side, so a
+   * value that is not a real status simply matches nothing.
+   *
+   * THIS FILTER IS NOT OPTIONAL FURNITURE. The money totals exclude coins the
+   * owner does not have (see inventory-metrics.ts). Without a way to list
+   * exactly those coins, "my collection is worth less than I remember" and "I
+   * have forty coins on a want list" would look identical from the toolbar.
+   */
+  readonly collectionStatusFilter = signal<string>('');
 
   /**
    * How the grid is sorted. Persisted between sessions — see
@@ -73,6 +97,17 @@ export class InventoryFilterStore {
   // Re-exported for the template, which cannot reach module-level constants.
   readonly allCategoriesFilter = allCategoriesFilter;
   readonly allSetsFilter = allSetsFilter;
+  /**
+   * The five status choices, for the filter bar's dropdown.
+   *
+   * Re-exported here for the same reason as the two sentinels above: an
+   * Angular template cannot reach a module-level constant, only members of
+   * its component or of something a component hands it. Taking it from
+   * COLLECTION_STATUS_OPTIONS rather than writing five <option> tags by hand
+   * means the filter, the editor dropdown and the grid can never offer
+   * different sets of values.
+   */
+  readonly collectionStatusOptions = COLLECTION_STATUS_OPTIONS;
 
   // `storage` is optional so the store stays constructible without it — a
   // number of specs build one with just an InventoryService, and a missing
@@ -96,6 +131,19 @@ export class InventoryFilterStore {
     const valMax = this.valueMaxFilter() ? Number(this.valueMaxFilter()) : null;
     const source = this.sourceFilter();
     const country = this.countryFilter();
+    const status = this.collectionStatusFilter();
+    // Read ONCE, outside the per-coin predicate below, so the lookup list is
+    // not re-read for every row of a hundred-coin grid on every keystroke.
+    // `?? []` because the signal is absent in the two-line service stubs the
+    // filter specs build, and because phase 2 of hydration is allowed to fail
+    // without taking the search box down with it.
+    const catalogs = this.inv.catalogs?.() ?? [];
+    // Read once, for the same two reasons as `catalogs` directly above: a
+    // hundred-coin grid must not re-read the signal per row per keystroke,
+    // and the signal is absent in the small service stubs several filter
+    // specs build. An empty list is a working answer — see
+    // coinDenominationDisplay(), which then falls back to the coin's text.
+    const denominations = this.inv.denominations?.() ?? [];
     const { column, direction } = this.sortState();
 
     const filtered = this.inv.inventory().filter(coin => {
@@ -106,15 +154,64 @@ export class InventoryFilterStore {
       if (valMax !== null && coin.currentValue > valMax) return false;
       if (source && coin.source !== source) return false;
       if (country && coin.country !== country) return false;
+      // *** NORMALISE THE COIN'S SIDE, NEVER COMPARE IT RAW. ***
+      // Every coin saved before migration 010 has no `collectionStatus` at
+      // all, and all of them are Owned. A plain
+      // `coin.collectionStatus !== status` would match none of them, so
+      // filtering to "Owned" would return only the coins touched since the
+      // feature shipped — and make the owner think the rest had vanished.
+      if (status && normalizeCollectionStatus(coin.collectionStatus) !== status) return false;
       if (!query) return true;
 
-      // Search across all coin fields (note: 'name' field removed, replaced by
-      // 'coinType'; 'tags' removed along with the whole tag feature; 'dealer'
-      // removed along with the coin-level dealer field).
+      // `storageLocation` is in the haystack because "which coins are in the
+      // safe deposit box?" is the question that field exists to answer. Note
+      // the `?? ''` — a coin saved before the field existed has none, and
+      // `undefined` would put the literal string "undefined" into the
+      // haystack and make a search for "undefined" return the whole
+      // collection.
+      //
+      // THE CATALOGUE REFERENCE IS BUILT, NOT READ. The coin stores a
+      // foreign key (`catalogId`) and a number; what the user sees in the
+      // grid is "Sear 6819". He will type what he sees, so the haystack has
+      // to contain that exact string -- and it has to be produced by the
+      // SAME function the grid cell uses (coinCatalogReference), because two
+      // hand-rolled `${name} ${number}` joins are how a cell ends up visible
+      // but unfindable. For an ancient coin this is often the only
+      // identifying text there is: no year, no denomination, no grade. It
+      // returns '' for a coin with no reference, so no `undefined` leaks in.
+      //
+      // THE DENOMINATION IS IN HERE TWICE, ON PURPOSE. What the grid SHOWS
+      // and what the column HOLDS are two different strings, and after an
+      // import they routinely disagree: the id resolves to '8 Reales' while
+      // `coin.denomination` still says 'Pillar Dollar'. Each earns its place:
+      //
+      //   coinDenominationDisplay(...) is WHAT THE USER CAN SEE. Without it
+      //   a resolved coin is visible in the grid and unfindable from the
+      //   search box -- the user types what is on screen and concludes the
+      //   coin has gone. It must be BUILT BY THE SAME FUNCTION THE GRID CELL
+      //   USES; two hand-rolled copies of the rule is precisely how a cell
+      //   ends up visible but unsearchable. See denomination-display.spec.ts,
+      //   which greps src/ to keep there being one.
+      //
+      //   coin.denomination is WHAT THE SOURCE SAID -- the original text as
+      //   it was typed, and the artefact that answers "which coins came in
+      //   saying this?". Dropping it would be a regression.
+      //
+      // A coin with NO denomination at all is the one case the display
+      // string is withheld. It renders as the em-dash placeholder, and an
+      // em-dash in the haystack would make a search for it return every
+      // unrecorded coin in the collection -- same family as the literal
+      // 'undefined' the storage-location field is defended from.
+      const denominationShown = coinDenominationDisplay(coin, denominations);
+
       const haystack = [
-        coin.coinType, coin.denomination, coin.country,
+        coin.coinType,
+        denominationShown === NO_DENOMINATION ? '' : denominationShown,
+        coin.denomination,
+        coin.country,
         coin.grade, coin.certCompany, coin.certNumber, coin.variety,
-        coin.mintMark, coin.notes, coin.coinSet ?? ''
+        coin.mintMark, coin.notes, coin.coinSet ?? '', coin.storageLocation ?? '',
+        coinCatalogReference(catalogs, coin.catalogId, coin.catalogNumber)
       ].join(' ').toLowerCase();
       return haystack.includes(query);
     });
@@ -165,11 +262,9 @@ export class InventoryFilterStore {
    *
    * The stored value is VALIDATED rather than trusted. It is JSON from a
    * browser database that may have been written by an older build, so the
-   * column it names might since have been renamed or removed entirely — both
-   * of which have happened in this project (`name` became `coinType`; `tags`
-   * and `dealer` were deleted). Sorting by a column that no longer exists
-   * would silently produce a meaningless order, so an unrecognised column
-   * falls back to the default instead.
+   * column it names may since have been renamed or removed. Sorting by a
+   * column that no longer exists would silently produce a meaningless order,
+   * so an unrecognised column falls back to the default instead.
    */
   async restoreFromStorage(): Promise<void> {
     try {

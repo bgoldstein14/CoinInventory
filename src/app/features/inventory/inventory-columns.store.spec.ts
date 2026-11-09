@@ -3,7 +3,6 @@
  * interacts with it.
  *
  * WHY THESE TESTS LOOK LIKE THIS
- * ------------------------------
  * There is no jsdom in this project's vitest setup, so nothing here renders a
  * component or inspects a `<th>`. That is fine, because the grid's column
  * sequence is not decided by the template: `inventory-table.html` just loops
@@ -26,27 +25,23 @@ const canonicalIndex = (column: InventoryColumn) => inventoryColumnOrder.indexOf
 
 describe('inventoryColumnOrder — Cert sits immediately before Grade', () => {
   it('places certNumber directly before grade with nothing in between', () => {
-    // The owner's request, stated as the invariant it really is: adjacency,
-    // not just "somewhere to the left of".
+    // The requirement is adjacency, not just "somewhere to the left of".
     expect(canonicalIndex('grade') - canonicalIndex('certNumber')).toBe(1);
   });
 
   it('still places mintMark directly after year', () => {
-    // The pre-existing rule. Inserting certNumber must not have displaced it.
     expect(canonicalIndex('mintMark') - canonicalIndex('year')).toBe(1);
   });
 
   it('places denomination directly after mintMark', () => {
-    // Also the owner's request. Year / Mint Mark / Denomination is how a coin
-    // is spoken about and written on a holder -- "1881-S Dollar" -- so the
-    // three read together at the left edge of the grid. Denomination was
-    // previously stranded between category and country.
+    // Year / Mint Mark / Denomination is how a coin is spoken about and
+    // written on a holder -- "1881-S Dollar" -- so the three read together
+    // at the left edge of the grid.
     expect(canonicalIndex('denomination') - canonicalIndex('mintMark')).toBe(1);
   });
 
   it('lists denomination exactly once', () => {
-    // The move was a cut-and-paste out of the middle of the list; a leftover
-    // would give the grid two Denomination columns.
+    // A duplicate entry would give the grid two Denomination columns.
     expect(inventoryColumnOrder.filter(c => c === 'denomination')).toHaveLength(1);
   });
 
@@ -60,8 +55,8 @@ describe('inventoryColumnOrder — Cert sits immediately before Grade', () => {
   });
 
   it('lists certNumber exactly once', () => {
-    // The move was a cut-and-paste; a duplicate would give the grid two Cert
-    // columns and the picker two tick boxes.
+    // A duplicate would give the grid two Cert columns and the picker two
+    // tick boxes.
     expect(inventoryColumnOrder.filter(c => c === 'certNumber')).toHaveLength(1);
   });
 
@@ -83,9 +78,8 @@ describe('InventoryColumnsStore — ordering', () => {
   });
 
   it('inserts a newly ticked Cert column before Grade, not at the far right', () => {
-    // THE BUG THIS LOCKS DOWN.
-    // toggleColumn() used to append to the end of the visible list, so ticking
-    // "Cert" put it after the last column and the re-order looked broken until
+    // Appending to the end of the visible list would put a newly ticked
+    // "Cert" after the last column, and the order would look broken until
     // the page was reloaded.
     expect(store.visibleInventoryColumns()).not.toContain('certNumber');
 
@@ -125,17 +119,14 @@ describe('InventoryColumnsStore — a PRE-EXISTING saved preference', () => {
   });
 
   it('ignores the ORDER of the stored array and re-derives it from the canonical list', async () => {
-    // This is the migration question, and the answer is "no migration needed".
-    //
-    // The preference is persisted as an ORDERED array under one fixed key
-    // (StorageKeys.VisibleColumns, no version stamp). A user who had the Cert
-    // column switched on before this change therefore has the OLD order sitting
-    // in IndexedDB — here, cert stored near the end, after soldPrice.
-    //
-    // If restoreFromStorage() trusted that order, the saved value would pin the
-    // old layout forever and the change would appear not to work for exactly
-    // the people who use the app most. It does not: normalizeVisibleColumns()
-    // reads the stored array as a SET and sorts it into inventoryColumnOrder.
+    // Why changing the canonical order needs no migration. The preference is
+    // persisted as an ORDERED array under one fixed key
+    // (StorageKeys.VisibleColumns, no version stamp), so an existing user has
+    // the old order sitting in IndexedDB — here, cert near the end, after
+    // soldPrice. If restoreFromStorage() trusted that order, the saved value
+    // would pin the old layout forever for exactly the people who use the app
+    // most. It does not: normalizeVisibleColumns() reads the stored array as a
+    // SET and sorts it into inventoryColumnOrder.
     const savedWithOldOrder: InventoryColumn[] = [
       'year', 'mintMark', 'coinType', 'grade', 'category', 'denomination',
       'country', 'purchasePrice', 'currentValue', 'soldPrice', 'certNumber'
@@ -196,96 +187,3 @@ describe('InventoryColumnsStore — a PRE-EXISTING saved preference', () => {
   });
 });
 
-/* ===========================================================================
- * The "Certified By" column, as the user actually experiences it
- * ---------------------------------------------------------------------------
- * inventory-columns.spec.ts pins down what the column IS (its label, its cell,
- * its slot in the canonical array). These tests pin down the thing the owner
- * asked for in the grid itself: that on a normal screen, the column sitting
- * immediately to the left of Grade is Certified By — out of the box, and for
- * an existing user with a saved column preference, with no migration.
- * =========================================================================== */
-
-describe('InventoryColumnsStore — the Certified By column', () => {
-  let storage: StorageService;
-  let store: InventoryColumnsStore;
-
-  beforeEach(() => {
-    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
-    storage = new StorageService();
-    store = new InventoryColumnsStore(storage);
-  });
-
-  it('renders immediately to the left of Grade on a fresh install', () => {
-    // THE REQUEST, as the grid shows it. Note this holds even though the
-    // canonical array has certNumber between them: certNumber is not a default
-    // column, so in the visible list the two are neighbours.
-    const visible = store.visibleInventoryColumns();
-    expect(visible.indexOf('grade') - visible.indexOf('certCompany')).toBe(1);
-  });
-
-  it('appears for an existing user on their next load, with no migration', () => {
-    // The saved preference is a SET, not an order (see restoreFromStorage's
-    // comment), and normalizeVisibleColumns unions it with the defaults. So a
-    // column added to defaultVisibleColumns simply turns up — there is no
-    // version stamp on the storage key and nothing to migrate. This test is
-    // the proof of that reasoning rather than a restatement of it.
-    const savedBeforeThisChange: InventoryColumn[] = [
-      'year', 'mintMark', 'denomination', 'coinType', 'grade', 'category',
-      'country', 'purchasePrice', 'currentValue', 'coinSet'
-    ];
-
-    const restored = store.normalizeVisibleColumns(savedBeforeThisChange);
-
-    expect(restored).toContain('certCompany');
-    expect(restored.indexOf('grade') - restored.indexOf('certCompany')).toBe(1);
-    // Their own extra choice survives the union.
-    expect(restored).toContain('coinSet');
-  });
-
-  it('is offered in the column picker exactly once', () => {
-    // The picker is driven straight off the canonical array, so a duplicate
-    // there would show two identical tick boxes.
-    const options = store.inventoryColumnOptions();
-    expect(options.filter(c => c === 'certCompany')).toHaveLength(1);
-  });
-
-  it('still leaves Cert flush against Grade when the user switches Cert on', () => {
-    // Three neighbours, in this order: Certified By | Cert | Grade. Both the
-    // old invariant and the new one hold at the same time, which is the whole
-    // reason the new column went to the left of Cert rather than between Cert
-    // and Grade.
-    store.toggleColumn('certNumber');
-
-    const visible = store.visibleInventoryColumns();
-    expect(visible.indexOf('certNumber') - visible.indexOf('certCompany')).toBe(1);
-    expect(visible.indexOf('grade') - visible.indexOf('certNumber')).toBe(1);
-  });
-
-  it('can be switched off for the session like any other column', () => {
-    // It is a default column, not a mandatory one. (As with every default,
-    // normalizeVisibleColumns re-adds it on the next load — that is existing,
-    // deliberate behaviour for the whole default set, not something special
-    // about this column.)
-    expect(store.visibleInventoryColumns()).toContain('certCompany');
-
-    store.toggleColumn('certCompany');
-
-    expect(store.visibleInventoryColumns()).not.toContain('certCompany');
-  });
-
-  it('does not displace Mint Mark from its slot after Year', async () => {
-    // The adjacency rule normalizeVisibleColumns enforces by hand. Adding a
-    // visible column shifts every index after it, so this is re-checked on the
-    // real restore path, not just on the canonical array.
-    await storage.set<InventoryColumn[]>(StorageKeys.VisibleColumns, [
-      'grade', 'mintMark', 'coinSet', 'year'
-    ]);
-
-    const restored = new InventoryColumnsStore(storage);
-    await restored.restoreFromStorage();
-
-    const visible = restored.visibleInventoryColumns();
-    expect(visible.indexOf('mintMark') - visible.indexOf('year')).toBe(1);
-  });
-});

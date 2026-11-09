@@ -41,7 +41,6 @@
         placeholder="Or paste QIF text here&hellip;"
       ></textarea>
 
-      <!-- QIF Filters -->
       <div class="qif-filters">
         <h3>Filters</h3>
         <div class="filter-group">
@@ -112,13 +111,8 @@
         Some Quicken names do not say which of two coins they mean. A bare
         "3¢" dated 1865-1873 is the standing example: the three-cent silver
         and the three-cent nickel were both being struck, and the date cannot
-        separate them. The parser still answers -- the owner asked it to --
-        but the answer now arrives labelled as an assumption, with the
-        reasoning attached:
-
-          "It's okay to make an assumption and note to the user that there was
-           ambiguity in a choice so they can either fix the choice right away
-           or later or just cancel the match."
+        separate them. The parser still answers, but the answer arrives
+        labelled as an assumption, with the reasoning attached.
 
         THIS IS NOT THE EXCEPTIONS PANEL AND MUST NEVER BECOME IT. An
         exception is a row that CANNOT be imported. A guessed row imports by
@@ -156,12 +150,11 @@
         fewer than 2 of Year / Coin Type / Denomination were present.
 
         These are always SHOWN and never silently dropped -- that reporting is
-        the whole point of the panel. What they cannot be is imported. There
-        used to be an "Import anyway" button here; it produced a row in the
-        grid that the backend had never saved (it rejects a coin with no
-        denomination with 400 "denomination is required"), so every later edit
-        failed against an id that did not exist. The fix for a row landing
-        here is to fix its name in Quicken and re-import, not to force it in.
+        the whole point of the panel. What they cannot be is imported, and
+        there must be no "Import anyway" button: the backend rejects a coin
+        with no denomination with 400 "denomination is required", so a forced
+        row is one the grid shows and the database never holds. The fix for a
+        row landing here is to fix its name in Quicken and re-import.
       -->
       @if (rejectedRecords().length > 0) {
         <div class="exception-list" role="region" aria-label="Import exceptions">
@@ -244,9 +237,9 @@
                       Row actions. Empty for every row the parser was sure
                       about; a Drop / Undo button on the ones it guessed at.
                       Deliberately NOT a select-every-row checkbox column:
-                      the ask was a way out for an assumption the user
-                      disagrees with, not a general row picker, and a column
-                      of 400 ticked boxes would bury the handful that matter.
+                      this is a way out of an assumption the user disagrees
+                      with, not a general row picker, and a column of 400
+                      ticked boxes would bury the handful that matter.
                     -->
                     <th><span title="Leave a guessed row out of this import">Action</span></th>
                   </tr>
@@ -307,10 +300,10 @@
                       <td>{{ record.pmPercent !== undefined ? record.pmPercent + '%' : '—' }}</td>
                       <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>
                       <!--
-                        "...or just cancel the match." Offered only on a
-                        guessed row, and reversible from the same button, so
-                        the action cannot be taken by accident and cannot be
-                        taken back only by re-loading the file.
+                        Cancel the match. Offered only on a guessed row, and
+                        reversible from the same button, so the action cannot
+                        be taken by accident and does not need the file
+                        re-loading to undo.
                       -->
                       <td>
                         @if (ambiguity(record)) {

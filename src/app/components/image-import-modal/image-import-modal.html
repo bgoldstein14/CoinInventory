@@ -12,8 +12,7 @@
     </div>
     <div class="modal-body">
 
-      <!-- ================= WHERE THE PHOTOS LIVE =================
-           WHY THIS BOX HAS TO EXIST AT ALL.
+      <!-- WHERE THE PHOTOS LIVE, and why this box has to exist at all.
 
            A browser NEVER tells a web page where a file really is on disk —
            that is a hard security rule, not an oversight. A directory picker
@@ -27,19 +26,16 @@
            first file actually selected, so a wrong folder is obvious BEFORE
            the import stamps hundreds of rows with an unreachable location.
 
-           WHAT IS PREFILLED HERE, AND WHY IT IS ALMOST CERTAINLY WRONG.
-
-           The first time this screen is opened there is nothing remembered, so
-           the box is seeded with the folder THIS APP is installed in, reported
-           by the backend (GET /api/app-info). That is deliberately a starting
-           point and not a guess at where the photos are: its value is that it
-           is a genuine path on the machine that has to resolve these paths,
-           with a drive letter that machine really has. Editing it down to the
-           right folder is far easier than typing one from nothing, and once the
-           user does, that choice is saved and wins from then on. The wording
-           below has to be honest about this — a prefilled box that looks
-           authoritative but points at the program folder would be worse than an
-           empty one. -->
+           WHAT IS PREFILLED, AND WHY IT IS ALMOST CERTAINLY WRONG. With
+           nothing remembered the box is seeded with the folder THIS APP is
+           installed in (GET /api/app-info). That is a starting point, not a
+           guess at where the photos are: its value is being a genuine path on
+           the machine that has to resolve these paths, with a drive letter
+           that machine really has, so it is easier to edit down than to type
+           from nothing. Whatever the user sets is saved and wins from then
+           on. The wording below has to stay honest about this — a prefilled
+           box that looks authoritative but points at the program folder is
+           worse than an empty one. -->
       <label class="detail-field detail-field--full">
         <span>Folder these photos live in (on the machine hosting this app)</span>
         <input
@@ -92,7 +88,7 @@
         <p class="import-blocked" role="alert">{{ blocked }}</p>
       }
 
-      <!-- ================= PICK A FOLDER =================
+      <!-- PICK A FOLDER.
            Both pickers are dead while a stage is running. A folder select can
            take ten seconds or more before the review screen appears, and the
            user's instinct when a screen looks frozen is to click the thing
@@ -128,17 +124,13 @@
         saved &mdash; your original files are never modified.
       </p>
 
-      <!-- ================= BUSY INDICATOR =================
-           The answer to "the screen was basically frozen with no indication
-           that anything was going on".
-
-           Three parts, and each earns its place:
+      <!-- BUSY INDICATOR. Three parts, and each earns its place:
 
              SPINNER   a CSS animation, so it keeps turning between the
                        session's yields and tells the user the tab is alive
                        even on the stages that have no countable progress.
              LABEL     a real count wherever one exists ("Processing 42 of
-                       317…"), because the import is per-file and the owner
+                       317…"), because the import is per-file and the user
                        can see at a glance whether it is moving. The wording
                        for every stage lives in
                        services/image-import/import-progress.ts.
@@ -152,7 +144,7 @@
 
            Every one of these only ever appears because the session yields to
            the event loop before each stage. Without those yields this markup
-           is written but never painted — which is exactly the bug. -->
+           is written but never painted. -->
       @if (session.progress()) {
         <div class="import-progress" role="status" aria-live="polite" [attr.aria-busy]="session.busy()">
           <span class="import-progress-head">
@@ -171,7 +163,7 @@
         </div>
       }
 
-      <!-- ================= SKIPPED-FILE REPORT =================
+      <!-- SKIPPED-FILE REPORT.
            Shown before anything else so the user can see that the 343 .dng
            files were dropped on purpose, not lost. -->
       @if (session.filterResult(); as filter) {
@@ -190,7 +182,7 @@
         </div>
       }
 
-      <!-- ================= SUMMARY (after the import ran) ================= -->
+      <!-- SUMMARY (after the import ran) -->
       @if (session.summary(); as done) {
         <div class="import-summary-panel">
           <h3>Import finished</h3>
@@ -221,7 +213,7 @@
 
       @if (session.imageReviews().length > 0 && !session.summary()) {
 
-        <!-- ================= THE SHAPE OF THE WORK =================
+        <!-- THE SHAPE OF THE WORK.
              Shown BEFORE any of the three lists, and deliberately phrased as
              a sentence rather than a row of numbers.
 
@@ -262,11 +254,135 @@
                 {{ tiers.rescued === 1 ? 'is' : 'are' }} counted above in
                 &ldquo;will be attached&rdquo;.
               }
+              <!-- Why the "will be attached" number can be lower than the
+                   number of ticked photos. Without this sentence the gap
+                   between a ticked review list and a smaller Save button
+                   count reads as a bug in one of them. -->
+              @if (tiers.heldBack > 0) {
+                <strong>{{ tiers.heldBack | number }}</strong> ticked
+                {{ tiers.heldBack === 1 ? 'photo is' : 'photos are' }} not
+                counted above, because you chose to leave the coins that
+                already have photos alone.
+              }
             </p>
           </div>
         }
 
-        <!-- ================= 1. MATCHED COINS, GROUPED ================= -->
+        <!-- COINS THAT ALREADY HAVE PHOTOS. Adding a few new files to a
+             folder that was imported before must not mean re-importing
+             everything in it.
+
+             Shown ONLY when at least one matched coin really does have photos
+             (see existingPhotoChoiceVisible). Asking what to do about existing
+             photos when there are none is a question with no meaning, and a
+             screen that asks those trains people to stop reading the ones that
+             do have meaning.
+
+             Placed here, above the review lists, because it is a decision
+             about the whole run — the user should make it before scrolling
+             into the per-coin detail, and every count below reflects it.
+
+             Every number in it is live and exact: see existingPhotoCounts()
+             and the header of existing-photo-mode.ts. -->
+        @if (session.existingPhotoChoiceVisible()) {
+          @if (session.existingPhotoCounts(); as photos) {
+            <fieldset class="existing-photos">
+              <legend class="existing-photos-question">
+                <strong>{{ photos.coinsWithPhotos | number }}</strong>
+                of these {{ photos.matchedCoins | number }} coins already have photos.<br />
+                What should happen to them?
+              </legend>
+
+              <!-- THE DEFAULT, and the only option that can neither delete nor
+                   duplicate. See DEFAULT_EXISTING_PHOTO_MODE. -->
+              <label class="existing-photos-option">
+                <input
+                  type="radio"
+                  name="existingPhotoMode"
+                  value="leave"
+                  [checked]="session.existingPhotoMode() === 'leave'"
+                  (change)="session.existingPhotoMode.set('leave')"
+                />
+                <span class="existing-photos-label">
+                  <span class="existing-photos-title">Leave them alone</span>
+                  <span class="existing-photos-detail">
+                    Import only for the
+                    {{ photos.coinsWithoutPhotos | number }} coins with no photos yet.
+                  </span>
+                </span>
+              </label>
+
+              <!-- THE DESTRUCTIVE ONE. The photo count is rendered large and
+                   in the danger colour because it is the only thing standing
+                   between the user and deleting photos they may have no other
+                   copy of, and there is a confirmation carrying the same
+                   number before anything is written. See
+                   replaceConfirmationMessage(). -->
+              <label class="existing-photos-option existing-photos-destructive">
+                <input
+                  type="radio"
+                  name="existingPhotoMode"
+                  value="replace"
+                  [checked]="session.existingPhotoMode() === 'replace'"
+                  (change)="session.existingPhotoMode.set('replace')"
+                />
+                <span class="existing-photos-label">
+                  <span class="existing-photos-title">Replace what they have</span>
+                  <span class="existing-photos-detail">
+                    Their
+                    <strong class="existing-photos-count">{{ photos.existingPhotos | number }}</strong>
+                    current photos are deleted first.
+                  </span>
+                </span>
+              </label>
+
+              <label class="existing-photos-option">
+                <input
+                  type="radio"
+                  name="existingPhotoMode"
+                  value="add"
+                  [checked]="session.existingPhotoMode() === 'add'"
+                  (change)="session.existingPhotoMode.set('add')"
+                />
+                <span class="existing-photos-label">
+                  <span class="existing-photos-title">Keep both</span>
+                  <span class="existing-photos-detail">
+                    Add the new photos to the ones already there.
+                  </span>
+                </span>
+              </label>
+
+              <!-- Only while the destructive answer is selected. role="alert"
+                   because it appears in response to the user's click and
+                   describes something irreversible. -->
+              @if (session.existingPhotoMode() === 'replace') {
+                <p class="existing-photos-warning" role="alert">
+                  <strong>{{ photos.existingPhotos | number }}</strong> existing
+                  {{ photos.existingPhotos === 1 ? 'photo' : 'photos' }} will be
+                  deleted from
+                  <strong>{{ photos.coinsWithPhotos | number }}</strong>
+                  {{ photos.coinsWithPhotos === 1 ? 'coin' : 'coins' }}. This cannot
+                  be undone from inside the app, and the original files these
+                  copies came from may no longer exist on disk. You will be asked
+                  to confirm once more before anything is saved.
+                </p>
+              }
+
+              <!-- Said out loud under "Keep both" because it is the whole
+                   reason that option is safe to pick on a folder that has
+                   been imported before. -->
+              @if (session.existingPhotoMode() === 'add') {
+                <p class="existing-photos-note">
+                  Photos already attached to a coin are recognised by the
+                  original file they came from, so re-importing the same folder
+                  adds only what is genuinely new.
+                </p>
+              }
+            </fieldset>
+          }
+        }
+
+        <!-- 1. MATCHED COINS, GROUPED -->
         @if (session.coinGroups().length > 0) {
           <div class="image-match-section">
             <h3>Matched coins</h3>
@@ -305,8 +421,7 @@
           </div>
         }
 
-        <!-- ================= 2. NEAR MATCHES: ONE YES/NO EACH =================
-             The heart of the redesign.
+        <!-- 2. NEAR MATCHES: ONE YES/NO EACH.
 
              Every row here agrees with its coin on all four identifying
              attributes -- year, coin type, denomination and grade -- so it IS
@@ -363,7 +478,7 @@
           </div>
         }
 
-        <!-- ================= 3. NOT IMPORTED: READ-ONLY =================
+        <!-- 3. NOT IMPORTED: READ-ONLY.
              Deliberately modelled on the "Not imported - too little detail"
              panel in the CSV importer and the "Exceptions - not imported"
              table in the QIF importer, down to the columns: what the file was
@@ -375,9 +490,9 @@
 
              THE ONE EXCEPTION, AND WHY IT IS OPT-IN.
              The four-attribute near-match bar (year + type + denomination +
-             grade) is strict by instruction and is NOT relaxed anywhere in this
-             work. But a census over the owner's real filenames showed what that
-             costs: of 32 skipped files, 19 are genuine single-coin photos and
+             grade) stays strict and is NOT relaxed. But a census over the real
+             filenames showed what that costs: of 32 skipped files, 19 are
+             genuine single-coin photos and
              only 2 of those are actually WRONG matches -- the other 17 failed
              because something was ABSENT rather than contradictory. The starkest
              is "1881 Morgan Dollar NGC 2599001.jpg", which the matcher scores at
@@ -474,22 +589,16 @@
 
                                A counterfeit ("FAKE - 1860 3CS - VF - Obverse.jpg")
                                or a shot of several coins at once ("20¢ Collage.jpg").
-                               The owner, about both:
+                               The policy for both: never automatically attach, and
+                               never OFFER as attachable in the automated import. So
+                               there is no "Attach anyway" link on these rows.
 
-                                 "Ignore the Fake coins."
-                                 "Never automatically attach nor offer as attachable
-                                  in the automated import. A user can try to manually
-                                  choose such a photo manually at a later time to
-                                  attach to a coin(s)."
-
-                               "Nor offer as attachable" rules out the link, so there
-                               is none. The ROW is still here, with its reason in the
-                               column to the left, because a photo that simply
-                               vanished would leave him asking where it went — and
-                               this note names the "later time" he is describing, so
-                               it reads as a deliberate decision rather than a dead
-                               end. The file is not off limits to anything: the coin's
-                               own gallery will attach it on request. -->
+                               The ROW is still here, with its reason beside it,
+                               because a photo that simply vanished leaves the user
+                               asking where it went. The file is not off limits to
+                               anything - a manual attach from the coin's own gallery
+                               is always allowed, and this note names that route so
+                               the row reads as a decision rather than a dead end. -->
                           <span class="skipped-manual-only">
                             Attach by hand from the coin's gallery
                           </span>
@@ -603,7 +712,7 @@
           </div>
         }
 
-        <!-- ================= CONFIRM ================= -->
+        <!-- CONFIRM -->
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="close()" [disabled]="session.busy()">Cancel</button>
           <button
@@ -611,7 +720,11 @@
             (click)="session.applyConfirmedMatches()"
             [disabled]="session.attachCount() === 0 || session.busy()"
           >
-            Save {{ session.attachCount() | number }} photo{{ session.attachCount() === 1 ? '' : 's' }}
+            <!-- The label carries the live count while saving. The progress
+                 bar at the top of this dialog is several screens away once
+                 the review list is long, so the button has to report for
+                 itself. See saveButtonLabel() in import-progress.ts. -->
+            {{ session.saveButtonLabel() }}
           </button>
         </div>
       }

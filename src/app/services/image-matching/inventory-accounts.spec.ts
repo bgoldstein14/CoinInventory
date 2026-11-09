@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * inventory-accounts.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   That the matcher behaves on A FULL, DENSE INVENTORY -- all seven coin
  *   accounts of the corpus in `src/app/testing/qif-corpus/`, read live out
@@ -8,56 +8,35 @@
  *   every one of them, because the rules are general.
  *
  *   That corpus is SYNTHETIC, but it is not simplified: it reproduces, group
- *   for group, the duplicate density of the owner's real export, which is
- *   the only property of his data these tests ever needed. See the header of
+ *   for group, the duplicate density of the real export, which is the only
+ *   property of that data these tests ever needed. See the header of
  *   `qif-corpus/generate-corpus.mjs` before regenerating it.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS FILE REPLACED TWO OTHERS -- HE ASKED FOR THIS, IN THESE WORDS
- * ---------------------------------------------------------------------------
- *   There used to be `three-cent-proofs.spec.ts` and `early-proofs.spec.ts`:
- *   one spec file per COLLECTION. He saw them and said:
+ * COLLECTIONS ARE DATA, NEVER FILES
  *
- *     "I wouldn't expect there to be a special file to single out a
- *      particular type of coin like the three-cent-proofs.spec.ts. That's
- *      too specific and will just add a lot of noise to this project if we
- *      had files for every denomination. Likely, whatever rules are in there
- *      can be applied across the board."
+ *   There is no spec file per collection and there must not be: a file for
+ *   every denomination would be noise, and the rules these tests exercise
+ *   were never about three-cent pieces or about proofs. They are about
+ *   AMBIGUITY -- several coins that a filename cannot choose between --
+ *   which every account has.
  *
- *   He is right twice over. He has EIGHT accounts, so one file each does not
- *   scale; and the rules those two files tested were never about three-cent
- *   pieces or about proofs. They were about AMBIGUITY -- several coins that
- *   a filename cannot choose between -- which every account has.
+ *   `QIF_ACCOUNTS` in qif-accounts.fixture.ts is the list, and everything
+ *   below is written once and run over all of them with `describe.each`.
+ *   ADDING A COLLECTION IS ADDING A ROW TO THAT TABLE. It is never a new
+ *   file and never a new copy of an assertion.
  *
- *   So the collections are now DATA. `QIF_ACCOUNTS` in qif-accounts.fixture.ts
- *   is the list, and everything below is written once and run over all of
- *   them with `describe.each`. ADDING A COLLECTION IS ADDING A ROW TO THAT
- *   TABLE. It is never a new file and never a new copy of an assertion.
+ *   For the same reason, assertions DISCOVER the coins they are about rather
+ *   than naming them: "for every account, find every year holding two or
+ *   more SPECIFIC forms of one GENERIC denomination, and assert the refusal
+ *   for each". The interesting years are found, not typed.
  *
- * ---------------------------------------------------------------------------
- * WHAT WAS CARRIED OVER, AND WHAT CHANGED ABOUT IT
- * ---------------------------------------------------------------------------
- *   EVERY assertion's intent from both old files survives here. What changed
- *   is that the ones that used to name a coin now DISCOVER it:
+ *   Facts that are not about an inventory at all -- how `compareGrades`
+ *   reads "PR64" against "PF64", how the parser reads "2 cent", that a
+ *   postage stamp is not a coin -- belong in the spec that owns the rule,
+ *   not here.
  *
- *     OLD  "skips a bare 3-cent photo of 1866 / 1867 / 1870 / 1871"
- *     NEW  for every account, find every year in which it holds two or more
- *          SPECIFIC forms of one GENERIC denomination, and assert the
- *          refusal for each. The four years above are found, not typed.
- *
- *     OLD  "his FIVE 1861 Three Cent Silver records differ only by grade"
- *     NEW  for every account, find every (year, denomination) group holding
- *          more than one record, and assert the invariants over all of them.
- *
- *   A handful of assertions in the old files were not about an inventory at
- *   all -- how `compareGrades` reads "PR64" against "PF64", how the parser
- *   reads "2 cent", that a postage stamp is not a coin. Those were unit
- *   facts wearing a collection's clothes, and they have moved to the spec
- *   that owns the rule: near-match.spec.ts and denomination-units.spec.ts.
- *
- * ---------------------------------------------------------------------------
  * WHY THIS CANNOT BE REPLACED BY import-tiers.spec.ts
- * ---------------------------------------------------------------------------
+ *
  *   The census there builds its inventory OUT OF THE FILENAMES IT TESTS --
  *   one coin per distinct (year, denomination, coin type). So it can never
  *   contain two coins of the same year and denomination, and that is exactly
@@ -66,14 +45,13 @@
  *   1864 Two Cent pieces, four years in Early Proofs holding both a 3CS and
  *   a 3CN. This file is where that density lives.
  *
- * ---------------------------------------------------------------------------
  * ANCIENTS IS EXCLUDED ON PURPOSE
- * ---------------------------------------------------------------------------
+ *
  *   An ancient coin has no year, no denomination and no grade, so it is
  *   matched on catalogue references instead -- a separate design with its own
  *   deferred plan in `docs/ancients-matching-plan.md`. The exclusion lives in
  *   the fixture's table, with the reasoning.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord, ImageMatchResult, ImportTier } from '../../types/coin.model';
@@ -93,15 +71,15 @@ import { searchCoins } from '../image-import/row-decisions';
 
 const service = () => new ImageMatchingService();
 
-/* ===========================================================================
+ /*
  * ONE MATCH RUN PER ACCOUNT, COMPUTED ONCE
- * ---------------------------------------------------------------------------
+ *
  * `matchImages` is O(photos x coins) and the biggest account is 262 photos
  * against 109 coins. Running it inside each `it` would multiply that by the
  * number of assertions for no benefit whatsoever: the inputs never change,
  * so neither can the answer. Everything is computed here, at module load,
  * and every assertion below reads from the same snapshot.
- * ========================================================================= */
+  */
 
 interface AccountRun {
   account: QifAccount;
@@ -175,15 +153,15 @@ const RUNS = new Map<string, AccountRun>(
 const ACCOUNTS: ReadonlyArray<[string, QifAccount]> =
   QIF_ACCOUNTS.map(account => [account.account, account]);
 
-/* ===========================================================================
+ /*
  * PART 1 -- THE DATA IS REALLY HIS, AND REALLY HARD
- * ---------------------------------------------------------------------------
+ *
  * Asserted rather than assumed. If an account stops being dense -- if the
  * duplicate groups disappear, or the file is renamed, or the Windows-1252
  * decode breaks and every cent sign turns into a replacement character --
  * the rest of this file goes on passing while testing nothing. These are the
  * tripwires for that.
- * ========================================================================= */
+  */
 describe.each(ACCOUNTS)('%s - the inventory these tests run against', (_name, account) => {
   const { inventory, photos } = RUNS.get(account.account)!;
 
@@ -215,7 +193,7 @@ describe.each(ACCOUNTS)('%s - the inventory these tests run against', (_name, ac
     /* THE PROPERTY THAT MAKES THIS FILE WORTH RUNNING, and the one the
      * synthetic census in import-tiers.spec.ts structurally cannot have:
      * two or more coins sharing a year AND a denomination, differing only
-     * in the grade. That is the shape his inventory really is, and it is
+     * in the grade. That is the shape a real inventory has, and it is
      * where the runner-up margin, the generic denomination and the strike
      * veto all earn their keep. */
     expect(duplicateGroups(RUNS.get(account.account)!).length)
@@ -250,13 +228,12 @@ function duplicateGroups({ inventory }: AccountRun): Array<{
  * for a hand-picked few. They are the cheapest possible check on a
  * catastrophe and the fastest to tell you one has happened.
  *
- * His governing principle, which decides every judgement call below:
- *
- *   "I can always force an image to be associated with a coin manually, but
- *    the automated process should be very descriminatory."
+ * The governing principle, which decides every judgement call below: an
+ * image can always be forced onto a coin manually, but the automated process
+ * should be very discriminatory.
  *
  * So each of these is phrased as a thing the matcher must NOT do. Refusing a
- * correct photo costs him one click. Attaching a wrong one is silent and may
+ * correct photo costs one click. Attaching a wrong one is silent and may
  * never be noticed.
  * ========================================================================= */
 describe.each(ACCOUNTS)('%s - invariants over the whole account', (_name, account) => {
@@ -281,11 +258,10 @@ describe.each(ACCOUNTS)('%s - invariants over the whole account', (_name, accoun
   });
 
   it('never attaches two photos of ONE coin to two DIFFERENT coins', () => {
-    /* His opening complaint, measured over the whole account: "if I match it
-     * with an image, all related image files of similar names (including for
-     * both obverse/reverse/slab designations) should automatically be
-     * attached at that point". The obverse and the reverse of one coin must
-     * never disagree about which coin they are of. */
+    /* Measured over the whole account: all the image files of one coin,
+     * obverse, reverse and slab label alike, must end up on the same coin.
+     * The obverse and the reverse of one coin must never disagree about
+     * which coin they are of. */
     const coinsPerStem = new Map<string, Set<string>>();
     for (const result of attached) {
       const stem = result.parsed.fileName.replace(/ - (Obverse|Reverse)\.jpg$/, '');
@@ -297,25 +273,20 @@ describe.each(ACCOUNTS)('%s - invariants over the whole account', (_name, accoun
   });
 
   it('never attaches a photo that does not say "proof" to a PROOF record', () => {
-    /* !! THE OWNER'S RULE, MEASURED ACROSS THE BOARD !!
+    /* !! THE SILENCE-IS-A-STATEMENT RULE, MEASURED ACROSS THE BOARD !!
      *
-     * He has stated it three times, each more absolute than the last, and
-     * this is the final form, verbatim:
+     * The proof descriptor is always part of both the image file name and
+     * the inventory description; otherwise the coin is assumed to be a
+     * business strike. A filename that does not say proof is not a filename
+     * that forgot -- it is a filename about a coin with nothing to say. So
+     * silence is the positive claim "business strike", and it contradicts a
+     * proof record exactly as "MS65" would.
      *
-     *   "The Proof descriptor should always be part of the image file name
-     *    as well as part of the inventory description otherwise it's assumed
-     *    the coin is a business strike."
-     *
-     * Read the last clause. A filename that does not say proof is not a
-     * filename that forgot; it is a filename about a coin that has nothing
-     * to say. So silence is the positive claim "business strike", and it
-     * contradicts a proof record exactly as "MS65" would.
-     *
-     * This is the one dimension where absence counts as evidence --
+     * This is the one dimension where absence counts as evidence;
      * match-vetoes.ts keeps "absence is not disagreement" for the year, the
-     * denomination and the coin type -- and the carve-out rests on a fact
-     * about HIS DATA, not on logic: he writes these names and these records
-     * himself, and he writes PF or Proof every single time it is true. */
+     * denomination and the coin type. The carve-out rests on a fact about
+     * THIS COLLECTION'S DATA, not on logic: one person writes these names
+     * and these records, and writes PF or Proof every time it is true. */
     for (const result of [...results, ...silentResults]) {
       const coin = coinOf(result.matchedRecordId);
       if (!coin) continue;
@@ -357,16 +328,13 @@ describe.each(ACCOUNTS)('%s - invariants over the whole account', (_name, accoun
 /* ===========================================================================
  * PART 3 -- A SLAB LABEL NEVER IDENTIFIES A COIN ON ITS OWN
  * ---------------------------------------------------------------------------
- * Asked whether a photograph of the slab's certification label -- no coin
- * visible, just the paper -- may identify a coin by itself, he answered:
- *
- *     "Only alongside a coin photo."
- *
- * So a label shot may RIDE ALONG once an actual coin image has named the
- * coin, but it may never be the thing that does the naming. He accepted the
- * consequence -- a coin whose only photograph is a label shot stops being
- * attached automatically -- but not that it should happen silently, so the
- * skip line has to SAY this rather than claim nothing matched.
+ * A photograph of the slab's certification label -- no coin visible, just the
+ * paper -- may identify a coin ONLY alongside a coin photo. So a label shot
+ * may RIDE ALONG once an actual coin image has named the coin, but it may
+ * never be the thing that does the naming. The accepted consequence is that a
+ * coin whose only photograph is a label shot stops being attached
+ * automatically -- but never silently, so the skip line has to SAY this
+ * rather than claim nothing matched.
  *
  * The coin used is DISCOVERED rather than named: the first security in the
  * account whose ordinary obverse shot attaches cleanly. That keeps the test
@@ -434,14 +402,12 @@ describe.each(ACCOUNTS)('%s - a slab label rides along, and only rides along', (
      *
      * The two files below share their entire name, so if a label could
      * identify anything the first would place the second immediately. It
-     * cannot -- "Only alongside a coin photo" -- so with no coin photo in the
-     * batch there is no first link in the chain and neither row attaches.
+     * cannot, so with no coin photo in the batch there is no first link in
+     * the chain and neither row attaches.
      *
-     * (An earlier version of this test put the obverse in the batch too and
-     * then checked that the second label was not placed BY THE FIRST. That
-     * proved nothing: with the obverse present, the second label is placed by
-     * the OBVERSE, perfectly correctly, so the assertion passed without ever
-     * exercising a chain.) */
+     * DO NOT add the obverse to this batch: with it present the second label
+     * is placed by the OBVERSE, perfectly correctly, and the assertion then
+     * passes without ever exercising a chain. */
     if (!anchor) return;
     const results = service().matchImages(
       [`${anchor.stem} - Slab Label.jpg`, `${anchor.stem} - Slab Label 2.jpg`],
@@ -487,26 +453,19 @@ describe.each(ACCOUNTS)('%s - a slab label rides along, and only rides along', (
 /* ===========================================================================
  * PART 4 -- A GENERIC DENOMINATION NEVER AUTO-ATTACHES
  * ---------------------------------------------------------------------------
- * He was asked what should happen when a photo is called "1867 3-cent" and
- * he owns both an 1867 Three Cent Silver and an 1867 Three Cent Nickel. His
- * answer was two words:
- *
- *     "Never auto-attach."
- *
- * Not "attach when one is clearly ahead". Never. So it is not a margin test:
- * the automatic attachment is refused outright and the offer list is
- * emptied, because a coin flip presented as a ranked recommendation is worse
- * than no recommendation.
+ * When a photo is called "1867 3-cent" and the inventory holds both an 1867
+ * Three Cent Silver and an 1867 Three Cent Nickel, the rule is NEVER
+ * AUTO-ATTACH -- not "attach when one is clearly ahead". So it is not a
+ * margin test: the automatic attachment is refused outright and the offer
+ * list is emptied, because a coin flip presented as a ranked recommendation
+ * is worse than no recommendation.
  *
  * ---------------------------------------------------------------------------
- * THE YEARS ARE DISCOVERED, NOT TYPED -- THIS IS THE POINT OF THE REWRITE
+ * THE YEARS ARE DISCOVERED, NOT TYPED
  * ---------------------------------------------------------------------------
- *   The old three-cent-proofs.spec.ts hand-listed 1866 and 1867; the old
- *   early-proofs.spec.ts hand-listed 1866, 1867, 1870 and 1871. Both were
- *   really asking one general question -- "is there a year in which this
- *   account holds two of the coins this word could mean?" -- so that is what
- *   is asked here, of every account and every generic denomination the
- *   reference table knows about.
+ *   The general question is "is there a year in which this account holds two
+ *   of the coins this word could mean?", so that is what is asked, of every
+ *   account and every generic denomination the reference table knows about.
  *
  *   `isSpecificFormOf` in reference-tables.ts is the predicate, and it is
  *   driven entirely by `DENOMINATION_EQUIVALENCES`. Nothing in this test, and
@@ -514,11 +473,11 @@ describe.each(ACCOUNTS)('%s - a slab label rides along, and only rides along', (
  * ========================================================================= */
 
 /**
- * The generic denominations, and how he would spell each one in a filename.
+ * The generic denominations, and how each one is spelled in a filename.
  *
- * The KEYS are the table's own generic keys. The SPELLINGS are what his
+ * The KEYS are the table's own generic keys. The SPELLINGS are what the
  * filename convention produces for them -- "3-cent", "5-cent" -- which is
- * the one thing the table cannot tell us, because it is about his habits
+ * the one thing the table cannot tell us, because it is about naming habits
  * rather than about coins.
  */
 const GENERIC_SPELLINGS: ReadonlyArray<{ key: string; spelling: string }> = [
@@ -532,7 +491,7 @@ describe.each(ACCOUNTS)('%s - a general word never picks between two coins', (_n
   const { inventory } = RUNS.get(account.account)!;
 
   /**
-   * Every (generic, year) in this account where he owns TWO OR MORE of the
+   * Every (generic, year) in this account holding TWO OR MORE of the
    * specific coins the generic word stands over.
    */
   const undecidable = (() => {
@@ -555,7 +514,7 @@ describe.each(ACCOUNTS)('%s - a general word never picks between two coins', (_n
     /* Visibility, not a threshold. An account with none of these is not
      * broken -- most have none -- but which accounts DO have them is the
      * thing a reader needs to know to interpret the tests below, and it
-     * changes whenever his inventory does. */
+     * changes whenever the inventory does. */
     // eslint-disable-next-line no-console
     console.log(
       `  ${account.account}: ${undecidable.length} undecidable generic/year pairs` +
@@ -569,11 +528,11 @@ describe.each(ACCOUNTS)('%s - a general word never picks between two coins', (_n
   it('refuses every one of them: no attachment, no offered guesses, and a reason', () => {
     for (const { spelling, year } of undecidable) {
       /* The photo states the PROOF designation deliberately. Without it the
-       * filename would claim "business strike" under the owner's rule, the
-       * strike veto would disqualify his proofs, and in several of these
-       * years that leaves only ONE metal standing -- at which point the word
-       * is no longer undecidable and offering the survivor is correct. The
-       * two rules compose exactly as they should; this test is about the
+       * filename would claim "business strike", the strike veto would
+       * disqualify the proofs, and in several of these years that leaves
+       * only ONE metal standing -- at which point the word is no longer
+       * undecidable and offering the survivor is correct. The two rules
+       * compose exactly as they should; this test is about the
        * generic-denomination one, so it holds the strike constant. */
       const fileName = `${year} ${spelling} - PCGS PF64 - Obverse.jpg`;
       const [result] = service().matchImages([fileName], inventory);
@@ -619,7 +578,7 @@ describe('the generic-denomination rule is general, not a rule about three-cent 
    *     'dollar'      stands over  Gold / Silver / Trade Dollar
    *     'gold eagle'  stands over  the four Eagle face values
    *
-   * But only the FIRST of them can fire against his inventory today, and
+   * But only the FIRST of them can fire against this inventory today, and
    * that is a fact about the DATABASE SEED rather than about the rule. The
    * seeded denominations are '½¢ 1¢ 2¢ 5¢ 10¢ 20¢ 25¢ 50¢ 3CS 3CN', so a
    * half dime and a nickel BOTH land on the generic key 'five cent' and a
@@ -672,12 +631,11 @@ describe('the generic-denomination rule is general, not a rule about three-cent 
 /* ===========================================================================
  * PART 5 -- SEVERAL COINS THAT DIFFER ONLY BY GRADE
  * ---------------------------------------------------------------------------
- * The inventory shape the synthetic census cannot produce, and the one three
- * separate defects hid in. His worked example was a run of Three Cent
- * Silvers of one date -- a CAC proof plus an AU, an EF and two XFs -- where
- * every photograph of the proof was landing in the skipped list because the
- * four business strikes it had ALREADY DISQUALIFIED were still being counted
- * as the runner-up it had to beat.
+ * The inventory shape the synthetic census cannot produce, and the hardest
+ * one to get right: a run of Three Cent Silvers of one date -- a CAC proof
+ * plus an AU, an EF and two XFs -- where every photograph of the proof can
+ * land in the skipped list because the four business strikes the matcher has
+ * ALREADY DISQUALIFIED are still counted as the runner-up it must beat.
  *
  * The groups are discovered from each account rather than named, so this
  * covers the trimes, the 1864 Two Cent pieces, the 1865 Three Cent Nickels
@@ -757,11 +715,11 @@ describe.each(ACCOUNTS)('%s - coins that differ only by grade', (_name, account)
   });
 
   it('a photo that names NO grade is not attached to any member of a group', () => {
-    /* HIS WORKED EXAMPLE, generalised. "1859 3CS - Obverse 2.jpg" carries no
+    /* THE WORKED EXAMPLE, generalised. "1859 3CS - Obverse 2.jpg" carries no
      * grade at all, and the account holds four 1859 3CS records:
      *
      *   - the PROOF is disqualified, because the filename says nothing about
-     *     proof and under his rule that means "business strike";
+     *     proof and that means "business strike";
      *   - the four business strikes differ only by grade, so there is
      *     nothing to choose between them either.
      *
@@ -781,13 +739,12 @@ describe.each(ACCOUNTS)('%s - coins that differ only by grade', (_name, account)
        * else means the matcher chose between coins it could not tell apart.
        *
        * "Eligible" means ELIGIBLE FOR THE AUTOMATED RUN, which is why the
-       * counterfeits come out here as well as the proofs. The owner: "Ignore
-       * the Fake coins." The 1855 3CS group is exactly two business strikes,
-       * one genuine and one "1855 3CS - VF - FAKE", so before that rule the
-       * fake was blocking a gradeless photo from reaching the only real coin
-       * it could possibly belong to. It no longer is, and this line is where
-       * that shows up. A fake record is still in `group.coins` on purpose --
-       * it is in his inventory and every manual path can still see it. */
+       * counterfeits come out here as well as the proofs. The 1855 3CS group
+       * is exactly two business strikes, one genuine and one
+       * "1855 3CS - VF - FAKE"; without the counterfeit rule the fake blocks
+       * a gradeless photo from reaching the only real coin it could possibly
+       * belong to. A fake record is still in `group.coins` on purpose -- it
+       * is in the inventory and every manual path can still see it. */
       const eligible = group.coins.filter(
         c => parseCoin(c).strike === 'business' && !isCounterfeitRecord(c)
       );
@@ -806,19 +763,20 @@ describe.each(ACCOUNTS)('%s - coins that differ only by grade', (_name, account)
  *
  * TWO CORPORA ARE MEASURED, AND THE SECOND IS THE INTERESTING ONE.
  *
- *   DERIVED    one obverse and one reverse per security, named the way he
- *              names them. These photographs REPEAT whatever their record
+ *   DERIVED    one obverse and one reverse per security, named by the usual
+ *              convention. These photographs REPEAT whatever their record
  *              says, so a proof record's photo always says "PF" -- which
  *              means the strike veto can never fire against them, in either
  *              direction. A corpus that cannot trigger a rule cannot measure
  *              its cost.
  *
  *   SILENT     one extra shot per coin giving only the year, the mint mark
- *              and the denomination -- "1872 3CN - Obverse 2.jpg". His share
- *              is full of these, and they are the ENTIRE subject of the
- *              owner's rule: a silent shot is not an abbreviation of the
- *              loud one, it is a claim that the coin is a business strike.
- *              This is where the price of that rule is visible.
+ *              and the denomination -- "1872 3CN - Obverse 2.jpg". The real
+ *              share is full of these, and they are the ENTIRE subject of
+ *              the silence-is-a-statement rule: a silent shot is not an
+ *              abbreviation of the loud one, it is a claim that the coin is
+ *              a business strike. This is where the price of that rule is
+ *              visible.
  * ========================================================================= */
 describe('the census, account by account', () => {
   it('prints how every account divides, for both corpora', () => {
@@ -866,40 +824,34 @@ describe('the census, account by account', () => {
   });
 
   it('attaches the clear majority of the Early Proofs account unaided', () => {
-    /* THE OPERATIONAL NUMBER, and the one the owner was shown. 62 of these
-     * 118 photographs attached before the five decisions of that round were
-     * implemented, and 102 attach now.
-     *
-     * The floor is set at 80%, comfortably under where it lands, so that an
-     * unrelated change does not fail this on a rounding -- while a
-     * REGRESSION back towards the old behaviour does. It is named here
-     * rather than applied to every account because the accounts are not
-     * comparable: `Odd Type Set` attaches almost nothing, correctly, because
-     * its securities are too bare to tell apart. */
+    /* THE OPERATIONAL NUMBER. The floor is set at 80%, comfortably under
+     * where this account lands, so that an unrelated change does not fail it
+     * on a rounding -- while a REGRESSION towards the old behaviour does. It
+     * is named here rather than applied to every account because the
+     * accounts are not comparable: `Odd Type Set` attaches almost nothing,
+     * correctly, because its securities are too bare to tell apart. */
     const { results } = RUNS.get('Early Proofs')!;
     const matched = results.filter(r => r.tier === 'matched').length;
     expect(matched).toBeGreaterThan(results.length * 0.8);
   });
 
   it('the proof rule costs the Early Proofs account almost all of its silent shots', () => {
-    /* THE PRICE OF HIS RULE, PINNED AS A NUMBER RATHER THAN DESCRIBED.
+    /* THE PRICE OF THE SILENCE RULE, PINNED AS A NUMBER RATHER THAN
+     * DESCRIBED.
      *
      * Every coin in this account is a proof, so every silent second shot --
-     * a name giving only the year and the denomination -- now claims
-     * "business strike" and is disqualified from its own record. Measured:
-     * 51 of these 54 attached under the old "silence says nothing" rule, and
-     * 1 attaches now.
+     * a name giving only the year and the denomination -- claims "business
+     * strike" and is disqualified from its own record. Of 54 such shots, 51
+     * would attach if silence said nothing; 1 attaches under the rule.
      *
-     * HE HAS BEEN TOLD THIS AND ACCEPTS IT, under his standing tie-breaker:
-     * "I can always force an image to be associated with a coin manually,
-     * but the automated process should be very descriminatory." Every one of
-     * those photographs is still listed, still carries a reason, and is
-     * still attachable in one click.
+     * That is accepted, under the standing tie-breaker that the automated
+     * process should be very discriminatory. Every one of those photographs
+     * is still listed, still carries a reason, and is still attachable in
+     * one click.
      *
      * The assertion is deliberately an UPPER bound. If someone weakens the
      * rule, this number climbs back towards 51 and the test fails -- which
-     * is the only way a quiet relaxation of his most-repeated instruction
-     * would ever be noticed. */
+     * is the only way a quiet relaxation would ever be noticed. */
     const { silentResults } = RUNS.get('Early Proofs')!;
     const matched = silentResults.filter(r => r.tier === 'matched').length;
     expect(matched).toBeLessThan(silentResults.length * 0.1);
@@ -907,10 +859,10 @@ describe('the census, account by account', () => {
 });
 
 /* ===========================================================================
- * PART 7 -- THE AWKWARD SPELLINGS IN HIS RECORDS
+ * PART 7 -- THE AWKWARD SPELLINGS IN THE RECORDS
  * ---------------------------------------------------------------------------
- * Not per-account, because each is a fact about ONE string he typed. They
- * are here rather than in a parser spec because each one is only
+ * Not per-account, because each is a fact about ONE string someone typed.
+ * They are here rather than in a parser spec because each one is only
  * interesting against a real inventory: the question is never "how is this
  * parsed" but "what does it attach to".
  * ========================================================================= */
@@ -920,7 +872,7 @@ describe('the odd characters in his record text', () => {
      * (a split grade) are perfectly good RECORD text and the importer handles
      * them. They cannot appear in a FILENAME, because "/" is one of the nine
      * characters Windows forbids in one -- so this is not a defect to fix, it
-     * is a fact to pin down, and the fixture substitutes a hyphen the way he
+     * is a fact to pin down, and the fixture substitutes a hyphen as a person
      * would have to.
      *
      * The behaviour if a slashed name ever did reach the matcher: `baseName`
@@ -943,10 +895,9 @@ describe('the odd characters in his record text', () => {
 
   it('a filename with no grade LETTERS is not attached on a guess', () => {
     /* "1868 5¢ - NGC/CAC 65CAM" is the one record written without the grade
-     * letters, and he mentioned the form when giving the grade rules.
-     * grade-parser.ts does not recognise a letter-less grade in a FILENAME
-     * (it needs the letters to know it is looking at a grade at all), so
-     * "65CAM" survives as a coin-type word.
+     * letters. grade-parser.ts does not recognise a letter-less grade in a
+     * FILENAME (it needs the letters to know it is looking at a grade at
+     * all), so "65CAM" survives as a coin-type word.
      *
      * Pinned here so that if the filename grade reader is ever taught the
      * letter-less form, this test is what tells you the behaviour moved. */
@@ -957,13 +908,13 @@ describe('the odd characters in his record text', () => {
 });
 
 /* ===========================================================================
- * PART 7B -- HIS COUNTERFEIT RECORDS ARE OUT OF THE AUTOMATED POOL
+ * PART 7B -- COUNTERFEIT RECORDS ARE OUT OF THE AUTOMATED POOL
  * ---------------------------------------------------------------------------
- * "Ignore the Fake coins" cuts both ways, and this is the half that is easy
+ * "Ignore the fake coins" cuts both ways, and this is the half that is easy
  * to miss. The photograph side is covered in real-filenames.spec.ts; this is
- * the RECORD side, measured against the accounts he actually has.
+ * the RECORD side, measured against the real accounts.
  *
- * He holds three counterfeits as inventory rows --
+ * The inventory holds three counterfeits as rows --
  *
  *     1855 3CS - VF - FAKE
  *     1859 3CS - XF - FAKE
@@ -974,11 +925,10 @@ describe('the odd characters in his record text', () => {
  * auto-attach to "1859 3CS - XF40 - FAKE", which is the identical mis-filing
  * pointing the other way.
  *
- * *** AND THE EXCLUSION STOPS AT THE AUTOMATED RUN. ***
- *   "I should be able to manually add a Fake coin to my inventory, just
- *    don't worry about automating such a thing."
- * So the asymmetry is the requirement: invisible to the matcher, entirely
- * ordinary everywhere else. The last test here is the one that pins it.
+ * *** AND THE EXCLUSION STOPS AT THE AUTOMATED RUN. *** A fake coin may be
+ * added to the inventory by hand and must behave like any other record
+ * everywhere except the matcher. That asymmetry is the requirement, and the
+ * last test here is the one that pins it.
  * ========================================================================= */
 describe('his counterfeit records', () => {
   /* Every account's securities list carries the three FAKE names, so any one
@@ -991,7 +941,7 @@ describe('his counterfeit records', () => {
     const flagged = inventory.filter(isCounterfeitRecord);
 
     /* Named rather than counted, so a change shows WHICH record moved. The
-     * word survives only in the raw Quicken security name: his fakes import
+     * word survives only in the raw Quicken security name: the fakes import
      * with denomination "3CS", coinType "Three Cent Silver" and grades
      * VF / XF / XF45 -- every declared CoinRecord field identical to a
      * genuine coin. That is why `isCounterfeitRecord` reads `securityName`
@@ -1028,11 +978,11 @@ describe('his counterfeit records', () => {
     /* The over-reach guard. A false positive here is a silent loss: a real
      * coin that quietly stops receiving its own photographs.
      *
-     * The specific trap in his data is the Quicken memo
+     * The specific trap in the real data is the Quicken memo
      *
      *     "Sent the PCI PF 3CS to the dealer (exchange for a 3CS FAKE)"
      *
-     * which was attached to a GENUINE proof. That is why
+     * which is attached to a GENUINE proof. That is why
      * `isCounterfeitRecord` reads the identity fields and NOT `notes`. */
     const { inventory } = run();
     const genuine = inventory.filter(c => !isCounterfeitRecord(c));
@@ -1050,10 +1000,10 @@ describe('his counterfeit records', () => {
      *
      * `searchCoins` is what drives CoinLookup, the free-text chooser behind
      * every manual attachment on the import screen. It reads the inventory
-     * directly, and must keep doing so: push the counterfeit filter down into
-     * the inventory service or into this function and his fakes disappear
-     * from the manual search too -- which is the escape hatch his whole
-     * answer depends on. */
+     * directly, and must keep doing so: push the counterfeit filter down
+     * into the inventory service or into this function and the fakes
+     * disappear from the manual search too -- which is the escape hatch the
+     * whole rule depends on. */
     const { inventory } = run();
     const matching = service();
     const fakes = inventory.filter(isCounterfeitRecord);
@@ -1070,27 +1020,26 @@ describe('his counterfeit records', () => {
  * PART 8 -- TWO IMPORT DEFECTS THE DENSE ACCOUNTS EXPOSED
  * ---------------------------------------------------------------------------
  * Neither is a matching rule. They are here because these accounts are the
- * first fixtures dense enough to expose them, and because leaving either in
- * place would SHIP A SILENT MIS-ATTACHMENT -- the one outcome he has said
- * matters more than any other.
+ * first fixtures dense enough to expose them, and because either one would
+ * SHIP A SILENT MIS-ATTACHMENT.
  *
- * Both lived in the regex ladder in quicken-import.service.ts that turns a
- * security name into a denomination, and both were ORDERING problems:
+ * Both live in the regex ladder in quicken-import.service.ts that turns a
+ * security name into a denomination, and both are ORDERING problems:
  *
- *   /5¢/ was tried before /25¢/, and "25¢" CONTAINS "5¢", so his two
- *   quarters imported as five-cent pieces.
+ *   /5¢/ tried before /25¢/, and "25¢" CONTAINS "5¢", so quarters import as
+ *   five-cent pieces.
  *
- *   The half-dime spelling "½10¢" was in no branch at all, so it fell
- *   through to /10¢/ and his nine half dimes imported as dimes.
+ *   The half-dime spelling "½10¢" in no branch at all, so it falls through
+ *   to /10¢/ and half dimes import as dimes.
  *
- * WHY THAT WAS WORSE THAN LOSING INFORMATION. The Early Proofs account holds
+ * WHY THAT IS WORSE THAN LOSING INFORMATION. The Early Proofs account holds
  * genuine dimes (1868 10¢, 1908 10¢) and a genuine five-cent piece (1868 5¢)
- * alongside the mis-read coins, so the mis-reads COLLIDED. Once the grade
- * tolerance let "PF65" agree with "PF65 Cameo", the photographs of
- * "1871 ½10¢" cleared every gate against the record claiming to be an 1871
- * five-cent piece -- which is really the 1871 QUARTER -- and were attached to
- * it automatically. The matcher was behaving correctly on the data it was
- * given; the data was wrong.
+ * alongside the mis-read coins, so the mis-reads COLLIDE. Once the grade
+ * tolerance lets "PF65" agree with "PF65 Cameo", the photographs of
+ * "1871 ½10¢" clear every gate against the record claiming to be an 1871
+ * five-cent piece -- which is really the 1871 QUARTER -- and are attached to
+ * it automatically. The matcher behaves correctly on the data it is given;
+ * the data is wrong.
  * ========================================================================= */
 describe('his cent-sign spellings import as the coins they are', () => {
   const { inventory } = RUNS.get('Early Proofs')!;
@@ -1102,8 +1051,8 @@ describe('his cent-sign spellings import as the coins they are', () => {
   });
 
   it('"1855 ½10¢" is a HALF DIME, not a dime', () => {
-    // The owner: "Half Dime can be ½10¢ or 5¢". '5¢' is the key the database
-    // seeds for a half dime, so that is the right answer here.
+    // "Half Dime can be ½10¢ or 5¢". '5¢' is the key the database seeds for
+    // a half dime, so that is the right answer here.
     expect(recordFor('1855 ½10¢ - NGC/CAC PF65').denomination).toBe('5¢');
   });
 
@@ -1114,10 +1063,10 @@ describe('his cent-sign spellings import as the coins they are', () => {
   });
 
   it('a QUARTER photo is never filed under a half dime again', () => {
-    /* The regression test for the silent mis-attachment itself. Before the
-     * ladder was reordered, "1871 ½10¢" and "1871 25¢" both claimed to be
-     * 1871 five-cent pieces, and the half-dime photographs were
-     * auto-attached to the quarter. */
+    /* The regression test for the silent mis-attachment itself. With the
+     * ladder in the wrong order, "1871 ½10¢" and "1871 25¢" both claim to be
+     * 1871 five-cent pieces, and the half-dime photographs are auto-attached
+     * to the quarter. */
     const results = service().matchImages(
       ['1871 25¢ - PCGS PF65CAM - Obverse.jpg', '1871 ½10¢ - PCGS PF65 - Obverse.jpg'],
       inventory

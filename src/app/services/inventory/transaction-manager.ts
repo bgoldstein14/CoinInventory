@@ -5,9 +5,9 @@ import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
 import { firstValueFrom } from 'rxjs';
 
-/* ===========================================================================
+ /*
  * TransactionManager
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   The buy/sell history rows attached to coins: adding one, deleting one,
  *   and clearing out a deleted coin's history.
@@ -19,7 +19,7 @@ import { firstValueFrom } from 'rxjs';
  *
  * The `transactions` signal belongs to InventoryService (it is public API);
  * this class is handed that same signal to read and write.
- * =========================================================================== */
+  */
 
 export class TransactionManager {
   constructor(

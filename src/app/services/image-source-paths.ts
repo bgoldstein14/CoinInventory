@@ -1,11 +1,9 @@
-/* ===========================================================================
+ /*
  * ImageSourcePathRegistry
- * ---------------------------------------------------------------------------
+ *
  * A side table: "for this displayed image, where did the original file live?"
  *
- * ---------------------------------------------------------------------------
- * THE PROBLEM IT SOLVES
- * ---------------------------------------------------------------------------
+ * ---- THE PROBLEM IT SOLVES ----
  * An image now has two pieces of information: the downscaled `data:` URL we
  * show, and the absolute path of the full-size original on the host machine.
  *
@@ -28,16 +26,29 @@
  *     imagePaths: [{ imageData: "data:...AAA", sourcePath: "\\\\srv\\pics\\a.jpg" },
  *                  { imageData: "data:...BBB", sourcePath: null }]
  *
- * ---------------------------------------------------------------------------
- * WHY THIS ALSO PREVENTS A DATA-LOSS BUG
- * ---------------------------------------------------------------------------
+ * ---- THIS IS AN OPTIMISATION, NOT THE SAFETY NET ----
  * `PUT /api/coins/:id` REPLACES a coin's whole image set (it deletes the rows
- * and re-inserts them). Any entry sent as a bare string comes back with
- * `SourcePath NULL`. So without this registry, re-ordering or deleting ONE
- * photo — both of which send the full `imagePaths` array — would quietly wipe
- * the recorded paths of every other photo on that coin. Enriching every
- * outgoing array from a single place means a path, once known, survives all of
- * those operations.
+ * and re-inserts them), and an entry sent as a bare string stores
+ * `SourcePath NULL`. So re-ordering or deleting ONE photo — both of which
+ * send the full `imagePaths` array — could wipe the recorded paths of every
+ * other photo on the coin.
+ *
+ * This registry alone cannot prevent that: it only knows a path if THIS
+ * browser session was told one, so after a reload, in a second tab, or for
+ * any other client it is empty. The guarantee lives on the SERVER, which
+ * before deleting the rows reads the existing (ImageData -> SourcePath)
+ * pairs and carries each one forward onto any incoming entry that supplies
+ * no path of its own — see `replaceImages()` in
+ * server/routes/coins/write-helpers.ts.
+ *
+ * So this registry saves the server a read and keeps the UI able to show a
+ * path it has just learned. Do not delete it, but do not treat it as the
+ * safety net either.
+ *
+ * One consequence worth knowing: `enrich()` fills unknown entries with an
+ * explicit `sourcePath: null`, and the server deliberately reads that as "I do
+ * not know" rather than "clear the stored path". Changing `enrich()` to send
+ * some other sentinel would break that contract.
  *
  * The registry is populated from both ends:
  *   - the batch import, which has just computed the path (see
@@ -48,7 +59,7 @@
  * in the database, and the next fetch re-populates it. `enrich()` degrades to
  * "sourcePath: null" for anything it has never been told about, which is the
  * same as the pre-existing behaviour.
- * =========================================================================== */
+  */
 
 import { signal } from '@angular/core';
 import { AttachedImage } from '../types/coin-image.model';

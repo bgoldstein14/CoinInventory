@@ -2,9 +2,8 @@
  * Tests for WHEN the busy indicator exists, as opposed to what it says
  * (import-progress.spec.ts covers the wording).
  *
- * ---------------------------------------------------------------------------
  * WHY THESE TESTS LOOK LIKE THEY ARE TESTING setTimeout
- * ---------------------------------------------------------------------------
+ *
  * The reported bug was "the screen was basically frozen with no indication
  * that anything was going on". There were two separate causes, and only one of
  * them is a missing indicator:

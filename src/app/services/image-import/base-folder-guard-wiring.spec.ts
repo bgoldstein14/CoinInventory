@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * base-folder-guard-wiring.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * base-folder-check.spec.ts proves the DECISION is right. This file proves the
  * decision is actually WIRED to the import — that `applyConfirmedMatches`
  * consults it, and that a refusal really does stop the database write.
@@ -17,7 +17,7 @@
  * every photo twice — so the guard had to be inserted AFTER that write rather
  * than before it. A test pins that, because the obvious refactor (check first,
  * then start) silently reopens the older bug.
- * =========================================================================== */
+  */
 
 import 'fake-indexeddb/auto';
 import '@angular/compiler';
@@ -106,7 +106,7 @@ async function selectOneFile(session: BatchImportSession) {
 
 describe('applyConfirmedMatches — the base-folder guard', () => {
   /**
-   * THE HEADLINE REGRESSION. This is the owner's bug, end to end: a base
+   * THE HEADLINE REGRESSION, end to end: a base
    * folder pointing at the app's own directory, a real selection, and an
    * import that must not happen.
    */

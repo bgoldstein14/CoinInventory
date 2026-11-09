@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * CoinImagePathsService
- * ---------------------------------------------------------------------------
+ *
  * "Where did this photo come from, and is that file still there?"
  *
  * Two questions, two endpoints, and a cache in front of both:
@@ -8,9 +8,7 @@
  *   GET  /api/coins/:id/images   the recorded sourcePath for each image
  *   POST /api/images/exists      does each of those files still exist
  *
- * ---------------------------------------------------------------------------
- * THE RULES THIS SERVICE ENFORCES
- * ---------------------------------------------------------------------------
+ * ---- THE RULES THIS SERVICE ENFORCES ----
  *  1. LAZY. Nothing is fetched until a coin is actually being viewed. The main
  *     coin list can be loaded without image payloads, and pulling the full
  *     base64 for every coin up front is exactly what that change was avoiding.
@@ -29,7 +27,7 @@
  *     we know nothing about the files, so the paths render as plain text. The
  *     alternative — showing every photo as gone whenever the server blinks —
  *     would be actively alarming and wrong.
- * =========================================================================== */
+  */
 
 import { Injectable, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
@@ -125,9 +123,7 @@ export class CoinImagePathsService {
     this.existenceByPath.set({});
   }
 
-  /* =========================================================================
-   * Internals
-   * ======================================================================= */
+  /* ---- Internals ---- */
 
   private async load(coinId: string): Promise<void> {
     let images: CoinImageRecord[];

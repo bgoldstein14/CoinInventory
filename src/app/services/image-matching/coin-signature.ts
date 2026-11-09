@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * coin-signature.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   STAGE 1 for the COIN side of the comparison:
  *     - `Signature`, the shared shape both sides of a comparison are reduced
@@ -9,6 +9,8 @@
  *     - `parseCoin`, which turns a CoinRecord's structured fields into a
  *       Signature,
  *     - `buildCoinSignatures`, the once-per-batch precompute,
+ *     - `denominationLabelSnapshot`, the id -> Label table the coin side is
+ *       resolved against,
  *     - `describeCoin`, the display label ("Morgan Dollar 1881-S").
  *
  * WHY IT IS ITS OWN FILE
@@ -22,7 +24,7 @@
  *   `Signature` lives here because it is the contract the rest of the matcher
  *   is written against, and this is the file that defines what a well-formed
  *   one looks like.
- * =========================================================================== */
+  */
 
 import { CoinRecord, StrikeKind } from '../../types/coin.model';
 import { foldCatalogRefs } from './catalog-refs';
@@ -40,9 +42,124 @@ import {
   tokenize
 } from './text-tokens';
 
-/* ===========================================================================
+ /*
+ * THE DENOMINATION LOOKUP, AS THE MATCHER IS ALLOWED TO SEE IT
+ *
+ * WHY THE COIN SIDE NEEDS A LOOKUP AT ALL
+ *   A coin carries two denomination fields and they are ALLOWED TO DISAGREE
+ *   (design §4.1):
+ *
+ *       Coins.DenominationId   the canonical link. NULL is ordinary.
+ *       Coins.Denomination     WHAT THE SOURCE SAID. Never rewritten by
+ *                              anything, including the migrations.
+ *
+ *   After an import they usually do disagree: the text goes on saying
+ *   `Pillar Dollar` while the id says `8 Reales`. Reading only the text gets
+ *   such a coin scored -- and VETOED -- against every photograph of a Dollar
+ *   in a collection that holds dozens. So the coin's id is resolved to its
+ *   label and the EXISTING string logic is fed that label unchanged (design
+ *   §6). Comparing ids on both sides would be better eventually; that is not
+ *   what this does.
+ *
+ * *** THE MATCHER DOES NOT PERFORM THE LOOKUP, AND MUST NOT. ***
+ *
+ *   It is handed a finished snapshot. That is not fastidiousness about
+ *   dependencies; it prevents a timing bug that would be invisible:
+ *
+ *     `BatchImageImportService.buildRows` matches in chunks of 200 filenames
+ *     and awaits a paint between them. If the coin side resolved its own
+ *     labels from a signal, a lookup response landing between two chunks
+ *     would match photographs 1-200 under one set of rules and 201-400 under
+ *     another -- one folder, two behaviours, nothing anywhere saying so.
+ *
+ *   So the snapshot is taken ONCE, before the loop, and `parseCoin` is a pure
+ *   function of its arguments. A lookup that has not returned yet is an EMPTY
+ *   snapshot, and an empty snapshot is the plain text-only matcher, never
+ *   some third behaviour. coin-denomination-label.spec.ts tests every one of
+ *   those statements.
+  */
+
+/**
+ * What this module needs of a denominations row, and nothing more.
+ *
+ * Structurally satisfied by `types/coin.model.ts`'s `Denomination` and by
+ * `services/denominations/denomination-index.ts`'s `IndexableDenomination`.
+ * Declared here rather than imported so the matcher keeps its long-standing
+ * freedom from the rest of the application -- these modules are pure and
+ * Node-testable, and that is what lets the whole suite run without jsdom.
+ */
+export interface LabelledDenomination {
+  denominationId: number;
+  label: string;
+  isActive: boolean;
+}
+
+/** `DenominationId` -> `Label`, for the ACTIVE rows of one lookup fetch. */
+export type DenominationLabels = ReadonlyMap<number, string>;
+
+/**
+ * Freeze the denominations lookup into the id -> Label table the coin side
+ * reads.
+ *
+ * *** SOFT-DELETED ROWS ARE LEFT OUT, DELIBERATELY. *** §4.4 retires a
+ * denomination with `IsActive = 0` and nulls the `DenominationId` of every
+ * coin using it, so a live id pointing at a retired row should not exist --
+ * but if one does, nothing may speak for that row. Leaving it out drops the
+ * coin back onto its recorded text, which is both the pre-change behaviour
+ * and what `denominationDisplay()` already shows the user for that coin
+ * ("the id ... no longer resolves to an active row" -> `Other (25¢)`).
+ */
+export function denominationLabelSnapshot(
+  rows: readonly LabelledDenomination[]
+): DenominationLabels {
+  const labels = new Map<number, string>();
+  for (const row of rows) {
+    if (row.isActive) labels.set(row.denominationId, row.label);
+  }
+  return labels;
+}
+
+/**
+ * THE ONE PLACE THE LABEL ENTERS THE MATCHER.
+ *
+ * Answers: which string should the denomination readers be given for this
+ * coin? The label when the coin is linked, the recorded text otherwise.
+ *
+ * WHY A BLANK `Coins.Denomination` IGNORES THE LABEL
+ *
+ * *** READ match-vetoes.ts UNDER "ONLY A STATED DISAGREEMENT" BEFORE
+ * CHANGING THIS. ***
+ *
+ * A denomination veto needs BOTH SIDES TO SAY SOMETHING. Silence is not
+ * disagreement, and a veto is far more destructive than a bad score: it
+ * removes the coin from the candidate list, so the user never sees it to
+ * correct it.
+ *
+ * An id beside a BLANK text is a state this application does not create. The
+ * editor's write rule sets both fields; §4.4 nulls the id and leaves the text
+ * alone; migration 014 resolves FROM the text and never writes it. So a blank
+ * text next to a live id is unexplained data, and the pessimistic reading is
+ * the right one -- a coin that recorded nothing goes on saying nothing, which
+ * costs the user a click instead of silently hiding the right coin.
+ *
+ * Whitespace counts as blank for the same reason it does in
+ * `denominationDisplay()`: a column that has held free text for years holds
+ * '   ' somewhere.
+ */
+function denominationTextOf(coin: CoinRecord, labels?: DenominationLabels | null): string {
+  const recorded = String(coin.denomination ?? '');
+  if (!recorded.trim()) return recorded;
+
+  const id = coin.denominationId;
+  if (id === null || id === undefined || !labels) return recorded;
+
+  const label = labels.get(id);
+  return label && label.trim() ? label : recorded;
+}
+
+ /*
  * Internal shapes
- * =========================================================================== */
+  */
 
 /** Attributes for ONE side of a comparison (a filename or a coin record). */
 export interface Signature {
@@ -65,12 +182,11 @@ export interface Signature {
    * proof-strike.ts, exactly once each. A stated proof-against-business
    * disagreement is a hard veto (match-vetoes.ts).
    *
-   * SAYING NOTHING IS SAYING 'business'. The owner: "The Proof descriptor
-   * should always be part of the image file name as well as part of the
-   * inventory description otherwise it's assumed the coin is a business
-   * strike." So this field is 'unknown' only when the side was EMPTY -- no
-   * type, no variety, no notes, no grade -- and 'unknown' is the only value
-   * that disagrees with nothing.
+   * SAYING NOTHING IS SAYING 'business'. The proof designation is always
+   * written into both the file name and the inventory description, so this
+   * field is 'unknown' only when the side was EMPTY -- no type, no variety,
+   * no notes, no grade -- and 'unknown' is the only value that disagrees with
+   * nothing.
    *
    * REMEMBER: a PROOFLIKE / PL / DMPL coin is 'business', not 'proof'. The
    * warning at the top of proof-strike.ts explains why that matters so much.
@@ -93,9 +209,7 @@ export interface CoinSignature {
  * and it is the only thing the user reads when deciding whether a photo
  * belongs to this coin. Without the grade it is often not enough to tell two
  * records apart: a collection can hold an 1876 20¢ in XF45 and another in
- * MS63, and "Twenty Cent 1876" names both of them identically. The owner hit
- * exactly that while reviewing a folder of 20¢ photos and asked for the
- * header to be more complete.
+ * MS63, and "Twenty Cent 1876" names both of them identically.
  *
  * The grading company matters alongside the grade for the same reason —
  * "PCGS XF45" and "NGC XF45" are different slabs — and because the filenames
@@ -141,21 +255,20 @@ export function formatYear(signature: Signature): string {
 /* ===========================================================================
  * COUNTERFEIT RECORDS AND THE AUTOMATED CANDIDATE POOL
  * ---------------------------------------------------------------------------
- * "Ignore the Fake coins" cuts BOTH ways, and the second way is the one that
- * is easy to miss.
+ * "Ignore the fake coins" cuts BOTH ways, and the second way is easy to miss.
  *
  * The obvious half is the photograph: a picture of a counterfeit must not be
  * filed under a genuine coin (non-coin-detector.ts owns that). The other half
- * is the RECORD. The owner holds three counterfeits as inventory rows --
+ * is the RECORD. This collection holds counterfeits as inventory rows --
  *
  *     1860 3CS - VF - FAKE
  *     1861 3CS - XF - FAKE
  *     1861 3CS - XF45 - FAKE
  *
- * -- and he also holds five GENUINE 1861 three-cent silvers. Leave the fakes
- * in the candidate pool and a photograph of a real 1861 3CS can auto-attach
- * to "1861 3CS - XF45 - FAKE", which is the identical error pointing the
- * other way.
+ * -- alongside five GENUINE 1861 three-cent silvers. Leave the fakes in the
+ * candidate pool and a photograph of a real 1861 3CS can auto-attach to
+ * "1861 3CS - XF45 - FAKE", which is the identical error pointing the other
+ * way.
  *
  * *** WHY THE FILTER IS HERE AND NOWHERE LOWER DOWN. ***
  * `buildCoinSignatures` is called from exactly one place in the application:
@@ -170,15 +283,11 @@ export function formatYear(signature: Signature): string {
  *     sorting, reports, totals and melt values never touch this function;
  *   - the per-coin image gallery's add-images path never touches it either.
  *
- * The owner drew that boundary himself:
- *
- *   "I should be able to manually add a Fake coin to my inventory, just don't
- *    worry about automating such a thing."
- *
- * Putting the filter one level lower -- in the inventory service, or in
- * `searchCoins` -- would have taken his fakes out of the manual search too,
- * and the manual search is the escape hatch his whole answer depends on.
- * There is a test pinning that asymmetry.
+ * A fake coin may be added to the inventory by hand; it is only the
+ * AUTOMATION that ignores it. Putting the filter one level lower -- in the
+ * inventory service, or in `searchCoins` -- would take fakes out of the
+ * manual search too, and the manual search is the escape hatch the whole rule
+ * depends on. There is a test pinning that asymmetry.
  * ========================================================================= */
 
 /**
@@ -186,7 +295,7 @@ export function formatYear(signature: Signature): string {
  *
  * `securityName` is not on {@link CoinRecord}; it is carried by the Quicken
  * importer's own record shape, and for this collection it is THE ONLY place
- * the word survives. His three fakes import with denomination "3CS", coinType
+ * the word survives. The fakes import with denomination "3CS", coinType
  * "Three Cent Silver" and grades "VF" / "XF" / "XF45" -- every declared field
  * identical to a genuine coin -- and the "FAKE" that distinguishes them lives
  * only in the raw Quicken security name. So it is read defensively here
@@ -194,7 +303,7 @@ export function formatYear(signature: Signature): string {
  *
  * *** `notes` IS DELIBERATELY ABSENT. ***
  * It holds the Quicken transaction memo, which is prose about dealers and
- * history rather than a descriptor of the coin, and his real data contains
+ * history rather than a descriptor of the coin, and the real data contains
  * exactly the trap that matters:
  *
  *     "Sent 1860 PCI PF 3CS to a dealer (exchange for 1861 3CS FAKE)"
@@ -235,14 +344,23 @@ export function isCounterfeitRecord(coin: CoinRecord): boolean {
  *
  * Counterfeit records are dropped here -- see the long note above for why
  * this function, and only this function, is the right place for that.
+ *
+ * @param labels the id -> Label snapshot, taken ONCE for the whole import.
+ *   Optional, and absent is not an error: an unlinked collection, or a
+ *   denominations lookup that has not returned, parses exactly the way it
+ *   did before `DenominationId` existed. See the header of this file for why
+ *   this is a parameter and not a lookup performed in here.
  */
-export function buildCoinSignatures(inventory: CoinRecord[]): CoinSignature[] {
+export function buildCoinSignatures(
+  inventory: CoinRecord[],
+  labels?: DenominationLabels | null
+): CoinSignature[] {
   return inventory
     .filter(coin => !isCounterfeitRecord(coin))
     .map(coin => ({
       coin,
       label: describeCoin(coin),
-      signature: parseCoin(coin)
+      signature: parseCoin(coin, labels)
     }));
 }
 
@@ -253,8 +371,13 @@ export function buildCoinSignatures(inventory: CoinRecord[]): CoinSignature[] {
  * denomination: many records leave `denomination` blank and stuff everything
  * into `coinType` ("Mercury Dime"), so if `denomination` gives us nothing we
  * look for a denomination inside the type text instead.
+ *
+ * @param labels optional id -> Label snapshot. When the coin is linked, the
+ *   denomination READERS are given the lookup's Label instead of the source
+ *   text; everything else about the parse is untouched. See the header of
+ *   this file, and `denominationTextOf` for the blank-text carve-out.
  */
-export function parseCoin(coin: CoinRecord): Signature {
+export function parseCoin(coin: CoinRecord, labels?: DenominationLabels | null): Signature {
   // -- year (supports "1881", "1916-1945", "c. 1881") --------------------
   const yearMatches = [...String(coin.year ?? '').matchAll(/\d{4}/g)].map(m => Number(m[0]));
   const validYears = yearMatches.filter(y => isPlausibleYear(y));
@@ -284,13 +407,36 @@ export function parseCoin(coin: CoinRecord): Signature {
    * This is only safe on a RECORD, never on a filename: a denomination COLUMN
    * reading "50 Cents" cannot be anything else, whereas a filename saying the
    * same words might be a stamp or a price. See the header of
-   * denomination-units.ts for that distinction. */
+   * denomination-units.ts for that distinction.
+   *
+   * ---------------------------------------------------------------------
+   * *** WHICH STRING THE TWO READERS ARE GIVEN ***
+   * ---------------------------------------------------------------------
+   * `denominationTextOf` answers that: the Label the coin's `denominationId`
+   * points at when it is linked, the recorded text when it is not. The
+   * readers themselves, the word table, `denominationsAgree`, the vetoes and
+   * every threshold are untouched by the substitution.
+   *
+   * `denomTokens` DELIBERATELY STILL COMES FROM THE RECORDED TEXT. It is not
+   * an input to the identity of the coin; it is token EVIDENCE, and it is the
+   * evidence the filenames actually carry. A photo is named
+   * "1753 Pillar Dollar (8 Reales) - Obverse.jpg"; nobody types a bare
+   * "8 Reales" into a filename for a record they call a Pillar Dollar.
+   * Replacing the text wholesale would delete 'pillar' from the coin's tokens
+   * and from the unrecognised-wording fallback below, and the photograph
+   * would lose the only words still tying it to the record. The label is
+   * authoritative about WHICH DENOMINATION; it is not a better record of what
+   * the source said, and §4.1 keeps both for that reason. */
   const denomTokens = tokenize(coin.denomination ?? '');
+  const denominationText = denominationTextOf(coin, labels);
+  const readerTokens =
+    denominationText === (coin.denomination ?? '') ? denomTokens : tokenize(denominationText);
+
   let denomination: { key: string; label: string } | null =
-    readTrustedDenominationText(coin.denomination ?? '');
+    readTrustedDenominationText(denominationText);
 
   if (!denomination) {
-    denomination = findDenomination(denomTokens);
+    denomination = findDenomination(readerTokens);
   }
 
   const typeText = [coin.coinType, coin.variety].filter(Boolean).join(' ');
@@ -330,7 +476,13 @@ export function parseCoin(coin: CoinRecord): Signature {
    *
    * The weight text is the denomination and type fields joined, so a record
    * whose type reads "Gold Eagle 1/4 oz" resolves to the $10 quarter-ounce
-   * rather than the $50 default. See reference-tables.ts. */
+   * rather than the $50 default. See reference-tables.ts.
+   *
+   * THE RECORDED TEXT IS DELIBERATELY WHAT IS SEARCHED HERE, not the
+   * resolved label. This argument is hunting for a BULLION WEIGHT ("1/4 oz",
+   * "1/10 oz"), and a lookup Label is a short canonical token -- '$10',
+   * '50¢' -- that has never carried one. Reading the label instead could only
+   * delete a weight the record really stated. */
   denomination = resolveEagleSeries(
     denomination,
     year,
@@ -358,7 +510,13 @@ export function parseCoin(coin: CoinRecord): Signature {
     yearRangeEnd,
     mintMark,
     denomination: denomination?.key ?? null,
-    denominationLabel: denomination?.label ?? (coin.denomination || null),
+    /* DISPLAY ONLY -- the scorer never compares this, it only quotes it in
+     * the sentence the user reads. It falls back to the AUTHORITATIVE text
+     * rather than the recorded one, so a coin the matcher cannot read is
+     * still named to the user the way the rest of the application names it:
+     * "denomination Dollar ($1) does not match 8 Reales", not
+     * "... does not match Pillar Dollar". */
+    denominationLabel: denomination?.label ?? (denominationText || null),
     coinTypeTokens,
     // Normalized so "MS-63", "MS 63" and "ms63" all compare equal to the
     // "MS63" a filename would carry. See grade-parser.normalizeGrade.
@@ -371,17 +529,14 @@ export function parseCoin(coin: CoinRecord): Signature {
      * The grade decides whenever it can ("PF65RB" is a proof, "MS63" is not),
      * and only a record with NO grade falls back on its descriptive text. A
      * record that has both and mentions neither proof nor SP is a BUSINESS
-     * STRIKE: the owner said the designation "should always be part of ...
-     * the inventory description otherwise it's assumed the coin is a business
-     * strike", so this is the inventory half of his sentence.
+     * STRIKE -- this is the inventory half of the silence-is-a-statement rule
+     * in proof-strike.ts.
      *
-     * `notes` is included because the owner said the proof designation "will
-     * always be in the file and image descriptors", and on an ungraded record
-     * the notes are often the only descriptor there is. It is also the one
-     * free-text field here, so if a correct match is ever vetoed as
-     * proof-against-business, the notes are the first place to look. The
-     * grade-first ordering keeps the blast radius small: a graded coin's
-     * notes cannot override its slab. */
+     * `notes` is included because on an ungraded record the notes are often
+     * the only descriptor there is. It is also the one free-text field here,
+     * so if a correct match is ever vetoed as proof-against-business, the
+     * notes are the first place to look. The grade-first ordering keeps the
+     * blast radius small: a graded coin's notes cannot override its slab. */
     strike: detectStrike(
       [coin.coinType, coin.variety, coin.notes].filter(Boolean).join(' '),
       coin.grade

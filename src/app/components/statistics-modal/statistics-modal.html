@@ -1,0 +1,362 @@
+<!--
+  The Statistics dialog.
+
+  EVERY FIGURE IN HERE IS ALREADY A STRING by the time it arrives. No pipe, no
+  `| currency`, no `toFixed`, no arithmetic anywhere in this template: the
+  suite runs under Node with no jsdom, so anything decided here is decided
+  where no test can see it. The component maps the pure statistics modules
+  onto `StatTile`s and pre-laid-out SVG geometry; this file only places them.
+
+  That matters most for the dash. `formatStatMoney(null)` is "—", and a
+  currency pipe would have turned the same null into "$0.00" — the exact lie
+  the whole screen exists to avoid.
+-->
+<div class="modal-backdrop" (click)="close()">
+  <div class="modal modal--wide stats" (click)="$event.stopPropagation()" role="dialog" aria-label="Collection statistics">
+    <div class="modal-header">
+      <h2>Statistics</h2>
+      <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
+    </div>
+
+    <div class="modal-body">
+      <!--
+        NOTHING BELOW THIS POINT MAY BE SHOWN BEFORE THE COINS ARRIVE.
+
+        Every figure on this screen is computed over `inv.inventory()`,
+        which is an empty array until hydration finishes. Rendered then,
+        the screen states with complete confidence that the collection is
+        worth $0.00 and holds no gold — something the app does not know.
+        `notReadyNotice()` is non-null exactly while that is the case.
+
+        The modal-actions row stays OUTSIDE this guard: the close button
+        has to work whatever the connection is doing.
+      -->
+      @if (notReadyNotice(); as notice) {
+        <p class="empty-state">{{ notice }}</p>
+      } @else {
+
+        <section class="stats-section stats-hero-block">
+          <p class="stats-hero-label">Total current value</p>
+          <p class="stats-hero">{{ hero().value }}</p>
+          @if (hero().note) {
+            <p class="stats-gap">{{ hero().note }}</p>
+          }
+        </section>
+
+        <!-- Stat tiles, not a bar chart: these are unrelated headline numbers
+             in different units, and charting them would compare dollars with
+             coins. -->
+        <section class="stats-section">
+          <div class="stat-tiles">
+            @for (tile of headlineTiles(); track tile.label) {
+              <div class="stat-tile">
+                <p class="stat-tile__label">{{ tile.label }}</p>
+                <p
+                  class="stat-tile__value"
+                  [class.gain]="tile.tone === 'gain'"
+                  [class.loss]="tile.tone === 'loss'"
+                >{{ tile.value }}</p>
+                @if (tile.detail) {
+                  <p class="stat-tile__detail">{{ tile.detail }}</p>
+                }
+                @if (tile.note) {
+                  <p class="stats-gap">{{ tile.note }}</p>
+                }
+              </div>
+            }
+          </div>
+        </section>
+
+        <!-- Tiles rather than bars: a bar chart of gold against silver grams
+             is one whose largest bar is always the cheapest metal. -->
+        <section class="stats-section">
+          <h3 class="stats-heading">Precious metal held</h3>
+          <p class="hint-text">
+            Pure metal only — the <strong>PM Weight (g)</strong> field, not the coin's
+            gross weight.
+          </p>
+
+          @if (metalTiles().length > 0) {
+            <div class="stat-tiles">
+              @for (tile of metalTiles(); track tile.label) {
+                <div class="stat-tile">
+                  <p class="stat-tile__label">{{ tile.label }}</p>
+                  <p class="stat-tile__value">{{ tile.value }}</p>
+                  @if (tile.detail) {
+                    <p class="stat-tile__detail">{{ tile.detail }}</p>
+                  }
+                  @if (tile.note) {
+                    <p class="stats-gap">{{ tile.note }}</p>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <p class="empty-state">No coin in the collection is recorded as gold, silver, platinum or copper.</p>
+          }
+
+          @for (note of metalNotes(); track $index) {
+            <p class="stats-gap">{{ note }}</p>
+          }
+        </section>
+
+        <!-- COMPOSITION — ranked horizontal bars, one hue.
+
+             RANKED BARS, NOT A PIE OR A DONUT. Bars sharing one baseline let
+             the reader compare and rank the parts exactly; a ring of segments
+             does not, and falls apart past about six parts. The tail past ten
+             rows folds into a single "Other" bar in the de-emphasis grey, so
+             it never reads as a category of its own.
+
+             ONE HUE FOR EVERY BAR. These categories (denominations, countries,
+             grades) have no natural order, so shading each bar
+             darker-where-bigger would double-encode length as colour and make
+             a nominal scale look ranked. -->
+        <section class="stats-section">
+          <h3 class="stats-heading">Composition</h3>
+
+          <div class="stats-controls">
+            <label class="stats-control">
+              <span>Break down by</span>
+              <select
+                [value]="dimension()"
+                (change)="setDimension($any($event.target).value)"
+                aria-label="Break down by"
+              >
+                @for (option of dimensionOptions; track option.key) {
+                  <option [value]="option.key">{{ option.label }}</option>
+                }
+              </select>
+            </label>
+
+            <div class="stats-segmented" role="group" aria-label="Measure">
+              <button
+                type="button"
+                class="small-button"
+                [class.secondary]="metric() !== 'count'"
+                [attr.aria-pressed]="metric() === 'count'"
+                (click)="setMetric('count')"
+              >Coins</button>
+              <button
+                type="button"
+                class="small-button"
+                [class.secondary]="metric() !== 'value'"
+                [attr.aria-pressed]="metric() === 'value'"
+                (click)="setMetric('value')"
+              >Value</button>
+            </div>
+          </div>
+
+          @if (barChart().bars.length > 0) {
+            <div class="chart-scroll">
+              <svg
+                class="chart"
+                [attr.width]="barChartWidth"
+                [attr.height]="barChart().height"
+                role="img"
+                [attr.aria-label]="'Coins by ' + dimensionLabel()"
+              >
+                <!-- The baseline every bar grows from. Never dashed: a dashed
+                     line reads as a threshold rather than as chrome. -->
+                <line
+                  class="chart-axis"
+                  [attr.x1]="barChart().plotLeft"
+                  [attr.y1]="0"
+                  [attr.x2]="barChart().plotLeft"
+                  [attr.y2]="barChart().height"
+                />
+
+                @for (bar of barChart().bars; track bar.label; let i = $index) {
+                  <!-- Hit target first so the painted marks sit above it. It
+                       spans the whole row and is at least 24px tall, because a
+                       16px bar is a pinpoint nobody lands on reliably. -->
+                  <rect
+                    class="chart-hit"
+                    [attr.x]="bar.hitX"
+                    [attr.y]="bar.hitY"
+                    [attr.width]="bar.hitWidth"
+                    [attr.height]="bar.hitHeight"
+                    tabindex="0"
+                    (pointerenter)="onBarFocus(i)"
+                    (pointerleave)="onBarBlur()"
+                    (focus)="onBarFocus(i)"
+                    (blur)="onBarBlur()"
+                  >
+                    <title>{{ bar.label }}: {{ bar.valueText }}</title>
+                  </rect>
+
+                  <text
+                    class="chart-label"
+                    [attr.x]="barChartLabelWidth - 10"
+                    [attr.y]="bar.centerY"
+                    text-anchor="end"
+                    dominant-baseline="middle"
+                  >{{ barLabels()[i].text }}</text>
+
+                  <!-- A zero draws no path at all: `barPath` returns an empty
+                       string, and a <path> with no `d` paints nothing. A
+                       hairline here would read as a small value. -->
+                  @if (bar.path) {
+                    <path
+                      class="chart-bar"
+                      [attr.d]="bar.path"
+                      [class.chart-bar--other]="bar.label === otherLabel"
+                      [class.chart-bar--active]="activeBarIndex() === i"
+                    />
+                  }
+
+                  <!-- Placed by the geometry: outside the tip if the reserved
+                       gutter holds it, inside the bar end if it fits there,
+                       and NOT DRAWN if neither — the readout below carries
+                       it. Never clipped. -->
+                  @if (bar.valueVisible) {
+                    <text
+                      [class]="bar.valueInside ? 'chart-value chart-value--inside' : 'chart-value'"
+                      [attr.x]="bar.valueX"
+                      [attr.y]="bar.centerY"
+                      [attr.text-anchor]="bar.valueAnchor"
+                      dominant-baseline="middle"
+                    >{{ bar.valueText }}</text>
+                  }
+                }
+              </svg>
+            </div>
+
+            <!-- The hover/focus readout. A live region rather than a floating
+                 box, so keyboard focus announces exactly what hover shows. -->
+            <p class="chart-readout" aria-live="polite">{{ barReadout() ?? ' ' }}</p>
+          } @else {
+            <p class="empty-state">No coin has a {{ dimensionLabel().toLowerCase() }} recorded.</p>
+          }
+
+          @if (breakdownNote()) {
+            <p class="stats-gap">{{ breakdownNote() }}</p>
+          }
+          @if (otherNote()) {
+            <p class="hint-text">{{ otherNote() }}</p>
+          }
+        </section>
+
+        <!-- One series, so no legend box — the heading already names what is
+             plotted. One direct label, at the end of the line; the axis and
+             the crosshair carry the rest. -->
+        <section class="stats-section">
+          <h3 class="stats-heading">Cumulative spend</h3>
+
+          @if (hasSpendCurve()) {
+            <div class="chart-scroll">
+              <svg
+                class="chart"
+                [attr.width]="spendChartWidth"
+                [attr.height]="spendChartHeight"
+                tabindex="0"
+                role="img"
+                aria-label="Cumulative spend by purchase date. Use the left and right arrow keys to read each point."
+                (pointermove)="onPlotMove($event)"
+                (pointerleave)="onPlotLeave()"
+                (keydown)="onPlotKey($event)"
+              >
+                @for (tick of spendChart().yTicks; track tick.value) {
+                  <line
+                    class="chart-grid"
+                    [attr.x1]="spendChart().plotLeft"
+                    [attr.y1]="tick.y"
+                    [attr.x2]="spendChart().plotRight"
+                    [attr.y2]="tick.y"
+                  />
+                }
+                @for (label of spendYLabels(); track $index) {
+                  <text
+                    class="chart-tick"
+                    [attr.x]="spendChart().plotLeft - 8"
+                    [attr.y]="label.y"
+                    text-anchor="end"
+                    dominant-baseline="middle"
+                  >{{ label.text }}</text>
+                }
+                @for (label of spendXLabels(); track $index) {
+                  <text
+                    class="chart-tick"
+                    [attr.x]="label.x"
+                    [attr.y]="spendChart().plotBottom + 18"
+                    text-anchor="middle"
+                  >{{ label.text }}</text>
+                }
+
+                <path class="chart-area" [attr.d]="spendChart().areaPath" />
+                <path class="chart-line" [attr.d]="spendChart().linePath" />
+
+                @if (crosshairX() !== null) {
+                  <line
+                    class="chart-crosshair"
+                    [attr.x1]="crosshairX()"
+                    [attr.y1]="spendChart().plotTop"
+                    [attr.x2]="crosshairX()"
+                    [attr.y2]="spendChart().plotBottom"
+                  />
+                }
+
+                @if (spendEndLabel(); as end) {
+                  <circle class="chart-dot" [attr.cx]="end.x" [attr.cy]="end.y" r="4" />
+                  <text
+                    class="chart-value"
+                    [attr.x]="end.x - 8"
+                    [attr.y]="end.y - 10"
+                    text-anchor="end"
+                  >{{ end.text }}</text>
+                }
+              </svg>
+            </div>
+
+            <p class="chart-readout" aria-live="polite">{{ activeSpendReadout() ?? ' ' }}</p>
+
+            <!-- The table twin: a tooltip must never be the only way to read
+                 a value, so every figure on the curve stays reachable with no
+                 pointer at all. -->
+            <button type="button" class="secondary small-button" (click)="toggleSpendTable()">
+              {{ showSpendTable() ? 'Hide figures' : 'Show figures' }}
+            </button>
+            @if (showSpendTable()) {
+              <table class="stats-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Date</th>
+                    <th scope="col">Coins</th>
+                    <th scope="col">Spend</th>
+                    <th scope="col">Cumulative</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of spendTableRows(); track row.date) {
+                    <tr>
+                      <td>{{ row.date }}</td>
+                      <td class="numeric">{{ row.coins }}</td>
+                      <td class="numeric">{{ row.spend }}</td>
+                      <td class="numeric">{{ row.cumulative }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            }
+          } @else {
+            <p class="empty-state">
+              No coin has both a purchase date and a purchase price recorded, so there is
+              nothing to plot.
+            </p>
+          }
+
+          @for (note of spendNotes(); track $index) {
+            <p class="stats-gap">{{ note }}</p>
+          }
+
+          <!-- Unconditional. See VALUE_HISTORY_NOTE in the component. -->
+          <p class="hint-text">{{ valueHistoryNote() }}</p>
+        </section>
+
+      }
+      <div class="modal-actions">
+        <button type="button" (click)="close()">Done</button>
+      </div>
+    </div>
+  </div>
+</div>

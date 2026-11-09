@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * pm-reference.ts — WHAT IS THIS COIN MADE OF?
- * ---------------------------------------------------------------------------
+ *
  * ONE table, TWO questions:
  *
  *   1. "How much precious metal is in it?"   -> lookupPmData()
@@ -11,12 +11,8 @@
  *      Feeds the FIVE editor fields every import path is supposed to
  *      pre-fill:  Metal / Composition / PM % / PM weight / Weight.
  *      Answers for EVERY coin in the table, precious or base metal.
- *      (It was four fields until gross Weight was promoted from a prose
- *      comment to a real column — see the UNITS section below.)
  *
- * ---------------------------------------------------------------------------
- * THE GOVERNING PRINCIPLE: WHEN IN DOUBT, ANSWER NOTHING
- * ---------------------------------------------------------------------------
+ * ---- THE GOVERNING PRINCIPLE: WHEN IN DOUBT, ANSWER NOTHING ----
  * This project already follows that rule for image matching ("only assume a
  * match if it is very close, otherwise let the user decide"). The same rule
  * applies here, and for a sharper reason:
@@ -42,9 +38,7 @@
  * UNLESS the caller passes a `metalHint`, because the security name said
  * "Gold" or "G$1" out loud.
  *
- * ---------------------------------------------------------------------------
- * UNITS -- READ THIS BEFORE ADDING A ROW
- * ---------------------------------------------------------------------------
+ * ---- UNITS -- READ THIS BEFORE ADDING A ROW ----
  * `pmWeightGrams` is the weight of the PURE PRECIOUS METAL, in grams. It is
  * NOT the weight of the coin.
  *
@@ -77,16 +71,11 @@
  * producing a wrong melt value. (The tolerance is 0.01 g, because
  * `pmWeightGrams` is published rounded to two decimals -- see the spec.)
  *
- * Gross weight used to live only in PROSE in the comments of this file
- * ("1.672 g gross", "5.015 g gross", "11.50 g gross"). Nothing could read it,
- * so the coin editor's Weight field came up empty on every imported coin. It
- * is now data.
- *
  * *** UNITS: GRAMS, NOT TROY OUNCES ***
  * `CoinRecord.weight` was a count of TROY OUNCES until migration 008 and is a
  * count of GRAMS afterwards. This column is grams, which is what makes it
  * directly comparable with -- and divisible by -- pmWeightGrams.
- * =========================================================================== */
+  */
 
 /**
  * The canonical "Metal" values. These are not free text: the coin editor
@@ -167,9 +156,9 @@ export interface PmEntry {
  * boundary year is assigned to one side and the reasoning is in a comment.
  */
 const PM_REFERENCE_DATA: PmEntry[] = [
-  /* =========================================================================
+   /*
    * UNITED STATES — GOLD
-   * -------------------------------------------------------------------------
+   *
    * US gold went through THREE standards, and the year is the only thing that
    * tells them apart, so each denomination needs up to three rows:
    *
@@ -185,7 +174,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
    * Note how little the PURE weight moved across 1834->1839 for the $5 and
    * $2.50: the 1834 Act cut the planchet, and the 1837 Act then raised the
    * fineness by almost exactly the offsetting amount.
-   * ===================================================================== */
+    */
 
   // --- Gold Dollar (1849-1889 only) ---------------------------------------
   // The whole series shares one specification: 1.672 g gross, 0.900 fine.
@@ -255,7 +244,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     composition: '90% Gold, 10% Copper',
     pmWeightGrams: 4.52,
     pmPercent: 90,
-    // The 5.015 g that the comment above has always quoted, now readable.
+    // 5.015 g gross x 0.900 = 4.5135 g of gold.
     grossWeightGrams: 5.015,
     pmDescription: '0.1452 oz AGW',
     country: 'United States'
@@ -338,15 +327,15 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     composition: '90% Gold, 10% Copper',
     pmWeightGrams: 30.09,
     pmPercent: 90,
-    // The 33.436 g quoted in this file's header, now readable as data.
+    // 33.436 g gross x 0.900 = 30.09 g of gold.
     grossWeightGrams: 33.436,
     pmDescription: '0.9675 oz AGW',
     country: 'United States'
   },
 
-  /* =========================================================================
+   /*
    * UNITED STATES — SILVER
-   * -------------------------------------------------------------------------
+   *
    * Three weight standards for the subsidiary silver (dime / quarter / half):
    *
    *   1792 Act   0.8924 fine on a heavy planchet.
@@ -364,7 +353,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
    * the quarter outright. There is no gradual change and no overlap: a 1964
    * quarter is 90% silver and a 1965 quarter has none. That is why every
    * silver row below stops dead at 1964.
-   * ===================================================================== */
+    */
 
   // --- Silver Dollar (1794-1935) ------------------------------------------
   // One row covers the whole run because the 1792 and 1837 standards give the
@@ -382,7 +371,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     composition: '90% Silver, 10% Copper',
     pmWeightGrams: 24.06,
     pmPercent: 90,
-    /* ---------------------------------------------------------------------
+     /*
      * 26.73 g is the 1837-onward planchet: the Bust, Seated, Trade (near
      * enough), Morgan and Peace dollars -- i.e. everything a collection is
      * realistically going to contain. The 1794-1803 dollars were 26.96 g at
@@ -393,7 +382,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
      * 1837 standard rather than the 1792 one. The two standards were chosen
      * precisely so the PURE silver content came out the same (24.06 g either
      * way), which is why one row can cover both at all.
-     * ------------------------------------------------------------------- */
+      */
     grossWeightGrams: 26.73,
     pmDescription: '0.7734 oz ASW',
     country: 'United States'
@@ -465,8 +454,8 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     yearRange: { min: 1971, max: 2100 },
     metal: 'Clad',
     composition: 'Copper-Nickel clad (75% Cu / 25% Ni over pure copper core)',
-    // No precious metal, but it still has a weight, and the owner wants the
-    // Weight field filled wherever it is known.
+    // No precious metal, but it still has a weight: Weight is filled in
+    // wherever it is known.
     grossWeightGrams: 11.34,
     country: 'United States'
   },
@@ -677,19 +666,19 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     country: 'United States'
   },
 
-  /* =========================================================================
+   /*
    * UNITED STATES — BASE METAL
-   * -------------------------------------------------------------------------
+   *
    * These carry NO pmWeightGrams and NO pmPercent, on purpose. A bronze cent
    * has no melt value worth tracking, and leaving those two fields absent is
    * what makes `lookupPmData` correctly answer "null" for it while
    * `lookupCoinAlloy` still fills in Metal and Composition.
    *
    * They DO carry `grossWeightGrams`, though. A cent has a weight even when
-   * it has no melt value, and the owner asked for the Weight field to be
-   * filled in wherever the figure is known. It feeds nothing but the display,
-   * so there is no arithmetic for it to get wrong.
-   * ===================================================================== */
+   * it has no melt value, and Weight is filled in wherever the figure is
+   * known. It feeds nothing but the display, so there is no arithmetic for
+   * it to get wrong.
+    */
 
   // --- Five Cents, the NICKEL (1866 onward) -------------------------------
   // Every five-cent piece from 1866 to today weighs exactly 5.00 g, including
@@ -737,7 +726,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     yearRange: { min: 1793, max: 1857 },
     metal: 'Copper',
     composition: '100% Copper (large cent)',
-    /* -------------------------------------------------------------------
+     /*
      * *** NO GROSS WEIGHT, AND NOT BECAUSE IT IS UNKNOWN ***
      * It is known twice over, and that is the problem. The large cent was
      * struck on TWO planchets:
@@ -753,7 +742,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
      * `lookupCoinAlloy`'s matching behaviour, which this change is not
      * allowed to do. So the field is left absent, per the standing rule at
      * the top of this file: when in doubt, answer nothing.
-     * ----------------------------------------------------------------- */
+      */
     country: 'United States'
   },
   {
@@ -866,16 +855,16 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     country: 'United States'
   },
 
-  /* =========================================================================
+   /*
    * GREAT BRITAIN
-   * -------------------------------------------------------------------------
+   *
    * Two cliffs, both abrupt:
    *   1920  sterling (92.5%) halved to 50% silver, to pay for the Great War.
    *   1947  silver removed entirely; the same denominations continued in
    *         cupronickel.
    * The Sovereign is untouched by either -- it has been 22 carat (91.67%)
    * gold without interruption since 1817.
-   * ===================================================================== */
+    */
 
   // --- Gold ---------------------------------------------------------------
   {
@@ -917,7 +906,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
    * That invariance is what makes the arithmetic in the 1920-1946 block below
    * work out so neatly, and it is a useful cross-check: a British silver
    * coin's gross weight depends only on its DENOMINATION, never on its date.
-   * ---------------------------------------------------------------------- */
+    */
   {
     denomination: 'Crown',
     yearRange: { min: 1707, max: 1919 },
@@ -1055,9 +1044,9 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     country: 'Great Britain'
   },
 
-  /* =========================================================================
+   /*
    * PERU — the 1950-1970 gold Soles series
-   * -------------------------------------------------------------------------
+   *
    * Added because this collection actually contains one: the security name
    * "1969 Peru 100 Soles - NGC MS64", whose own Quicken memo reads
    * "1.3544 ounces of gold" -- which is exactly the published AGW below, so
@@ -1068,7 +1057,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
    * scaling linearly with the face value (the 100 Soles is 46.8069 g, the
    * 50 Soles exactly half that, and so on).
    *   46.8069 g x 0.900 = 42.13 g of gold = 1.3544 oz AGW.
-   * ===================================================================== */
+    */
   {
     denomination: '100 Soles',
     yearRange: { min: 1950, max: 1970 },
@@ -1076,9 +1065,7 @@ const PM_REFERENCE_DATA: PmEntry[] = [
     composition: '90% Gold, 10% Copper',
     pmWeightGrams: 42.13,
     pmPercent: 90,
-    // 46.8069 g, the figure the comment above quotes. Confirmed against the
-    // owner's own Quicken memo ("1.3544 ounces of gold"): 46.8069 x 0.900 =
-    // 42.13 g, and 42.13 / 31.1035 = 1.3544 oz.
+    // 46.8069 g x 0.900 = 42.13 g, and 42.13 / 31.1035 = 1.3544 oz AGW.
     grossWeightGrams: 46.8069,
     pmDescription: '1.3544 oz AGW',
     country: 'Peru'

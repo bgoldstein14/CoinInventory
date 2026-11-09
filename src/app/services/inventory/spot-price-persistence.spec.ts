@@ -6,9 +6,9 @@ import { of, throwError } from 'rxjs';
 import { CoinRecord } from '../../types/coin.model';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-/* ===========================================================================
+ /*
  * Spot price persistence — the plumbing that makes melt value actually work
- * ---------------------------------------------------------------------------
+ *
  * The melt ARITHMETIC was correct and tested long before any of this existed;
  * what was missing was everything around it. Prices were never written to the
  * database, never read back at start-up, and so reset to zero on every launch,
@@ -21,7 +21,7 @@ import { createTestInventoryService } from '../../testing/test-helpers';
  *
  * So the tests below care as much about when we DON'T save as when we do. A
  * save wired into the price setter would have written one row per keystroke.
- * =========================================================================== */
+  */
 
 /** A complete CoinRecord, overridable per test. */
 function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
@@ -50,9 +50,7 @@ describe('spot price persistence', () => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  // ==========================================================================
-  // B. Loading saved prices at start-up
-  // ==========================================================================
+  // ---- B. Loading saved prices at start-up ----
 
   describe('hydrate() loads saved spot prices', () => {
     it('applies the newest saved row so melt values work from the first second', async () => {
@@ -175,9 +173,7 @@ describe('spot price persistence', () => {
     });
   });
 
-  // ==========================================================================
-  // C. Saving only on deliberate actions
-  // ==========================================================================
+  // ---- C. Saving only on deliberate actions ----
 
   describe('updateSpotPrices() never writes to the database', () => {
     it('stays in memory no matter how many times it is called', () => {
@@ -278,9 +274,7 @@ describe('spot price persistence', () => {
     });
   });
 
-  // ==========================================================================
-  // The automatic COMEX refresh once start-up has finished
-  // ==========================================================================
+  // ---- The automatic COMEX refresh once start-up has finished ----
 
   describe('autoRefreshSpotPrices()', () => {
     it('applies and saves live prices when the fetch succeeds', async () => {
@@ -382,9 +376,7 @@ describe('spot price persistence', () => {
     });
   });
 
-  // ==========================================================================
-  // Melt value end to end, from a restart
-  // ==========================================================================
+  // ---- Melt value end to end, from a restart ----
 
   it('shows a melt value for a silver coin after a restart, with no fetch at all', async () => {
     // The owner's actual requirement, in one test: melt auto-calculates from

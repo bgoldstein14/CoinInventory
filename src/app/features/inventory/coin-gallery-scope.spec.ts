@@ -1,44 +1,23 @@
-/* ===========================================================================
- * coin-gallery-scope.spec.ts
- * ---------------------------------------------------------------------------
- * "When I hit the Images button for the coin, I expect to only see the images
- *  for that coin, not all images."
+/*
+ * A coin's gallery must show that coin's photos and no others.
  *
- * ---------------------------------------------------------------------------
- * WHAT THE INVESTIGATION FOUND, so nobody has to repeat it
- * ---------------------------------------------------------------------------
- * There is NO cross-coin leak anywhere in the code. The gallery renders
- * `coin().imagePaths` and nothing else; the App shell binds `coin` to the
- * single selected coin; the server groups image rows strictly by CoinId
- * (server/routes/coins/list-query.ts); and the batch import buckets its rows
+ * The first three groups pin that down as a property: the gallery renders
+ * `coin().imagePaths` and nothing else, the App shell binds `coin` to the
+ * single selected coin, the server groups image rows strictly by CoinId
+ * (server/routes/coins/list-query.ts), and the batch import buckets its rows
  * by `selectedCoinId` and merges each bucket into that coin's own array
- * (services/image-import/attach-runner.ts). The first three groups of tests
- * below pin all of that down as a property, so a future change that does
- * introduce a leak fails here.
+ * (services/image-import/attach-runner.ts). A change that introduces a leak
+ * fails here.
  *
- * Two things explain the symptom instead, and the last group documents the
- * second one:
- *
- *   1. THE GALLERY HAD NO MODAL STYLING. `coin-image-gallery.scss` never
- *      imported `styles/_modal.scss`, so `.modal-backdrop` had no rules —
- *      no fixed position, no dimmed overlay, no card. The gallery rendered
- *      INLINE underneath the inventory table, and the inventory table has a
- *      Photo column. What was on screen was therefore every coin's thumbnail
- *      plus a small unstyled strip of this coin's photos below it, which
- *      reads exactly like "all the images". (The identical omission had
- *      already been found and fixed in the Settings dialog.) Pure CSS, so
- *      there is nothing to assert here — see the note in the stylesheet.
- *
- *   2. THE MATCHER LEGITIMATELY PILES A WHOLE FOLDER ONTO ONE COIN. The
- *      auto-match gates are per-FILE: nothing caps how many files may land on
- *      the same record. A folder of 20-cent photos matched against an
- *      inventory holding one 20-cent record puts all of them on that record —
- *      including shots of a DIFFERENT physical coin whose filename happens
- *      not to contradict it. That coin's gallery then really does hold a
- *      folder's worth of photos. It is a matching-accuracy question, not a
- *      scoping bug, and `describe('the import can legitimately...')` below
- *      captures the exact behaviour so a future tuning change is visible.
- * =========================================================================== */
+ * The last group is about something that LOOKS like a leak and is not: THE
+ * MATCHER LEGITIMATELY PILES A WHOLE FOLDER ONTO ONE COIN. The auto-match
+ * gates are per-FILE; nothing caps how many files may land on the same
+ * record. A folder of 20-cent photos matched against an inventory holding
+ * one 20-cent record puts all of them on that record — including shots of a
+ * DIFFERENT physical coin whose filename happens not to contradict it. That
+ * is a matching-accuracy question, not a scoping bug, and the behaviour is
+ * captured below so a future tuning change is visible.
+ */
 
 import 'fake-indexeddb/auto';
 import '@angular/compiler';
@@ -50,9 +29,7 @@ import { imageSourcePaths } from '../../services/image-source-paths';
 import { BatchImageRow, CoinRecord } from '../../types/coin.model';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-/* ---------------------------------------------------------------------------
- * Fixtures
- * ------------------------------------------------------------------------- */
+/* --- Fixtures --- */
 
 function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
   return {
@@ -69,10 +46,7 @@ const MORGAN_OBVERSE = 'data:image/jpeg;base64,MORGAN-OBVERSE';
 const MORGAN_REVERSE = 'data:image/jpeg;base64,MORGAN-REVERSE';
 const EAGLE_OBVERSE = 'data:image/jpeg;base64,EAGLE-OBVERSE';
 
-/**
- * Two coins with photos of their own, plus a third with none at all — the
- * case the gallery could not previously be opened in.
- */
+/** Two coins with photos of their own, plus a third with none at all. */
 function createTwoCoinInventory() {
   const harness = createTestInventoryService();
   harness.inv.inventory.set([
@@ -87,10 +61,6 @@ function createTwoCoinInventory() {
 function galleryImagesFor(inv: { inventory: () => CoinRecord[] }, coinId: string): string[] {
   return inv.inventory().find(c => c.id === coinId)!.imagePaths;
 }
-
-/* ===========================================================================
- * 1. The property the owner asked for: two coins, two disjoint galleries
- * ========================================================================= */
 
 describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
   beforeEach(() => {
@@ -170,15 +140,11 @@ describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
   });
 });
 
-/* ===========================================================================
- * 2. The gallery opens for a coin with no photos at all
- * ========================================================================= */
-
 describe('the gallery opens for a coin with no photos', () => {
   it('lets a coin with an empty gallery be opened, so a first photo can be added', () => {
-    // The catch-22 this removes: the gallery owns the only per-coin "Add
-    // images" picker and the only per-coin drop target, and it used to refuse
-    // to open unless the coin already had a photo.
+    // The gallery owns the only per-coin "Add images" picker and the only
+    // per-coin drop target, so refusing to open it for a photo-less coin
+    // would make a first photo impossible to add.
     const { inv, store } = createTwoCoinInventory();
     inv.selectedCoinId.set('empty');
 
@@ -220,10 +186,6 @@ describe('the gallery opens for a coin with no photos', () => {
   });
 });
 
-/* ===========================================================================
- * 3. The import writes each coin's photos to that coin only
- * ========================================================================= */
-
 /** A ticked review row aimed at one coin. */
 function makeRow(fileName: string, coinId: string): BatchImageRow {
   return {
@@ -258,9 +220,14 @@ describe('runAttach keeps each coin\'s new photos to that coin', () => {
     ]);
     const attach = vi.fn();
 
+    // `existingPhotoMode: 'add'` because both coins already have a photo, and
+    // the default ('leave') now writes nothing to a coin that does. The
+    // property under test here — one write per coin, never one carrying both
+    // coins' photos — is unchanged; it just needs a mode that writes at all.
+    // See services/image-import/existing-photo-mode.ts.
     await runAttach(
       [makeRow('morgan-rev.jpg', 'morgan'), makeRow('eagle-rev.jpg', 'eagle')],
-      { files, inventory, attach, encode: stubEncode }
+      { files, inventory, attach, encode: stubEncode, existingPhotoMode: 'add' }
     );
 
     // One write per coin, never one write carrying both coins' photos.
@@ -303,15 +270,10 @@ describe('runAttach keeps each coin\'s new photos to that coin', () => {
   });
 });
 
-/* ===========================================================================
- * 4. The real explanation: one coin can legitimately collect a whole folder
- * ========================================================================= */
-
 describe('the import can legitimately pile a whole folder onto one coin', () => {
   /**
-   * The inventory the owner's 20-cent folder was matched against: ONE
-   * twenty-cent record, plus two unrelated coins so the runner-up margin has
-   * something to measure against.
+   * ONE twenty-cent record, plus two unrelated coins so the runner-up margin
+   * has something to measure against.
    */
   const inventory: CoinRecord[] = [
     makeCoin({
@@ -378,9 +340,8 @@ describe('the import can legitimately pile a whole folder onto one coin', () => 
      *   1875-CC  -> 'review'. Only the MINT MARK disagrees, and a mint mark
      *               is not one of the three vetoes. The coin stays on the
      *               shortlist and the user decides.
-     *   1876     -> 'none'.   The YEAR disagrees, and the owner's rule is
-     *               that a year conflict is not a close match at all: "First
-     *               it's not a close match if the years don't match." The
+     *   1876     -> 'none'.   The YEAR disagrees, and the domain rule is
+     *               that a year conflict is not a close match at all. The
      *               1875 record is disqualified outright, so there is nothing
      *               left to offer and nothing to click.
      *

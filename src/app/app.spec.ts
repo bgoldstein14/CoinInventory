@@ -140,15 +140,12 @@ describe('App', () => {
     }
   });
 
-  // ==========================================================================
   // Regression tests: a failed save must stay recoverable.
   //
-  // THE BUG THESE GUARD AGAINST: updateCoin() used to diff new edits against
-  // the OPTIMISTIC local record. When a PUT failed, the local record already
-  // held the new value, so re-typing the same value produced an empty diff,
-  // updateCoin() returned early, and the edit was lost forever with no further
-  // feedback. Diffing against the last SERVER-CONFIRMED value fixes that.
-  // ==========================================================================
+  // updateCoin() diffs new edits against the last SERVER-CONFIRMED value,
+  // never against the optimistic local record. Diff against the local one
+  // and a retry after a failed PUT produces an empty diff, returns early,
+  // and loses the edit with no feedback at all.
 
   it('re-sends the same value after a failed save (a retry must actually retry)', async () => {
     vi.useFakeTimers();
@@ -265,10 +262,8 @@ describe('App', () => {
     }
   });
 
-  // `imagePaths` is now the ONLY array field on a coin. This test used to use
-  // `tags` for its second half; tags were removed (nothing could ever set one),
-  // so both halves are expressed with imagePaths instead. The rule being
-  // protected is unchanged: arrays are compared by CONTENT, not by identity.
+  // `imagePaths` is the only array field on a coin. The rule being protected:
+  // arrays are compared by CONTENT, not by identity.
   it('treats array fields (imagePaths) as changed by content, not identity', async () => {
     vi.useFakeTimers();
 
@@ -296,19 +291,16 @@ describe('App', () => {
     }
   });
 
-  // ==========================================================================
   // Regression tests: a NEW coin is a local draft until it is worth saving.
   //
-  // THE BUG THESE GUARD AGAINST: "Add coin" used to POST a completely empty
-  // record straight away. The backend answered
-  // `400 {"error":"denomination is required"}`, so the user got a red error
-  // toast before typing a single character.
+  // POSTing a blank record on "Add coin" earns a
+  // `400 {"error":"denomination is required"}` and puts a red error toast in
+  // front of the user before they have typed a character.
   //
-  // The rule now: a new row lives only on screen until it has at least 2 of
+  // The rule: a new row lives only on screen until it has at least 2 of
   // Year / Coin Type / Denomination (the SAME 2-of-3 rule the QIF importer
   // uses, from services/coin-completeness.ts). Then it POSTs itself once and
   // behaves like any other coin from that moment on.
-  // ==========================================================================
 
   it('sends no HTTP request at all when a coin is added', async () => {
     vi.useFakeTimers();
@@ -534,9 +526,7 @@ describe('App', () => {
     }
   });
 
-  // ==========================================================================
   // Regression tests: connection recovery
-  // ==========================================================================
 
   it('recovers via retryConnection() after the initial hydrate fails', async () => {
     const { inv, storage, mockApiService } = createTestInventoryService();
@@ -579,7 +569,6 @@ describe('App', () => {
     app['addBlankCoin']();
 
     const coin = app['inv'].inventory().at(-1)!;
-    // CoinRecord no longer has a 'name' field - it's derived from denomination/coinType/year
     expect(coin.denomination).toBe('');
     expect(coin.coinType).toBe('');
     expect(coin.category).toBe('');
@@ -664,10 +653,8 @@ describe('App', () => {
 
   it('starts with the first visible item selected', () => {
     // "First visible" depends on the sort, so the fixture has to make the
-    // order unambiguous under the DEFAULT sort. That default is Year
-    // ascending (it used to be Coin Type, which is why this test previously
-    // distinguished its coins by 'Alpha' and 'Zebra'), so the years are what
-    // decide the order here.
+    // order unambiguous under the DEFAULT sort, which is Year ascending --
+    // so the years are what decide the order here.
     const app = createApp();
     const coin1 = addTestCoin(app, { denomination: 'Quarter', year: '1999' });
     const coin2 = addTestCoin(app, { denomination: 'Dime', year: '1935' });
@@ -802,6 +789,78 @@ describe('App', () => {
     expect(app['showImageImportModal']()).toBe(false);
   });
 
+  /*
+   * THE "COINS WITH NO DENOMINATION" PROMPT
+   * The cleanup pane lives inside Reference Data, which is where its fixes
+   * are — and which a non-technical user would never think to open. This
+   * banner is the discoverability half: it is the only thing in the app
+   * that tells somebody the problem exists.
+    */
+
+  it('stays silent until the denomination lookup has arrived', () => {
+    /* THE BUG THIS PREVENTS: with an empty lookup nothing resolves, so a
+     * naive count reports the WHOLE collection as unlinked for the second
+     * between start-up and `GET /api/denominations` landing. The banner
+     * would flash "105 coins have no denomination" on every launch. */
+    const app = createApp();
+    app['inv'].inventory.set([makeCoin({ id: 'a', denomination: '8 Reales', denominationId: null })]);
+    app['inv'].denominations.set([]);
+
+    expect(app['unlinkedCount']()).toBe(0);
+    expect(app['unlinkedPrompt']()).toBe('');
+  });
+
+  it('says nothing when every coin has a denomination', () => {
+    // The banner is a prompt, not a status line. Zero is reported INSIDE the
+    // pane (where "every coin has a denomination" is reassurance the user
+    // went looking for); on the main screen it would be noise for ever.
+    const app = createApp();
+    app['inv'].denominations.set([
+      { denominationId: 1, label: 'Quarter', country: 'US', sortOrder: 1, isActive: true }
+    ]);
+    app['inv'].inventory.set([makeCoin({ id: 'a', denomination: 'Quarter', denominationId: 1 })]);
+
+    expect(app['unlinkedCount']()).toBe(0);
+    expect(app['unlinkedPrompt']()).toBe('');
+  });
+
+  it('raises a prompt, with the number, when coins cannot be linked', () => {
+    const app = createApp();
+    app['inv'].denominations.set([
+      { denominationId: 1, label: '8 Reales', country: 'MX', sortOrder: 1, isActive: true },
+      { denominationId: 2, label: '8 Reales', country: 'ES', sortOrder: 2, isActive: true }
+    ]);
+    app['inv'].inventory.set([
+      makeCoin({ id: 'a', denomination: '8 Reales', denominationId: null, country: 'United States' }),
+      makeCoin({ id: 'b', denomination: '8 Reales', denominationId: null, country: 'United States' })
+    ]);
+
+    expect(app['unlinkedCount']()).toBe(2);
+    expect(app['unlinkedPrompt']()).toBe('2 coins have no denomination linked, in 1 group.');
+  });
+
+  it('opens Reference Data ON the unlinked pane, not on Categories', () => {
+    /* Landing the user on Categories after they pressed "Review" would make
+     * them hunt for a pane they have never seen, which is the same dead end
+     * the SQL report left them in. */
+    const app = createApp();
+    app['openUnlinkedCoins']();
+
+    expect(app['showCategoryModal']()).toBe(true);
+    expect(app['categoryModalSection']()).toBe('unlinked');
+  });
+
+  it('goes back to the default pane the next time Reference Data is opened', () => {
+    // A sticky section would mean the Categories button on the filter bar
+    // silently opens a different screen after the banner has been used once.
+    const app = createApp();
+    app['openUnlinkedCoins']();
+    app['closeCategoryModal']();
+    app['openCategoryModal']();
+
+    expect(app['categoryModalSection']()).toBe('categories');
+  });
+
   // --- The Import menu must actually REACH each modal ---
   //
   // The test above calls openImageImportModal() directly. That passed happily
@@ -901,20 +960,13 @@ describe('App', () => {
   });
 
   it('still offers the image action for a coin with no images, and opens it closed', () => {
-    // THIS TEST USED TO ASSERT THE OPPOSITE, and the change is the point.
-    //
     // The gallery is the only place in the app where a photo can be attached
     // to one particular coin, so refusing to open it for a coin with no
-    // photos meant a coin could never get its first one from the UI. The
-    // owner asked for exactly that:
+    // photos would mean a coin could never get its first one from the UI.
+    // `canOpenImageGallery` therefore means only "is a coin selected".
     //
-    //   "I should have the option to try to import one or more images to add
-    //    to the coin as I wish, too, even if there are no images for the coin
-    //    yet."
-    //
-    // `canOpenImageGallery` now means "is a coin selected". What has NOT
-    // changed is that opening the detail panel does not open the gallery by
-    // itself — that still takes a click.
+    // Opening the detail panel still does NOT open the gallery by itself —
+    // that takes a click.
     const app = createApp();
     const coin = addTestCoin(app, { denomination: 'Dime', coinType: 'Roosevelt', imagePaths: [] });
 
@@ -1132,10 +1184,9 @@ describe('App', () => {
   });
 
   it('does not let a short grade code stand in for a longer one', () => {
-    // These three pairs used to depend on the order the tests were written in.
-    // The tier is now keyed on the COMPLETE letter run, so VF and F are simply
-    // different keys and no reordering can confuse them. Kept as tests because
-    // the failure would be a wrong COLOUR rather than an error.
+    // The tier is keyed on the COMPLETE letter run, so VF and F are simply
+    // different keys and no reordering can confuse them. Kept as tests
+    // because the failure would be a wrong COLOUR rather than an error.
     expect(gradeBadgeClass('VF20')).toContain('grade-vf');   // never F
     expect(gradeBadgeClass('VG8')).toContain('grade-vg');    // never G
     expect(gradeBadgeClass('FR2')).toContain('grade-basal'); // never F
@@ -1400,11 +1451,8 @@ describe('App', () => {
     expect(formatInventoryCell(coin, 'coinSet')).toBe('Morgan Set');
   });
 
-  // `weight` is the coin's GROSS weight in GRAMS. It used to be troy ounces,
-  // and this test used to assert '0.7734' -- the troy-ounce weight of a Morgan
-  // dollar, at the four decimals the grid showed then. 26.73 g is the SAME
-  // coin expressed the new way, and the grid now shows three decimals to match
-  // the PM Weight (g) column beside it. See migrations/008-weight-to-grams.sql.
+  // `weight` is the coin's GROSS weight in GRAMS -- 26.73 g is a Morgan
+  // dollar. Three decimals, matching the PM Weight (g) column beside it.
   it('formats sold price and weight columns', () => {
     const app = createApp();
     const coin = addTestCoin(app, { soldPrice: 250, weight: 26.73 });

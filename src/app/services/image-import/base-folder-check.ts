@@ -1,41 +1,37 @@
-/* ===========================================================================
+ /*
  * base-folder-check.ts — refuse an import whose paths resolve to nothing.
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO PREVENT
- * ---------------------------------------------------------------------------
- * The owner imported a folder of photos and every row came back stamped with a
- * path under his DEVELOPMENT folder rather than the folder he had picked —
- * "making up directories under Development by denomination".
  *
- * Nothing was made up. A browser never tells JavaScript where a file really
+ * THE BUG THIS EXISTS TO PREVENT
+ *
+ * An import can stamp every row with a path under a folder the user never
+ * picked -- inventing directories that do not exist.
+ *
+ * Nothing is made up. A browser never tells JavaScript where a file really
  * lives (the long version is in source-path.ts); a directory picker supplies
  * only `webkitRelativePath`, the path RELATIVE to the chosen folder. The
- * absolute prefix therefore comes from exactly one place — the base-folder
- * text box — and that box had been left holding its fallback, which is the
- * folder the app itself is installed in. His real subfolder names were glued
- * onto the wrong root, and all of it resolved to nothing.
+ * absolute prefix therefore comes from exactly one place -- the base-folder
+ * text box -- so if that box is left holding the wrong root, the real
+ * subfolder names are glued onto it and all of it resolves to nothing.
  *
- * ---------------------------------------------------------------------------
  * WHY THE EXISTING DEFENCE WAS NOT ENOUGH
- * ---------------------------------------------------------------------------
+ *
  * The import screen already renders a live example of the path about to be
  * stored (`BaseFolderState.preview`), built from the first selected file. That
- * was a good idea and it stays. But it is ADVISORY, and the project's own
- * README had already predicted, in these words, what advisory would cost:
+ * is a good idea and it stays. But it is ADVISORY:
  *
- *     "A path valid on the wrong machine is the single most expensive mistake
- *      that screen can make, because it does not fail loudly -- it stamps
- *      every imported row with a location that resolves to nothing."
+ *     A path valid on the wrong machine is the single most expensive mistake
+ *     that screen can make, because it does not fail loudly -- it stamps
+ *     every imported row with a location that resolves to nothing.
  *
  * A hint the user is under no obligation to read is not a defence against a
+ * silent 1,700-row mistake.
  * silent 1,700-row mistake. So the paths that WOULD be written are now checked
  * against the disk first, through the same `POST /api/images/exists` endpoint
  * the inventory grid already uses to cross out missing files, and an import
  * that would record nothing but dead paths is refused.
  *
- * ---------------------------------------------------------------------------
  * THE THREE RULES THAT KEEP THIS FROM BECOMING ITS OWN BUG
- * ---------------------------------------------------------------------------
+ *
  * 1. ONLY A TOTAL FAILURE BLOCKS. The user picked these files moments ago, so
  *    they exist. If the root is wrong, EVERY path fails. A few failures mean
  *    something individual happened and is not grounds to refuse the rest.
@@ -52,7 +48,7 @@
  * Plain functions with an injected probe rather than an ApiService dependency,
  * for the same reason `import-base-folder.ts` takes an `AppFolderProvider`:
  * this stays unit-testable under Node with no DOM and no HTTP mock.
- * =========================================================================== */
+  */
 
 import { sourcePathForFile } from './source-path';
 

@@ -2,15 +2,14 @@
  * process-safety.ts — the last-resort diagnostic backstop for the whole
  * Node process.
  *
- * The connection-pool crash that motivated this code was invisible for weeks
- * for one reason: the process died from an uncaught exception raised deep
- * inside the mssql/tedious socket callbacks, so it never reached our logger and
- * app.log simply stopped mid-session with no error line.
+ * An uncaught exception raised deep inside the mssql/tedious socket callbacks
+ * kills the process without ever reaching the logger: app.log simply stops
+ * mid-session with no error line, which is invisible for weeks. The handlers
+ * installed here make sure that cannot happen silently.
  *
- * The handlers installed here make sure that can never happen silently again.
  * They are a diagnostic backstop, NOT a licence to stop handling errors
- * properly — the real fix for that crash is the pool 'error' listener in
- * db/pool.ts.
+ * properly — the actual guard against that crash is the pool 'error' listener
+ * in db/pool.ts.
  */
 
 import { logError } from './logger';
@@ -31,8 +30,8 @@ export function installProcessSafetyNet(): void {
   });
 
   process.on('uncaughtException', (err: Error) => {
-    // Something threw outside of any try/catch — historically this killed the
-    // server. We log the full message + stack and deliberately KEEP RUNNING so
+    // Something threw outside any try/catch, which would otherwise kill the
+    // server. Log the full message + stack and deliberately KEEP RUNNING, so
     // the user's session survives and there is a record of what happened.
     logError('UNCAUGHT EXCEPTION — the server is staying up; please report this log entry', err);
   });

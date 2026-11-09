@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * selection-rules.ts
- * ---------------------------------------------------------------------------
+ *
  * The bulk tick-box rules, as pure functions.
  *
  * Every matched image arrives ticked (the user asked for that explicitly), and
@@ -14,7 +14,7 @@
  *
  * All rules return a NEW array of NEW row objects. Angular signals compare by
  * reference, so mutating rows in place would leave the UI stale.
- * =========================================================================== */
+  */
 
 import { BatchImageRow, SelectionBulkAction } from '../../types/coin.model';
 

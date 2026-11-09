@@ -1,54 +1,59 @@
-﻿/**
- * Primary coin record interface representing a single coin in the inventory.
- * Aligns with the coins table in the database schema.
+﻿import { CollectionStatus } from './collection-status';
+
+/**
+ * Re-exported so that `import { CollectionStatus } from './coin.model'` works
+ * alongside every other coin type. The definition, and the argument for the
+ * five values it allows, lives in collection-status.ts.
  *
- * Key changes from legacy schema:
- * - Removed 'name' field (was redundant with denomination/type/variety)
- * - Changed 'year' from number|null to string (supports ranges like "1916-1945")
- * - Changed 'type' to 'coinType' for clarity
- * - Changed 'grade' from union type to freeform string (supports any grading standard)
- * - Added 'pmWeightGrams' and 'pmPercent' for precious metal tracking
- * - Removed 'tags' (see below)
- * - Removed 'dealer' (see below)
+ * THE DEPENDENCY RUNS THIS WAY ROUND ON PURPOSE. collection-status.ts imports
+ * nothing at all, so it cannot take part in an import cycle; if its rules
+ * lived here instead they would need CoinRecord, and anything wanting the
+ * rules would drag in this whole file.
+ */
+export type { CollectionStatus } from './collection-status';
+
+/**
+ * A single coin in the inventory. Mirrors the Coins table.
  *
- * ABOUT THE REMOVED 'tags' FIELD
- * ------------------------------
- * There used to be a `tags: string[]` here, backed by a CoinTags table in SQL
- * Server and a "Tags" column in the grid. It was plumbed end to end EXCEPT for
- * one thing: there was never any way to type a tag in. The editor had no input,
- * bulk edit did not offer it, and neither importer could set one, so every coin
- * carried an empty array and the grid column could only ever render a dash.
- * Rather than build the missing UI the whole concept was dropped.
+ * There is no coin-level `dealer` field, and `TransactionRecord.dealer`
+ * further down this file is a DIFFERENT field that stays. A coin-level
+ * dealer said "this coin came from Heritage"; a transaction-level dealer
+ * says "THIS purchase, on this date, for this amount, was with Heritage",
+ * which survives a coin being bought from one dealer and later sold to
+ * another. If you are grepping for `dealer`, check which one you have found.
  *
- * Older JSON exports still contain a `tags` array. That is harmless: the import
- * normaliser in services/inventory/coin-factory.ts simply does not copy the key
- * across, so an old file still loads without error.
- *
- * ABOUT THE REMOVED 'dealer' FIELD
- * -------------------------------
- * There used to be a `dealer?: string` here — "who this coin came from" — backed
- * by a Coins.Dealer column, an editor input, a grid column, a free-text filter
- * and a CSV column. The owner asked for it to go: the same information is
- * already recorded, per event and more precisely, on the TRANSACTION rows
- * (see TransactionRecord.dealer further down this file), so the coin-level copy
- * was a second, weaker answer to a question that was already answered.
- *
- * ***********************************************************************
- * *** TransactionRecord.dealer IS A DIFFERENT FIELD AND IT STAYS. ***
- * A coin-level dealer said "this coin came from Heritage". A transaction-level
- * dealer says "THIS purchase, on this date, for this amount, was with
- * Heritage" — which survives a coin being bought from one dealer and later
- * sold to another. Only the coin-level one was removed. If you are grepping
- * for `dealer` to finish a cleanup, check which of the two you have found.
- * ***********************************************************************
- *
- * Older JSON and CSV exports still contain a `dealer` column/key. That is
- * harmless for the same reason the old `tags` arrays are: nothing copies the key
- * across any more, so an old file still loads, just without that value.
+ * Old JSON/CSV exports may still carry `dealer` or `tags` keys. That is
+ * harmless: the import normaliser in services/inventory/coin-factory.ts does
+ * not copy unknown keys across, so an old file still loads.
  */
 export interface CoinRecord {
   id: string;
+  /* THE DENOMINATION, IN TWO FIELDS.
+   *
+   * `denomination` IS NOT THE AUTHORITY. It is WHAT THE SOURCE SAID -- typed
+   * by the user, or read out of a QIF, a CSV or a spreadsheet -- and nothing
+   * in this application rewrites it. `denominationId` is the canonical link
+   * to a row in the Denominations lookup, when one could be established.
+   *
+   * They are allowed to disagree, and after an import they usually do: the
+   * text keeps saying `Pillar Dollar` while the id says `8 Reales`. That is
+   * the point of keeping both. An id-only model would DESTROY the string at
+   * import, and neither the user nor a later, smarter resolver could get it
+   * back.
+   *
+   * NULL IS THE ORDINARY STATE of `denominationId`, not an error: a coin
+   * imported before its issuer was seeded has one, and deleting a
+   * denomination puts its coins back into it.
+   *
+   * *** NEVER BUILD THE DISPLAY STRING BY HAND. ***
+   * `denominationDisplay()` in services/denominations/denomination-display.ts
+   * is the only place the label / unresolved / nothing-recorded rule may be
+   * written, and its spec greps src/ and fails the build if a second copy
+   * appears. The editor's picker writes BOTH fields when the user chooses a
+   * denomination, so from then on they agree.
+   */
   denomination: string;
+  denominationId?: number | null;
   year: string; // Changed from number|null to string to support year ranges (e.g., "1916-1945")
   coinType: string; // Renamed from 'type' - describes the coin variant (e.g., "Walking Liberty", "Morgan")
   category: string;
@@ -63,7 +68,55 @@ export interface CoinRecord {
   purchasePrice: number;
   currentValue: number;
   notes: string;
-  imagePaths: string[];
+  /* THE COIN'S PHOTOGRAPHS — AND WHY THIS KEY IS OPTIONAL
+   *
+   * Downscaled `data:` URLs, in display order. Position 0 is the coin's main
+   * photo (the one the grid shows); the server stores that order as
+   * CoinImages.SortOrder and returns the rows ORDER BY SortOrder.
+   *
+   * THERE ARE THREE STATES HERE, NOT TWO, and conflating two of them deletes
+   * somebody's photographs:
+   *
+   *   ['data:...', 'data:...']   loaded, and the coin has these photographs
+   *   []                         loaded, and the coin genuinely has NONE
+   *   undefined (key absent)     NOT LOADED. We do not know. Say nothing.
+   *
+   * `GET /api/coins` returns the third state for every coin: the list
+   * endpoint must never carry image bytes, because concatenating them runs
+   * past V8's maximum string length and the response cannot be serialised at
+   * all. See server/routes/coins/list-query.ts.
+   *
+   * THE DANGER. `PUT /api/coins/:id` carrying an `imagePaths` key REPLACES
+   * the coin's whole image set — it deletes every CoinImages row and
+   * re-inserts the array it was given. So an empty array is a DESTRUCTIVE
+   * instruction. If "not loaded" ever gets written as `[]`, the next save of
+   * that coin erases every photograph on it, silently, with a 200 response.
+   * That is why this key is absent rather than defaulted, all the way from
+   * the SQL row assembly to here.
+   *
+   * READING IT: use `coinPhotoCount()` / `coinHasPhotos()` from
+   * services/coin-photos.ts, which answer from `imageCount` when the array
+   * is absent. Never `coin.imagePaths.length` — that throws on a record
+   * straight from the list.
+   *
+   * GETTING IT: `InventoryService.loadCoinImages(coinId)` fetches one coin's
+   * photographs from `GET /api/coins/:id/images` and writes them here. It is
+   * called automatically when a coin is selected.
+   */
+  imagePaths?: string[];
+  /**
+   * How many photographs this coin has, according to the server.
+   *
+   * Added by `GET /api/coins` from a SQL `COUNT(*)`, so it costs nothing and
+   * is available for EVERY coin on load — which is what lets the grid decide
+   * whether to render a thumbnail, and the report decide whether a coin is
+   * worth fetching, without touching a single byte of image data.
+   *
+   * It is a snapshot from load time, so it can be stale once the user starts
+   * attaching or deleting photographs. `coinPhotoCount()` prefers the loaded
+   * array for exactly that reason and only falls back to this.
+   */
+  imageCount?: number;
   source: 'manual' | 'quicken' | 'import' | 'csv';
   hasCacSticker?: boolean;
   soldPrice?: number;
@@ -71,13 +124,9 @@ export interface CoinRecord {
   /**
    * The coin's GROSS weight — the whole coin, alloy included — in GRAMS.
    *
-   * It was in TROY OUNCES until the switch recorded in
-   * `server/migrations/008-weight-to-grams.sql`, which multiplied every
-   * stored value by 31.1034768. Grams was chosen so that this and
-   * `pmWeightGrams` below share a unit: the two fields measure different
-   * things (gross coin vs. pure metal inside it) and having them in
-   * different units as well made them easy to confuse — which is exactly
-   * the mistake behind the melt-value bug written up in the README.
+   * Grams so that this and `pmWeightGrams` below share a unit: the two
+   * fields measure different things (gross coin vs. pure metal inside it),
+   * and in different units as well they are very easy to confuse.
    *
    * NOT used to compute melt value. That is `pmWeightGrams` only; see
    * `computeMeltValue` in services/inventory/inventory-metrics.ts.
@@ -87,49 +136,109 @@ export interface CoinRecord {
   coinSet?: string;
   pmWeightGrams?: number; // Precious metal weight in grams (for melt value calculations)
   pmPercent?: number; // Precious metal purity percentage (e.g., 90 for 90% silver)
+  /**
+   * Where this coin sits in the collecting cycle: owned, wanted, ordered,
+   * for sale, or sold. Backed by Coins.CollectionStatus NVARCHAR(20) NOT NULL
+   * DEFAULT 'owned'.
+   *
+   * *** OPTIONAL HERE, NOT NULL IN THE DATABASE, AND THAT IS DELIBERATE. ***
+   * Undefined means exactly the same thing as 'owned'. Making it required
+   * would turn every coin literal in the app and in the test suite into a
+   * compile error, and — far worse — would offer no protection at all against
+   * the case that actually matters, which is a value arriving at RUNTIME from
+   * an old JSON backup or a database row the migration has not reached.
+   * Nothing may read this property raw: go through
+   * `normalizeCollectionStatus()` / `isHeldInCollection()` in
+   * collection-status.ts, which treat absent, empty and unrecognised alike
+   * and answer 'owned' for all three.
+   *
+   * WHAT IT CHANGES. Only two things, and both are about coins the owner does
+   * NOT have: the money totals on the toolbar (see inventory-metrics.ts) and
+   * the insurance schedule export (see features/inventory/inventory-file-io.ts)
+   * count HELD coins only, so a want-list coin can never inflate the value of
+   * a collection that does not exist. Per-coin melt value is untouched: the
+   * metal in a coin is a fact about that coin whether or not it is yours yet,
+   * and that figure is exactly what you want in front of you when deciding
+   * what to bid.
+   *
+   * NOT derived from `soldDate` / `soldPrice` below, now or ever. Those record
+   * what an event was worth; this records what is true today. The full
+   * argument is in collection-status.ts.
+   */
+  collectionStatus?: CollectionStatus;
+  /**
+   * Where the physical coin actually is: "Safe deposit box 2", "Dansco 7070,
+   * page 4", "Blue album, slot 12". Backed by Coins.StorageLocation
+   * NVARCHAR(200) NULL.
+   *
+   * FREE TEXT, WITH NO VALIDATION AND NO LOOKUP TABLE, ON PURPOSE. Every
+   * collector organises differently — by album page, by box, by safe, by
+   * room, by "the one at my mother's house" — and any structure this app
+   * imposed would be wrong for most of them and unusable for the rest. It is
+   * searched by the inventory search box and shown as an optional grid
+   * column; nothing parses it.
+   *
+   * It is NOT `coinSet`. A set is a conceptual grouping ("Morgan Set") that a
+   * coin belongs to wherever it physically lives; this is the shelf. One coin
+   * can be in the Morgan set AND in safe deposit box 2, and the whole reason
+   * both exist is that neither answers the other's question — "which of my
+   * sets is this part of" versus "where do I go to put my hands on it".
+   */
+  storageLocation?: string;
+  /* THE CATALOGUE REFERENCE — "Sear 6819"
+   *
+   * TWO FIELDS, ONE IDEA. `catalogId` says WHICH catalogue (a row in the
+   * Catalogs lookup, maintained like denominations and mint marks);
+   * `catalogNumber` is the reference within it, stored exactly as the user
+   * typed it -- `1A`, `6819`, `II.1 234`, `RRC 44/5`.
+   *
+   * NEVER CONCATENATE THEM BY HAND. `coinCatalogReference()` in
+   * types/catalog-reference.ts is the only place that joins them, and it is
+   * what stops the grid showing something the search box cannot find. It also
+   * handles the three partial states -- number with no catalogue (an import),
+   * catalogue with no number (half-typed), and neither (nearly every coin).
+   *
+   * WHY THIS FIELD EXISTS. Ancients have no year, no denomination and no
+   * grade, so a catalogue reference is frequently the ONLY thing that
+   * identifies them. Without it such references end up stuffed into
+   * `variety`, which nothing can search on properly.
+   *
+   * There is ONE reference per coin rather than the child table that would
+   * eventually be correct, and entering a reference does NOT look anything
+   * up — it is recorded, not resolved.
+   *
+   * BOTH OPTIONAL: "no reference recorded" is the normal state of a modern
+   * coin, not a gap to be filled.
+   */
+  catalogId?: number;
+  catalogNumber?: string;
 }
 
-/* ---------------------------------------------------------------------------
- * "I GUESSED HERE." -- THE AMBIGUOUS-READING CHANNEL
- * ---------------------------------------------------------------------------
+/* "I GUESSED HERE." -- THE AMBIGUOUS-READING CHANNEL
+ *
  * The importer reads a coin out of a hand-typed Quicken security name. Most
  * of what it reads is certain: "1927 $20" is a twenty dollar gold piece and
  * there is nothing to argue about. A few readings are NOT certain, because
  * two different coins were struck at the same time under the same wording,
  * and the name does not say which one the owner is holding.
  *
- * Before this type existed, the importer resolved those cases silently. It
- * picked one, wrote it into the record, and from that moment on the guess was
- * indistinguishable from a fact -- the preview showed it as a plain value, the
- * database stored it as a plain value, and the image matcher trusted it as a
- * plain value. The owner's instruction was NOT to stop guessing:
+ * The importer still guesses — it does not stop at an ambiguity — but the
+ * guess must not become indistinguishable from a fact. This type is how it
+ * travels: the value we picked, every value we were picking BETWEEN, and one
+ * plain sentence saying why we were unsure. The import preview renders it as
+ * a flagged -- not quarantined -- row the user can re-point or drop.
  *
- *   "It's okay to make an assumption and note to the user that there was
- *    ambiguity in a choice so they can either fix the choice right away or
- *    later or just cancel the match."
- *
- * So the guess stays and this type is how it travels: the value we picked,
- * every value we were picking BETWEEN, and one plain sentence saying why we
- * were unsure. The import preview renders it as a flagged -- not quarantined
- * -- row the user can re-point or drop.
- *
- * *** THIS IS DELIBERATELY NOT ABOUT ANY ONE COIN. ***
- * The owner, on an earlier proposal to give the three-cent piece its own file:
- *
- *   "I wouldn't expect there to be a special file to single out a particular
- *    type of coin... That's too specific and will just add a lot of noise to
- *    this project if we had files for every denomination. Likely, whatever
- *    rules are in there can be applied across the board."
- *
- * The three-cent piece is simply the FIRST caller. `field` is a union rather
- * than a hard-coded 'denomination' precisely so the next ambiguous reading --
- * a coin TYPE the name cannot pin down, say -- can use the same channel
+ * *** DELIBERATELY NOT ABOUT ANY ONE COIN. *** There are no per-denomination
+ * special-case modules in this project; a rule that applies to one coin is
+ * expected to be written so it applies across the board. `field` is a union
+ * rather than a hard-coded 'denomination' precisely so the next ambiguous
+ * reading -- a coin TYPE the name cannot pin down, say -- uses this channel
  * instead of inventing a second one.
  *
  * NOT A DATABASE COLUMN. This lives on the parsed record and is resolved at
  * import time. "Fix it later" is already served by the coin editor, where
  * denomination and coin type are both editable.
- * ------------------------------------------------------------------------- */
+ */
 export interface AmbiguousReading {
   /**
    * Which parsed field this is about. A union, not a literal, because the
@@ -155,13 +264,8 @@ export interface AmbiguousReading {
 }
 
 /**
- * Interface for coins imported from Quicken CSV exports.
- * Maps to CoinRecord after enrichment and normalization.
- *
- * Key changes from legacy schema:
- * - Removed 'name' field (redundant)
- * - Added year, coinType, grade, mintMark, variety fields
- * - Added pmWeightGrams and pmPercent for precious metal tracking
+ * A coin read out of a Quicken export. Maps to CoinRecord after enrichment
+ * and normalization.
  */
 export interface QuickenImportRecord {
   id: string;
@@ -195,8 +299,7 @@ export interface QuickenImportRecord {
   country: string;
   notes: string;
   source: 'quicken';
-  /* -------------------------------------------------------------------------
-   * THE FIVE ALLOY / WEIGHT FIELDS.
+  /* THE FIVE ALLOY / WEIGHT FIELDS.
    *
    * All five come from ONE function -- `composePmFields` in pm-fill.ts, which
    * is also what the CSV import and the Settings > Maintenance backfill call,
@@ -215,13 +318,7 @@ export interface QuickenImportRecord {
    * All five are optional and are left UNDEFINED -- not zero, not empty string
    * -- whenever nothing determines them, because a blank the user can see and
    * fix beats a guess that silently produces a wrong melt value.
-   *
-   * `metalContent` and `composition` were added when the import used to fill
-   * in only the two PM numbers, which is why the editor's Metal and
-   * Composition fields came up empty on every imported coin. `weight` is the
-   * most recent addition, for the same reason: the gross weights existed only
-   * in prose comments in pm-reference.ts, so nothing could read them.
-   * ---------------------------------------------------------------------- */
+   */
   /** Canonical Metal value for the editor dropdown: "Gold", "Silver", "Clad", ... */
   metalContent?: string;
   /** Free-text alloy description, e.g. "90% Gold, 10% Copper". */
@@ -232,12 +329,11 @@ export interface QuickenImportRecord {
   pmPercent?: number;
   /**
    * The WHOLE COIN's gross weight in GRAMS -- alloy included, the figure a
-   * scale reads. Maps straight onto `CoinRecord.weight`, which counts GRAMS
-   * from migration 008 onward. Undefined when nothing determines it.
+   * scale reads. Maps straight onto `CoinRecord.weight`, which also counts
+   * GRAMS. Undefined when nothing determines it.
    */
   weight?: number;
-  /* -------------------------------------------------------------------------
-   * THE RAW QUICKEN SECURITY NAME THIS RECORD WAS READ FROM.
+  /* THE RAW QUICKEN SECURITY NAME THIS RECORD WAS READ FROM.
    *
    * Carried for ONE reason: it is the only stable identity a preview row has.
    * `id` is a fresh `crypto.randomUUID()` on every parse, and the import modal
@@ -251,7 +347,7 @@ export interface QuickenImportRecord {
    * Optional because a test fixture may build a record by hand, and because
    * nothing downstream of the import needs it -- it is NOT copied onto
    * CoinRecord and never reaches the database.
-   * ---------------------------------------------------------------------- */
+   */
   securityName?: string;
   /**
    * Readings the importer made but is NOT certain about -- see
@@ -278,9 +374,7 @@ export interface PendingImageMatch {
   status: 'auto-matched' | 'confirmed' | 'rejected' | 'pending' | 'unmatched';
 }
 
-// ---------------------------------------------------------------------------
 // Image filename matching (see services/image-matching.service.ts)
-// ---------------------------------------------------------------------------
 
 /**
  * Everything the matcher believes it understood from an image filename.
@@ -314,13 +408,9 @@ export interface ParsedImageAttributes {
   /** True when nothing usable was found (e.g. "IMG_2024.jpg"). */
   isEmpty: boolean;
 
-  // -------------------------------------------------------------------------
-  // Fields added for this collection's real filename conventions.
-  //
-  // All OPTIONAL, so every existing caller keeps compiling untouched. They
-  // are always populated by ImageMatchingService.parseFilename(); the `?` is
-  // purely there to keep the published shape backwards-compatible.
-  // -------------------------------------------------------------------------
+  // The fields below are always populated by
+  // ImageMatchingService.parseFilename(); the `?` only keeps the published
+  // shape backwards-compatible for hand-built callers and fixtures.
 
   /**
    * Which face of the coin the photo shows, from "- Obverse" / "- Reverse" /
@@ -377,22 +467,17 @@ export interface ParsedImageAttributes {
    *
    * STRONGER THAN {@link isNonCoin}, AND THAT IS THE ONLY REASON IT EXISTS.
    * An `isNonCoin` row is skipped but still carries tier 3's opt-in
-   * "Attach anyway..." link. The owner ruled that out for these two groups:
-   *
-   *   "Never automatically attach nor offer as attachable in the automated
-   *    import. A user can try to manually choose such a photo manually at a
-   *    later time to attach to a coin(s)."
-   *   "Ignore the Fake coins."
-   *
-   * so an excluded row gets no rescue affordance at all. It is still LISTED,
-   * with {@link autoImportExclusionReason} as its skip reason, because nothing
+   * "Attach anyway..." link. These two groups get no rescue affordance at
+   * all: a counterfeit or a group shot must never be offered as attachable
+   * by the automated import. The row is still LISTED, with
+   * {@link autoImportExclusionReason} as its skip reason, because nothing
    * may ever disappear silently.
    *
    * *** THIS IS A PROPERTY OF THE AUTOMATED DECISION, NEVER OF THE FILE. ***
-   * The owner: "I never want a picture file to be off limits from choosing to
-   * attach to a coin even if the descriptor has nothing relevant to the coin
-   * itself." Every manual path -- the per-coin image gallery, the free-text
-   * coin search, the coin editor -- ignores this flag completely.
+   * No picture file is ever off limits for a MANUAL attach, however
+   * irrelevant its name. Every manual path -- the per-coin image gallery,
+   * the free-text coin search, the coin editor -- ignores this flag
+   * completely.
    *
    * Set by `image-matching/non-coin-detector.detectAutoImportExclusion`.
    */
@@ -406,9 +491,9 @@ export interface ParsedImageAttributes {
    * strike, a specimen, or 'unknown' only when the name was EMPTY.
    *
    * A FILENAME THAT SAYS NOTHING ABOUT THE STRIKE REPORTS 'business', NOT
-   * 'unknown'. The owner: "The Proof descriptor should always be part of the
-   * image file name as well as part of the inventory description otherwise
-   * it's assumed the coin is a business strike."
+   * 'unknown'. The convention in this collection is that a proof is always
+   * labelled as one, in both the filename and the inventory description, so
+   * silence means a business strike.
    *
    * Read by `image-matching/proof-strike.ts`, which carries the long warning
    * about why "PROOFLIKE" is a BUSINESS strike and not a proof. A proof and a
@@ -428,9 +513,9 @@ export interface ParsedImageAttributes {
  *   'unknown'  THERE WAS NOTHING TO READ -- no descriptive text and no grade
  *              on this side at all. It is NOT the answer for a side that
  *              merely failed to mention proof: that is 'business', because
- *              the owner writes the designation whenever it applies. See
- *              `image-matching/proof-strike.ts`, which quotes him, and the
- *              strike-only carve-out note in `match-vetoes.ts`.
+ *              the designation is written whenever it applies. See
+ *              `image-matching/proof-strike.ts` and the strike-only
+ *              carve-out note in `match-vetoes.ts`.
  */
 export type StrikeKind = 'proof' | 'business' | 'specimen' | 'unknown';
 
@@ -528,11 +613,11 @@ export interface ImageMatchResult extends ImageMatchCandidate {
   /** Score gap between the best and second-best candidate. */
   runnerUpGap: number;
 
-  /* -------------------------------------------------------------------------
+  /*
    * Review-tier fields. Written by `near-match.assignImportTier`, which runs
    * AFTER the auto-assign gates and can only ever add advice — it never writes
    * `status` or `matchedRecordId`.
-   * ---------------------------------------------------------------------- */
+    */
 
   /** Which of the three review tiers this image belongs in. */
   tier: ImportTier;
@@ -580,11 +665,11 @@ export interface TransactionRecord {
    * Who this ONE transaction was with — the seller on a purchase, the buyer on
    * a sale, the appraiser on an appraisal.
    *
-   * KEEP. This is NOT the `dealer` field that was removed from CoinRecord
-   * above. That one was a single "where did this coin come from" string on the
-   * coin itself; this one belongs to an individual dated, priced event, so a
-   * coin bought from one dealer and sold to another records both correctly.
-   * It is backed by the Transactions.Dealer column, which is untouched.
+   * KEEP. CoinRecord has no `dealer` field and must not grow one: a single
+   * "where did this coin come from" string on the coin cannot describe a
+   * coin bought from one dealer and later sold to another. This one belongs
+   * to an individual dated, priced event, and is backed by
+   * Transactions.Dealer.
    */
   dealer: string;
   notes: string;
@@ -603,41 +688,61 @@ export interface Denomination {
   country: string; // Country of origin (e.g., "USA", "Canada")
   sortOrder: number; // Sort order for UI dropdowns
   isActive: boolean; // Whether this denomination is currently in use
+
+  /* THE ISSUER LINK
+   *
+   * A denomination belongs to an ISSUING AUTHORITY, not to a country: the
+   * Roman Empire, the Papal States and the German states are not countries,
+   * and ancients are explicitly in scope. These three fields come from
+   * `GET /api/denominations`, which LEFT JOINs Issuers.
+   *
+   * *** OPTIONAL, AND THAT IS NOT LAZINESS. ***
+   * `Denominations.IssuerId` is nullable, and requiring it here would force
+   * an issuer to be invented at every site that builds a Denomination by
+   * hand. A wrong value the user has no reason to doubt is worse than a
+   * visible blank.
+   *
+   * `country` is NOT replaced by them — it is flagged debt, and the coin
+   * editor's dropdown still groups by it.
+   */
+
+  /** `Denominations.IssuerId`. Null means no issuer has been established. */
+  issuerId?: number | null;
+  /** `Issuers.Name` for that id, joined server-side so the UI need not. */
+  issuerName?: string | null;
+  /**
+   * `Denominations.FaceValue`. Null is a real answer, not missing data: a
+   * Denarius has no face value in any system this app knows about.
+   *
+   * *** COMPARABLE ONLY WITHIN ONE CURRENCY ERA OF ONE ISSUER. *** France
+   * carries both '1 Franc' and '1 Euro' at 1. Anything SORTING a whole
+   * issuer must use sortOrder.
+   */
+  faceValue?: number | null;
 }
 
-/**
- * Mint mark reference data from the database.
- * Defines available mint marks (e.g., "D" for Denver, "S" for San Francisco).
- */
+/** Mint mark reference data, e.g. "D" for Denver, "S" for San Francisco. */
 export interface MintMarkOption {
-  mintMarkId: number; // Primary key
+  mintMarkId: number;
   label: string; // Short code (e.g., "D", "S", "P", "W")
-  description: string; // Full description (e.g., "Denver Mint", "San Francisco Mint")
-  isActive: boolean; // Whether this mint mark is currently in use
+  description: string; // Full description (e.g., "Denver Mint")
+  isActive: boolean;
 }
 
-/**
- * Log entry for application-level logging.
- * Used to track operations, errors, and debugging information.
- */
 export interface LogEntry {
-  level: 'INFO' | 'WARN' | 'ERROR'; // Severity level
-  message: string; // Log message
-  details?: string; // Optional additional details (e.g., stack trace, JSON payload)
-  source: 'frontend' | 'backend'; // Origin of the log entry
-  timestamp: string; // ISO 8601 timestamp (e.g., "2026-08-28T14:30:00Z")
+  level: 'INFO' | 'WARN' | 'ERROR';
+  message: string;
+  details?: string; // e.g. stack trace or JSON payload
+  source: 'frontend' | 'backend';
+  timestamp: string; // ISO 8601
 }
 
-/**
- * UI notification for displaying messages to the user.
- * Used by the notification service to show info/warning/error banners.
- */
 export interface AppNotification {
-  id: string; // Unique identifier for the notification
-  type: 'info' | 'warning' | 'error'; // Notification type (affects styling and icon)
-  message: string; // Message to display to the user
-  autoDismiss: boolean; // Whether the notification should auto-dismiss after duration
-  duration?: number; // Auto-dismiss duration in milliseconds (only if autoDismiss is true)
+  id: string;
+  type: 'info' | 'warning' | 'error';
+  message: string;
+  autoDismiss: boolean;
+  duration?: number; // milliseconds; only read when autoDismiss is true
 }
 
 /**
@@ -704,16 +809,13 @@ export interface SpotPriceMeta {
   prices: SpotPrices | null;
 }
 
-// ===========================================================================
-// BATCH IMAGE IMPORT
-// ---------------------------------------------------------------------------
+// --- BATCH IMAGE IMPORT ---
 // Types for "point at a folder, match the photos to coins, attach the ones I
 // tick". See services/image-import/* and components/image-import-modal.
 //
-// Why these live here rather than next to the service: the modal, the two
+// They live here rather than next to the service because the modal, its two
 // child components and three services all traffic in the same shapes, and
-// putting them in one place stops the components from importing each other.
-// ===========================================================================
+// one shared home stops the components importing each other.
 
 /**
  * Which face of the coin a photo shows, as read from the filename.
@@ -825,17 +927,15 @@ export interface CoinImageGroup {
  * The near-match rows that all point at ONE coin — the unit tier 2 is reviewed
  * in.
  *
- * WHY GROUPING MATTERS HERE. The product owner named two situations that
- * produce a near match, and this type is the answer to the second one:
- * "multiple images apparently for each side of the same coin but don't match
- * well enough". Obverse, reverse, the slab label and two retakes are five
- * files but ONE question, and answering it five times is exactly the manual
- * work this redesign exists to remove. The group header carries an
- * "accept all" so the whole coin is settled in one click.
+ * WHY GROUPING MATTERS HERE. Two situations produce a near match, and this
+ * type answers the second: several images of the same coin that none of them
+ * match well enough. Obverse, reverse, the slab label and two retakes are
+ * five files but ONE question, and answering it five times is the manual
+ * work this screen exists to remove — so the group header carries an
+ * "accept all".
  *
- * (The owner's FIRST situation — several coins fitting one image — is handled
- * inside the row instead, by {@link NearMatchDetail.candidates} and the
- * dropdown that lists them.)
+ * (The FIRST situation — several coins fitting one image — is handled inside
+ * the row instead, by {@link NearMatchDetail.candidates} and its dropdown.)
  */
 export interface NearMatchGroup {
   /** The coin the matcher suggests for every row in this group. */
@@ -870,18 +970,17 @@ export interface BatchImportProgress {
    * What we are doing right now, so the UI can label the bar honestly.
    *
    * There are FOUR working phases rather than two because the import has four
-   * places where the main thread goes away for a noticeable time, and the user
-   * reported every silent one of them as "the screen was basically frozen":
+   * places where the main thread goes away long enough to look frozen:
    *
    *   scanning   classifying the picked File handles into images / not-images.
-   *              Cheap per file, but the picker hands over ~2,140 of them.
-   *   matching   filename -> coin, in chunks. Measured at ~1.1 s per
-   *              200-file chunk against a 2,000-coin inventory.
+   *              Cheap per file, but the picker hands over thousands of them.
+   *   matching   filename -> coin, in chunks. Roughly 1 s per 200-file chunk
+   *              against a 2,000-coin inventory.
    *   building   Angular turning the finished rows into the review screen.
-   *              This one is not our code at all, which is exactly why it used
-   *              to be invisible: the old code cleared `progress` in the same
-   *              task that handed the rows over, so the indicator came down
-   *              immediately BEFORE the longest render of the whole flow.
+   *              This phase is not our code, so it is easy to forget: do NOT
+   *              clear `progress` in the same task that hands the rows over,
+   *              or the indicator comes down immediately before the longest
+   *              render of the whole flow.
    *   attaching  reading, downscaling and saving the ticked photos.
    *
    * See services/image-import/import-progress.ts, which owns the labels and

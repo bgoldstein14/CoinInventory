@@ -1,11 +1,9 @@
 /**
  * Tests for the denomination dropdown's country groupings.
  *
- * The reported symptom was a dropdown that "doesn't list anything but the
- * countries": two <optgroup> headings with no options under either. The cause
- * was a hard-coded ['US', 'GB'] in the template meeting denominations whose
- * country had been rewritten to 'United States', so neither group matched
- * anything but both still rendered.
+ * The headings are derived from the data, so a group can never render with
+ * nothing under it and a denomination can never be filed under a country
+ * with no group to show it in.
  */
 import { describe, expect, it } from 'vitest';
 import { Denomination } from '../../types/coin.model';

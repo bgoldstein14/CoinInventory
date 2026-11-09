@@ -1,29 +1,28 @@
-/* ===========================================================================
+ /*
  * base-folder-check.spec.ts
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO PREVENT (it really happened, 2026-10-31)
- * ---------------------------------------------------------------------------
- * The owner imported a folder of photos and every resulting row was stamped
- * with a path under his DEVELOPMENT folder — "making up directories under
- * Development by denomination" — instead of the folder he had picked.
+ *
+ * THE BUG THIS EXISTS TO PREVENT (it really happened)
+ *
+ * An import stamped every resulting row with a path under a DEVELOPMENT
+ * folder -- "making up directories under Development by denomination" --
+ * instead of the folder that had been picked.
  *
  * Nothing was made up. The directory picker cannot supply an absolute path
  * (see source-path.ts), so only the RELATIVE half comes from the picked
- * folder; the absolute prefix comes solely from the base-folder text box. That
- * box had been left holding its fallback, which is the folder the app itself
- * is installed in. So his real subfolder names were glued onto the wrong root,
+ * folder; the absolute prefix comes solely from the base-folder text box.
+ * That box had been left holding its fallback, the folder the app itself is
+ * installed in, so the real subfolder names were glued onto the wrong root
  * and every image resolved to nothing.
  *
  * The screen already showed a live preview of the path about to be stored.
- * It was ADVISORY. The README had predicted this exact failure in those exact
- * terms -- "it does not fail loudly -- it stamps every imported row with a
- * location that resolves to nothing" -- and defended against it with a hint
+ * It was ADVISORY -- "it does not fail loudly -- it stamps every imported row
+ * with a location that resolves to nothing" -- and a hint
  * that a user is under no obligation to read.
  *
  * So the preview is no longer the only defence. Before anything is written,
  * the paths that WOULD be stored are checked against the disk, and an import
  * whose paths resolve to nothing is refused outright.
- * =========================================================================== */
+  */
 
 import { describe, expect, it, vi } from 'vitest';
 import {

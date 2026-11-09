@@ -46,9 +46,7 @@ afterEach(() => {
   else process.env['APP_BASE_FOLDER'] = ORIGINAL_OVERRIDE;
 });
 
-// ============================================================
 // normaliseWindowsPath
-// ============================================================
 
 describe('normaliseWindowsPath', () => {
   it('rewrites forward slashes in a drive-letter path', () => {
@@ -86,9 +84,7 @@ describe('normaliseWindowsPath', () => {
   });
 });
 
-// ============================================================
 // resolveAppFolder — the resolution order
-// ============================================================
 
 describe('resolveAppFolder', () => {
   it('prefers APP_BASE_FOLDER when it is set', () => {
@@ -155,9 +151,7 @@ describe('resolveAppFolder', () => {
   });
 });
 
-// ============================================================
 // GET /api/app-info
-// ============================================================
 
 describe('GET /api/app-info', () => {
   it('returns the app folder as JSON', async () => {

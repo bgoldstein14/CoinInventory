@@ -1,0 +1,319 @@
+// Styles for the Statistics dialog.
+@use '../../styles/controls' as *;
+@use '../../styles/modal' as *;
+
+// The dialog is position: fixed, so the host element must stay out of the
+// layout — same reason as settings-modal.
+:host { display: contents; }
+
+/*
+ * THE CHART PALETTE. Custom properties scoped to `.stats`, so the SVG below
+ * is written against ROLES rather than raw hex and there is one place to
+ * change a colour.
+ *
+ * DO NOT SWAP THE SERIES COLOUR FOR THE APP'S OWN BROWN. The accent #7a5b35
+ * and the Settings border #8e5b2d both fail the data-viz chroma floor against
+ * this dialog's white surface (0.067 and 0.091 against a floor of 0.10), so
+ * as a large flat fill they read as GREY rather than as a colour. Fine for a
+ * button, where shape and label carry the meaning; not fine for a mark whose
+ * only job is to be a visible quantity. #a9742f is the same bronze family,
+ * stepped up until it passes against #ffffff.
+ *
+ * NO DARK MODE HERE, deliberately: this application has no dark theme, and a
+ * chart that flipped on its own while the dialog around it stayed cream would
+ * look broken rather than considerate.
+ */
+.stats {
+  --viz-surface: #fff;
+  --viz-series: #a9742f;
+  // The wash under the spend line: the series hue at ~10%, never a saturated
+  // block — the data is the only thing allowed to be loud.
+  --viz-series-wash: rgba(169, 116, 47, 0.1);
+  --viz-series-strong: #8a5c21;
+  // The de-emphasis grey. Chart chrome and the folded "Other" bar.
+  --viz-muted: #b0a08a;
+  // Solid hairlines only — a dashed grid reads as a projection or a
+  // threshold when it is just a grid.
+  --viz-grid: #ede5d8;
+  --viz-axis: #d9c7a5;
+  --viz-ink: #2c1c0e;
+  --viz-ink-secondary: #5a4a32;
+  --viz-ink-tertiary: #8a7a63;
+}
+
+// A little more room than the shared .modal--wide: five tile rows and two
+// 700px-wide charts.
+.modal.stats { max-width: 820px; }
+
+.stats-section {
+  padding: 14px 0;
+
+  & + .stats-section { border-top: 1px solid #ede5d8; }
+}
+
+.stats-heading {
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--viz-ink-secondary);
+}
+
+// --- Figures ---
+
+.stats-hero-block { padding-top: 4px; }
+
+.stats-hero-label {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--viz-ink-tertiary);
+}
+
+// PROPORTIONAL FIGURES, not tabular: `tabular-nums` gives every digit the
+// width of a `0`, which makes a number like "$121.00" look loose at display
+// size. Tabular is reserved for the table below, where digits must line up.
+.stats-hero {
+  margin: 2px 0 0;
+  font-size: 3rem;
+  line-height: 1.1;
+  font-weight: 600;
+  color: var(--viz-ink);
+  font-variant-numeric: proportional-nums;
+}
+
+.stat-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.stat-tile {
+  flex: 1 1 150px;
+  min-width: 150px;
+  padding: 10px 12px;
+  border: 1px solid #ede5d8;
+  border-radius: 10px;
+  background: #fdfaf6;
+}
+
+.stat-tile__label {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--viz-ink-tertiary);
+}
+
+.stat-tile__value {
+  margin: 4px 0 0;
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--viz-ink);
+  font-variant-numeric: proportional-nums;
+
+  // .gain / .loss come from styles/_controls.scss, so a profit is coloured
+  // exactly as the rest of the app colours it. That green is only the THIRD
+  // cue and never the first — see StatTile.tone in the component.
+}
+
+.stat-tile__detail {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--viz-ink-secondary);
+}
+
+/*
+ * THE GAP NOTE — "Not recorded for 31 of 125 coins". Quiet but never hidden:
+ * it is the sentence that stops a total over 94 coins being read as a total
+ * over 125. Italic and small so a screen carrying several of them does not
+ * look like a screen of errors.
+ */
+.stats-gap {
+  margin: 4px 0 0;
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--viz-ink-tertiary);
+}
+
+// --- Controls: one row, above the chart they scope ---
+
+.stats-controls {
+  display: flex;
+  align-items: flex-end;
+  gap: 12px;
+  margin: 8px 0 10px;
+}
+
+.stats-control span {
+  font-weight: 600;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--viz-ink-tertiary);
+}
+
+.stats-segmented {
+  display: flex;
+  gap: 4px;
+}
+
+// --- Charts ---
+
+// The charts have a FIXED pixel width (see the component header: the
+// crosshair reads offsetX, which is only a user unit when nothing scales).
+// On a narrow window this scrolls sideways rather than silently putting the
+// crosshair in the wrong place.
+.chart-scroll {
+  overflow-x: auto;
+  // Enough room for the plot AND the x-axis label band underneath it — a
+  // fixed height that excludes the axis is what produces a tiny nested
+  // scrollbar inside a chart card.
+  padding-bottom: 2px;
+}
+
+.chart { display: block; }
+
+.chart-grid { stroke: var(--viz-grid); stroke-width: 1; }
+.chart-axis { stroke: var(--viz-axis); stroke-width: 1; }
+
+.chart-tick {
+  font-size: 10px;
+  fill: var(--viz-ink-tertiary);
+  // Tabular here: axis ticks sit in a column and must align.
+  font-variant-numeric: tabular-nums;
+}
+
+// Category names and values wear TEXT tokens, never the series colour: a
+// light hue is illegible as text on a white surface.
+.chart-label {
+  font-size: 11px;
+  fill: var(--viz-ink-secondary);
+}
+
+.chart-value {
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--viz-ink-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+// The one exception to the rule above: a label set INSIDE a coloured fill,
+// which is white or near-black by the fill's luminance. #a9742f is dark
+// enough to take white.
+.chart-value--inside { fill: #fff; }
+
+/*
+ * THE PAINTED MARKS DO NOT TAKE POINTER EVENTS — load-bearing, not a
+ * micro-optimisation. In SVG the topmost element under the pointer wins the
+ * event, and the bars, the category names and the value labels are all drawn
+ * AFTER their row's hit rectangle. Without this rule the one place a reader
+ * is most likely to aim — the bar itself — is the one place hover does not
+ * fire, because the <path> sits on top of the <rect> and carries no handler
+ * of its own.
+ *
+ * Handing the whole row to the invisible rect also keeps the hit area a
+ * single >= 24px band instead of a 16px ribbon with gaps in it, which is the
+ * behaviour the geometry's `hitHeight` was computed for.
+ *
+ * No DOM in this test suite can catch a regression here.
+ */
+.chart-bar,
+.chart-label,
+.chart-value {
+  pointer-events: none;
+}
+
+.chart-bar {
+  fill: var(--viz-series);
+  transition: fill 0.12s;
+}
+
+// The folded tail. De-emphasis grey rather than a ninth hue, because "Other"
+// is an aggregate and not a category — a reader must not learn it as one.
+.chart-bar--other { fill: var(--viz-muted); }
+
+// The hovered bar lifts. A fill change rather than an added stroke: a border
+// drawn round a mark adds data-weight ink that is not data.
+.chart-bar--active { fill: var(--viz-series-strong); }
+
+// Transparent, and on top of nothing: the pointer/focus target. Spans the
+// whole row and is at least 24px tall, which is the point — the painted bar
+// is 16px and would be a pinpoint.
+.chart-hit {
+  fill: transparent;
+  outline: none;
+
+  &:focus-visible {
+    fill: rgba(169, 116, 47, 0.08);
+  }
+}
+
+.chart-line {
+  fill: none;
+  stroke: var(--viz-series);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.chart-area {
+  fill: var(--viz-series-wash);
+  stroke: none;
+}
+
+.chart-crosshair {
+  stroke: var(--viz-axis);
+  stroke-width: 1;
+}
+
+// A 2px ring in the SURFACE colour, so the dot stays legible where it
+// overlaps the line.
+.chart-dot {
+  fill: var(--viz-series);
+  stroke: var(--viz-surface);
+  stroke-width: 2;
+}
+
+// The readout holds its height when empty (the template renders a
+// non-breaking space), so hovering a bar does not shunt the dialog down.
+.chart-readout {
+  margin: 6px 0 8px;
+  min-height: 1.2em;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--viz-ink-secondary);
+}
+
+// --- The table twin ---
+
+.stats-table {
+  width: 100%;
+  margin-top: 10px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+
+  th, td {
+    padding: 4px 8px;
+    border-bottom: 1px solid #ede5d8;
+    text-align: left;
+  }
+
+  th {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--viz-ink-tertiary);
+  }
+
+  // Columns of numbers that must align vertically — the one place tabular
+  // figures belong.
+  .numeric {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+  }
+}

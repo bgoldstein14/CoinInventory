@@ -1,11 +1,11 @@
-/* ===========================================================================
+ /*
  * custom-option-mode.ts — "the user picked Other" as a piece of state.
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO FIX
- * ---------------------------------------------------------------------------
+ *
+ * THE TRAP THIS EXISTS TO AVOID
+ *
  * Denomination and Mint mark are <select>s with a trailing "Other" option, and
- * choosing it is supposed to reveal a free-text box. That was implemented by
- * storing a sentinel string in the coin field itself:
+ * choosing it reveals a free-text box. The obvious implementation stores a
+ * sentinel string in the coin field itself and gates the box on it:
  *
  *     <select [ngModel]="coin().denomination" ...>
  *       <option value="__OTHER__">Other</option>
@@ -15,26 +15,15 @@
  *       <input (ngModelChange)="updateSelectedCoin('denomination', $event)" />
  *     }
  *
- * Both halves are broken by the same mistake — the *value* is being used to
- * remember a *UI choice*:
+ * That uses the *value* to remember a *UI choice*, and it fails three ways.
+ * Typing: the first character replaces the sentinel, so the `@if` goes false
+ * and the box is destroyed mid-keystroke. Reloading: a saved custom value such
+ * as "Trade Dollar" is not the sentinel either, so the box never reopens and
+ * the coin looks as though it has no denomination at all. Saving: picking
+ * Other and clicking away without typing persists the literal "__OTHER__".
  *
- *   TYPING: the first character you type into the box replaces the
- *   denomination with that character. '__OTHER__' is gone, so the `@if` is now
- *   false and the box you are typing into is destroyed mid-keystroke. Exactly
- *   the owner's report: "only one letter/number can be typed and then the box
- *   goes away".
- *
- *   RELOADING: a saved custom denomination such as "Trade Dollar" is a real
- *   value, not the sentinel, so the `@if` is false and the box never reopens.
- *   The coin comes back looking like it has no denomination selected at all.
- *
- *   SAVING: if the user picked Other and then clicked away without typing,
- *   the literal string "__OTHER__" was written to the database as the coin's
- *   denomination.
- *
- * ---------------------------------------------------------------------------
  * WHAT THIS DOES INSTEAD
- * ---------------------------------------------------------------------------
+ *
  * "This field is in custom mode" becomes its own boolean signal, held here,
  * completely independent of the field's value. The sentinel survives only as
  * the <option>'s value attribute — a token the <select> needs in order to have
@@ -45,9 +34,8 @@
  * text input in the form, and its visibility is driven by this signal. Typing
  * cannot close it, because typing does not touch this signal.
  *
- * ---------------------------------------------------------------------------
  * THE SUBTLE PART: WHEN MAY CUSTOM MODE BE RE-DERIVED?
- * ---------------------------------------------------------------------------
+ *
  * On load we want to infer custom mode from the value ("this denomination is
  * not one of the options, so it must be a custom one"). The temptation is to
  * make that a `computed()` or an unguarded `effect()` over the coin signal.
@@ -60,7 +48,7 @@
  * So the re-derivation is guarded by the coin id: it happens once per coin,
  * when a DIFFERENT coin is loaded, and never again while that coin is being
  * edited. `syncForCoin` is where that guard lives.
- * =========================================================================== */
+  */
 
 import { signal } from '@angular/core';
 
@@ -108,8 +96,7 @@ export function stripCustomSentinel(value: string | null | undefined): string {
  * Per-field "is the custom text box open?" state.
  *
  * One instance per field (one for Denomination, one for Mint mark) rather than
- * two bespoke pairs of signals, so the two fields cannot drift apart — the
- * owner reported the bug for Denomination but it was identical for Mint mark.
+ * two bespoke pairs of signals, so the two fields cannot drift apart.
  *
  * Deliberately a plain class with no Angular injection: it can be constructed
  * with `new` in a unit test, which matters because the template itself is not
@@ -144,10 +131,40 @@ export class CustomOptionMode {
    */
   syncForCoin(coinId: string, value: string, optionLabels: readonly string[]): void {
     if (optionLabels.length === 0) return;
+    this.syncWhenReady(coinId, isCustomOptionValue(value, optionLabels));
+  }
+
+  /**
+   * The same re-derivation, for a field whose "is this custom?" question is
+   * not "is the value in the list?".
+   *
+   * Denomination is not answerable from a list of labels. A coin can hold text
+   * with NO id — the normal outcome of an import — and that is custom even
+   * when the text happens to spell a real label, because the label may be
+   * ambiguous across issuers ('Crown' is British AND Australian) or may belong
+   * to a row that has been retired. Equally, a coin WITH an id is NOT custom
+   * however its text reads. The caller works all that out in
+   * `denominationSelectionFor` (denomination-picker.ts, which carries the full
+   * argument) and brings the answer here.
+   *
+   * *** BOTH GUARDS FROM syncForCoin ARE STILL IN FORCE. *** The coin-id guard
+   * is right here, so a re-derivation still happens ONCE per coin and never
+   * again while that coin is being edited — without it, typing a custom
+   * denomination that happens to resolve would yank the box away mid-word.
+   *
+   * The "wait for the lookups" guard moves to the CALLER, because the
+   * readiness signal is no longer "is the label list empty?". It is
+   * `DenominationSelection.ready`. Do not call this with a verdict derived
+   * from an empty lookup list: it would declare every coin custom, and because
+   * this method fires once per coin the coin would then STAY custom.
+   *
+   * @param custom the already-decided answer for THIS coin.
+   */
+  syncWhenReady(coinId: string, custom: boolean): void {
     if (coinId === this.lastSyncedCoinId) return;
 
     this.lastSyncedCoinId = coinId;
-    this.customMode.set(isCustomOptionValue(value, optionLabels));
+    this.customMode.set(custom);
   }
 
   /** The user chose "Other" in the select. */

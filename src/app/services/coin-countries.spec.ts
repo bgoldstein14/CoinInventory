@@ -126,14 +126,14 @@ describe('allCountryNames', () => {
 });
 
 
-/* =============================================================================
+ /*
  * FOREIGN DENOMINATIONS READ OUT OF A SECURITY NAME
- * -----------------------------------------------------------------------------
+ *
  * These names are securities from the test corpus in testing/qif-corpus. The units
  * table is the only thing standing between "50 Euro" and a coin that imports
  * with no denomination at all and lands in the exceptions list, so a unit he
  * actually owns being absent from it is a silent data gap, not a cosmetic one.
- * =========================================================================== */
+  */
 describe('detectForeignDenomination', () => {
   it('reads the euro, which no single country implies', () => {
     const found = detectForeignDenomination('2025 Italy 50 Euro 1/2 oz. Gold Proof');

@@ -11,8 +11,8 @@
 -- inventory grid, a "Search dealers" box in the advanced filter panel, a Dealer
 -- option in bulk edit, and a Dealer column in the CSV import/export.
 --
--- The owner asked for it to go ("not sure why that was added anyway"), and the
--- reason it was redundant is worth writing down: the same information is
+-- It goes because it was redundant, and the reason is worth writing down: the
+-- same information is
 -- already recorded, more precisely, on the TRANSACTION rows. A coin-level
 -- dealer can only say "this coin is associated with Heritage"; a transaction
 -- says "the purchase on 2024-01-15, for $150, was with Heritage" -- and it can
@@ -43,13 +43,13 @@
 -- ************************************************************
 -- Migration 005 (the tags removal) REFUSED to drop anything it found data in,
 -- and stopped with instructions instead. This one does NOT do that, and the
--- difference is a decision the owner made, not an oversight:
+-- difference is deliberate, not an oversight:
 --
 --   - Tags were unreachable. No code path could ever set one, so any row found
 --     in CoinTags was a mystery that deserved a human look before deletion.
 --   - Dealer was a real, editable field. There is nothing mysterious about
---     finding values in it -- that is what it was for -- and the owner has
---     chosen to discard them anyway.
+--     finding values in it -- that is what it was for -- and they are being
+--     discarded knowingly.
 --
 -- So there is no refusal path here. What the script DOES do is COUNT the values
 -- it is about to destroy and PRINT that count first, so the log records exactly
@@ -146,8 +146,8 @@ GO
 -- ============================================================
 -- STEP 0: report what is about to be discarded
 -- ============================================================
--- The owner has already decided to proceed regardless of what is in here, so
--- this step never blocks. Its only job is to put the loss on the record.
+-- The decision to proceed has already been made regardless of what is in
+-- here, so this step never blocks. Its only job is to put the loss on record.
 --
 -- WHY THE COUNT GOES THROUGH sp_executesql INSTEAD OF BEING WRITTEN PLAINLY:
 -- a batch is compiled as a whole before any of it runs, and column names in a

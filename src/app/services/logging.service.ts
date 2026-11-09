@@ -8,17 +8,12 @@ import { LogEntry } from '../types/coin.model';
 import { describeHttpError, resolveApiBaseUrl } from './http-utils';
 
 /**
- * LoggingService provides centralized logging for the application.
+ * Centralised logging.
  *
  * Every log line goes to the browser console immediately, and is also sent
  * to the backend so it lands in server/logs/app.log alongside the server's
  * own entries. Having both halves of the story in one file is what makes
  * it possible to debug "the save failed" reports after the fact.
- *
- * Usage:
- *   private readonly logger = inject(LoggingService);
- *   this.logger.info('User clicked save button');
- *   this.logger.error('Failed to save coin', describeHttpError(err));
  */
 @Injectable({ providedIn: 'root' })
 export class LoggingService {
@@ -29,30 +24,24 @@ export class LoggingService {
   constructor(private http: HttpClient) {}
 
   /**
-   * Absolute base URL for the API.
-   *
-   * This used to POST to the relative path '/api/log'. That is wrong during
-   * development: the app is served by `ng serve` on port 4200, so a relative
-   * URL posts to the Angular dev server (which has no /api/log route) rather
-   * than to the Express backend on port 3000. Frontend logs were therefore
-   * silently dropped in exactly the setup we do most of our debugging in.
-   *
-   * resolveApiBaseUrl() is shared with ApiService so both agree on where the
-   * backend lives.
+   * ABSOLUTE base URL for the API, never a relative '/api/log'. In
+   * development the app is served by `ng serve` on port 4200, so a relative
+   * URL posts to the Angular dev server — which has no /api/log route — and
+   * frontend logs are silently dropped in exactly the setup most debugging
+   * happens in. `resolveApiBaseUrl()` is shared with ApiService so both
+   * agree on where the backend lives.
    */
   private readonly baseUrl = resolveApiBaseUrl();
 
   /**
    * When the backend log endpoint fails we stop hammering it -- but only
-   * temporarily. This holds the timestamp (ms) before which we will not
+   * TEMPORARILY. This holds the timestamp (ms) before which we will not
    * retry.
    *
-   * The previous implementation latched a `backendAvailable = false` flag
-   * permanently on the first failure, so a single transient hiccup disabled
-   * backend logging for the rest of the browser session. That is the worst
-   * possible behaviour: the moment something goes wrong is the moment we
-   * most need the logs, and it guaranteed the interesting entries were the
-   * ones that never got written.
+   * Do not replace it with a latched `backendAvailable = false`: one
+   * transient hiccup would then disable backend logging for the rest of the
+   * session, and the moment something goes wrong is the moment the logs
+   * matter most.
    */
   private suppressBackendUntil = 0;
 
@@ -67,34 +56,18 @@ export class LoggingService {
    */
   private sending = false;
 
-  /**
-   * Log an informational message.
-   * Use for general operation tracking and debugging.
-   */
   info(message: string, details?: string): void {
     this.log('INFO', message, details);
   }
 
-  /**
-   * Log a warning message.
-   * Use for non-critical issues that should be investigated.
-   */
   warn(message: string, details?: string): void {
     this.log('WARN', message, details);
   }
 
-  /**
-   * Log an error message.
-   * Use for critical failures that impact functionality.
-   */
   error(message: string, details?: string): void {
     this.log('ERROR', message, details);
   }
 
-  /**
-   * Internal method that handles the actual logging logic.
-   * Writes to the browser console always, and to the backend when possible.
-   */
   private log(level: 'INFO' | 'WARN' | 'ERROR', message: string, details?: string): void {
     // Console first, unconditionally. This must never be skipped -- it is
     // the fallback when the backend is unreachable.

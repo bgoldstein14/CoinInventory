@@ -1,25 +1,21 @@
 /**
  * Tests that Export -> CSV produces a file the importer can fully read back.
  *
- * THE BUG THESE EXIST FOR
- * -----------------------
- * The CSV modal tells the user that an exported file doubles as a template,
- * because every column will auto-map. That was not true. `exportCsv()` kept its
- * own hand-written list of 22 header labels, and `CSV_MAPPABLE_FIELDS` -- which
- * drives both auto-mapping and the mapping dropdown -- listed only 21. The
- * missing one was `Source`. It could not auto-map, and since the dropdown is
- * built from the same list, it could not be mapped by hand either. The one file
- * advertised as a ready-made template was the one file with an unmappable
- * column in it.
+ * WHY THEY MATTER
  *
- * The fix was structural rather than a one-line addition: the export now
- * DERIVES its columns from `CSV_MAPPABLE_FIELDS`, so the two cannot drift
- * again. The first test below is the one that would have caught the original
- * bug, and it now holds by construction.
+ * The CSV modal tells the user that an exported file doubles as a template,
+ * because every column will auto-map. That only holds while the export's
+ * columns and `CSV_MAPPABLE_FIELDS` -- which drives both auto-mapping and the
+ * mapping dropdown -- stay in step. A hand-written header list drifts from
+ * that list (it once grew a `Source` column the importer could map neither
+ * automatically nor by hand), so the export now DERIVES its columns from it.
+ * The first test below holds by construction and is the one that catches a
+ * regression there.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
 import { CSV_MAPPABLE_FIELDS, CsvService } from '../csv.service';
+import { BOM } from './byte-order-mark';
 
 /**
  * CsvService has no injected dependencies, so it can be constructed directly.
@@ -29,13 +25,18 @@ import { CSV_MAPPABLE_FIELDS, CsvService } from '../csv.service';
  * capture lets the tests assert on the REAL generated file content rather than
  * on some reimplementation of it.
  */
-function serviceCapturing(): { csv: CsvService; written: () => string } {
+function serviceCapturing(): {
+  csv: CsvService;
+  written: () => string;
+  mimeType: () => string;
+} {
   const csv = new CsvService();
   let content = '';
+  let mimeType = '';
   (csv as unknown as Record<string, unknown>)['downloadBlob'] = vi.fn(
-    (text: string) => { content = text; }
+    (text: string, _filename: string, type: string) => { content = text; mimeType = type; }
   );
-  return { csv, written: () => content };
+  return { csv, written: () => content, mimeType: () => mimeType };
 }
 
 function coin(overrides: Partial<CoinRecord> = {}): CoinRecord {
@@ -82,9 +83,8 @@ describe('Export -> CSV round trip', () => {
 
   it('survives a full export then re-import with values intact', () => {
     const { csv, written } = serviceCapturing();
-    // 26.73 is the Morgan dollar's weight in GRAMS, which is what the weight
-    // field holds since migration 008. It read 0.7734 here -- the same coin in
-    // troy ounces -- before the unit changed.
+    // 26.73 is the Morgan dollar weight in GRAMS, which is what the weight
+    // field holds since migration 008.
     csv.exportCsv([coin({ notes: 'Toned, with a comma', weight: 26.73 })]);
 
     const rows = csv.parseCsv(written());
@@ -202,6 +202,72 @@ describe('the Source column', () => {
   });
 });
 
+/**
+ * The byte-order mark, and the silent trap that came with adding it.
+ *
+ * Without a BOM, Excel decodes a UTF-8 export as windows-1252 and every `¢`
+ * and `½` in a denomination comes out as nonsense: both are two-byte UTF-8
+ * sequences beginning `0xC2`, which windows-1252 renders as a stray `Â`, and
+ * both are ordinary content in a US coin inventory ("½ Cent", "25¢").
+ *
+ * Adding the BOM on its own is a net loss, though: if the importer does not
+ * strip one, re-importing our own export leaves the FIRST column unmapped
+ * and says nothing about it. The re-import assertions below are the real
+ * test; the "starts with a BOM" ones only stop it being removed again.
+ */
+describe('CSV exports are written as UTF-8 with a byte-order mark', () => {
+  it('prefixes all three exports, which is what makes Excel decode UTF-8', () => {
+    const inventory = serviceCapturing();
+    inventory.csv.exportCsv([coin()]);
+    expect(inventory.written().startsWith(BOM)).toBe(true);
+    expect(inventory.mimeType()).toBe('text/csv;charset=utf-8');
+
+    const template = serviceCapturing();
+    template.csv.downloadCsvTemplate();
+    expect(template.written().startsWith(BOM)).toBe(true);
+
+    const insurance = serviceCapturing();
+    insurance.csv.exportInsuranceCsv([coin()]);
+    expect(insurance.written().startsWith(BOM)).toBe(true);
+  });
+
+  it('re-imports its own export with the first column still mapped', () => {
+    // THE regression test. `Coin Type` is the first exported column; with a
+    // BOM glued to it and no stripping, it reads `﻿Coin Type`, matches
+    // nothing, and every coin loses its type without a word of warning.
+    const { csv, written } = serviceCapturing();
+    csv.exportCsv([coin()]);
+
+    const rows = csv.parseCsv(written());
+    expect(rows[0][0]).toBe('Coin Type');
+
+    const mapping = csv.autoMapHeaders(rows[0]);
+    expect(rows[0].filter(header => !mapping[header])).toEqual([]);
+    expect(csv.mapRowToCoin(rows[1], rows[0], mapping).coinType).toBe('Morgan Dollar');
+  });
+
+  it('round-trips the cent sign and the fraction that caused the report', () => {
+    const { csv, written } = serviceCapturing();
+    csv.exportCsv([coin({ denomination: '½ Cent', notes: 'Marked 25¢ on the flip' })]);
+
+    const rows = csv.parseCsv(written());
+    const mapping = csv.autoMapHeaders(rows[0]);
+    const reimported = csv.mapRowToCoin(rows[1], rows[0], mapping);
+
+    expect(reimported.denomination).toBe('½ Cent');
+    expect(reimported.notes).toBe('Marked 25¢ on the flip');
+    // And no stray Â anywhere in the file itself.
+    expect(written()).not.toContain('Â');
+  });
+
+  it('strips a BOM from a file written by some other program too', () => {
+    const csv = new CsvService();
+    const rows = csv.parseCsv(`${BOM}Coin Type,Year\nMorgan Dollar,1881\n`);
+    expect(rows[0]).toEqual(['Coin Type', 'Year']);
+    expect(csv.autoMapHeaders(rows[0])['Coin Type']).toBe('coinType');
+  });
+});
+
 describe('the blank template', () => {
   it('omits Source, which nobody filling in a blank sheet should supply', () => {
     const { csv, written } = serviceCapturing();
@@ -213,10 +279,10 @@ describe('the blank template', () => {
   });
 
   it('keeps every example row aligned with the header row', () => {
-    // The example rows used to be positional arrays that had to match
-    // CSV_MAPPABLE_FIELDS in order AND length by hand, so adding one field
-    // shifted every example value a column to the left. They are keyed by
-    // field now, which is what this asserts.
+    // The example rows are keyed by field, not positional arrays: a
+    // positional array has to match CSV_MAPPABLE_FIELDS in order AND length
+    // by hand, so adding one field shifts every example value a column to
+    // the left. This asserts the alignment.
     const { csv, written } = serviceCapturing();
     csv.downloadCsvTemplate();
 
@@ -241,17 +307,15 @@ describe('the blank template', () => {
     // parser handles rather than only the easy case -- but only the forms that
     // are SAFE in this column.
     //
-    // This test used to assert the opposite: that the template contained
-    // 'ozt' and '1/10 oz'. Both were correct when Weight was measured in troy
-    // ounces. Both became traps when migration 008 moved the column to grams,
-    // because parseNumericCell reads the NUMBER and discards whatever unit
-    // follows it, and resolves a fraction on sight. So in the template's one
-    // job -- being the file people copy -- '0.7734 ozt' would now record
-    // 0.7734 GRAMS and '1/10 oz' would record a tenth of a gram.
+    // 'ozt' and '1/10 oz' are NOT safe here. parseNumericCell reads the
+    // NUMBER and discards whatever unit follows it, and resolves a fraction
+    // on sight, so in a GRAMS column '0.7734 ozt' records 0.7734 grams and
+    // '1/10 oz' records a tenth of a gram. In the template's one job -- being
+    // the file people copy -- that is a trap.
     //
-    // The assertions are therefore inverted: a gram example WITH its unit
-    // (which is both safe and useful, since it makes the unit unmissable),
-    // and nothing that looks like an ounce. The negative assertions are the
+    // So: a gram example WITH its unit (safe, and it makes the unit
+    // unmissable), and nothing that looks like an ounce. The negative
+    // assertions are the
     // point of the test -- they stop the old examples being restored by
     // somebody who reads the parser's tolerance as an invitation.
     const written = (() => {

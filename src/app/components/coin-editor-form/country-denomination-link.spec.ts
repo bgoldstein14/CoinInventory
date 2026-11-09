@@ -1,12 +1,6 @@
 /**
  * Tests for the two-way Country <-> Denomination link in the coin editor.
  *
- * The owner's request was:
- *
- *   "If a coin is being added from Great Britain, then only the British
- *    denominations should be available... If the denomination is entered
- *    first then the country should be automatically chosen/entered."
- *
  * The failure modes worth testing are not the happy path. They are:
  *
  *   - a country nobody recognises emptying the dropdown, leaving the user
@@ -28,11 +22,11 @@ import {
   denominationOptionGroups
 } from './country-denomination-link';
 
-/* ---------------------------------------------------------------------------
+ /*
  * Fixtures: a miniature of the real seed data, which files US denominations
  * under 'US' and British ones under 'GB' — two-letter codes, while coins
  * store full country names. That mismatch is the thing under test.
- * ------------------------------------------------------------------------- */
+  */
 function denomination(overrides: Partial<Denomination> = {}): Denomination {
   return {
     denominationId: 1,
@@ -58,9 +52,7 @@ function labelsOf(groups: ReturnType<typeof denominationOptionGroups>): string[]
   return groups.flatMap((group) => group.options.map((option) => option.label));
 }
 
-// ===========================================================================
 // COUNTRY -> DENOMINATIONS: the filter
-// ===========================================================================
 
 describe('denominationOptionGroups — narrowing by country', () => {
   it('offers only British denominations for a British coin', () => {
@@ -109,9 +101,7 @@ describe('denominationOptionGroups — narrowing by country', () => {
   });
 });
 
-// ===========================================================================
 // RULE 1: NEVER AN EMPTY DROPDOWN
-// ===========================================================================
 
 describe('denominationOptionGroups — never strands the user with nothing', () => {
   it('shows everything, grouped by country, when the country is blank', () => {
@@ -154,9 +144,7 @@ describe('denominationOptionGroups — never strands the user with nothing', () 
   });
 });
 
-// ===========================================================================
 // RULE 2: AN EXISTING OUT-OF-COUNTRY DENOMINATION MUST SURVIVE
-// ===========================================================================
 
 describe('denominationOptionGroups — an existing denomination from elsewhere', () => {
   it('keeps a saved GB denomination visible when the country becomes the US', () => {
@@ -204,9 +192,7 @@ describe('denominationOptionGroups — an existing denomination from elsewhere',
   });
 });
 
-// ===========================================================================
 // DENOMINATION -> COUNTRY: the auto-fill
-// ===========================================================================
 
 describe('denominationChoiceUpdates — filling the country in', () => {
   it('fills in the country when it is blank', () => {
@@ -300,9 +286,7 @@ describe('denominationChoiceUpdates — filling the country in', () => {
   });
 });
 
-// ===========================================================================
 // THE PAYLOAD: EVERY WRITE IS STILL ONE FIELD
-// ===========================================================================
 
 /**
  * Mimics the funnel every edit in CoinEditorForm goes through:
@@ -365,9 +349,7 @@ describe('the payloads that reach the server', () => {
   });
 });
 
-// ===========================================================================
 // THE '__OTHER__' SENTINEL
-// ===========================================================================
 
 describe('the custom-denomination sentinel', () => {
   it('is never a real denomination, so it can never infer a country', () => {

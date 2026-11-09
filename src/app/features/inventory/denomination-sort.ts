@@ -4,9 +4,8 @@
  * WHY THIS FILE EXISTS
  * Sorting a coin collection is not plain alphabetical sorting. "½¢" has to come
  * before "1¢", "2/-" (two shillings) has to come before "5/-", and "Dollar" has
- * to come after "Quarter". All of that knowledge used to sit as private methods
- * on the App component, where it was impossible to read the component without
- * scrolling past 90 lines of denomination lookup tables.
+ * to come after "Quarter". That knowledge is a lookup table, and it is kept
+ * out of the components that use it.
  *
  * These are pure functions — no signals, no Angular, no state — so they are
  * trivial to reason about and to unit test on their own.
@@ -82,36 +81,26 @@ export function parseDenominationValue(value: string): number {
     ['100 dollar', 100], ['100 dollars', 100], ['$100', 100], ['£100', 100]
   ];
 
-  // Add the two modern bullion face values alongside the classic series.
+  // The modern bullion face values, alongside the classic series.
   directMatches.push(['25 dollar', 25], ['25 dollars', 25], ['$25', 25], ['£25', 25]);
 
-  /* -----------------------------------------------------------------------
-   * MATCH THE LONGEST PATTERN, NOT THE FIRST ONE LISTED
-   * -----------------------------------------------------------------------
-   * This loop used to walk `directMatches` in order and take the first entry
-   * whose text appeared ANYWHERE in the label. Because the list runs smallest
-   * face value first, a short pattern reliably shadowed a longer one that
-   * started the same way, and the result was silently wrong sorting:
+  /* MATCH THE LONGEST PATTERN, NOT THE FIRST ONE LISTED
    *
-   *     "$10"   contains "$1"   -> sorted as one dollar
-   *     "$20"   contains "$2"   -> sorted as two dollars
-   *     "$2.50" contains "$2"   -> sorted as two dollars
-   *     "$50"   contains "$5"   -> sorted as five dollars
-   *     "25¢"   contains "5¢"   -> sorted as five cents
+   * Taking the first entry whose text appears ANYWHERE in the label lets a
+   * short pattern shadow a longer one that starts the same way, and the
+   * result is silently wrong sorting:
    *
-   * Four of those are denominations the database actually seeds, so this was
-   * live: quarters sorted among the nickels and Double Eagles among the $2
-   * pieces. Nothing failed, the rows were just in the wrong order, which is
-   * exactly the kind of bug that survives for years.
+   *     "$10"   contains "$1"   -> one dollar
+   *     "$2.50" contains "$2"   -> two dollars
+   *     "25¢"   contains "5¢"   -> five cents
    *
-   * Two passes fix it without having to hand-order the table:
+   * Two passes avoid it without having to hand-order the table:
    *   1. an EXACT match wins outright -- "$5" is five dollars, full stop;
    *   2. otherwise the LONGEST matching pattern wins, so "$10" prefers "$10"
    *      over "$1" no matter where either sits in the list.
    *
-   * Keeping the table in ascending face-value order is then purely for human
-   * readability, and reordering it can no longer change any answer.
-   * --------------------------------------------------------------------- */
+   * Keeping the table in ascending face-value order is therefore purely for
+   * human readability; reordering it cannot change any answer. */
   for (const [pattern, amount] of directMatches) {
     if (normalized === pattern) return amount;
   }

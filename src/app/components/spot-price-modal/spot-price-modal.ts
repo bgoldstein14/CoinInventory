@@ -11,9 +11,8 @@ const MANUAL_SOURCE = 'Manual entry';
 /**
  * SpotPriceModalComponent — the "Spot Prices" dialog.
  *
- * ---------------------------------------------------------------------------
  * THE ONE THING TO UNDERSTAND BEFORE EDITING THIS FILE
- * ---------------------------------------------------------------------------
+ *
  * `POST /api/spot-prices` does not update a price. It INSERTS A NEW ROW into a
  * price-history table, every single time it is called, for ever. (Read
  * server/routes/data/spot-prices.ts if you want to see it.)
@@ -78,8 +77,7 @@ export class SpotPriceModalComponent {
    *
    * Read straight off InventoryService rather than kept locally, so the
    * dialog shows the provenance of prices LOADED AT START-UP, not just ones
-   * fetched in this session. Before this, reopening the app showed an empty
-   * fetch bar as though nothing had ever been retrieved.
+   * fetched in this session.
    */
   protected readonly savedSource = computed(() => this.inv.spotPriceMeta().source);
   protected readonly savedAt = computed(() => this.inv.spotPriceMeta().fetchedAt);

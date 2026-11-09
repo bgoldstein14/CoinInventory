@@ -1,16 +1,12 @@
 import { ErrorHandler, Injectable, inject } from '@angular/core';
 import { LoggingService } from './logging.service';
 import { NotificationService } from './notification.service';
+import { RecentErrorsService } from './support/recent-errors.service';
 
 /**
- * GlobalErrorHandler
- *
- * Angular's global error handler that catches any unhandled errors
- * thrown throughout the application. Instead of crashing silently,
- * this handler logs the error and notifies the user via a toast message.
- *
- * Usage: Registered in app.config.ts providers array.
- * This is automatically called by Angular when an error occurs.
+ * Angular's global error handler: catches anything thrown anywhere in the
+ * app, logs it, remembers it for the problem report, and shows a toast.
+ * Registered in app.config.ts.
  */
 @Injectable()
 export class GlobalErrorHandler implements ErrorHandler {
@@ -18,20 +14,27 @@ export class GlobalErrorHandler implements ErrorHandler {
   private readonly notifications = inject(NotificationService);
 
   /**
-   * Handles errors by logging them and showing a user-friendly notification.
+   * The in-memory tail that "Help > Report a problem" reads.
    *
-   * @param error - The error object (could be Error, string, or any type)
+   * WHY IT IS NOT ENOUGH TO RELY ON this.logging: LoggingService stops
+   * POSTing to the backend for thirty seconds after a failed send, and the
+   * backend being unreachable is exactly when the errors worth reporting
+   * happen. Without this line the report's "recent errors" section would be
+   * reliably empty in the one situation it exists for.
    */
+  private readonly recentErrors = inject(RecentErrorsService);
+
   handleError(error: unknown): void {
-    // Extract message safely from the error object
     const message = error instanceof Error
       ? error.message
       : 'An unexpected error occurred';
 
-    // Log the full error with context
     this.logging.error('Unhandled error', message);
 
-    // Show user-friendly toast notification
+    // Remember it for the problem report. Recorded here rather than inside
+    // LoggingService so it survives the backend being down.
+    this.recentErrors.record(message, error instanceof Error ? error.stack : undefined);
+
     this.notifications.showError(message);
   }
 }

@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * BatchImageImportService
- * ---------------------------------------------------------------------------
+ *
  * The engine behind "point at a folder and attach the photos to my coins".
  *
  * It owns two jobs, and the whole design of the feature comes out of the order
@@ -10,9 +10,7 @@
  *   2. APPLY (expensive)  - read + shrink + save ONLY the files the user
  *                           ticked. Lives in ./image-import/attach-runner.ts.
  *
- * ---------------------------------------------------------------------------
- * WHY FILENAME-ONLY MATCHING HAPPENS BEFORE ANY FILE IS READ
- * ---------------------------------------------------------------------------
+ * ---- WHY FILENAME-ONLY MATCHING HAPPENS BEFORE ANY FILE IS READ ----
  * The share is 4.2 GB across ~2,140 files (average 2.5 MB, largest 46 MB).
  * `<input webkitdirectory>` hands us File handles instantly - that part is
  * free, because a File is only a pointer to something on disk. The expensive
@@ -29,7 +27,7 @@
  * screen appear in well under a second even for the full share. Bytes are
  * only ever read for the files the user actually confirms - typically a few
  * hundred, not 1,700, and with a progress bar in front of them.
- * =========================================================================== */
+  */
 
 import { Injectable, inject } from '@angular/core';
 import {
@@ -41,6 +39,10 @@ import {
   NearMatchGroup
 } from '../types/coin.model';
 import { ImageMatchingService } from './image-matching.service';
+import {
+  denominationLabelSnapshot,
+  type LabelledDenomination
+} from './image-matching/coin-signature';
 import { ImageDownscaleService } from './image-import/image-downscaler';
 import { describePhoto, sideSortOrder } from './image-import/photo-variant';
 import {
@@ -69,9 +71,7 @@ export class BatchImageImportService {
   private readonly matcher = inject(ImageMatchingService);
   private readonly downscaler = inject(ImageDownscaleService);
 
-  /* =========================================================================
-   * STAGE 1 - PLAN (filenames only, nothing is read)
-   * ======================================================================= */
+  /* ---- STAGE 1 - PLAN (filenames only, nothing is read) ---- */
 
   /**
    * Match a filtered list of image files against the inventory and build the
@@ -80,13 +80,34 @@ export class BatchImageImportService {
    * @param files     already filtered to displayable images (see image-file-filter)
    * @param inventory the coins to match against
    * @param onChunk   progress callback: (matched so far, total)
+   * @param denominations the denominations lookup, so a linked coin is
+   *   identified by the denomination its `DenominationId` names rather than
+   *   by whatever text the source wrote (design §6). Optional: omitting it,
+   *   or passing a lookup that failed to load, is the matcher exactly as it
+   *   behaved before `DenominationId` existed.
    */
   async buildRows(
     files: readonly File[],
     inventory: readonly CoinRecord[],
-    onChunk?: (done: number, total: number) => void
+    onChunk?: (done: number, total: number) => void,
+    denominations: readonly LabelledDenomination[] = []
   ): Promise<BatchImageRow[]> {
     const rows: BatchImageRow[] = [];
+
+     /*
+     * !! TAKEN ONCE, HERE, AND NOT INSIDE THE LOOP. !!
+     *
+     * This loop yields to the browser between chunks, so a denominations
+     * response landing mid-import could otherwise match photographs 1-200
+     * under one set of rules and 201-400 under another -- one folder, two
+     * behaviours, and nothing anywhere saying so. Freezing the lookup before
+     * the first chunk makes the whole batch internally consistent whatever
+     * the network does. See coin-signature.ts for the full note.
+     *
+     * It is also the cheap place to do it: one pass over the lookup for the
+     * import rather than one per chunk.
+      */
+    const denominationLabels = denominationLabelSnapshot(denominations);
 
     for (let start = 0; start < files.length; start += MATCH_CHUNK_SIZE) {
       const chunk = files.slice(start, start + MATCH_CHUNK_SIZE);
@@ -94,7 +115,8 @@ export class BatchImageImportService {
       // The ONLY thing handed to the matcher is the name. No file.arrayBuffer().
       const results = this.matcher.matchImages(
         chunk.map(f => f.name),
-        inventory as CoinRecord[]
+        inventory as CoinRecord[],
+        denominationLabels
       );
 
       for (let i = 0; i < chunk.length; i++) {
@@ -120,12 +142,12 @@ export class BatchImageImportService {
    *                          single yes/no.
    *   tier 'not-imported' -> no coin, unticked, decision 'skipped' ALREADY.
    *
-   * That last line is the behaviour change the owner asked for: a file the
-   * matcher has no apparent match for is skipped automatically rather than
-   * sitting in a queue demanding attention it cannot reward. With ~2,140 files
-   * the old behaviour meant hundreds of cards whose only honest answer was
-   * "yes, skip it". Nothing is lost — the row keeps its result, its parse and
-   * its `skipReason`, and the screen lists every one of them read-only.
+   * A file the matcher has no apparent match for is skipped automatically
+   * rather than sitting in a queue demanding attention it cannot reward:
+   * with ~2,140 files that would be hundreds of cards whose only honest
+   * answer is "yes, skip it". Nothing is lost — the row keeps its result, its
+   * parse and its `skipReason`, and the screen lists every one of them
+   * read-only.
    */
   private toRow(file: File, result: ImageMatchResult): BatchImageRow {
     const isMatched = result.tier === 'matched' && !!result.matchedRecordId;
@@ -151,9 +173,7 @@ export class BatchImageImportService {
     };
   }
 
-  /* =========================================================================
-   * TIER 2 GROUPING - one entry per SUGGESTED COIN, not one per file
-   * ======================================================================= */
+  /* ---- TIER 2 GROUPING - one entry per SUGGESTED COIN, not one per file ---- */
 
   /**
    * Collapse the near-match rows into one group per coin they point at.
@@ -194,9 +214,7 @@ export class BatchImageImportService {
       .sort((a, b) => b.outstandingCount - a.outstandingCount || a.coinLabel.localeCompare(b.coinLabel));
   }
 
-  /* =========================================================================
-   * GROUPING - one row per COIN, not one row per file
-   * ======================================================================= */
+  /* ---- GROUPING - one row per COIN, not one row per file ---- */
 
   /**
    * Collapse rows into per-coin groups for the review screen.
@@ -249,9 +267,7 @@ export class BatchImageImportService {
     };
   }
 
-  /* =========================================================================
-   * STAGE 2 - APPLY (delegated to attach-runner.ts)
-   * ======================================================================= */
+  /* ---- STAGE 2 - APPLY (delegated to attach-runner.ts) ---- */
 
   /**
    * Read, shrink and save every ticked row. See attach-runner.ts for the

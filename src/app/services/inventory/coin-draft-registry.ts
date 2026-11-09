@@ -2,14 +2,13 @@ import { signal } from '@angular/core';
 import { CoinRecord } from '../../types/coin.model';
 import { describeMissingCoinDetail, hasEnoughCoinDetail } from '../coin-completeness';
 
-/* ===========================================================================
+ /*
  * CoinDraftRegistry
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   The answer to "has this coin ever existed in the database?", and nothing
  *   else. It is a tiny state machine with three states per coin id.
  *
- * ---------------------------------------------------------------------------
  * WHY THIS EXISTS — THE BUG IT FIXES
  *
  *   Clicking "Add coin" used to build a completely empty CoinRecord and POST
@@ -25,7 +24,6 @@ import { describeMissingCoinDetail, hasEnoughCoinDetail } from '../coin-complete
  *       The moment it is good enough, it saves itself, and from then on it
  *       behaves exactly like every other coin.
  *
- * ---------------------------------------------------------------------------
  * THE THREE STATES
  *
  *   'draft'     The row exists on screen only. NO HTTP request has ever been
@@ -56,14 +54,13 @@ import { describeMissingCoinDetail, hasEnoughCoinDetail } from '../coin-complete
  *   exist and the user's coin would be lost. Dropping back to 'draft' means
  *   the very next qualifying edit tries the POST again.
  *
- * ---------------------------------------------------------------------------
  * WHAT THIS DELIBERATELY DOES *NOT* DO
  *
  *   Drafts are not persisted anywhere. If the user adds a row, types nothing
  *   useful and refreshes the page, the row is gone. That is intended: an
  *   empty row is not data, and remembering it would mean inventing a second,
  *   client-only storage format for coins.
- * =========================================================================== */
+  */
 
 /** The two states a not-yet-real coin can be in. See the header. */
 export type CoinDraftState = 'draft' | 'creating';
@@ -86,9 +83,7 @@ export class CoinDraftRegistry {
    */
   private readonly notifiedCreateFailures = new Set<string>();
 
-  /* =========================================================================
-   * Reading state
-   * ======================================================================= */
+  /* ---- Reading state ---- */
 
   /** The raw state, or undefined for a normal server-backed coin. */
   stateOf(coinId: string): CoinDraftState | undefined {
@@ -116,9 +111,7 @@ export class CoinDraftRegistry {
     return this.states().size;
   }
 
-  /* =========================================================================
-   * Transitions
-   * ======================================================================= */
+  /* ---- Transitions ---- */
 
   /**
    * Mark a coin as a local-only draft. Used both for a freshly added row and
@@ -156,9 +149,7 @@ export class CoinDraftRegistry {
     this.states.set(new Map());
   }
 
-  /* =========================================================================
-   * The saving rule (borrowed wholesale from coin-completeness.ts)
-   * ======================================================================= */
+  /* ---- The saving rule (borrowed wholesale from coin-completeness.ts) ---- */
 
   /**
    * Is this coin finally worth writing to the database?
@@ -179,9 +170,7 @@ export class CoinDraftRegistry {
     return describeMissingCoinDetail(coin);
   }
 
-  /* =========================================================================
-   * Failure-toast de-duplication
-   * ======================================================================= */
+  /* ---- Failure-toast de-duplication ---- */
 
   /**
    * True the FIRST time a coin's create fails, false for every failure after
@@ -193,7 +182,6 @@ export class CoinDraftRegistry {
     return true;
   }
 
-  // -------------------------------------------------------------------------
 
   private setState(coinId: string, state: CoinDraftState): void {
     if (this.states().get(coinId) === state) return;

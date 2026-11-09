@@ -1,6 +1,4 @@
-/* ===========================================================================
- * generate-corpus.mjs
- * ---------------------------------------------------------------------------
+/*
  * WHAT THIS FILE IS
  *   The generator for the eight synthetic Quicken exports that sit next to it
  *   in `src/app/testing/qif-corpus/`. Run it and it rewrites all eight,
@@ -12,24 +10,12 @@
  *   suite needs no build step; committing the generator means the data is not
  *   magic -- anyone can see exactly what is in those files and why.
  *
- * ---------------------------------------------------------------------------
- * WHY IT EXISTS AT ALL
- * ---------------------------------------------------------------------------
- *   Until this file was written, `qif-accounts.fixture.ts` read the owner's
- *   REAL Quicken exports out of the repository root: eight 6.7 MB files
- *   holding 815 securities, of which only about half were coins. The rest was
- *   his financial life -- stock and fund holdings, a retirement account, savings bonds, option
- *   positions, bank and credit-card accounts, income categories, a private
- *   company name and his street address (it was in a Quicken TAG). The
- *   repository is going public, so those files have to go.
+ *   It stands in for a real set of Quicken exports, which cannot be
+ *   committed: they carry a whole financial life alongside the coins. What
+ *   the tests needed from those files was never the data but THE SHAPE OF
+ *   IT, and that is what this generator reproduces.
  *
- *   They could not go while the tests depended on them, and the tests
- *   depended on them for a reason that is easy to lose: THE SHAPE OF THE
- *   DATA, not its size.
- *
- * ---------------------------------------------------------------------------
  * !! THE ONE PROPERTY THAT MUST NOT BE "SIMPLIFIED" AWAY !!
- * ---------------------------------------------------------------------------
  *   COLLISION DENSITY. The synthetic census in import-tiers.spec.ts derives
  *   its inventory FROM THE FILENAMES IT TESTS, so it can never hold two coins
  *   of one year and one denomination -- and that is precisely the shape every
@@ -53,9 +39,7 @@
  *   here to shrink this file, shrink the PRICE HISTORY and the CATEGORY LIST.
  *   Do not shrink the coins.
  *
- * ---------------------------------------------------------------------------
  * HOW THE SECURITY NAMES WERE OBTAINED -- "KEEP THE STRUCTURE, LOSE THE MAN"
- * ---------------------------------------------------------------------------
  *   The names in corpus-data.mjs are not invented from nothing and they are
  *   not his collection either. They were produced from the real export by
  *   four BIJECTIONS, each applied to one attribute and nothing else:
@@ -104,9 +88,7 @@
  *   the importer never reads them. Inventing some would have created a new
  *   thing to audit rather than removing one.
  *
- * ---------------------------------------------------------------------------
  * WHICH QIF SECTIONS THE IMPORTER READS, AND WHICH IT IGNORES
- * ---------------------------------------------------------------------------
  *   Read, in `QuickenImportService.parse`:
  *
  *     !Account        the `N` line names the account every following
@@ -142,7 +124,7 @@
  *   Every non-coin item below is invented. The tickers are six characters
  *   beginning "ZQ", which is not a form any US exchange issues, so none of
  *   them can be looked up as a real holding.
- * ======================================================================== */
+ */
 
 import { writeFileSync, readFileSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -151,9 +133,8 @@ import { COIN_ACCOUNTS } from './corpus-data.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/* ===========================================================================
+/*
  * WINDOWS-1252, NOT UTF-8
- * ---------------------------------------------------------------------------
  * In the real exports a cent sign is the single byte 0xA2 and "½" is 0xBD.
  * `quicken-import-modal.ts` decodes with `new TextDecoder('windows-1252')`
  * and so does the fixture, so the corpus has to be written in that encoding
@@ -161,7 +142,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  *
  * The table is built by DECODING every high byte rather than typed out, so it
  * is the exact inverse of the decoder the application uses.
- * ======================================================================== */
+ */
 function cp1252Encoder() {
   const decoder = new TextDecoder('windows-1252');
   const map = new Map();
@@ -181,9 +162,9 @@ function cp1252Encoder() {
 }
 const encode = cp1252Encoder();
 
-/* ===========================================================================
+/*
  * THE NON-COIN FURNITURE -- ALL INVENTED
- * ======================================================================== */
+ */
 
 /** Quicken tags. The real file had a street address in one of these. */
 const TAGS = [
@@ -293,9 +274,9 @@ const DEALERS = [
   'Tollgate Rarities', 'Westmarch Coin Co.', 'Ambersley Auctions'
 ];
 
-/* ===========================================================================
+/*
  * BUILDING ONE FILE
- * ======================================================================== */
+ */
 
 const LF = '\n';
 const block = (lines) => lines.join(LF) + LF + '^' + LF;
@@ -459,16 +440,15 @@ function priceSection() {
   return out;
 }
 
-/* ===========================================================================
+/*
  * WHAT GOES IN WHICH FILE
- * ---------------------------------------------------------------------------
  * The real exports repeated the WHOLE 815-security master list in every one
  * of the eight files. Reproducing that exactly would cost about 4 MB of
  * repository for no extra coverage, so each file here carries the complete
  * non-coin list, its own account's coins, and a slice of the other accounts'
  * coins -- enough that the master list is always bigger than the account and
  * always contains securities the account never traded.
- * ======================================================================== */
+ */
 function otherAccountSample(index) {
   const sample = [];
   COIN_ACCOUNTS.forEach((account, i) => {

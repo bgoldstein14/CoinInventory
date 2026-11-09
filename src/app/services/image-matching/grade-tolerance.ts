@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * grade-tolerance.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   ONE QUESTION, ASKED IN ONE PLACE: are these two grades the same grade?
  *
@@ -11,53 +11,36 @@
  *                         PROOFLIKE, ...) and BASE_SYNONYMS (PR = PF,
  *                         EF = XF), which are what make the answer tolerant.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS IS ITS OWN FILE NOW -- AND WHY IT WAS MOVED RATHER THAN COPIED
- * ---------------------------------------------------------------------------
- *   All of this used to live in near-match.ts, where only the tier-2
- *   four-attribute test could reach it. match-scorer.ts, which does the
- *   actual comparing, still measured grade agreement with a plain `===`.
+ * WHY IT IS A FILE OF ITS OWN
  *
- *   The owner measured the consequence himself. These two files are
- *   PHOTOGRAPHS OF ONE COIN:
- *
- *       1867 3CS - NGC PF65CAM - Reverse.jpg       scored 0.84 -> skipped
- *       1867 3CS - NGC PF65 Cameo - Obverse.jpg    scored 0.88 -> attached
- *
- *   His record for that coin reads "1867 3CS - NGC PF65 Cameo". One photo
- *   abbreviates the designation and the other spells it out, and that alone
- *   moved the score by 0.03 -- which happens to be exactly the distance
- *   across the 0.85 auto-match bar. Half his Early Proofs collection is in
- *   the same position: he writes PR where PCGS prints it and PF where NGC
- *   does ("1868 3CS - PCGS PR65" beside "1865 3CS - PCGS PF64"), and CAM
- *   where one slab says CAM and another says Cameo.
- *
- *   His rule, verbatim, and the one this file exists to apply EVERYWHERE:
- *
- *       "Keep in mind that the grade might slightly differ and still be
- *        correct like 63CAM or 63 CAMEO or 63PL of 63 PL or something like
- *        that."
- *
- *   The fix could have been to copy the comparison into the scorer. It was
- *   not, deliberately. TWO IMPLEMENTATIONS OF "ARE THESE THE SAME GRADE?"
- *   WOULD DRIFT, and the day they drifted the scorer would be rewarding a
- *   pairing that the near-match test refuses, or the reverse -- which is the
- *   precise class of bug this whole directory has spent its life chasing
- *   (see the header of match-vetoes.ts for the same argument about year and
- *   denomination conflicts). So the code MOVED here, to a leaf module that
- *   imports nothing but the vocabulary and the normalizer, and both callers
- *   now read the one answer:
+ *   TWO IMPLEMENTATIONS OF "ARE THESE THE SAME GRADE?" WOULD DRIFT, and the
+ *   day they drifted the scorer would be rewarding a pairing the near-match
+ *   test refuses, or the reverse. (See the header of match-vetoes.ts for the
+ *   same argument about year and denomination conflicts.) So this is a leaf
+ *   module that imports nothing but the vocabulary and the normalizer, and
+ *   both callers read the one answer:
  *
  *       match-scorer.ts   scoring the grade attribute of one pair
  *       near-match.ts     the four-attribute tier-2 test
  *
- *   It had to be a NEW FILE rather than a function left in near-match.ts,
- *   because near-match.ts imports match-scorer.ts (for `diceSimilarity`), so
- *   the scorer importing near-match.ts would have made the two files import
- *   each other in a circle. near-match.ts re-exports everything below so
- *   that `import { compareGrades } from './near-match'` keeps working, the
- *   same way match-scorer.ts re-exports `formatYear`.
- * =========================================================================== */
+ *   It cannot live in near-match.ts: near-match.ts imports match-scorer.ts
+ *   (for `diceSimilarity`), so the scorer importing near-match.ts would make
+ *   the two files import each other in a circle. near-match.ts re-exports
+ *   everything below so that `import { compareGrades } from './near-match'`
+ *   keeps working, the same way match-scorer.ts re-exports `formatYear`.
+ *
+ *   WHY IT MATTERS THAT THE TOLERANCE IS APPLIED EVERYWHERE. These two files
+ *   are PHOTOGRAPHS OF ONE COIN:
+ *
+ *       1867 3CS - NGC PF65CAM - Reverse.jpg       scored 0.84 -> skipped
+ *       1867 3CS - NGC PF65 Cameo - Obverse.jpg    scored 0.88 -> attached
+ *
+ *   One abbreviates the designation and the other spells it out, and that
+ *   alone moves the score by 0.03 -- exactly the distance across the 0.85
+ *   auto-match bar. Much of this collection is in the same position: PR where
+ *   PCGS prints it and PF where NGC does, CAM on one slab and Cameo on
+ *   another.
+  */
 
 import {
   GRADE_BASE_WORDS,
@@ -66,15 +49,10 @@ import {
 } from './filename-vocabulary';
 import { normalizeGrade } from './grade-parser';
 
-/* ===========================================================================
+ /*
  * THE GRADE TOLERANCE
- * ---------------------------------------------------------------------------
- * The product owner's words, verbatim:
  *
- *   "...although something about the grade is a little off like there's extra
- *    information then that might be acceptable as a near-match"
- *
- * So the rule is NOT "grades are roughly similar". It is much narrower:
+ * The rule is NOT "grades are roughly similar". It is much narrower:
  *
  *   SAME GRADE, MORE DETAIL  -> still a near match
  *       MS64        vs  MS64 CAC       (a CAC sticker was noted on one side)
@@ -86,8 +64,7 @@ import { normalizeGrade } from './grade-parser';
  *       PF63CAM     vs  PF63 CAMEO     one abbreviates what the other spells
  *       MS64PL      vs  MS64 PROOFLIKE out; nothing about the coin differs
  *       MS65 RD     vs  MS65 RED
- *   See GRADE_DESIGNATION_SYNONYMS below. This case used to be refused, which
- *   is the bug that table exists to fix.
+ *   See GRADE_DESIGNATION_SYNONYMS below.
  *
  *   A DIFFERENT GRADE        -> NOT a near match, ever
  *       MS64        vs  MS63           different number  = a different coin
@@ -106,7 +83,7 @@ import { normalizeGrade } from './grade-parser';
  * All the vocabulary is reused from filename-vocabulary.ts / grade-parser.ts
  * rather than re-invented here; see NEAR_MATCH_EXTRA_DESIGNATIONS for the one
  * short list this file has to add, and why.
- * ========================================================================= */
+  */
 
 /**
  * Decorations that mean "extra information about the SAME grade" but which
@@ -133,31 +110,20 @@ export const NEAR_MATCH_EXTRA_DESIGNATIONS: readonly string[] = [
   'sms'     // special mint set
 ];
 
-/* ===========================================================================
+ /*
  * EQUIVALENT SPELLINGS OF THE SAME DESIGNATION
- * ---------------------------------------------------------------------------
- * The product owner's words, verbatim:
  *
- *   "Keep in mind that the grade might slightly differ and still be correct
- *    like 63CAM or 63 CAMEO or 63PL of 63 PL or something like that."
+ * The tolerance rule below compares the leftover decorations as plain
+ * strings, so without this table "63CAM" yields 'cam', "63 CAMEO" yields
+ * 'cameo', neither token appears on the other side, and the rule concludes
+ * that each side CONTRADICTS the other -- throwing away a pair that is the
+ * identical grade written two ways.
  *
- * WHAT WAS GOING WRONG
- *   The tolerance rule below compares the leftover decorations as plain
- *   strings. "63CAM" yields the decoration 'cam'; "63 CAMEO" yields 'cameo'.
- *   Neither side's token appears on the other, so the rule concluded that each
- *   side said something the other CONTRADICTED -- and threw away a pair that
- *   is, in fact, the identical grade written two ways. Worse, a spelled-out
- *   "PROOFLIKE" was not in the vocabulary at all, so the whole grade failed to
- *   parse and was refused outright.
+ * So every spelling of a designation is mapped to ONE canonical token before
+ * anything is compared. 'cam' and 'cameo' both become 'cam'.
  *
- * THE FIX
- *   Every spelling of a designation is mapped to ONE canonical token before
- *   anything is compared. 'cam' and 'cameo' both become 'cam', so the two
- *   sides hold the same token and the grades agree.
- *
- * ---------------------------------------------------------------------------
  * WHY 'CAM' AND 'CAMEO' ARE THE SAME THING BUT 'CAM' AND 'DCAM' ARE NOT
- * ---------------------------------------------------------------------------
+ *
  *   A future reader will not know the numismatics, so: these suffixes describe
  *   how a PROOF coin's frosted design contrasts with its mirrored field.
  *
@@ -186,9 +152,8 @@ export const NEAR_MATCH_EXTRA_DESIGNATIONS: readonly string[] = [
  *   same group only when a grading service would print either one on the same
  *   slab. If one is a stronger claim than the other, they are two groups.
  *
- * ---------------------------------------------------------------------------
  * SPACING, HYPHENATION AND CASE
- * ---------------------------------------------------------------------------
+ *
  *   `normalizeGrade` has already lower-cased the string and removed ALL
  *   whitespace by the time we see it, so "63 PL" and "63PL" are literally the
  *   same string here and no synonym entry is needed for the space. Hyphens are
@@ -198,7 +163,7 @@ export const NEAR_MATCH_EXTRA_DESIGNATIONS: readonly string[] = [
  *   written-out designation ("RED-BROWN", "DEEP-CAMEO") therefore reaches us
  *   intact, which is why the spellings below are written with spaces and then
  *   expanded into every space/hyphen combination -- see `spellingVariants`.
- * ========================================================================= */
+  */
 
 /** One designation, all the ways this trade writes it, and what it means. */
 export interface GradeDesignationGroup {
@@ -236,11 +201,9 @@ export const GRADE_DESIGNATION_SYNONYMS: readonly GradeDesignationGroup[] = [
   },
   {
     /* DMPL is PCGS's spelling and DPL is NGC's; both name the same, deeper
-     * step above plain PL, so they share a group. CONFIRMED BY THE OWNER on
-     * 2026-10-17, when asked directly whether he distinguishes them: "They are
-     * the same." Recorded here because the two services' wording differs
-     * enough to invite someone to split this group later; do not, without
-     * asking him again.
+     * step above plain PL, so they share a group. The two services' wording
+     * differs enough to invite someone to split this group later -- do not;
+     * collectors treat them as the same thing.
      *
      * They are NOT merged into 'pl' -- a DMPL Morgan is a different (and far
      * dearer) coin than a PL. */
@@ -263,9 +226,9 @@ export const GRADE_DESIGNATION_SYNONYMS: readonly GradeDesignationGroup[] = [
   { canonical: 'fsb', spellings: ['fsb', 'full split bands'], meaning: 'full split bands (Mercury dime)' },
 
   /* -- stickers, labels and other notes written into the grade field ------
-   * CAC is the one the owner called out by name: "CAC might be missing on the
-   * picture but it's in the inventory." It needs no synonyms, but it is listed
-   * here so the table is the single place every decoration is declared. */
+   * CAC is the common one: it is often missing from the picture's name but
+   * present in the inventory. It needs no synonyms, but it is listed here so
+   * the table is the single place every decoration is declared. */
   { canonical: 'cac', spellings: ['cac'], meaning: 'green CAC approval sticker' },
   { canonical: 'cacg', spellings: ['cacg'], meaning: 'CAC\'s own grading service' },
   { canonical: 'pq', spellings: ['pq'], meaning: 'premium quality for the grade' },
@@ -443,12 +406,12 @@ export function parseGradeParts(normalized: string): GradeParts | null {
   }
 
   // -- the letters --------------------------------------------------------
-  /* The letters may be ABSENT. The owner writes grades in conversation as
-   * "63CAM" / "63 CAMEO", and a hand-typed record sometimes holds just the
-   * number too. An empty base is a perfectly good thing to compare -- it only
-   * ever equals another empty base, so a bare "63" still never matches an
-   * "MS63"; it just lets "63CAM" and "63 CAMEO" be recognised as one grade.
-   * A string with NEITHER letters nor a number is rejected further down. */
+  /* The letters may be ABSENT. Grades are written in conversation as "63CAM"
+   * / "63 CAMEO", and a hand-typed record sometimes holds just the number
+   * too. An empty base is a perfectly good thing to compare -- it only ever
+   * equals another empty base, so a bare "63" still never matches an "MS63";
+   * it just lets "63CAM" and "63 CAMEO" be recognised as one grade. A string
+   * with NEITHER letters nor a number is rejected further down. */
   const first = matchBase(rest);
   // Folded onto one spelling so "PR69" and "PF69" compare as the same grade.
   let base = first ? canonicalBase(first) : '';
@@ -552,11 +515,11 @@ export function compareGrades(fileGrade: unknown, coinGrade: unknown): GradeComp
     };
   }
 
-  /* The number is the line the owner drew: "MS64 vs MS63 is a different coin".
-   * A number present on one side only is treated as extra DETAIL rather than a
+  /* The number is the line: MS64 against MS63 is a different coin. A number
+   * present on one side only is treated as extra DETAIL rather than a
    * contradiction -- "XF" and "XF40" are the same grade, one simply stated
-   * more precisely. That still only ever produces a near match, which the user
-   * must confirm; it never attaches anything. */
+   * more precisely. That still only ever produces a near match, which the
+   * user must confirm; it never attaches anything. */
   if (left.number !== null && right.number !== null && left.number !== right.number) {
     return {
       relation: 'different',

@@ -1,16 +1,10 @@
-/* ===========================================================================
+ /*
  * denomination-aliases.ts — one coin, many spellings, one lookup row
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO FIX
- * ---------------------------------------------------------------------------
- *   "When I bring up certain coins for their detail screen, their
- *    denomination doesn't automatically show, it shows Other, like when I
- *    brought up the 1866 3CS NGC PF65 CAC. I brought up another 3CS, same
- *    thing. Not sure if this is across the board though."
  *
- * It is not across the board, and that is the clue. The Denomination dropdown
- * decides "this value is custom, open the Other box" in `custom-option-mode.ts`
- * with one line:
+ * WHY AN ALIAS LAYER IS NEEDED AT ALL
+ *
+ * The Denomination dropdown decides "this value is custom, open the Other box"
+ * in `custom-option-mode.ts` with one line:
  *
  *     return !optionLabels.includes(text);
  *
@@ -29,65 +23,56 @@
  *   stored verbatim. Not one of them is a lookup label.
  *
  *   ROWS TYPED BY HAND, before the dropdown existed. The alias CASE in
- *   server/migrations/007-infer-coin-metal-data.sql says so outright: "the
- *   coin editor's dropdown produces the canonical forms, but the CSV importer
- *   accepts free text and older rows were typed by hand, so the spelled-out
- *   names are folded onto the same keys". That CASE — thirty spellings,
- *   'three cent silver' and 'trime' among them — is this collection's own
- *   catalogue of what is really in the column, and it is where most of the
- *   table below comes from.
+ *   server/migrations/007-infer-coin-metal-data.sql is this collection's own
+ *   catalogue of what is really in the column — thirty spellings, 'three cent
+ *   silver' and 'trime' among them — and it is where most of the table below
+ *   comes from.
  *
  *   THE QIF IMPORTER ITSELF, for Great Britain. quicken-import.service.ts
  *   writes '5s' for a crown and '1s' for a shilling; the lookup spells those
  *   '5/- (Crown)' and '1/-'. Every British crown in the collection has
- *   therefore always landed in the custom box. (A sweep of all seven QIF
- *   accounts — 457 coins — finds exactly one, "1889 1 Crown".)
+ *   therefore always landed in the custom box.
  *
  * Case alone is enough to trigger it, too: features/inventory/
  * denomination-sort.ts lists '3cs' in lower case among the spellings it
  * expects to meet, and '3cs' is not '3CS'.
  *
- * ---------------------------------------------------------------------------
  * WHAT THIS DOES
- * ---------------------------------------------------------------------------
+ *
  * `resolveDenominationLabel` answers one question: WHICH ROW OF THE LOOKUP,
  * IF ANY, IS THIS STORED STRING NAMING? Both sides are reduced to the same
  * key — symbols folded, case dropped, spelled-out names translated — and
  * compared on that.
  *
- * ---------------------------------------------------------------------------
  * WHY NOT ADD THE SPELLINGS TO THE LOOKUP TABLE INSTEAD
- * ---------------------------------------------------------------------------
- * Migration 009 added '$25' and '$50' as rows, and that was right: those face
- * values had NO row, so a Gold Eagle could not be filed at all. These are the
- * opposite case. '50¢' and 'Half Dollar' are the same coin, and a migration
- * adding the second one would put BOTH in the dropdown — two entries for one
+ *
+ * Adding a row is right when a face value has NO row at all — '$25' and '$50'
+ * were added that way, because a Gold Eagle could not otherwise be filed. An
+ * alias is the opposite case. '50¢' and 'Half Dollar' are the same coin, and a
+ * row for the second would put BOTH in the dropdown — two entries for one
  * denomination, with new coins filed under whichever the user happened to
  * click. That makes the data worse, permanently, to fix a display fault.
  *
- * ---------------------------------------------------------------------------
  * AND WHY THE COIN'S STORED VALUE IS NOT REWRITTEN
- * ---------------------------------------------------------------------------
+ *
  * The obvious alternative is a migration that UPDATEs Coins.Denomination to
  * the canonical label. That is lossy and irreversible: "Trade Dollar" and
  * "Pillar Dollar" and "100 Soles" are in the same column, a rewrite has to
  * decide about all of them, and anything it gets wrong is gone. This layer
  * changes only what the <select> SHOWS. The stored string is untouched until
- * the user picks something themselves — which is exactly how
- * `CustomOptionMode.selectValue` already treats the "Other" sentinel.
+ * the user picks something themselves.
  *
  * The consequence is worth stating plainly: a coin stored as "Half Dollar"
  * will display as 50¢ and stay stored as "Half Dollar". If the user then
  * re-picks 50¢ from the dropdown, '50¢' is written — a normalisation they
  * performed, not one done behind their back.
  *
- * ---------------------------------------------------------------------------
  * WHAT IS DELIBERATELY *NOT* AN ALIAS
- * ---------------------------------------------------------------------------
+ *
  * Every omission below is someone else's decision, copied rather than
  * re-argued. Guessing here would be worse than showing "Other", because
  * "Other" is visible and a wrong denomination is not.
- * =========================================================================== */
+  */
 
 /**
  * Spellings that mean a lookup row, mapped onto that row's own folded key.
@@ -111,9 +96,18 @@ const DENOMINATION_ALIASES: ReadonlyMap<string, string> = new Map([
   ['three cent silver', '3cs'],
   ['trime', '3cs'],
   ['three cent nickel', '3cn'],
-  ['nickel', '5c'],
+  // 'nickel' and 'half dime' MUST NOT BE ALIASES OF '5c'. A Half Dime
+  // (1794-1873, silver) and a Nickel (1866-) are different coins that merely
+  // share a face value, and each is seeded as its own US row; folding them
+  // together left the image matcher unable to tell a photograph of one from
+  // the other. Three labels folding to one key also makes every five-cent
+  // coin AMBIGUOUS, and an ambiguous resolution is a NULL link — the seed
+  // generator rejects that outright ("no two labels under one issuer may fold
+  // to the same key").
+  //
+  // 'five cents' stays: it is a spelling of the generic 5¢ row, not a distinct
+  // coin, and nothing else claims that key.
   ['five cents', '5c'],
-  ['half dime', '5c'],
   ['dime', '10c'],
   ['ten cents', '10c'],
   ['twenty cent', '20c'],
@@ -236,14 +230,13 @@ export function denominationKey(value: string | null | undefined): string {
  *   IT ONLY EVER RETURNS A MEMBER OF `optionLabels`. It cannot invent a
  *   denomination. On a database whose lookup rows have been renamed or
  *   deactivated through the Settings dialog, an alias with no surviving row
- *   answers null and the custom box opens holding the stored text — the old
- *   behaviour, which is the correct one once the row is really gone. Handing
- *   back a label with no <option> would render the select blank instead.
+ *   answers null and the custom box opens holding the stored text — which is
+ *   the correct answer once the row is really gone. Handing back a label with
+ *   no <option> would render the select blank instead.
  *
- *   AN EXACT MATCH IS ANSWERED WITHOUT CONSULTING THE TABLE AT ALL. A coin
- *   already holding a canonical label takes the first branch, so the 451 of
- *   457 QIF-imported coins that were always fine cannot be affected by
- *   anything in this file.
+ *   AN EXACT MATCH IS ANSWERED WITHOUT CONSULTING THE TABLE AT ALL, so a coin
+ *   already holding a canonical label cannot be affected by anything in this
+ *   file.
  *
  * If two active rows fold to the same key — the Settings dialog can create a
  * second row with an equivalent label — the first in `optionLabels` wins.

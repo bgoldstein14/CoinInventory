@@ -5,7 +5,7 @@ import { signal } from '@angular/core';
  * for them ON DEMAND.
  *
  * WHY THIS EXISTS (it is a performance rule, not a convenience)
- * ------------------------------------------------------------
+ *
  * `URL.createObjectURL(file)` is cheap by itself, but the moment that URL goes
  * into an `<img src>` the browser reads and decodes the whole file. Selecting
  * the share's root gives us ~1,700 displayable photos averaging 2.5 MB, so

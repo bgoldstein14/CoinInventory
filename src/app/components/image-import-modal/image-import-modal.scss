@@ -108,6 +108,90 @@
   line-height: 1.45;
 }
 
+// ---- "These coins already have photos" — the three-way choice ----
+//
+// Only rendered when at least one matched coin really has photos. The visual
+// weight is deliberate: this is the one control on the screen that can delete
+// something, and the counts inside it are the only warning the user gets
+// before the confirmation dialog.
+
+.existing-photos {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  background: #fbf8f3;
+  border: 1px solid #e3d4b8;
+  border-radius: 10px;
+}
+
+.existing-photos-question {
+  padding: 0 4px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #3b2a14;
+
+  strong { font-size: 1.05rem; }
+}
+
+.existing-photos-option {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+
+  &:hover { background: #f4ece0; }
+
+  input { margin-top: 3px; }
+}
+
+.existing-photos-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.existing-photos-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #3b2a14;
+}
+
+.existing-photos-detail {
+  font-size: 0.8rem;
+  color: #6b5c48;
+  line-height: 1.4;
+}
+
+// The count of photos about to be DELETED. Bigger and in the danger colour:
+// this number has to be unmissable.
+.existing-photos-count {
+  font-size: 1.05rem;
+  color: #9b2c1f;
+}
+
+.existing-photos-warning {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: #7a2318;
+  background: #fdf0ed;
+  border: 1px solid #e8bdb4;
+  border-radius: 8px;
+
+  strong { font-size: 0.95rem; }
+}
+
+.existing-photos-note {
+  margin: 10px 0 0;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: #8a7a63;
+}
+
 // ---- Skipped-file report ----
 
 .import-filter-report {
@@ -133,7 +217,27 @@
 
 // ---- Progress ----
 
+// PINNED, and that is the whole point of these three properties.
+//
+// This block renders near the TOP of the dialog. The Save button is at the
+// BOTTOM, below a review list that routinely runs to hundreds of rows, and
+// `.modal` is the scrolling container. Unpinned, the user scrolls down,
+// presses Save, and the indicator updates several screens above the
+// viewport, so the import looks as though it has no busy indicator at all.
+//
+// `top: 52px` clears the sticky modal header, matching the offset already used
+// by the section headings further down this file. The opaque background is
+// required: a translucent one would let review rows scroll visibly through
+// the bar.
+//
+// The Save button also reports progress in its own label, which is the
+// defence that does not depend on scroll position at all. Both are deliberate;
+// see saveButtonLabel() in services/image-import/import-progress.ts.
 .import-progress {
+  position: sticky;
+  top: 52px;
+  z-index: 2;
+
   display: grid;
   gap: 5px;
   margin-bottom: 12px;
@@ -399,11 +503,11 @@
   &:focus-visible { color: #7a4b16; text-decoration-style: solid; }
 }
 
-// A counterfeit or multi-coin photo: no hatch at all, by instruction
-// ("nor offer as attachable in the automated import"). Styled as plain muted
-// prose rather than as a control, so the eye reads it as a statement about
-// the row and never tries to click it — but it is still SAID, because the
-// point is that he can see the importer looked and chose not to act.
+// A counterfeit or multi-coin photo: no hatch at all, because the policy is
+// never to OFFER these as attachable in the automated import. Styled as
+// plain muted prose rather than as a control, so the eye reads it as a
+// statement about the row and never tries to click it — but it is still
+// SAID, so the user can see the importer looked and chose not to act.
 .skipped-manual-only {
   font-size: 0.7rem;
   color: #a3917a;

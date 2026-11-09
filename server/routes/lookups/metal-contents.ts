@@ -9,16 +9,12 @@
  * Mounted (via routes/lookups/index.ts) at /api:
  *
  *   GET /metalcontents  -> the names, in the curated SortOrder
- *
- * It used to sit inside the Categories section of the old lookups.ts purely
- * because that is where it was first added; it is its own table and now has
- * its own file.
  */
 
 import { Router, Request, Response } from 'express';
 import { logInfo } from '../../logger';
 import { withDb } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 
 const router = Router();
 
@@ -32,9 +28,9 @@ router.get('/metalcontents', async (_req: Request, res: Response) => {
       return result.recordset.map((r: Record<string, unknown>) => r['MetalContentName'] as string);
     });
 
-    res.json(names);
+    sendJson(res, 'GET /api/metalcontents', names, 'metal content list');
   } catch (err) {
-    sendDbError(res, 'GET /api/metalcontents', err, 'Failed to retrieve metal contents');
+    sendDbError(res, 'GET /api/metalcontents', err, 'Failed to retrieve metal contents', 'metal content list');
   }
 });
 

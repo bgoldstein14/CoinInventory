@@ -7,8 +7,7 @@ import { Component, input, output, signal } from '@angular/core';
  * of coin records, while this one reads a FOLDER of photographs and matches
  * them to coins that already exist. It belongs on the same menu anyway,
  * because from the user's point of view "bring my photos in" is an import like
- * any other -- and it was previously unreachable precisely because it did not
- * fit the pattern and so never got a menu entry.
+ * any other.
  */
 export type ImportKind = 'qif' | 'csv' | 'json' | 'images';
 
@@ -19,11 +18,9 @@ export type ExportKind = 'csv' | 'json' | 'insurance';
  * AppToolbar — the action buttons in the top-right of the page header:
  * "Add Coin", the Import split-button, the Export split-button and "Settings".
  *
- * WHY THIS FILE EXISTS
- * The only real state here is "is one of the dropdown menus open", which is
- * pure presentation and of no interest to anybody else. Everything the buttons
- * actually *do* (open a modal, write a file) belongs to the App shell, so this
- * component simply reports what the user picked and lets App decide.
+ * The only state here is "is one of the dropdown menus open". Everything the
+ * buttons actually *do* (open a modal, write a file) belongs to the App
+ * shell, so this component just reports what the user picked.
  *
  * A "split button" is the main button plus a little ▾ that opens a menu of
  * alternatives; clicking the main button performs the default action.
@@ -42,6 +39,16 @@ export class AppToolbar {
   readonly importSelected = output<ImportKind>();
   readonly exportSelected = output<ExportKind>();
   readonly settingsRequested = output<void>();
+
+  /**
+   * "Help > Report a problem".
+   *
+   * On the toolbar rather than buried in Settings because the moment it is
+   * needed is the moment something has just gone wrong, and a user who
+   * cannot find it will close the app instead — at which point the recent
+   * errors it would have carried are gone.
+   */
+  readonly helpRequested = output<void>();
 
   protected readonly importMenuOpen = signal(false);
   protected readonly exportMenuOpen = signal(false);
@@ -65,5 +72,12 @@ export class AppToolbar {
   protected handleExportSelection(kind: ExportKind): void {
     this.exportMenuOpen.set(false);
     this.exportSelected.emit(kind);
+  }
+
+  /** Closes any open dropdown first, so the dialog never opens behind one. */
+  protected requestHelp(): void {
+    this.importMenuOpen.set(false);
+    this.exportMenuOpen.set(false);
+    this.helpRequested.emit();
   }
 }

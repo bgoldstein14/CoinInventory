@@ -24,7 +24,7 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, formatDate, normalizeTextDate, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 
 const router = Router();
@@ -60,9 +60,9 @@ router.get('/transactions', async (req: Request, res: Response) => {
       }));
     });
 
-    res.json(transactions);
+    sendJson(res, 'GET /api/transactions', transactions, 'transaction list');
   } catch (err) {
-    sendDbError(res, 'GET /api/transactions', err, 'Failed to retrieve transactions');
+    sendDbError(res, 'GET /api/transactions', err, 'Failed to retrieve transactions', 'transaction list');
   }
 });
 

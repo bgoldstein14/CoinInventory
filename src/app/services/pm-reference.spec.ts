@@ -58,12 +58,11 @@ describe('pm-reference', () => {
     it('returns PM data for 1967 US Half Dollar (40% silver)', () => {
       const data = lookupPmData('50¢', '1967', 'United States');
       expect(data).toBeDefined();
-      // CORRECTED FIGURE. This used to assert 9.20 g, which is wrong under
-      // either reading: a 40% Kennedy weighs 11.50 g gross and carries
-      // 0.1479 oz ASW = 4.60 g of actual silver. 9.20 is neither, and it
-      // doubled every melt value this table produced for the 1965-1970
-      // halves. pmWeightGrams is always the PURE metal weight -- see the
-      // units note at the top of pm-reference.ts.
+      // A 40% Kennedy weighs 11.50 g gross and carries 0.1479 oz ASW =
+      // 4.60 g of actual silver. pmWeightGrams is always the PURE metal
+      // weight -- see the units note at the top of pm-reference.ts. (9.20
+      // is neither figure, and doubles every melt value for the 1965-1970
+      // halves.)
       expect(data?.pmWeightGrams).toBeCloseTo(4.60, 2);
       expect(data?.pmPercent).toBe(40);
     });
@@ -89,11 +88,10 @@ describe('pm-reference', () => {
     it('returns PM data for 1945 GB Shilling (50% silver)', () => {
       const data = lookupPmData('Shilling', '1945', 'Great Britain');
       expect(data).toBeDefined();
-      // CORRECTED FIGURE. 5.24 g is the STERLING (92.5%) silver content of a
-      // pre-1920 shilling. The 1920 debasement halved the fineness without
-      // changing the 5.655 g planchet, so a 1920-1946 shilling holds
-      // 5.655 x 0.50 = 2.83 g of silver. Asserting 5.24 at 50% claimed a
-      // 92.5% coin's silver in a 50% coin's body.
+      // The 1920 debasement halved the fineness without changing the
+      // 5.655 g planchet, so a 1920-1946 shilling holds 5.655 x 0.50 =
+      // 2.83 g of silver. (5.24 g is the STERLING, 92.5%, content of a
+      // pre-1920 shilling: a 92.5% coin's silver in a 50% coin's body.)
       expect(data?.pmWeightGrams).toBeCloseTo(2.83, 2);
       expect(data?.pmPercent).toBe(50);
     });
@@ -101,8 +99,8 @@ describe('pm-reference', () => {
     it('returns PM data for 1930 GB Florin (50% silver)', () => {
       const data = lookupPmData('Florin', '1930', 'Great Britain');
       expect(data).toBeDefined();
-      // CORRECTED FIGURE, same reasoning as the shilling above:
-      // 11.31 g planchet x 0.50 = 5.66 g.
+      // Same reasoning as the shilling above: 11.31 g planchet x 0.50 =
+      // 5.66 g.
       expect(data?.pmWeightGrams).toBeCloseTo(5.66, 2);
       expect(data?.pmPercent).toBe(50);
     });
@@ -140,13 +138,12 @@ describe('pm-reference', () => {
     });
   });
 
-  /* =========================================================================
+   /*
    * THE 1965 CLIFF AND THE OTHER YEAR-DRIVEN TRANSITIONS
-   * -------------------------------------------------------------------------
-   * These are the cases the owner called out: the alloy depends on the YEAR
-   * as much as the denomination, and getting the year band wrong is a silent
-   * error.
-   * ===================================================================== */
+   *
+   * The alloy depends on the YEAR as much as the denomination, and getting
+   * the year band wrong is a silent error.
+    */
   describe('year-driven alloy transitions', () => {
     it('1964 quarter is silver and 1965 quarter is clad', () => {
       const silver = lookupCoinAlloy('25¢', '1964', 'United States');
@@ -219,9 +216,7 @@ describe('pm-reference', () => {
     });
   });
 
-  /* =========================================================================
-   * GOLD vs SILVER AT THE SAME FACE VALUE
-   * ===================================================================== */
+  /* ---- GOLD vs SILVER AT THE SAME FACE VALUE ---- */
   describe('the gold dollar / silver dollar collision', () => {
     it('refuses to choose for a bare "$1" in the overlap years', () => {
       // 1849-1889: the US struck a 26.73 g silver dollar AND a 1.67 g gold
@@ -262,9 +257,7 @@ describe('pm-reference', () => {
     });
   });
 
-  /* =========================================================================
-   * US GOLD STANDARDS BY ERA
-   * ===================================================================== */
+  /* ---- US GOLD STANDARDS BY ERA ---- */
   describe('US gold fineness by era', () => {
     it('uses 91.67% for pre-1834 gold', () => {
       expect(lookupCoinAlloy('$5', '1800', 'United States')?.pmPercent).toBeCloseTo(91.67, 2);
@@ -286,14 +279,12 @@ describe('pm-reference', () => {
     });
   });
 
-  /* =========================================================================
-   * FOREIGN
-   * ===================================================================== */
+  /* ---- FOREIGN ---- */
   describe('foreign issues', () => {
     it('knows the 1950-1970 Peru gold Soles series', () => {
-      // "1969 Peru 100 Soles - NGC MS64" is in this collection, and its own
+      // "1969 Peru 100 Soles - NGC MS64" is a real security, and its own
       // Quicken memo reads "1.3544 ounces of gold" -- which is exactly the
-      // AGW below, so this row is confirmed by the user's own data.
+      // AGW below, so this row is confirmed against the source data.
       const alloy = lookupCoinAlloy('100 Soles', '1969', 'Peru');
       expect(alloy?.metal).toBe('Gold');
       expect(alloy?.pmPercent).toBe(90);
@@ -323,9 +314,7 @@ describe('pm-reference', () => {
     });
   });
 
-  /* =========================================================================
-   * BASE METAL: a composition WITHOUT precious metal numbers
-   * ===================================================================== */
+  /* ---- BASE METAL: a composition WITHOUT precious metal numbers ---- */
   describe('lookupCoinAlloy on base-metal coins', () => {
     it('describes a bronze Indian Head cent but reports no melt data', () => {
       const alloy = lookupCoinAlloy('1¢', '1890', 'United States');
@@ -344,8 +333,8 @@ describe('pm-reference', () => {
     });
 
     it('still reports a GROSS weight for a coin with no precious metal', () => {
-      // A 1983 cent has no melt value, but it certainly has a weight, and the
-      // owner asked for the Weight field to be filled wherever it is known.
+      // A 1983 cent has no melt value, but it certainly has a weight, and
+      // Weight is filled in wherever it is known.
       const alloy = lookupCoinAlloy('1¢', '1983', 'United States');
       expect(alloy?.pmWeightGrams).toBeUndefined();
       expect(alloy?.grossWeightGrams).toBeCloseTo(2.50, 3);

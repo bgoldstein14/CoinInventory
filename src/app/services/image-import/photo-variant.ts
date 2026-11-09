@@ -1,13 +1,13 @@
-/* ===========================================================================
+ /*
  * photo-variant.ts
- * ---------------------------------------------------------------------------
+ *
  * Works out, from a filename alone, WHICH SHOT of a coin a file is:
  *   - which face:      Obverse / Reverse / slab Label / unknown
  *   - which variant:   "Small", "Orig", "Photo", "Sharpened"
  *   - which take:      the trailing counter in "1874 $3 - NGC AU 58-2.jpg"
  *
  * Why the review screen needs this
- * --------------------------------
+ *
  * A single coin routinely has 8-10 files on the share:
  *
  *   1880-S $1 - MS64 - Obverse - Photo.jpg
@@ -22,20 +22,17 @@
  * times ~200 coins. With it we can offer one-click bulk rules: keep only
  * Obverse + Reverse, drop retakes, drop Label shots.
  *
- * ---------------------------------------------------------------------------
  * DEFENSIVE READ OF THE MATCHER'S OWN FIELDS
- * ---------------------------------------------------------------------------
- * The matcher is being upgraded in parallel to expose the side and the take
- * itself. When those fields land we want to use them (the matcher sees more
- * context than we do), but this code must compile and behave correctly TODAY,
- * before they exist.
  *
- * So we never reference the new fields by a hard-typed property. We take the
- * parsed object as an index-signature bag, probe a handful of plausible names,
- * accept the value only if it is a shape we understand, and otherwise fall
- * back to our own regex read of the filename. No field name we guess wrong
- * about can break anything - it just falls through to the fallback.
- * =========================================================================== */
+ * The matcher also parses the side, the take and the variant, and it sees
+ * more context than this file does, so its answer is preferred when there is
+ * one. But the fields are optional on the public shape, so they are never
+ * referenced by a hard-typed property: the parsed object is read as an
+ * index-signature bag, a handful of plausible names are probed, the value is
+ * accepted only if it is a shape we understand, and otherwise this file falls
+ * back to its own regex read of the filename. A field name we guess wrong
+ * about cannot break anything -- it just falls through to the fallback.
+  */
 
 import { ParsedImageAttributes, PhotoSide, PhotoVariantInfo } from '../../types/coin.model';
 

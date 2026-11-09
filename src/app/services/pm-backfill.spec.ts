@@ -2,7 +2,7 @@
  * Tests for the one-time "backfill precious-metal data" maintenance action.
  *
  * WHAT IS BEING PROTECTED HERE
- * ----------------------------
+ *
  * This feature rewrites part of every row in the owner's collection in one
  * press of a button, so the tests are mostly about what it REFUSES to do:
  *
@@ -49,13 +49,13 @@ function coin(overrides: Partial<CoinRecord>): CoinRecord {
   };
 }
 
-/* ===========================================================================
+ /*
  * THE SHARED INFERENCE
- * ---------------------------------------------------------------------------
+ *
  * `composePmFields` is the single adapter the Quicken import AND this backfill
  * both call. If the two ever stopped sharing it, the first symptom would be an
  * imported coin and a backfilled coin disagreeing about the same object.
- * ======================================================================== */
+  */
 
 describe('composePmFields — the mapping both the import and the backfill use', () => {
   it('names its result with CoinRecord field names, not the reference table\'s', () => {
@@ -124,9 +124,7 @@ describe('composePmFields — the mapping both the import and the backfill use',
   });
 });
 
-/* ===========================================================================
- * ONLY FILL BLANKS
- * ======================================================================== */
+/* ---- ONLY FILL BLANKS ---- */
 
 describe('pmFieldsToFill — which fields may be written for one coin', () => {
   it('fills all five on a coin that has none of them', () => {
@@ -142,15 +140,15 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('NEVER overwrites a value that is already there', () => {
-    // The owner has typed a deliberately "wrong" purity and a deliberately
+    // The user has typed a deliberately "wrong" purity and a deliberately
     // "wrong" weight. The backfill is not entitled to an opinion about
     // either: they may know something about this specific coin — a worn or
     // damaged example really does weigh less — that a year-and-denomination
     // table cannot.
     //
-    // Note the weight in particular. It is the newest of the five fields and
-    // the one most likely to have been measured on an actual scale, so it is
-    // the LAST one an inferred catalogue figure should be allowed to replace.
+    // Note the weight in particular. It is the one of the five most likely to
+    // have been measured on an actual scale, so it is the LAST one an
+    // inferred catalogue figure should be allowed to replace.
     const updates = pmFieldsToFill(coin({
       denomination: '$20',
       year: '1927',
@@ -191,8 +189,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('completes the GAPS on a partly-filled coin rather than skipping it', () => {
-    /* This is the decision the brief asked to be stated explicitly, and it is
-     * the case the whole feature exists for. Melt value needs BOTH
+    /* This is the case the whole feature exists for. Melt value needs BOTH
      * metalContent and pmWeightGrams. A coin where only the metal was ever
      * typed in still shows a blank melt figure — so a "skip anything partly
      * filled" rule would refuse to fix precisely the coins that are broken. */
@@ -275,9 +272,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 });
 
-/* ===========================================================================
- * THE DELIBERATE GAPS — coins the backfill must leave alone
- * ======================================================================== */
+/* ---- THE DELIBERATE GAPS — coins the backfill must leave alone ---- */
 
 describe('the deliberate gaps are inherited, not patched over', () => {
   // Each of these is a year/denomination where TWO alloys were struck and
@@ -323,9 +318,7 @@ describe('the deliberate gaps are inherited, not patched over', () => {
   });
 });
 
-/* ===========================================================================
- * THE PREVIEW
- * ======================================================================== */
+/* ---- THE PREVIEW ---- */
 
 describe('planPmBackfill — the preview the user confirms', () => {
   /** One of each kind of coin, so every bucket gets exactly one member. */
@@ -450,9 +443,7 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 });
 
-/* ===========================================================================
- * THE PAYLOAD
- * ======================================================================== */
+/* ---- THE PAYLOAD ---- */
 
 describe('the update payload carries ONLY precious-metal fields', () => {
   it('never includes a key outside the five alloy / weight fields', () => {
@@ -502,9 +493,7 @@ describe('the update payload carries ONLY precious-metal fields', () => {
   });
 });
 
-/* ===========================================================================
- * THE RUN
- * ======================================================================== */
+/* ---- THE RUN ---- */
 
 describe('runPmBackfill — the writes', () => {
   function planFor(coins: CoinRecord[]): PmBackfillPlan {

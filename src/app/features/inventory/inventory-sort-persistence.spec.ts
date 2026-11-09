@@ -1,15 +1,14 @@
 /**
  * Tests for remembering the grid's sort between sessions.
  *
- * Two requirements from the owner: the sort should survive a restart, and a
- * fresh installation should start sorted by Year.
+ * Two requirements: the sort survives a restart, and a fresh installation
+ * starts sorted by Year.
  *
  * The validation tests matter more than they look. The stored value is JSON
- * from a browser database that may have been written by an older build of the
- * app, and columns in this project really do come and go — `name` became
- * `coinType`, and `tags` and `dealer` were both deleted outright. A remembered
- * sort naming one of those would otherwise produce a silently meaningless
- * order with no clue as to why.
+ * from a browser database that may have been written by an older build, and
+ * columns in this project do come and go. A remembered sort naming a column
+ * that no longer exists would otherwise produce a silently meaningless order
+ * with no clue as to why.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -96,8 +95,8 @@ describe('inventory sort persistence', () => {
   });
 
   it('ignores a saved column that no longer exists', async () => {
-    // 'dealer' was a real column until it was removed. A browser that used it
-    // as its sort still has it in IndexedDB.
+    // 'dealer' is not a column. A browser that sorted by one that has since
+    // been removed still has the name sitting in IndexedDB.
     const { store } = createStore({
       [StorageKeys.SortState]: { column: 'dealer', direction: 'asc' }
     });

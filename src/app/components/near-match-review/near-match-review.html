@@ -7,7 +7,7 @@
 -->
 <div class="near-group" [class.near-group--done]="group().outstandingCount === 0">
 
-  <!-- ========== THE QUESTION, ASKED ONCE FOR THE WHOLE COIN ========== -->
+  <!-- The question, asked once for the whole coin. -->
   <div class="near-group-head">
     <div class="near-group-title">
       <span class="near-group-coin">{{ group().coinLabel }}</span>
@@ -54,7 +54,7 @@
     </p>
   }
 
-  <!-- ========== THE PHOTOS ========== -->
+  <!-- The photos. -->
   <ul class="near-rows">
     @for (row of group().rows; track row.fileName) {
       <li
@@ -88,10 +88,10 @@
           } @else {
             <button type="button" class="small-button" (click)="accepted.emit(row.fileName)">Attach</button>
 
-            <!-- The owner's other ambiguous case: several coins fit this one
-                 image. Only coins that independently passed the near-match
-                 test are listed — offering one the test rejected would just be
-                 a one-click way to mis-file a photo. -->
+            <!-- The other ambiguous case: several coins fit this one image.
+                 Only coins that independently passed the near-match test are
+                 listed — offering one the test rejected would just be a
+                 one-click way to mis-file a photo. -->
             @if (row.result.nearMatch && row.result.nearMatch.candidates.length > 1) {
               <select
                 class="near-candidate-select"

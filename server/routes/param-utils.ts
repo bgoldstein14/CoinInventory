@@ -2,11 +2,10 @@
  * routes/param-utils.ts — tiny helpers for reading values out of an Express
  * request.
  *
- * Express types `req.params['id']` as `string | string[] | undefined` because a
- * route pattern *can* produce repeated parameters. Ours never do, but
- * TypeScript does not know that, so every route module used to carry its own
- * private copy of the same two-line converter. There is now exactly one copy,
- * here.
+ * Express types `req.params['id']` as `string | string[] | undefined` because
+ * a route pattern *can* produce repeated parameters. Ours never do, but
+ * TypeScript does not know that — hence one shared converter rather than a
+ * private copy in every route module.
  */
 
 /**

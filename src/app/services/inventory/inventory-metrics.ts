@@ -1,8 +1,9 @@
 import { CoinRecord, SpotPrices } from '../../types/coin.model';
+import { heldCoins } from '../../types/collection-status';
 
-/* ===========================================================================
+ /*
  * Inventory metrics
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Every "work it out from the coin list" calculation: the money totals, the
  *   distinct-value lists that feed the filter dropdowns, and the melt-value
@@ -13,25 +14,71 @@ import { CoinRecord, SpotPrices } from '../../types/coin.model';
  *   no side effects. Pulling them out means InventoryService's `computed()`
  *   declarations read like a table of contents, and each calculation can be
  *   checked in isolation.
- * =========================================================================== */
+  */
 
-/** Grams in one troy ounce — the unit precious metal spot prices are quoted in. */
-const GRAMS_PER_TROY_OZ = 31.1035;
+/**
+ * Grams in one troy ounce — the unit precious metal spot prices are quoted in.
+ *
+ * EXPORTED, and it must stay exported. The statistics view totals the pure
+ * metal held and shows it in troy ounces as well as grams, and a second copy
+ * of this constant living over there is a copy that can drift from the one
+ * the melt value is computed with. One number, one home.
+ */
+export const GRAMS_PER_TROY_OZ = 31.1035;
 
-/** What the collection cost: the sum of every purchase price. */
+ /*
+ * THE THREE MONEY TOTALS COUNT ONLY COINS THE OWNER ACTUALLY HAS.
+ *
+ * All three filter through `heldCoins()` first. Before collection status
+ * existed every row in the inventory was, by definition, a coin in the
+ * collection, so "add up the rows" and "add up what I own" were the same sum.
+ * They are not any more: the inventory can now hold a want list, and a want
+ * list is a list of coins the owner is DREAMING about. Summing those into
+ * "what is my collection worth" would report a collection several times
+ * larger than the one in the safe, and — this is the dangerous part — it
+ * would look completely plausible. There is nothing on screen that would
+ * reveal the error.
+ *
+ * WHAT COUNTS is decided in exactly one place, `isHeldInCollection()` in
+ * types/collection-status.ts, which the insurance export consults too. The
+ * short version is that the test is POSSESSION: owned and for-sale count, and
+ * wanted, ordered and sold do not. The reasoning for each is written out
+ * there and is not repeated here, because two copies of a rule is how this
+ * project got its melt-value bug (the same sum in two files, only one of them
+ * fixed).
+ *
+ * The filtering is NOT pushed into the caller. It could have been
+ * (`sumCurrentValue(heldCoins(inventory()))` at each of the three call sites
+ * in inventory.service.ts) and that was rejected: it makes the safe behaviour
+ * opt-in, so the fourth caller — whoever adds a statistics panel, a dashboard
+ * tile, a report — gets the want list in his figures unless he happens to
+ * know. Here, it is impossible to get wrong.
+  */
+
+/** What the collection cost: the sum of every HELD coin's purchase price. */
 export function sumPurchasePrice(coins: CoinRecord[]): number {
-  return coins.reduce((sum, c) => sum + c.purchasePrice, 0);
+  return heldCoins(coins).reduce((sum, c) => sum + c.purchasePrice, 0);
 }
 
-/** What the collection is worth today: the sum of every current value. */
+/** What the collection is worth today: the sum of every HELD coin's value. */
 export function sumCurrentValue(coins: CoinRecord[]): number {
-  return coins.reduce((sum, c) => sum + c.currentValue, 0);
+  return heldCoins(coins).reduce((sum, c) => sum + c.currentValue, 0);
 }
 
-/** Overall profit/loss: current value minus cost, coin by coin. */
+/** Overall profit/loss on the coins held: current value minus cost, coin by coin. */
 export function sumProfit(coins: CoinRecord[]): number {
-  return coins.reduce((sum, c) => sum + (c.currentValue - c.purchasePrice), 0);
+  return heldCoins(coins).reduce((sum, c) => sum + (c.currentValue - c.purchasePrice), 0);
 }
+
+ /*
+ * THE DISTINCT-VALUE LISTS BELOW DELIBERATELY SEE EVERY COIN, HELD OR NOT.
+ *
+ * They are not valuations; they feed the filter dropdowns. The first thing
+ * anybody does with a want list is filter to it, and if a wanted coin's
+ * category were missing from the Category dropdown there would be no way to
+ * reach that coin through the filter bar at all. Status changes what a coin
+ * is WORTH to the collection, never whether it exists.
+  */
 
 /**
  * Distinct categories actually used by the coins on hand.
@@ -56,11 +103,6 @@ export function distinctSources(coins: CoinRecord[]): string[] {
   return [...new Set(sources)].sort();
 }
 
-// NOTE: a `distinctDealers()` lived here, alongside the three functions above.
-// It was removed with the coin-level dealer field. Its only caller was
-// InventoryService.inventoryDealers, which no UI ever read -- the dealer filter
-// was a free-text box, not a dropdown -- so nothing lost a feature.
-
 /**
  * Value of a coin's precious metal content at today's spot price.
  *
@@ -68,33 +110,42 @@ export function distinctSources(coins: CoinRecord[]): string[] {
  * when the pure-metal weight, the metal name, or a spot price for that metal
  * is missing.
  *
- * ---------------------------------------------------------------------------
- * PURITY IS NOT APPLIED HERE, AND THAT IS THE FIX FOR A REAL BUG
- * ---------------------------------------------------------------------------
- * This used to end with:
+ * ---- PURITY IS NOT APPLIED HERE ----
+ * Do NOT write this as:
  *
  *     (pmWeight / GRAMS_PER_TROY_OZ) * (pmPct / 100) * spotPerOz
  *
- * which discounted by purity a second time. `pmWeightGrams` is already the
+ * That discounts by purity a second time. `pmWeightGrams` is already the
  * weight of the PURE precious metal, not the gross weight of the coin — see
- * the header of services/pm-reference.ts, which states it outright and gives
- * the worked example of a $20 Saint-Gaudens: 33.44 g gross, 90% fine, so
- * pmWeightGrams = 30.09, which IS the 0.9675 oz AGW the trade quotes.
+ * the header of services/pm-reference.ts, which gives the worked example of a
+ * $20 Saint-Gaudens: 33.44 g gross, 90% fine, so pmWeightGrams = 30.09, which
+ * IS the 0.9675 oz AGW the trade quotes. Multiplying 30.09 g by 0.90 again
+ * gives 0.871 oz for a coin that holds 0.9675 oz — understating every melt
+ * value by the purity factor, about 10% on US 90% silver and gold and 60% on
+ * a 40% silver Kennedy half.
  *
- * Multiplying 30.09 g by 0.90 again produced 0.871 oz for a coin that holds
- * 0.9675 oz, understating every melt value by exactly the purity factor —
- * about 10% on US 90% silver and gold, and 60% on a 40% silver Kennedy half.
+ * So the correct sum is pure grams converted to troy ounces, priced at spot.
+ * `pmPercent` stays on the record because it is genuinely useful information,
+ * but it must NOT appear in this calculation.
  *
- * So the correct sum is simply pure grams converted to troy ounces, priced at
- * spot. `pmPercent` remains on the record because it is genuinely useful
- * information (it is what the "90% Silver" style of composition means, and it
- * is how pmWeightGrams was derived in the first place), but it must NOT appear
- * in this calculation.
+ * It is also not required for a melt value to be produced. Purity is not an
+ * input to the arithmetic, so demanding it would refuse an answer for a coin
+ * whose pure weight and metal are both known — a .999 bullion round recorded
+ * without a percentage, for instance.
  *
- * It is also no longer required for a melt value to be produced. Purity is not
- * an input to the arithmetic any more, so demanding it would refuse an answer
- * for a coin whose pure weight and metal are both known — a .999 bullion round
- * recorded without a percentage, for instance.
+ * ---- COLLECTION STATUS IS NOT CONSULTED HERE, AND THAT IS A DECISION ----
+ * A wanted coin gets a melt figure exactly like an owned one. The three money
+ * TOTALS above exclude coins the owner does not have, because summing a want
+ * list into "what my collection is worth" would be a lie. This is a different
+ * kind of number: it is a fact about a lump of metal — 30.09 g of gold is
+ * worth what gold is worth whoever happens to be holding it — and it is at
+ * its most useful on exactly the coins the owner does NOT have yet, because
+ * the melt floor is what tells him what is safe to bid. Blanking it out for
+ * want-list rows would remove the figure precisely where it earns its keep.
+ *
+ * There is no collection-wide melt TOTAL anywhere in the app. If one is ever
+ * added it must filter through `heldCoins()` first, for the same reason the
+ * three sums above do.
  *
  * @param coin - needs pmWeightGrams (grams of PURE metal) and metalContent
  * @param prices - current spot prices, quoted per troy ounce
@@ -119,9 +170,7 @@ export function computeMeltValue(coin: CoinRecord, prices: SpotPrices): number |
 /**
  * Has ANY spot price been loaded at all?
  *
- * ---------------------------------------------------------------------------
- * A ZERO IS NOT A PRICE — IT IS THE ABSENCE OF ONE
- * ---------------------------------------------------------------------------
+ * ---- A ZERO IS NOT A PRICE — IT IS THE ABSENCE OF ONE ----
  * Gold, silver, platinum and copper do not trade at zero and never will, so
  * throughout this app a 0 means "we have no price for that metal", exactly as
  * a null would. That invariant is what lets computeMeltValue() above say

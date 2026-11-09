@@ -51,7 +51,6 @@ describe('QuickenImportModal', () => {
     modal['refreshQuickenAccounts']();
     modal['importQuicken']();
 
-    // Category should be set from the Quicken account name
     expect((emitted[0] as { category: string }).category).toBe('Coin Collection');
   });
 
@@ -137,7 +136,6 @@ describe('QuickenImportModal', () => {
 
   it('groups preview records by account', () => {
     const { modal } = createModal();
-    // QuickenImportRecord no longer has 'name' or 'type' - use 'coinType', 'year', 'grade', etc.
     modal['importedRecords'].set([
       { id: 'r1', denomination: 'Dime', account: 'Checking', coinType: 'Mercury',
         purchasePrice: 10, currentValue: 12, country: 'US', year: '1945', grade: 'VF-30',
@@ -153,11 +151,9 @@ describe('QuickenImportModal', () => {
     expect(Object.keys(grouped)).toEqual(expect.arrayContaining(['Checking', 'Savings']));
   });
 
-  // NOTE: these filter fixtures used placeholder security names ("Old Coin",
-  // "Cheap Coin", ...). Those carry none of the three main details, so the
-  // parser never produced a record to filter and the tests failed with an
-  // empty list -- the date/price filters themselves were fine. Real Quicken
-  // security names are used instead.
+  // Filter fixtures must use REAL Quicken security names. A placeholder like
+  // "Old Coin" carries none of the three main details, so the parser never
+  // produces a record and the filter under test gets an empty list.
   it('applies QIF date filter during import', () => {
     const { modal } = createModal();
     modal['quickenText'].set(
@@ -227,24 +223,23 @@ describe('QuickenImportModal', () => {
   });
 
   /*
-   * THE "IMPORT ANYWAY" OVERRIDE IS GONE, AND MUST STAY GONE.
+   * THERE IS NO "IMPORT ANYWAY" OVERRIDE, AND THERE MUST NEVER BE ONE.
    *
-   * It used to let the user force a record that fails the 2-of-3 rule into
-   * the import. The coin appeared in the grid but was never saved -- the
-   * backend rejects a coin with no denomination outright
-   * (400 {"error":"denomination is required"}) -- so every later edit failed
-   * against an id the server had never heard of. The two tests that used to
-   * sit here asserted that broken behaviour worked.
+   * Forcing a record that fails the 2-of-3 rule into the import produces a
+   * coin that appears in the grid but is never saved -- the backend rejects
+   * a coin with no denomination outright
+   * (400 {"error":"denomination is required"}) -- so every later edit fails
+   * against an id the server has never heard of.
    *
-   * The replacement rule: THE UI MUST NEVER OFFER TO CREATE A COIN THE
-   * BACKEND WOULD REFUSE.
+   * The rule: THE UI MUST NEVER OFFER TO CREATE A COIN THE BACKEND WOULD
+   * REFUSE.
    */
   it('offers no way to force an excepted coin into the import', () => {
     const { modal } = createModal();
     const surface = modal as unknown as Record<string, unknown>;
 
-    // The whole override mechanism -- the state, both handlers and the
-    // accessor the template used -- is removed, not merely hidden.
+    // No override state, handlers or template accessor may exist at all;
+    // hiding the button would not be enough.
     expect(surface['overriddenSecurities']).toBeUndefined();
     expect(surface['overrideException']).toBeUndefined();
     expect(surface['undoOverride']).toBeUndefined();
@@ -268,8 +263,8 @@ describe('QuickenImportModal', () => {
   });
 
   it('still reports the excepted coin in full so the user can act on it', () => {
-    // Removing the escape hatch must not remove the REPORTING -- the panel
-    // is the part the owner asked for and it is load-bearing.
+    // Refusing the row must not cost the user the REPORTING; the exceptions
+    // panel is load-bearing, not decoration.
     const { modal } = createModal();
     modal['quickenText'].set(mixedQif);
     modal['previewImport']();
@@ -281,14 +276,9 @@ describe('QuickenImportModal', () => {
     expect(exception.reason).toContain('Only 1 of 3 required details found');
   });
 
-  /* -------------------------------------------------------------------------
-   * THE 1969 PERU 100 SOLES, END TO END.
-   *
-   * This is the record the owner reported as the only one that would not
-   * import. The proof that the country and denomination fixes actually work
-   * is that it now comes through the NORMAL path -- with the override gone,
-   * there is no other path it could be using.
-   * ---------------------------------------------------------------------- */
+  /* The 1969 Peru 100 Soles, end to end: a non-US coin whose country is
+   * named in the security string. It must come through the NORMAL path --
+   * with no override to fall back on, there is no other path it could use. */
   const peruQif =
     `!Account\nNGold Coins\n^\n` +
     `!Type:Invst\nD12/15/2023\nNBuy\nY1969 Peru 100 Soles - NGC MS64\nI3,199\nQ1\nT3,199.00\nM1.3544 ounces of gold\n^`;
@@ -302,7 +292,6 @@ describe('QuickenImportModal', () => {
     modal['refreshQuickenAccounts']();
     modal['importQuicken']();
 
-    // Not an exception any more.
     expect(modal['rejectedRecords']()).toHaveLength(0);
     expect(emitted).toHaveLength(1);
 
@@ -316,7 +305,7 @@ describe('QuickenImportModal', () => {
     // Blank Coin Type is the accepted outcome: Year + Denomination already
     // satisfy the 2-of-3 rule.
     expect(coin.coinType).toBe('');
-    // And the alloy fields the import used to leave empty.
+    // And the alloy fields, inferred from country + denomination + year.
     expect(coin.metalContent).toBe('Gold');
     expect(coin.composition).toBe('90% Gold, 10% Copper');
     expect(coin.pmPercent).toBe(90);
@@ -334,35 +323,27 @@ describe('QuickenImportModal', () => {
     const coin = emitted[0] as {
       composition: string; metalContent?: string; pmPercent?: number; pmWeightGrams?: number;
     };
-    // These four used to arrive blank on every single imported coin --
-    // `composition` was hard-coded to '' in this component.
     expect(coin.metalContent).toBe('Gold');
     expect(coin.composition).toBe('90% Gold, 10% Copper');
     expect(coin.pmPercent).toBe(90);
     expect(coin.pmWeightGrams).toBeCloseTo(30.09, 2);
   });
 
-  /* =========================================================================
-   * A GUESSED READING, SEEN FROM THE PREVIEW
-   * -------------------------------------------------------------------------
+  /*
+   * A guessed reading, seen from the preview.
+   *
    * The parser flags a reading it had to assume (see `AmbiguousReading` in
    * coin.model.ts; a bare "3¢" dated 1865-1873 is today's only producer of
-   * one). What this component owes the user, in the owner's words:
+   * one). What this component owes the user:
    *
-   *   "It's okay to make an assumption and note to the user that there was
-   *    ambiguity in a choice so they can either fix the choice right away or
-   *    later or just cancel the match."
-   *
-   * Three outcomes, and the first one is the load-bearing one:
-   *   - DEFAULT: the row imports. A flag is not an exception. If this ever
-   *     stops being true the import counts fall, which is precisely what the
-   *     owner refused.
+   *   - DEFAULT: the row imports. A flag is NOT an exception. If this ever
+   *     stops being true, the import counts silently fall.
    *   - FIX IT NOW: switch the denomination to the other candidate, and have
    *     everything derived from it follow.
    *   - CANCEL IT: drop the row from this import, reversibly.
-   * The fourth, "fix it later", needs nothing here -- the coin editor has
-   * always allowed it.
-   * ======================================================================= */
+   *
+   * "Fix it later" needs nothing here -- the coin editor already allows it.
+   */
   describe('a reading the parser had to guess at', () => {
     // "1870 3¢" sits in the 1865-1873 window where the three-cent silver and
     // the three-cent nickel were both being struck. Nothing in the name says

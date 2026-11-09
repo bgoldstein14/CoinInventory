@@ -43,9 +43,6 @@ export const DB_BINDINGS = {
    */
   imageSourcePath: sql.NVarChar(400),
 
-  // (There was a `tag: sql.NVarChar(100)` binding here for CoinTags.Tag. The
-  // tag feature and its table were removed — see migrations/005-drop-coin-tags.sql.)
-
   // ----- Transactions -------------------------------------------------
   transactionId: sql.NVarChar(36),    // TransactionId         UNIQUEIDENTIFIER (bound as text)
   transactionType: sql.NVarChar(50),  // TransactionType       NVARCHAR(50)
@@ -68,14 +65,54 @@ export const DB_BINDINGS = {
   setName: sql.NVarChar(100),         // CoinSets.SetName          NVARCHAR(100)
   metalContentName: sql.NVarChar(50), // MetalContents.Name        NVARCHAR(50)
 
+  // ----- Issuers (migration 011) --------------------------------------
+  // Who struck the coin. "Issuer" rather than "Country" because the Roman
+  // Empire, the Papal States and the German states are not countries.
+  issuerId: sql.Int,
+  issuerName: sql.NVarChar(100),          // Issuers.Name     NVARCHAR(100)
+  /**
+   * Issuers.IsoCode  CHAR(2) NULL
+   *
+   * *** THE ONLY FIXED-WIDTH COLUMN IN THIS SCHEMA, AND IT BITES BOTH WAYS. ***
+   * Bound as Char(2), not NVarChar(2), because the column is CHAR(2): SQL
+   * Server TRUNCATES 'MMR' to 'MM' and PADS 'M' to 'M ', both silently. The
+   * padded one is the worse of the two — it then compares unequal to 'M'
+   * everywhere, so the issuer quietly stops matching anything. The route
+   * refuses anything that is not exactly two letters before it gets here;
+   * this binding is the second line of that defence.
+   */
+  issuerIsoCode: sql.Char(2),
+  issuerKind: sql.NVarChar(20),           // Issuers.Kind     NVARCHAR(20)
+  /**
+   * Issuers.ValidFrom / ValidTo  INT NULL
+   *
+   * Plain INT years, and NEGATIVE IS LEGAL: -509 is the Roman Republic.
+   * A year column that rejected negatives would exclude exactly the issuers
+   * the design calls first-class.
+   */
+  issuerYear: sql.Int,
+  issuerSortOrder: sql.Int,
+
   // ----- Denominations ------------------------------------------------
   denominationId: sql.Int,
   denominationLabel: sql.NVarChar(100),   // Label     NVARCHAR(100)
   denominationCountry: sql.NVarChar(100), // Country   NVARCHAR(100)
   denominationSortOrder: sql.Int,
+  /** Denominations.IssuerId INT NULL — FK to Issuers (migration 011). */
+  denominationIssuerId: sql.Int,
 
   // ----- MintMarks ----------------------------------------------------
   mintMarkId: sql.Int,
   mintMarkLabel: sql.NVarChar(20),        // Label        NVARCHAR(20)
   mintMarkDescription: sql.NVarChar(200), // Description  NVARCHAR(200)
+
+  // ----- Catalogs (migration 012) -------------------------------------
+  // The reference catalogues a coin can be attributed to: Sear, RIC,
+  // Hendin, Krause. Note this `catalogId` binds the Catalogs table's own
+  // PRIMARY KEY, for /api/catalogs/:id -- the COIN's foreign key to it is a
+  // different binding, in db/coin-fields.ts, where it also gets the
+  // normalizer that keeps a CSV-round-tripped string out of an INT
+  // parameter.
+  catalogId: sql.Int,
+  catalogName: sql.NVarChar(60),          // Catalogs.Name  NVARCHAR(60)
 } as const;

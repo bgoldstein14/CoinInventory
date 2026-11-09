@@ -52,13 +52,11 @@ describe('SpotPriceModalComponent', () => {
     expect(inv.spotPrices().silver).toBe(0);
   });
 
-  // ==========================================================================
   // THE HISTORY-ROW TRAP
-  // --------------------------------------------------------------------------
+  //
   // POST /api/spot-prices INSERTS A NEW ROW every time. The price inputs are
   // bound with (ngModelChange), which fires per keystroke. These tests are the
   // guard rail against anyone "simplifying" the save back into the setter.
-  // ==========================================================================
 
   describe('saving only on deliberate actions', () => {
     it('writes nothing while the user is typing', () => {
@@ -164,8 +162,8 @@ describe('SpotPriceModalComponent', () => {
     });
 
     it('shows the provenance of prices loaded at start-up, not just fetched ones', async () => {
-      // Before this, reopening the app showed an empty fetch bar as though
-      // nothing had ever been retrieved, even with good saved prices in use.
+      // The provenance is read from the service, so prices loaded at
+      // start-up show where they came from — not just ones fetched here.
       const { modal, inv, mockApiService } = createModal();
       (mockApiService.getLatestSpotPrices as any).mockReturnValue(of({
         gold: 2600, silver: 30, platinum: 950, copper: 4,

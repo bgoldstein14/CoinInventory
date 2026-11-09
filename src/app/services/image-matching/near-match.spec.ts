@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * near-match.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   The near-match RULE, on its own, away from the UI:
  *
@@ -12,7 +12,7 @@
  *
  *   import-tiers.spec.ts measures the CONSEQUENCE across the whole real
  *   filename corpus. This file pins down the rule.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -43,10 +43,10 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   };
 }
 
-/* =========================================================================
+ /*
  * 1. THE GRADE TOLERANCE
- * =======================================================================
- * The owner's rule, verbatim: the grade may be "a little off" only when the
+ *
+ * The rule: the grade may be "a little off" only when the
  * difference is EXTRA INFORMATION. Both directions are tested, because the
  * easy mistake is to be lenient enough that MS64 starts matching MS63.
  */
@@ -130,12 +130,11 @@ describe('grade tolerance - a different grade is never forgiven', () => {
 /* =========================================================================
  * 1b. EQUIVALENT NOTATIONS
  * =======================================================================
- * The owner's words, verbatim:
+ * The rule, verbatim:
  *
  *   "Keep in mind that the grade might slightly differ and still be correct
  *    like 63CAM or 63 CAMEO or 63PL of 63 PL or something like that. Also,
  *    CAC might be missing on the picture but it's in the inventory."
- *
  * Two separate claims, tested separately below:
  *   (a) an ABBREVIATION and the WORD it abbreviates are one grade;
  *   (b) a designation present on one side only is extra detail, not a clash.
@@ -146,7 +145,7 @@ describe('grade tolerance - a different grade is never forgiven', () => {
 describe('grade tolerance - equivalent notations are one grade', () => {
   /** [terse, verbose, what the designation means]. */
   const EQUIVALENT: Array<[string, string, string]> = [
-    // -- the owner's own examples ---------------------------------------
+    // -- the forms collectors actually write ----------------------------
     ['MS63PL', 'MS63 PL', 'only the spacing differs'],
     ['63 CAM', '63CAM', 'only the spacing differs, with no grade letters'],
     ['MS63CAM', 'MS63 CAMEO', 'CAM is the abbreviation of CAMEO'],
@@ -275,7 +274,7 @@ describe('grade tolerance - abbreviations that only LOOK alike stay different', 
 /* =========================================================================
  * 1c. THE CAC CASE, BY NAME
  * =======================================================================
- * The owner: "CAC might be missing on the picture but it's in the inventory."
+ * A CAC sticker might be missing on the picture but present in the inventory.
  *
  * A CAC sticker is a second opinion bought AFTER grading; it is pasted on the
  * slab and typed into the record, and it is routinely left out of a filename.
@@ -452,7 +451,7 @@ describe('import tiers - the three buckets', () => {
   });
 
   it("tier 2: two coins that differ only by mint mark become one yes/no question", () => {
-    // The owner's first ambiguous case: several coins fit the same filename.
+    // The first ambiguous case: several coins fit the same filename.
     const inventory = [
       coin({ id: 'morgan-s', year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'S', grade: 'MS63', certCompany: 'PCGS' }),
       coin({ id: 'morgan-o', year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'O', grade: 'MS63', certCompany: 'PCGS' })

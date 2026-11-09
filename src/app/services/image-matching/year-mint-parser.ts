@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * year-mint-parser.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Pulling the YEAR and the MINT MARK out of a filename. Public entry points
  *   are `extractYear` and `extractMintMark`.
@@ -22,7 +22,7 @@
  *
  *   It is also, along with filename-parser.ts, where the matcher is most
  *   paranoid -- almost every rule here exists to REFUSE something.
- * =========================================================================== */
+  */
 
 import { CAMERA_PREFIXES, MINT_CODES, MINT_NAMES } from './reference-tables';
 import { indexOfSequence, isPlausibleYear } from './text-tokens';
@@ -41,16 +41,15 @@ const YEAR_WITH_GLUED_MINT = /^(1[6-9]\d{2}|2[01]\d{2})(cc|[pdswocm])$/;
  *
  * "IMG_2024.jpg" and "DSC_1998.jpg" are photos, not coins from 2024/1998.
  * A year-shaped number immediately preceded by a camera prefix is rejected.
- *
  * Also accepts the glued form "1875CC". `tokenize` splits only on
  * non-alphanumerics, so "1875CC" arrives as one token and would otherwise
- * fail the plain four-digit test -- which is exactly the bug that made
- * "1875CC - VF30 - 2 - Obverse.jpg" parse with no year at all.
+ * fail the plain four-digit test, leaving
+ * "1875CC - VF30 - 2 - Obverse.jpg" with no year at all.
  *
- * (The "1875S" spelling already worked by accident: `singularize` chops the
+ * (The "1875S" spelling happens to work anyway: `singularize` chops the
  * trailing "s" off tokens longer than three characters, turning it into a
- * plain "1875". The glued rule below covers it properly rather than relying
- * on that side effect.)
+ * plain "1875". The glued rule covers it properly rather than relying on that
+ * side effect.)
  */
 export function extractYear(tokens: string[], isFileName: boolean): number | null {
   for (let i = 0; i < tokens.length; i++) {
@@ -74,9 +73,8 @@ export function extractYear(tokens: string[], isFileName: boolean): number | nul
 /**
  * Extract a mint mark ONLY from unambiguous forms.
  *
- * Defect #6 was that any bare "s", "d" or "c" token anywhere in a filename
- * became a mint mark. Now a single letter must be positioned like a real
- * mint mark:
+ * A bare "s", "d" or "c" token anywhere in a filename is NOT a mint mark. A
+ * single letter must be positioned like a real mint mark:
  *
  *   A. attached to the year        "1881-S", "1881_S", "1916 D", "1875CC"
  *   B. delimited on both sides     "morgan-cc-obverse"

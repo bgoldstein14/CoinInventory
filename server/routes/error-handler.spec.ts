@@ -1,17 +1,16 @@
 /**
  * routes/error-handler.spec.ts — tests for the app-wide Express error handler.
  *
- * The regression being guarded is the one described at the top of
- * error-handler.ts: an oversized upload used to be reported as 500 "Internal
- * server error", hiding the 413 that body-parser had already worked out. During
- * a batch photo import that sent the user looking for a broken server instead
- * of simply sending fewer images.
+ * The regression guarded is the one described at the top of error-handler.ts:
+ * an oversized upload reported as 500 "Internal server error", hiding the 413
+ * body-parser had already worked out, which sends the user looking for a
+ * broken server instead of simply sending fewer images.
  *
  * The 413 test drives a REAL express.json() with a tiny 1 KB limit rather than
- * mocking the error. That exercises the exact code path the defect lived on —
- * body-parser rejecting a request and calling next(err) with a
- * PayloadTooLargeError — without having to send 50 MB through the test. The
- * production limit is 50mb; only the number differs.
+ * mocking the error, so it exercises the actual path — body-parser rejecting a
+ * request and calling next(err) with a PayloadTooLargeError — without sending
+ * 50 MB through the test. The production limit is 50mb; only the number
+ * differs.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -40,9 +39,7 @@ function buildTestApp(limit: string) {
   return testApp;
 }
 
-// ============================================================
 // The 413 regression
-// ============================================================
 
 describe('oversized request bodies', () => {
   it('surfaces body-parser PayloadTooLargeError as 413, not 500', async () => {
@@ -82,9 +79,7 @@ describe('oversized request bodies', () => {
   });
 });
 
-// ============================================================
 // errorStatusFor / errorMessageFor unit coverage
-// ============================================================
 
 describe('errorStatusFor', () => {
   it('honours body-parser PayloadTooLargeError', () => {

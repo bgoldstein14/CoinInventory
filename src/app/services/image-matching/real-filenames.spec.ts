@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * real-filenames.spec.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE PROVES
  *   That the matcher works against THIS COLLECTION, not against invented
  *   names. Every filename below is VERBATIM from a survey of the user's image
@@ -12,7 +12,7 @@
  *   image-matching.service.spec.ts covers the ALGORITHM (the safety gates,
  *   the ambiguity rules, the defect regressions). This file covers REALITY.
  *   If the collection's naming habits change, this is the file to extend.
- * =========================================================================== */
+  */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -32,9 +32,9 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   };
 }
 
-/* =========================================================================
+ /*
  * TABLE 1 -- SINGLE COINS: every attribute, from the real filename
- * =======================================================================
+ *
  * Columns are exactly what the import UI reads back to the user. `undefined`
  * means "this case does not pin that field down"; null means "we assert the
  * matcher found nothing", which for several of these is the whole point.
@@ -200,9 +200,9 @@ describe('real filenames - single coins parse to the right attributes', () => {
   }
 });
 
-/* =========================================================================
+ /*
  * TABLE 2 -- NOT A SINGLE COIN: must score 'none'
- * =======================================================================
+ *
  * The inventory below is stocked ON PURPOSE with the coins each of these
  * filenames would otherwise be attracted to -- a Three Cent piece for the
  * stamp and the fractional paper, gold for "Gold Coins", a Canadian cent for
@@ -271,9 +271,9 @@ describe('real filenames - group shots, non-coins and camera names score none', 
   });
 });
 
-/* =========================================================================
+ /*
  * TABLE 3 -- ANCIENTS GO TO REVIEW, NEVER TO AUTO
- * =======================================================================
+ *
  * An ancient's only comparable attribute is its coin-type text (which now
  * includes the folded catalogue reference). One attribute can never clear the
  * two-strong-attributes gate, and coin-type-only coverage caps the score below
@@ -319,9 +319,9 @@ describe('real filenames - ancients match on catalogue text but never auto-assig
   });
 });
 
-/* =========================================================================
+ /*
  * TABLE 4 -- THE BARE-DIGIT RULE, RESTATED AGAINST REAL NAMES
- * =======================================================================
+ *
  * The rule the rewrite must not lose: a number with a UNIT attached is strong
  * evidence; the SAME number with nothing attached says nothing at all.
  */
@@ -363,9 +363,9 @@ describe('real filenames - unit-bound digits count, bare digits do not', () => {
   });
 });
 
-/* =========================================================================
+ /*
  * TABLE 5 -- CERT COMPANY + GRADE TOGETHER
- * =======================================================================
+ *
  * Individually weak, jointly strong. These tests pin down that asymmetry,
  * because it is easy to "fix" a missed match by promoting the grade and
  * thereby let every XF coin match every other XF coin.
@@ -492,14 +492,9 @@ describe('real filenames - mint marks attached to the year', () => {
 /* =========================================================================
  * TABLE 8 -- HELD OUT OF THE AUTOMATED IMPORT ENTIRELY
  * =======================================================================
- * Counterfeits and multi-coin shots. Two groups, one rule, because the owner
- * gave one answer about both:
- *
- *   "Ignore the Fake coins."
- *   "Never automatically attach nor offer as attachable in the automated
- *    import. A user can try to manually choose such a photo manually at a
- *    later time to attach to a coin(s)."
- *
+ * Counterfeits and multi-coin shots. Two groups, one rule: never
+ * automatically attach, and never offer as attachable in the automated
+ * import. Such a photo can still be chosen by hand later.
  * Every path below is VERBATIM from the share, with its real directory. These
  * 20, plus nine more "Temp/Group PHOTO-..." siblings, are the complete set of
  * 30 that the markers catch across all 1,715 displayable files.
@@ -527,7 +522,8 @@ interface ExclusionCase {
 const EXCLUDED_FROM_AUTO_IMPORT: ExclusionCase[] = [
   /* COUNTERFEITS -- all eight on the share. Note how complete the descriptors
    * are: year, denomination, and in four cases a grade. That completeness is
-   * exactly why they are dangerous. He owns five genuine 1861 3CS records. */
+   * exactly why they are dangerous -- the inventory holds five genuine 1861
+   * 3CS records. */
   { file: 'Business Strikes/FAKE - 1860 3CS - VF - Obverse.jpg', marker: 'fake', kind: 'counterfeit' },
   { file: 'Business Strikes/FAKE - 1860 3CS - VF - Reverse.jpg', marker: 'fake', kind: 'counterfeit' },
   { file: 'Business Strikes/Archive/1861 3CS - Obverse - FAKE.jpg', marker: 'fake', kind: 'counterfeit' },
@@ -553,8 +549,8 @@ const EXCLUDED_FROM_AUTO_IMPORT: ExclusionCase[] = [
 
   /* "montage". These two are also the reason "set" does not need to be a
    * marker: both carry "Montage" and are caught by it, so adding "set" would
-   * buy nothing here and would cost him every photograph of a genuine Proof
-   * Set record. */
+   * buy nothing here and would cost every photograph of a genuine Proof Set
+   * record. */
   { file: 'Proofs/1870 Proof Set/Archive/1870 Proof Set Montage - Large.jpg', marker: 'montage', kind: 'multi-coin' },
   { file: 'Proofs/1870 Proof Set/Archive/1870 Proof Set Montage - Small.jpg', marker: 'montage', kind: 'multi-coin' },
 
@@ -586,7 +582,7 @@ describe('real filenames - counterfeits and group shots are out of the automated
 
       /* But still REPORTED, in full, with the reason the UI prints.
        * "Where did my photo go?" is the question the importer must never
-       * leave him asking. */
+       * leave a user asking. */
       expect(result.tier, 'tier').toBe('not-imported');
       expect(result.skipReason, 'skipReason').toBe(result.parsed.autoImportExclusionReason);
     });
@@ -632,8 +628,8 @@ describe('real filenames - counterfeits and group shots are out of the automated
  * TABLE 9 -- WORDS THAT LOOK LIKE MARKERS AND MUST NOT BE
  * =======================================================================
  * The whole risk in TABLE 8 is over-reach. Excluding an ordinary photograph
- * of a real coin is a silent loss and he would have no way to notice it
- * happened. Each row below is a word that was considered and rejected, with
+ * of a real coin is a silent loss with no way to notice it happened. Each row
+ * below is a word that was considered and rejected, with
  * the reason, so that adopting it later means deleting a test and reading
  * why it was there.
  */

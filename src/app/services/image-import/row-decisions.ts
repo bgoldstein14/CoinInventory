@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * row-decisions.ts
- * ---------------------------------------------------------------------------
+ *
  * The per-file decisions ("accept this suggestion", "use that candidate",
  * "skip it") as pure `rows -> rows` transforms.
  *
@@ -11,39 +11,29 @@
  * INVARIANT worth stating once: whenever a decision gives a row a coin, that
  * row also becomes ticked, and whenever a decision takes the coin away the
  * row becomes unticked. "Selected" can never mean "will be written to nowhere".
- * =========================================================================== */
+  */
 
 import { BatchImageRow, CoinRecord, RankedImageMatch } from '../../types/coin.model';
 
-/* ===========================================================================
+ /*
  * THE ONE ROW TIER 3 DOES NOT OFFER TO RESCUE
- * ---------------------------------------------------------------------------
+ *
  * Counterfeit photographs and multi-coin shots are held out of the AUTOMATED
- * import completely. The owner, on the group shots, and he said the same of
- * the fakes:
- *
- *   "Never automatically attach nor offer as attachable in the automated
- *    import. A user can try to manually choose such a photo manually at a
- *    later time to attach to a coin(s)."
- *   "Ignore the Fake coins."
- *
- * "Nor offer as attachable" is the part that lands here. Tier 3 is otherwise
+ * import completely: never automatically attached, and NEVER OFFERED AS
+ * ATTACHABLE. "Nor offered" is the part that lands here. Tier 3 is otherwise
  * read-only-plus-an-escape-hatch, and that escape hatch IS an offer, so these
  * rows must not have it. The modal hides the "Attach anyway..." link; the two
  * guards below are the same rule stated where it cannot be bypassed, so a
  * stale click or a future template change cannot attach one by accident.
  *
- * *** THIS DOES NOT MAKE THE FILE UNATTACHABLE, AND MUST NOT. ***
- *   "I never want a picture file to be off limits from choosing to attach to
- *    a coin even if the descriptor has nothing relevant to the coin itself."
- *   "Maybe it's an article about the coin or something like that that I'd
- *    want to attach."
- *
- * The row is still LISTED, with its reason, so nothing vanishes. And the
- * per-coin image gallery's add-images path — the manual route, which never
- * consults the matcher at all — attaches any file to any coin exactly as
+ * *** THIS DOES NOT MAKE THE FILE UNATTACHABLE, AND MUST NOT. *** No picture
+ * file is ever off limits from being chosen by hand, however irrelevant its
+ * descriptor -- it may be an article about the coin rather than a photograph
+ * of it. The row is still LISTED, with its reason, so nothing vanishes, and
+ * the per-coin image gallery's add-images path -- the manual route, which
+ * never consults the matcher -- attaches any file to any coin exactly as
  * before. The rule here is about what the IMPORT SCREEN offers, nothing more.
- * ========================================================================= */
+  */
 
 /** True when the automated importer must not even offer this row a coin. */
 function isExcludedFromAutoImport(row: BatchImageRow): boolean {
@@ -153,15 +143,11 @@ export function chooseNearCandidate(
  * that photo is UNREACHABLE: the right coin is sitting at the top of a ranked
  * list nobody can see.
  *
- * The owner was shown that trade-off and chose: keep the bar exactly where it
- * is, and give tier 3 a way back in. So the two functions below are the ONLY
- * way a tier-3 row can ever acquire a coin, and like every other decision in
- * this file they run only when the user presses something. The standing rule
- * is untouched:
- *
- *     "Silently filing an image under the wrong coin is much worse than
- *      asking."
- *
+ * The decision was to keep the bar exactly where it is and give tier 3 a way
+ * back in. So the two functions below are the ONLY way a tier-3 row can ever
+ * acquire a coin, and like every other decision in this file they run only
+ * when the user presses something. The standing rule is untouched: silently
+ * filing an image under the wrong coin is much worse than asking.
  * WHY A UI ESCAPE HATCH AND NOT A LOOSER MATCHER
  * Lowering the bar would move those 17 files into tier 2, where they would
  * each cost a question -- and it would drag the 2 genuinely wrong ones along

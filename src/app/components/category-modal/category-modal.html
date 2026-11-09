@@ -1,144 +1,429 @@
+<!--
+  The reference-data maintenance screen.
+
+  STRUCTURE: a sidebar of types on the left, one pane on the right. The
+  sidebar is a loop over REFERENCE_SECTIONS, so adding a seventh type is one
+  entry in reference-sections.ts plus one @case below — not another forty
+  lines of copied markup with the nouns changed.
+
+  NO INLINE STYLES ANYWHERE IN THIS FILE. That is a rule, not a preference:
+  spacing set per-element is spacing that can never be made consistent.
+-->
 <div class="modal-backdrop" (click)="closed.emit()">
-  <div class="modal" (click)="$event.stopPropagation()">
+  <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Categories & Sets</h2>
+      <h2>Reference Data</h2>
       <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
     </div>
-    <div class="modal-body">
-      <h3>Categories</h3>
-      <p class="hint-text">These are the choices offered in every coin's Category dropdown.</p>
-      <div class="category-admin-form">
-        <input type="text" class="category-admin-input" placeholder="New category name&hellip;"
-          [ngModel]="newCategoryOption()" (ngModelChange)="newCategoryOption.set($event)"
-          (keydown.enter)="addCategoryOptionFromDraft()" aria-label="New category name" />
-        <button type="button" class="secondary" (click)="addCategoryOptionFromDraft()">Add</button>
-      </div>
-      @if (inv.categoryOptions().length > 0) {
-        <ul class="category-admin-list">
-          @for (category of inv.categoryOptions(); track category) {
-            <li>
-              <span>{{ category }}</span>
-              <button type="button" class="secondary small-button" (click)="removeCategoryOption(category)">Remove</button>
-            </li>
-          }
-        </ul>
-      } @else {
-        <p class="empty-state">No categories yet.</p>
-      }
 
-      <h3 style="margin-top: 20px">Collection Sets / Albums</h3>
-      <p class="hint-text">Organize coins into named sets, albums, or collections. Assign coins via the detail panel.</p>
-      <div class="category-admin-form">
-        <input type="text" class="category-admin-input" placeholder="New set name&hellip;"
-          [ngModel]="newCoinSet()" (ngModelChange)="newCoinSet.set($event)"
-          (keydown.enter)="addCoinSetFromDraft()" aria-label="New set name" />
-        <button type="button" class="secondary" (click)="addCoinSetFromDraft()">Add</button>
-      </div>
-      @if (inv.coinSets().length > 0) {
-        <ul class="category-admin-list">
-          @for (s of inv.coinSets(); track s) {
-            <li>
-              <span>{{ s }}</span>
-              <button type="button" class="secondary small-button" (click)="removeCoinSet(s)">Remove</button>
-            </li>
-          }
-        </ul>
-      } @else {
-        <p class="empty-state">No sets yet.</p>
-      }
+    <div class="reference-layout">
+      <!-- The sidebar. role="tablist" because that is what it behaves like,
+           whatever its orientation; aria-orientation tells a screen reader
+           which arrow keys to expect. -->
+      <nav class="reference-nav" role="tablist" aria-orientation="vertical" aria-label="Reference data types">
+        @for (section of sections; track section.id) {
+          <button
+            type="button"
+            class="reference-nav__item"
+            [class.reference-nav__item--active]="activeSection() === section.id"
+            role="tab"
+            [attr.aria-selected]="activeSection() === section.id"
+            [attr.aria-controls]="'pane-' + section.id"
+            [id]="'tab-' + section.id"
+            (click)="selectSection(section.id)"
+          >{{ section.title }}</button>
+        }
+      </nav>
 
-      <!-- Denomination Management Section -->
-      <h3 style="margin-top: 20px">Denominations</h3>
-      <p class="hint-text">
-        Manage the list of denominations shown in the detail panel dropdown.
-        Requires database connection.
-      </p>
-      <div class="category-admin-form">
-        <input
-          type="text"
-          class="category-admin-input"
-          placeholder="New denomination (e.g., Quarter, Half Dollar)&hellip;"
-          [ngModel]="newDenominationLabel()"
-          (ngModelChange)="newDenominationLabel.set($event)"
-          (keydown.enter)="addDenominationFromDraft()"
-          aria-label="New denomination label"
-        />
-        <select
-          [ngModel]="newDenominationCountry()"
-          (ngModelChange)="newDenominationCountry.set($event)"
-          aria-label="Country"
-        >
-          <option value="US">US</option>
-          <option value="GB">GB</option>
-          <option value="CA">CA</option>
-        </select>
-        <button type="button" class="secondary" (click)="addDenominationFromDraft()">Add</button>
-      </div>
-      @if (inv.denominations().length > 0) {
-        <ul class="category-admin-list">
-          @for (denom of inv.denominations(); track denom.denominationId) {
-            <li>
-              <span>{{ denom.label }} ({{ denom.country }})</span>
-              <button
-                type="button"
-                class="secondary small-button"
-                (click)="removeDenomination(denom.denominationId)"
-              >
-                Remove
-              </button>
-            </li>
-          }
-        </ul>
-      } @else {
-        <p class="empty-state">No denominations yet.</p>
-      }
+      <section
+        class="reference-pane"
+        role="tabpanel"
+        [id]="'pane-' + activeSection()"
+        [attr.aria-labelledby]="'tab-' + activeSection()"
+      >
+        <header class="reference-pane__header">
+          <h3>{{ activeSectionTitle() }}</h3>
+          <p class="hint-text">{{ activeSectionHint() }}</p>
+        </header>
 
-      <!-- Mint Mark Management Section -->
-      <h3 style="margin-top: 20px">Mint Marks</h3>
-      <p class="hint-text">
-        Manage the list of mint marks shown in the detail panel dropdown.
-        Requires database connection.
-      </p>
-      <div class="category-admin-form">
-        <input
-          type="text"
-          class="category-admin-input"
-          placeholder="Mark (e.g., D, S, P)&hellip;"
-          [ngModel]="newMintMarkLabel()"
-          (ngModelChange)="newMintMarkLabel.set($event)"
-          (keydown.enter)="addMintMarkFromDraft()"
-          aria-label="New mint mark label"
-          style="max-width: 100px;"
-        />
-        <input
-          type="text"
-          class="category-admin-input"
-          placeholder="Description (e.g., Denver Mint)&hellip;"
-          [ngModel]="newMintMarkDescription()"
-          (ngModelChange)="newMintMarkDescription.set($event)"
-          (keydown.enter)="addMintMarkFromDraft()"
-          aria-label="Mint mark description"
-        />
-        <button type="button" class="secondary" (click)="addMintMarkFromDraft()">Add</button>
-      </div>
-      @if (inv.mintMarks().length > 0) {
-        <ul class="category-admin-list">
-          @for (mm of inv.mintMarks(); track mm.mintMarkId) {
-            <li>
-              <span>{{ mm.label }} - {{ mm.description }}</span>
-              <button
-                type="button"
-                class="secondary small-button"
-                (click)="removeMintMark(mm.mintMarkId)"
-              >
-                Remove
-              </button>
-            </li>
+        @switch (activeSection()) {
+
+          <!-- Categories -->
+          @case ('categories') {
+            <div class="reference-form">
+              <input type="text" class="reference-input" placeholder="New category name&hellip;"
+                [ngModel]="newCategoryOption()" (ngModelChange)="newCategoryOption.set($event)"
+                (keydown.enter)="addCategoryOptionFromDraft()" aria-label="New category name" />
+              <button type="button" class="secondary" (click)="addCategoryOptionFromDraft()">Add</button>
+            </div>
+            @if (inv.categoryOptions().length > 0) {
+              <ul class="reference-list">
+                @for (category of inv.categoryOptions(); track category) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">{{ category }}</span>
+                    <span class="reference-row__usage">{{ usageLabel(categoryUsage(category)) }}</span>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeCategoryOption(category)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No categories yet.</p>
+            }
           }
-        </ul>
-      } @else {
-        <p class="empty-state">No mint marks yet.</p>
-      }
+
+          <!-- Collection sets -->
+          @case ('coin-sets') {
+            <div class="reference-form">
+              <input type="text" class="reference-input" placeholder="New set name&hellip;"
+                [ngModel]="newCoinSet()" (ngModelChange)="newCoinSet.set($event)"
+                (keydown.enter)="addCoinSetFromDraft()" aria-label="New set name" />
+              <button type="button" class="secondary" (click)="addCoinSetFromDraft()">Add</button>
+            </div>
+            @if (inv.coinSets().length > 0) {
+              <ul class="reference-list">
+                @for (coinSet of inv.coinSets(); track coinSet) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">{{ coinSet }}</span>
+                    <span class="reference-row__usage">{{ usageLabel(coinSetUsage(coinSet)) }}</span>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeCoinSet(coinSet)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No sets yet.</p>
+            }
+          }
+
+          <!-- Issuers -->
+          @case ('issuers') {
+            <div class="reference-form reference-form--wrap">
+              <input type="text" class="reference-input" placeholder="Issuer name, e.g. Burma&hellip;"
+                [maxlength]="issuerNameMaxLength"
+                [ngModel]="issuerDraft().name" (ngModelChange)="setIssuerField('name', $event)"
+                aria-label="Issuer name" />
+              <input type="text" class="reference-input reference-input--iso" placeholder="ISO"
+                maxlength="2"
+                [ngModel]="issuerDraft().isoCode" (ngModelChange)="setIssuerField('isoCode', $event)"
+                aria-label="Two-letter ISO code, if there is one" />
+              <select class="reference-input reference-input--kind"
+                [ngModel]="issuerDraft().kind" (ngModelChange)="setIssuerField('kind', $event)"
+                aria-label="Kind of issuer">
+                @for (kind of issuerKinds; track kind) {
+                  <option [value]="kind">{{ kind }}</option>
+                }
+              </select>
+              <!-- Years are text inputs, not number inputs. A number input
+                   fights with a leading minus in several browsers, and -509
+                   (the Roman Republic) must be typeable. -->
+              <input type="text" class="reference-input reference-input--year" placeholder="From"
+                [ngModel]="issuerDraft().validFrom" (ngModelChange)="setIssuerField('validFrom', $event)"
+                aria-label="First year, negative for BC" />
+              <input type="text" class="reference-input reference-input--year" placeholder="To"
+                [ngModel]="issuerDraft().validTo" (ngModelChange)="setIssuerField('validTo', $event)"
+                aria-label="Last year, blank if it still issues" />
+              <button type="button" class="secondary" (click)="addIssuerFromDraft()">Add issuer</button>
+            </div>
+
+            @if (issuerError()) {
+              <p class="reference-error" role="alert">{{ issuerError() }}</p>
+            }
+
+            @if (issuers().length > 0) {
+              <ul class="reference-list">
+                @for (issuer of issuers(); track issuer.issuerId) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">
+                      {{ issuer.name }}
+                      @if (issuer.isoCode) { <span class="reference-row__tag">{{ issuer.isoCode }}</span> }
+                      <span class="reference-row__tag">{{ issuer.kind }}</span>
+                      @if (issuer.validFrom !== null || issuer.validTo !== null) {
+                        <span class="reference-row__years">{{ issuer.validFrom ?? '?' }}&ndash;{{ issuer.validTo ?? 'now' }}</span>
+                      }
+                    </span>
+                    <!-- Two numbers: removing an issuer and removing a
+                         denomination have different consequences, so the user
+                         needs both before deciding. -->
+                    <span class="reference-row__usage">
+                      {{ issuer.denominationCount }} denominations &middot; {{ usageLabel(issuer.coinCount) }}
+                    </span>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeIssuer(issuer)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No issuers loaded.</p>
+            }
+          }
+
+          <!-- Denominations -->
+          @case ('denominations') {
+            <div class="reference-form">
+              <input type="search" class="reference-input" placeholder="Search all denominations&hellip;"
+                [ngModel]="denominationSearch()" (ngModelChange)="denominationSearch.set($event)"
+                aria-label="Search denominations" />
+            </div>
+
+            <div class="reference-form reference-form--wrap">
+              <!-- The issuer picker comes FIRST, before the label, because
+                   choosing one is required and a form whose required field is
+                   last is a form people get wrong. -->
+              <select class="reference-input reference-input--issuer"
+                [ngModel]="newDenominationIssuerId()"
+                (ngModelChange)="newDenominationIssuerId.set($event)"
+                aria-label="Issuer for the new denomination">
+                <option [ngValue]="null">Choose an issuer&hellip;</option>
+                @for (issuer of issuers(); track issuer.issuerId) {
+                  <option [ngValue]="issuer.issuerId">{{ issuer.name }}</option>
+                }
+              </select>
+              <input type="text" class="reference-input" placeholder="New denomination, e.g. 8 Reales&hellip;"
+                [ngModel]="newDenominationLabel()" (ngModelChange)="newDenominationLabel.set($event)"
+                (keydown.enter)="addDenominationFromDraft()" aria-label="New denomination label" />
+              <button type="button" class="secondary" (click)="addDenominationFromDraft()">Add</button>
+            </div>
+
+            @if (denominationError()) {
+              <p class="reference-error" role="alert">{{ denominationError() }}</p>
+            }
+
+            @if (denominationSearch().trim()) {
+              <p class="reference-count">
+                {{ visibleDenominationCount() }} matching {{ denominationGroups().length }} issuer(s)
+              </p>
+            }
+
+            @for (group of denominationGroups(); track group.heading) {
+              <section class="issuer-group">
+                <button type="button" class="issuer-group__header"
+                  [attr.aria-expanded]="!isCollapsed(group.heading)"
+                  (click)="toggleGroup(group.heading)">
+                  <span class="issuer-group__caret">{{ isCollapsed(group.heading) ? '&#9656;' : '&#9662;' }}</span>
+                  <span class="issuer-group__name">{{ group.heading }}</span>
+                  <span class="issuer-group__meta">
+                    {{ group.denominations.length }} &middot; {{ usageLabel(group.inUseTotal) }}
+                  </span>
+                </button>
+
+                @if (!isCollapsed(group.heading)) {
+                  @if (group.denominations.length > 0) {
+                    <ul class="reference-list">
+                      @for (denomination of group.denominations; track denomination.denominationId) {
+                        <li class="reference-row">
+                          <span class="reference-row__name">{{ denomination.label }}</span>
+                          <span class="reference-row__usage">{{ usageLabel(denomination.inUseCount ?? 0) }}</span>
+                          <button type="button" class="secondary small-button"
+                            (click)="removeDenomination(denomination)">Remove</button>
+                        </li>
+                      }
+                    </ul>
+                  } @else {
+                    <p class="empty-state">Nothing under this issuer yet &mdash; add one above.</p>
+                  }
+                }
+              </section>
+            } @empty {
+              <p class="empty-state">No denomination matches that search.</p>
+            }
+          }
+
+          <!-- Unlinked coins
+
+               THE COUNT IS SHOWN EVEN WHEN IT IS ZERO. "Every coin has a
+               denomination" is a useful thing to be told, and a pane that
+               renders nothing is indistinguishable from one that is broken.
+
+               ONE GROUP IS OPEN AT A TIME, so one set of controls serves all
+               of them and the Apply button can never be pointed at a group
+               that is not on screen. -->
+          @case ('unlinked') {
+            <p class="reference-count">{{ unlinkedSummary() }}</p>
+
+            @if (unlinkedCensus().skippedDraftCount > 0) {
+              <p class="hint-text">
+                {{ unlinkedCensus().skippedDraftCount }} unsaved row(s) are not counted &mdash;
+                they have not been written to the database yet.
+              </p>
+            }
+
+            @if (unlinkedError()) {
+              <p class="reference-error" role="alert">{{ unlinkedError() }}</p>
+            }
+
+            @for (group of unlinkedCensus().groups; track group.key) {
+              <section class="issuer-group">
+                <button type="button" class="issuer-group__header"
+                  [attr.aria-expanded]="selectedUnlinkedKey() === group.key"
+                  (click)="selectUnlinkedGroup(group.key)">
+                  <span class="issuer-group__caret">{{ selectedUnlinkedKey() === group.key ? '&#9662;' : '&#9656;' }}</span>
+                  <span class="issuer-group__name">{{ group.heading }}</span>
+                  <span class="issuer-group__meta">
+                    {{ group.coinCount }} coin{{ group.coinCount === 1 ? '' : 's' }}
+                  </span>
+                </button>
+
+                @if (selectedUnlinkedKey() === group.key) {
+                  <div class="unlinked-fix">
+                    <p class="hint-text">{{ unlinkedReasonText(group.reason) }}</p>
+
+                    @if (group.countries.length > 0) {
+                      <p class="hint-text">Filed under: {{ group.countries.join(', ') }}</p>
+                    }
+
+                    <!-- THE SHORTLIST AND THE FULL LIST ARE ONE CONTROL.
+                         When the app knows the candidates (an ambiguous name,
+                         or one that would link if asked again) they are the
+                         first group; the whole reference list follows, so a
+                         user who wants something else is never stuck with the
+                         app's suggestions. The option VALUE is the id, never
+                         the label — 'Crown' is British and Australian. -->
+                    <div class="reference-form reference-form--wrap">
+                      <input type="search" class="reference-input" placeholder="Search denominations&hellip;"
+                        aria-label="Search denominations"
+                        [ngModel]="unlinkedSearch()" (ngModelChange)="unlinkedSearch.set($event)" />
+                      <select class="reference-input" aria-label="Denomination to link these coins to"
+                        [ngModel]="unlinkedChoiceValue()" (ngModelChange)="setUnlinkedChoice($event)">
+                        <option value="">(choose one)</option>
+                        @if (group.choices.length > 0) {
+                          <optgroup label="Suggested">
+                            @for (choice of group.choices; track choice.denominationId) {
+                              <option [value]="choice.denominationId">
+                                {{ choice.label }} &mdash; {{ choice.issuerName || 'no issuer' }}
+                              </option>
+                            }
+                          </optgroup>
+                        }
+                        @for (pickerGroup of unlinkedPickerView().groups; track $index) {
+                          <optgroup [label]="pickerGroup.heading">
+                            @for (option of pickerGroup.options; track $index) {
+                              <option [value]="option.value">{{ option.label }}</option>
+                            }
+                          </optgroup>
+                        }
+                      </select>
+                    </div>
+
+                    <!-- The two things the user has to be told about the list
+                         they are looking at. Identical reasoning to the
+                         editor's picker: a search that matched nothing falls
+                         back to the whole list, and a capped list is showing
+                         fewer rows than matched. -->
+                    @if (unlinkedPickerView().noMatches) {
+                      <p class="hint-text">No match for &ldquo;{{ unlinkedPickerView().query }}&rdquo; &mdash; showing all</p>
+                    } @else if (unlinkedPickerView().truncated) {
+                      <p class="hint-text">
+                        {{ unlinkedPickerView().shownCount }} of {{ unlinkedPickerView().matchCount }} &mdash; keep typing
+                      </p>
+                    }
+
+                    <!-- OPT-IN, AND IT WILL NEVER BE DEFAULTED ON. This is
+                         the half of the fix that OVERWRITES a value already
+                         on the coin, so it stays the user's decision rather
+                         than the app's. -->
+                    @if (unlinkedPlan(); as plan) {
+                      @if (plan.issuerName) {
+                        <label class="unlinked-fix__option">
+                          <input type="checkbox"
+                            [ngModel]="unlinkedSetCountry()" (ngModelChange)="unlinkedSetCountry.set($event)" />
+                          <span>Also set Country to &ldquo;{{ plan.issuerName }}&rdquo;</span>
+                        </label>
+                      }
+                    }
+
+                    <div class="reference-form">
+                      <button type="button" class="primary"
+                        [disabled]="unlinkedBusy()"
+                        (click)="applyUnlinkedFix()">
+                        {{ unlinkedBusy() ? 'Linking…' : 'Link ' + group.coinCount + ' coin' + (group.coinCount === 1 ? '' : 's') }}
+                      </button>
+                      @if (group.reason === 'unknown') {
+                        <button type="button" class="secondary"
+                          (click)="addMissingDenomination(group)">
+                          Add &ldquo;{{ group.recordedTexts[0] }}&rdquo; to the list
+                        </button>
+                      }
+                    </div>
+
+                    <!-- WHICH COINS, by name. A bulk action with no list of
+                         what it will touch is a leap of faith, and this one
+                         rewrites a column on several rows at once. -->
+                    <ul class="reference-list">
+                      @for (coin of group.coins; track coin.coinId) {
+                        <li class="reference-row">
+                          <span class="reference-row__name">{{ coin.label }}</span>
+                          <span class="reference-row__usage">{{ coin.recordedText || '&mdash;' }}</span>
+                        </li>
+                      }
+                    </ul>
+                  </div>
+                }
+              </section>
+            } @empty {
+              <!-- The zero state, so an empty body is never mistaken for a
+                   broken one. -->
+              <p class="empty-state">Nothing to fix here.</p>
+            }
+          }
+
+          <!-- Mint marks -->
+          @case ('mint-marks') {
+            <div class="reference-form">
+              <input type="text" class="reference-input reference-input--mark" placeholder="Mark"
+                [ngModel]="newMintMarkLabel()" (ngModelChange)="newMintMarkLabel.set($event)"
+                (keydown.enter)="addMintMarkFromDraft()" aria-label="New mint mark" />
+              <input type="text" class="reference-input" placeholder="Description, e.g. Denver Mint&hellip;"
+                [ngModel]="newMintMarkDescription()" (ngModelChange)="newMintMarkDescription.set($event)"
+                (keydown.enter)="addMintMarkFromDraft()" aria-label="Mint mark description" />
+              <button type="button" class="secondary" (click)="addMintMarkFromDraft()">Add</button>
+            </div>
+            @if (inv.mintMarks().length > 0) {
+              <ul class="reference-list">
+                @for (mintMark of inv.mintMarks(); track mintMark.mintMarkId) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">{{ mintMark.label }} &mdash; {{ mintMark.description }}</span>
+                    <span class="reference-row__usage">{{ usageLabel(mintMarkUsage(mintMark.label)) }}</span>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeMintMark(mintMark)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No mint marks yet.</p>
+            }
+          }
+
+          <!-- Catalogues -->
+          @case ('catalogues') {
+            <div class="reference-form">
+              <input type="text" class="reference-input" placeholder="New catalogue, e.g. Vagi&hellip;"
+                [ngModel]="newCatalogName()" (ngModelChange)="newCatalogName.set($event)"
+                (keydown.enter)="addCatalogFromDraft()" aria-label="New catalogue name" maxlength="60" />
+              <button type="button" class="secondary" (click)="addCatalogFromDraft()">Add</button>
+            </div>
+            @if (inv.catalogs().length > 0) {
+              <ul class="reference-list">
+                @for (catalog of inv.catalogs(); track catalog.catalogId) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">{{ catalog.name }}</span>
+                    <span class="reference-row__usage">{{ usageLabel(catalogUsage(catalog.catalogId)) }}</span>
+                    <!-- RENAME EXISTS ONLY HERE. Categories, sets and mint
+                         marks are referenced by TEXT, so remove-and-re-add IS
+                         a rename for them. A catalogue is referenced BY ID. -->
+                    <button type="button" class="secondary small-button"
+                      (click)="renameCatalog(catalog.catalogId, catalog.name)">Rename</button>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeCatalog(catalog)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No catalogues yet.</p>
+            }
+          }
+        }
+      </section>
     </div>
   </div>
 </div>

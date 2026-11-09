@@ -9,9 +9,8 @@
  * 200 => { status: 'ok',    database: 'connected' }
  * 503 => { status: 'error', database: 'disconnected', message: '...' }
  *
- * Mounted at /api and registered BEFORE the other API routers, exactly as it
- * was when it lived inline in server.ts. The launcher polls this URL in a
- * loop, so the response shape must not change.
+ * Mounted at /api and registered BEFORE the other API routers. The launcher
+ * polls this URL in a loop, so the response shape must not change.
  */
 
 import { Router, Request, Response } from 'express';

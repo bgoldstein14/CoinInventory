@@ -3,14 +3,10 @@
  *
  * Fetches live precious-metal prices from COMEX/NYMEX front-month futures.
  *
- * WHY THIS REPLACED metals.live
- * The previous implementation called `https://api.metals.live/v1/spot`. That
- * free API has been discontinued: the hostname still resolves (to a CloudFront
- * address) but the TLS connection is refused, so every fetch failed with
- * "The underlying connection was closed". Because the route deliberately
- * answers 200 with zeroed prices on failure, the app showed no error -- the
- * prices simply stayed at $0 forever, which is what the user saw as
- * "the COMEX PM prices fetch does not work".
+ * A DEAD UPSTREAM IS SILENT HERE. The route answers 200 with zeroed prices
+ * on failure, so a provider that stops responding shows no error at all --
+ * the prices simply stay at $0 forever. That is why the result reports WHICH
+ * metals failed rather than only handing back zeros.
  *
  * WHY YAHOO FINANCE
  * These four symbols are the actual COMEX/NYMEX contracts, which is precisely

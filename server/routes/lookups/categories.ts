@@ -16,7 +16,7 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 
 const router = Router();
@@ -30,9 +30,9 @@ router.get('/categories', async (_req: Request, res: Response) => {
       return result.recordset.map((r: Record<string, unknown>) => r['CategoryName'] as string);
     });
 
-    res.json(names);
+    sendJson(res, 'GET /api/categories', names, 'category list');
   } catch (err) {
-    sendDbError(res, 'GET /api/categories', err, 'Failed to retrieve categories');
+    sendDbError(res, 'GET /api/categories', err, 'Failed to retrieve categories', 'category list');
   }
 });
 

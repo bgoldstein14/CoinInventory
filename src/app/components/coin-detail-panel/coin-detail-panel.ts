@@ -10,12 +10,10 @@ import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link'
 /**
  * CoinDetailPanel — the sidebar that opens when you click "Details" on a row.
  *
- * WHY THIS FILE EXISTS
- * This component owns the *frame* around a single coin: its heading, the grade
- * / certification / CAC badges, the Show images / Close / Delete buttons, and
- * the optional transaction history. The (much larger) grid of editable fields
- * is a component of its own — see CoinEditorForm — so that neither file grows
- * past the point where you can read it in one sitting.
+ * This component owns the *frame* around a single coin: the Show images /
+ * Close / Delete buttons, the original-file list, and the optional
+ * transaction history. The (much larger) grid of editable fields is a
+ * component of its own — see CoinEditorForm.
  *
  * The panel deliberately does not decide anything: closing and deleting are
  * emitted upwards, because the App shell also has to hide the panel and tidy
@@ -43,24 +41,12 @@ export class CoinDetailPanel {
   readonly closeRequested = output<void>();
   readonly deleteRequested = output<void>();
 
-  // --- Constants and pure formatters the template calls ---
-  //
-  // Four things used to be exposed here and all four are gone, because the
-  // header elements that called them were removed as redundant with the editor
-  // below: `formatDenominationDisplay` (used by the <h2> heading), and
-  // `gradeBadgeClass`, `certBadgeLabel` and `cacGreenBeanIconPath` (used by the
-  // grade / cert / CAC summary badges).
-  //
-  // All four still exist and are still used — by the inventory grid, where
-  // there is no form alongside them and the coloured pill and green-bean icon
-  // are doing real work. They were only ever imported here for the header.
-
   /** Exposed so the transaction form's template can coerce its text input. */
   protected readonly Number = Number;
 
-  /* ---------------------------------------------------------------------
+   /*
    * Original image files
-   * ------------------------------------------------------------------- */
+    */
 
   /**
    * Do we know where ANY of this coin's photos came from? Decides whether the
@@ -74,12 +60,24 @@ export class CoinDetailPanel {
    * triggered by CoinImagePathLink, which Angular always builds properly.
    */
   protected readonly anyPathRecorded = computed(() =>
-    imageSourcePaths.hasAnyPathFor(this.coin().imagePaths)
+    imageSourcePaths.hasAnyPathFor(this.photos())
   );
 
-  /* ---------------------------------------------------------------------
+  /**
+   * This coin's photographs, or an empty list while they are still arriving.
+   *
+   * `GET /api/coins` does not carry them (see
+   * server/routes/coins/list-query.ts), so `coin().imagePaths` is ABSENT
+   * until `InventoryService.loadCoinImages()` fills it in for the selected
+   * coin. Reading the array directly would throw; this computed re-renders
+   * the moment the fetch lands, so the "Original image files" section simply
+   * appears a beat later.
+   */
+  protected readonly photos = computed(() => this.coin().imagePaths ?? []);
+
+   /*
    * Valuation summary
-   * ------------------------------------------------------------------- */
+    */
 
   /**
    * Records a purchase / sale / trade / appraisal against the selected coin.

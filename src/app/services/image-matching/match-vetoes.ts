@@ -1,32 +1,29 @@
-/* ===========================================================================
+ /*
  * match-vetoes.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   THE DISQUALIFICATION STEP: the handful of conflicts that do not merely
  *   make a coin a worse match, but make it NOT A MATCH AT ALL. One public
  *   entry point, `findVetoes`, plus the phrase the skip reporting looks for.
  *
- * ---------------------------------------------------------------------------
- * WHY THIS EXISTS -- THE OWNER'S REPORT, VERBATIM
- * ---------------------------------------------------------------------------
- *   "I tried attaching images from the Early Proofs directory and it's not
- *    quite working too well for the close matches. First it's not a close
- *    match if the years don't match. It's also not a close match if the
- *    denomination does not match. Also, if it's a Proof/PF coin, it will
- *    never match a non-Proof/PF coin as that will always be in the file and
- *    image descriptors."
+ * WHY A VETO AND NOT A LOWER SCORE
  *
- *   The matcher used to express every one of these as a LOWER SCORE. That is
- *   not strong enough. match-scorer.ts spreads its evidence across seven
- *   weighted attributes, so a coin with the WRONG YEAR could still reach the
- *   0.85 auto-assign bar on the strength of its denomination, coin type, cert
- *   number and grade -- and be attached silently. A score can always be
- *   out-voted. A veto cannot, and these three conflicts are categorical:
- *   whatever else agrees, it is not this coin.
+ *   Three conflicts are categorical, not matters of degree:
  *
- * ---------------------------------------------------------------------------
+ *     - it is not a close match if the YEARS do not match;
+ *     - it is not a close match if the DENOMINATION does not match;
+ *     - a Proof/PF coin never matches a non-Proof/PF coin, because the
+ *       designation is always in the file and image descriptors.
+ *
+ *   Expressing those as a lower score is not strong enough. match-scorer.ts
+ *   spreads its evidence across seven weighted attributes, so a coin with the
+ *   WRONG YEAR can still reach the 0.85 auto-assign bar on the strength of
+ *   its denomination, coin type, cert number and grade -- and be attached
+ *   silently. A score can always be out-voted. A veto cannot: whatever else
+ *   agrees, it is not this coin.
+ *
  * WHY IT IS ONE FILE AND NOT THREE COPIES OF THE SAME TEST
- * ---------------------------------------------------------------------------
+ *
  *   There are three places that could each form their own opinion about
  *   whether a file and a coin conflict:
  *
@@ -50,9 +47,8 @@
  *       list instead of re-deriving them, so tier 2 and the candidate list can
  *       never disagree about what counts as a conflict.
  *
- * ---------------------------------------------------------------------------
  * THE RULE THAT GOVERNS THE VETOES: ONLY A STATED DISAGREEMENT
- * ---------------------------------------------------------------------------
+ *
  *   A veto needs BOTH SIDES TO SAY SOMETHING, and for those two somethings to
  *   contradict each other. Silence on either side is not a conflict -- it is
  *   simply no evidence, and it goes on being handled exactly as it always was
@@ -72,52 +68,41 @@
  *   variety is ordinary and expected, so none of those omissions may count
  *   against it.
  *
- * ---------------------------------------------------------------------------
  * !! THE ONE CARVE-OUT: THE STRIKE, AND ONLY THE STRIKE !!
- * ---------------------------------------------------------------------------
- *   THE OWNER HAS OVERRIDDEN THE RULE ABOVE FOR ONE DIMENSION. Verbatim:
  *
- *     "The Proof descriptor should always be part of the image file name as
- *      well as part of the inventory description otherwise it's assumed the
- *      coin is a business strike."
- *
- *   So for the STRIKE -- and for nothing else -- saying nothing is a positive
- *   statement. The two sides never both fall silent in the veto's eyes,
- *   because `detectStrike` in proof-strike.ts resolves silence to 'business'
- *   before either signature is built. By the time `isStrikeConflict` below
- *   sees them, a quiet filename is already making the claim "business
- *   strike", and it conflicts with a proof record exactly as an "MS63"
+ *   For the STRIKE -- and for nothing else -- saying nothing is a positive
+ *   statement, because the proof designation is always written into both the
+ *   file name and the inventory description. The two sides never both fall
+ *   silent in the veto's eyes: `detectStrike` in proof-strike.ts resolves
+ *   silence to 'business' before either signature is built, so by the time
+ *   `isStrikeConflict` below sees them, a quiet filename is already claiming
+ *   "business strike" and conflicts with a proof record exactly as an "MS63"
  *   filename would.
  *
  *   NOTE WHAT THIS MEANS FOR THE 1870 DIME PAIR ABOVE, because the example is
  *   deliberately left in place rather than quietly swapped for a tamer one:
  *   the two filenames no longer match the same coin on their own. The second
- *   one now says "business strike" and is DISQUALIFIED from its own proof
- *   record. That is the intended, measured cost of his rule, not an oversight
- *   -- the photo is still listed with a reason and can still be attached by
- *   hand. The example still earns its place because it shows exactly what the
- *   general rule protects for year and denomination, and exactly what the
- *   carve-out gives up for the strike.
+ *   now says "business strike" and is DISQUALIFIED from its own proof record.
+ *   That is the measured cost of the rule, not an oversight -- the photo is
+ *   still listed with a reason and can still be attached by hand.
  *
  *   WHY THE CARVE-OUT IS SOUND HERE AND NOWHERE ELSE. It rests on a fact
- *   about his data, not on logic: he is the only person who names these files
- *   and writes these records, and he writes "PF" / "Proof" (and "SP" /
+ *   about this collection's data, not on logic: one person names these files
+ *   and writes these records, and writes "PF" / "Proof" (and "SP" /
  *   "Specimen") every time it is true. A filename that omits the year, by
  *   contrast, omits it all the time and means nothing by it. So:
  *
- *       year          absence is NOT evidence   (unchanged)
- *       denomination  absence is NOT evidence   (unchanged)
- *       coin type     absence is NOT evidence   (unchanged)
+ *       year          absence is NOT evidence
+ *       denomination  absence is NOT evidence
+ *       coin type     absence is NOT evidence
  *       STRIKE        absence IS evidence       <- the carve-out
  *
- *   DO NOT EXTEND IT. If a future rule wants "a filename with no mint mark
- *   means no mint mark", that is a separate question for the owner and a
- *   separate piece of evidence about his habits, not an application of this
- *   one.
+ *   DO NOT EXTEND IT. "A filename with no mint mark means no mint mark" would
+ *   be a separate question needing separate evidence about how these files
+ *   are named, not an application of this one.
  *
- * ---------------------------------------------------------------------------
  * HOW HARD A VETO IS -- AND WHAT IT DELIBERATELY DOES NOT TOUCH
- * ---------------------------------------------------------------------------
+ *
  *   A vetoed coin is removed from the running: it cannot be auto-attached and
  *   it is not offered in the candidate list, so the user cannot pick it by
  *   accident either.
@@ -127,19 +112,14 @@
  *   have to pass; a veto is an EXTRA condition stacked on top of them, never a
  *   replacement for one.
  *
- *   THE ONE PLACE THAT RULE WAS MISREAD, AND HAS NOW BEEN CORRECTED.
- *   The runner-up margin (gate c) used to be measured against the FULL ranked
- *   list, disqualified coins included, on the theory that leaving them in
- *   could only make the matcher more cautious. In practice it made it
- *   incoherent: the owner's five 1861 Three Cent Silver records differ only
- *   by grade, so his 1861 PROOF photos were held back from an automatic
- *   attachment because four BUSINESS-STRIKE records scored close behind --
- *   records this very file had already disqualified. The margin now looks
- *   only at coins that survived the vetoes, which is what "two coins fit and
- *   I cannot tell which" was always supposed to mean. The full argument,
- *   including why this cannot mis-attach anything, is in the long comment
- *   beside the calculation in match-decider.ts.
- * =========================================================================== */
+ *   IN PARTICULAR, the runner-up margin (gate c) is measured over the coins
+ *   that SURVIVED the vetoes, not over the full ranked list. Leaving
+ *   disqualified coins in the denominator sounds cautious and is in fact
+ *   incoherent -- it holds a proof photo back because business-strike records
+ *   this very file already disqualified scored close behind. The full
+ *   argument, including why narrowing the set cannot mis-attach anything, is
+ *   in the long comment beside the calculation in match-decider.ts.
+  */
 
 import { StrikeKind } from '../../types/coin.model';
 import { Signature, formatYear } from './coin-signature';
@@ -177,16 +157,13 @@ export const UNIDENTIFIED_PHRASE = 'The filename does not identify one coin';
  * withholds an automatic attachment because the photograph is of the SLAB
  * LABEL rather than of the coin.
  *
- * The owner was asked whether a label shot may identify a coin on its own:
- *
- *     "Only alongside a coin photo."
- *
- * So the label is allowed to ride along once an actual coin image has named
- * the coin -- sibling-inference.ts places it -- but it may never be the
- * thing that does the naming. He accepted the consequence, which is that a
- * coin whose ONLY photograph is a label shot stops being attached
- * automatically; what he will not accept is that happening silently, so the
- * skip line has to SAY this rather than claim nothing matched.
+ * A label shot may identify a coin only ALONGSIDE a coin photo -- it rides
+ * along once an actual coin image has named the coin (sibling-inference.ts
+ * places it), but it may never be the thing that does the naming. The
+ * accepted consequence is that a coin whose ONLY photograph is a label shot
+ * stops being attached automatically; what is NOT acceptable is that
+ * happening silently, so the skip line has to SAY this rather than claim
+ * nothing matched.
  *
  * It lives here beside the other two phrases for the same reason they do:
  * near-match.ts has to recognise it when it writes the read-only skip line,
@@ -222,16 +199,10 @@ export function findVetoes(file: Signature, coin: Signature): VetoVerdict {
   const reasons: string[] = [];
 
   /* ---- VETO 1: THE YEAR ------------------------------------------------
-   * "First it's not a close match if the years don't match."
-   *
    * Both sides must state a year. A coin RECORD may hold a RANGE rather than
    * a single year -- a type-set entry is written "1916-1945" -- so the file's
    * year has to fall outside the whole range to conflict. An image never
-   * carries a range, which is why only the coin side is treated as one.
-   *
-   * The wording is kept identical to the sentence the scorer and the
-   * near-match test used before this file existed, so the skip reasons the
-   * user reads (and the census that counts them) do not change shape. */
+   * carries a range, which is why only the coin side is treated as one. */
   if (file.year !== null && coin.year !== null) {
     const end = coin.yearRangeEnd ?? coin.year;
     if (file.year < coin.year || file.year > end) {
@@ -240,13 +211,11 @@ export function findVetoes(file: Signature, coin: Signature): VetoVerdict {
   }
 
   /* ---- VETO 2: THE DENOMINATION ----------------------------------------
-   * "It's also not a close match if the denomination does not match."
-   *
-   * Compared with `denominationsAgree`, NOT with `===`. That matters: the
-   * owner also told us "3¢ can be equivalent to 3CS or 3CN", so a filename
-   * saying three cents must not be vetoed against a Three Cent Silver record.
-   * The table and the reasoning live in reference-tables.ts; this is one of
-   * the three places that consults it. */
+   * Compared with `denominationsAgree`, NOT with `===`. That matters: "3¢" is
+   * equivalent to 3CS or 3CN, so a filename saying three cents must not be
+   * vetoed against a Three Cent Silver record. The table and the reasoning
+   * live in reference-tables.ts; this is one of the three places that
+   * consults it. */
   if (file.denomination && coin.denomination) {
     if (!denominationsAgree(file.denomination, coin.denomination)) {
       reasons.push(
@@ -257,53 +226,31 @@ export function findVetoes(file: Signature, coin: Signature): VetoVerdict {
   }
 
   /* ---- VETO 3: TWO DIFFERENT STATED STRIKES ----------------------------
-   * "if it's a Proof/PF coin, it will never match a non-Proof/PF coin."
-   *
    * Symmetric: a proof photo must not land on a business-strike record and a
    * business-strike photo must not land on a proof record. They are different
    * coins with different values.
    *
-   * SPECIMEN NOW TAKES PART TOO. It did not used to -- the first version of
-   * this veto let 'specimen' conflict with nothing, on the grounds that the
-   * owner's rule named only proof against non-proof and a veto he had not
-   * asked for could hide a correct coin. He has since closed that question:
+   * SPECIMEN TAKES PART TOO. SP or "Specimen" always appears in the
+   * descriptor of such a coin, which is the same property that makes the
+   * proof rule work: a side that says "MS63" or "PF64" instead is not being
+   * vague, it is saying this is not a specimen. So 'specimen' against
+   * 'business' and 'specimen' against 'proof' are genuine stated
+   * disagreements. (There are no specimens in the collection today, so this
+   * costs nothing now; its value is stopping a future SP69 presentation piece
+   * from being filed under the ordinary coin of the same date.)
    *
-   *     "I don't own any Specimens, however, SP or Specimen should always
-   *      exist in the descriptor for such a coin."
+   * SILENCE COUNTS AS "BUSINESS STRIKE". `isStrikeConflict` below only fires
+   * when both sides name a strike -- but upstream, in proof-strike.ts, a side
+   * that says nothing is RESOLVED to 'business' before it ever gets here. So
+   * a proof RECORD against a filename that never mentions proof IS a stated
+   * disagreement and is vetoed. The carve-out note in this file's header
+   * explains why that is legitimate for the strike and must not be copied to
+   * the year or the denomination.
    *
-   * That is the SAME argument he made for proof, and it is what makes the
-   * absence of the word informative: if every specimen says so, then a side
-   * that says "MS63" or "PF64" instead is not being vague, it is saying this
-   * is not a specimen. So 'specimen' against 'business' and 'specimen'
-   * against 'proof' are now genuine stated disagreements.
-   *
-   * The cost of being wrong here is about as low as it gets: he owns no
-   * specimens, so the rule changes nothing in today's data (the import-tier
-   * census is unmoved by it). Its whole value is stopping a future SP69
-   * presentation piece from being filed under the ordinary coin of the same
-   * date -- and the empty set is the cheapest possible time to add a rule.
-   *
-   * AND SILENCE NOW COUNTS AS "BUSINESS STRIKE" -- READ THIS, IT IS NEW.
-   * This veto used to fire only when both sides named a strike. It still
-   * does, in the sense that `isStrikeConflict` below is unchanged. What
-   * changed is upstream, in proof-strike.ts: a side that says nothing about
-   * the strike is now RESOLVED to 'business' before it ever gets here,
-   * because the owner said
-   *
-   *     "The Proof descriptor should always be part of the image file name
-   *      as well as part of the inventory description otherwise it's assumed
-   *      the coin is a business strike."
-   *
-   * So a proof RECORD against a filename that never mentions proof is now a
-   * genuine stated disagreement and is vetoed. The long carve-out note in
-   * this file's header explains why that is legitimate for the strike and
-   * must not be copied to the year or the denomination.
-   *
-   * 'unknown' still conflicts with NOTHING, in either direction -- but it is
-   * now rare, reached only when a side had no descriptive text and no grade
-   * at all (an almost-empty record, or a hand-built attributes object). It is
-   * the "we were given nothing" answer, not the "we were given something that
-   * stayed quiet" answer; the latter is 'business' now.
+   * 'unknown' conflicts with NOTHING, in either direction. It is reached only
+   * when a side had no descriptive text and no grade at all -- the "we were
+   * given nothing" answer, not the "we were given something that stayed
+   * quiet" answer.
    *
    * And the trap, one more time because this is where it would bite: PL,
    * DMPL, DPL and "prooflike" are BUSINESS STRIKES, not proofs. A prooflike
@@ -325,24 +272,20 @@ export function findVetoes(file: Signature, coin: Signature): VetoVerdict {
  * Written as its own named function so the whole rule is visible in three
  * lines, and so the two things that are easy to get wrong are easy to check:
  *
- *   1. 'unknown' on EITHER side returns false, always. 'unknown' no longer
- *      means "this side stayed quiet" -- proof-strike.ts resolves a quiet
- *      side to 'business' under the owner's rule -- it means "this side was
- *      EMPTY: no text, no grade, nothing that could have said". There is no
- *      statement in an empty string to contradict anything with, so an empty
- *      side never disqualifies a coin. The guard is first because it is the
- *      cheap, categorical one.
+ *   1. 'unknown' on EITHER side returns false, always. It does not mean "this
+ *      side stayed quiet" -- proof-strike.ts resolves a quiet side to
+ *      'business' -- it means "this side was EMPTY: no text, no grade,
+ *      nothing that could have said". There is no statement in an empty
+ *      string to contradict anything with.
  *
- *   2. Everything else that differs conflicts. With 'unknown' already out of
- *      the way the remaining values are 'proof', 'business' and 'specimen',
- *      and no two of those are ever the same coin:
+ *   2. Everything else that differs conflicts. With 'unknown' out of the way
+ *      the remaining values are 'proof', 'business' and 'specimen', and no
+ *      two of those are ever the same coin:
  *
  *          proof    vs business    different dies, different planchets
  *          specimen vs business    a presentation piece is not a circulation
  *                                  coin
- *          specimen vs proof       near-match.ts says the same thing about
- *                                  the grade letters: "SP (Specimen) is a
- *                                  different striking from PF altogether"
+ *          specimen vs proof       a different striking altogether
  *
  * Plain inequality rather than a list of pairs, so that adding a fourth
  * StrikeKind one day cannot leave a silently unhandled combination behind.

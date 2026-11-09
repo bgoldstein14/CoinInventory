@@ -33,19 +33,19 @@
               }
             </div>
           </label>
+          <!--
+            DENOMINATIONS ARE DELIBERATELY NOT EDITABLE HERE. A denomination
+            belongs to an issuer, a single text box cannot name one, and
+            there are over a thousand of them. See settings-modal.ts.
+          -->
           <label>
             <span>Denominations</span>
-            <div class="settings-inline-add">
-              <input type="text" [ngModel]="denominationDraft()" (ngModelChange)="denominationDraft.set($event)" placeholder="Add denomination" />
-              <button type="button" class="secondary small-button" (click)="addDenomination()">Add</button>
-            </div>
-            <div class="settings-chip-list">
-              @for (denomination of inv.denominations(); track denomination.denominationId) {
-                <button type="button" class="chip-button" (click)="removeDenominationEntry(denomination.denominationId)">
-                  {{ denomination.label }} <span aria-hidden="true">×</span>
-                </button>
-              }
-            </div>
+            <p class="hint-text">
+              {{ inv.denominations().length }} loaded. Add, edit and remove them under
+              <strong>Reference Data</strong>, which groups them by issuer and searches them
+              &mdash; a denomination has to belong to an issuer, and a flat list of this many
+              is unusable.
+            </p>
           </label>
           <label>
             <span>Mint marks</span>
@@ -75,14 +75,9 @@
               }
             </div>
           </label>
-          <!-- Sets / Albums. Same shape as the four lists above: type-and-Add,
-               plus clickable chips to remove.
-
-               These are the values offered by the "Set / Album" picker in the
-               coin detail panel. They were previously only editable from the
-               Categories & Sets dialog, and changes there did not survive a
-               reload because the add/remove path never reached the database.
-               Both halves of that are fixed — see LookupManager.addCoinSet. -->
+          <!-- Sets / Albums. Same shape as the lists above: type-and-Add,
+               plus clickable chips to remove. These are the values offered by
+               the "Set / Album" picker in the coin detail panel. -->
           <label>
             <span>Sets / Albums</span>
             <div class="settings-inline-add">
@@ -107,15 +102,13 @@
         </div>
       </div>
 
-      <!-- =====================================================================
-           MAINTENANCE
+      <!-- MAINTENANCE
 
            Deliberately set apart from the reference lists above by its own
            rule-off border, because it is a different KIND of thing: the lists
            change what the dropdowns offer, this changes the coin records
-           themselves. Burying it among the chips would make a four-hundred-row
-           rewrite look like one more thing to type into.
-           ================================================================== -->
+           themselves. Burying it among the chips would make a several-hundred
+           row rewrite look like one more thing to type into. -->
       <div class="settings-group settings-maintenance">
         <h3>Maintenance</h3>
 

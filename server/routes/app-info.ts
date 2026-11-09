@@ -1,43 +1,26 @@
 /**
  * routes/app-info.ts — GET /api/app-info
  *
- * ------------------------------------------------------------------
- * WHY THIS ENDPOINT EXISTS
- * ------------------------------------------------------------------
- * The batch image import screen has to ask the user for one thing the browser
- * refuses to tell it: the absolute folder their coin photos live in. (The long
- * version is in src/app/services/image-import/source-path.ts — in short, a
- * directory picker hands JavaScript only `File.webkitRelativePath`, the path
- * RELATIVE to the folder that was picked, never the real location on disk.)
+ * Supplies the batch image import screen with a prefill for the one thing the
+ * browser refuses to tell it: the absolute folder the user's coin photos live
+ * in. (A directory picker hands JavaScript only `File.webkitRelativePath` —
+ * the path RELATIVE to the folder picked, never the real location on disk. See
+ * src/app/services/image-import/source-path.ts.)
  *
- * Starting that box completely empty is safe but unhelpful, and prefilling a
- * hardcoded guess was worse: `\\NAS\Coin Pictures` is how the photo
- * library is reachable from the *developer's* workstation, and the machine that
- * actually hosts this app keeps those files on a LOCAL drive whose letter is not
- * fixed. A path that is valid on the wrong machine is the single most expensive
- * mistake this screen can make, because it does not fail loudly — it stamps
- * every imported row with a location that resolves to nothing.
- *
- * So the prefill is now something only the server can know and that is
- * guaranteed to be a real, host-local path: the folder the app itself is
- * installed in. It is very probably NOT where the photos are, and the import
- * screen says so — but it is a correct starting point in the right shape, on the
- * right machine, with the right drive letter, which the user can edit down to
- * the right folder. Once they do, that choice is remembered (see
- * src/app/services/image-import/import-base-folder.ts) and this endpoint's
+ * A HARDCODED guess is the dangerous option: a path valid on another machine
+ * does not fail loudly, it stamps every imported row with a location that
+ * resolves to nothing. So the prefill is something only the server can know
+ * and that is guaranteed to be a real, host-local path: the folder the app
+ * itself is installed in. It is probably not where the photos are, and the
+ * import screen says so, but it is the right shape on the right machine with
+ * the right drive letter. Once the user edits it the choice is remembered
+ * (src/app/services/image-import/import-base-folder.ts) and this endpoint's
  * answer is never used again.
  *
- * ------------------------------------------------------------------
- * THIS ROUTER NEVER TOUCHES THE DATABASE
- * ------------------------------------------------------------------
- * Deliberately. It answers a question about the filesystem, not about coins, so
- * `withDb()` and `sendDbError()` make no appearance here. That also means it
- * still answers correctly when SQL Server is down, which matters: the import
- * screen must open even in a half-broken state, and a cosmetic default is never
- * worth failing a page load over.
- *
- * routes/health.ts is the closest model for the shape of this file — it is the
- * other small, single-purpose router mounted straight onto /api.
+ * THIS ROUTER NEVER TOUCHES THE DATABASE, deliberately: it answers a question
+ * about the filesystem, not about coins, so it still answers correctly when
+ * SQL Server is down. The import screen must open even in a half-broken state,
+ * and a cosmetic default is never worth failing a page load over.
  *
  * 200 => { appFolder: 'D:\\CoinInventory', source: 'module' }
  */
@@ -63,13 +46,11 @@ export interface AppInfo {
 }
 
 /**
- * The escape hatch, documented in server/README.md's `.env` section.
- *
- * An unusual deployment — the app unpacked somewhere odd, run through a
- * symlink, or started as a service with a working directory of `C:\Windows\
- * System32` — can leave the derivation below with a defensible but unhelpful
- * answer. Rather than add guesswork for those cases, one variable overrides the
- * whole thing.
+ * The escape hatch, documented in server/README.md's `.env` section. An
+ * unusual deployment — unpacked somewhere odd, run through a symlink, started
+ * as a service with a working directory of `C:\Windows\System32` — can leave
+ * the derivation below with a defensible but unhelpful answer. Rather than add
+ * guesswork for those cases, one variable overrides the whole thing.
  */
 const OVERRIDE_ENV_VAR = 'APP_BASE_FOLDER';
 
@@ -85,10 +66,10 @@ const ROOT_MARKER = 'angular.json';
 /**
  * How far up from this module we are willing to walk looking for the marker.
  *
- * Three would do for the two layouts we actually ship (see the comment in
- * `deriveFolderFromModule` below); six is slack for a future reshuffle, and a
- * bound rather than "walk to the filesystem root" so a missing marker cannot
- * turn into a long stat-storm across a network drive.
+ * Three would do for the two layouts shipped (see `deriveFolderFromModule`);
+ * six is slack for a future reshuffle. Bounded rather than "walk to the
+ * filesystem root" so a missing marker cannot turn into a long stat-storm
+ * across a network drive.
  */
 const MAX_LEVELS_UP = 6;
 
@@ -133,34 +114,22 @@ export function normaliseWindowsPath(value: string): string {
 /**
  * Walk up from this module's own directory looking for the project root.
  *
- * ------------------------------------------------------------------
- * THE TRAP THIS FUNCTION IS CAREFUL ABOUT: tsx vs. compiled dist
- * ------------------------------------------------------------------
- * This file runs from two different depths, so any fixed `path.resolve(__dirname,
- * '..', '..')` is wrong in one of them:
+ * THE TRAP: tsx vs. compiled dist. This file runs from two different depths,
+ * so any fixed `path.resolve(__dirname, '..', '..')` is wrong in one of them:
  *
- *   under tsx      `npm run dev` / `npx tsx server.ts`, which is how the
- *                  launcher starts the backend from the `server/` folder.
- *                  __dirname = <root>\server\routes            -> 2 levels up
- *
- *   compiled       `npm start` runs `node dist/server.js`, and server/
- *                  tsconfig.json has "outDir": "./dist" with "rootDir": ".",
- *                  so the tree is mirrored one level deeper:
- *                  __dirname = <root>\server\dist\routes       -> 3 levels up
+ *   under tsx      __dirname = <root>\server\routes       -> 2 levels up
+ *   compiled       __dirname = <root>\server\dist\routes  -> 3 levels up
+ *                  (server/tsconfig.json has outDir ./dist, rootDir ., so the
+ *                   tree is mirrored one level deeper)
  *
  * Hardcoding either number gives a plausible-looking path that is off by a
- * folder — `<root>\server` from the compiled build, or `<root>\..` if you
- * pre-emptively assume the deeper layout while running under tsx. Both would be
- * silently wrong, which is exactly the failure mode this whole feature is trying
- * to avoid.
+ * folder, and silently wrong is exactly the failure this feature exists to
+ * avoid. So instead of counting levels we LOOK for the root: climb until a
+ * directory contains `angular.json`. One code path, no build-mode detection,
+ * and it stays correct if the output layout changes again.
  *
- * So instead of counting levels, we LOOK for the root: climb until a directory
- * contains `angular.json`. That is correct at 2 levels under tsx and at 3 when
- * compiled, with one code path and no build-mode detection at all — and it stays
- * correct if the output layout ever changes again.
- *
- * Returns null when the marker is nowhere to be found, which is the caller's cue
- * to fall through to `process.cwd()`.
+ * Returns null when the marker is nowhere to be found, which is the caller's
+ * cue to fall through to `process.cwd()`.
  */
 function deriveFolderFromModule(): string | null {
   let dir = __dirname;
@@ -191,13 +160,12 @@ function deriveFolderFromModule(): string | null {
  *   2. the project root found by walking up from this module (see above);
  *   3. `process.cwd()` as a last resort.
  *
- * Step 3 is deliberately last and deliberately present. It is the weakest answer
- * — the launcher starts the backend from `server/`, so cwd is `<root>\server`
- * rather than `<root>` — but "a real folder on the host, one level too deep" is
- * still a usable starting point for someone editing the box, and it guarantees
- * this function always has something to return. A blank answer would be handled
- * fine by the frontend, but it would also be indistinguishable from the endpoint
- * being broken.
+ * Step 3 is deliberately last and deliberately present. It is the weakest
+ * answer — the launcher starts the backend from `server/`, so cwd is
+ * `<root>\server` — but "a real folder on the host, one level too deep" is
+ * still a usable starting point, and it guarantees this function always has
+ * something to return. A blank answer would be indistinguishable from the
+ * endpoint being broken.
  *
  * Exported so the specs can exercise the resolution order without HTTP.
  */
@@ -226,15 +194,14 @@ const router = Router();
 
 router.get('/app-info', (_req: Request, res: Response, next: NextFunction) => {
   try {
-    // Resolved per request rather than cached at module load. The cost is a
-    // handful of existsSync calls on a local path, this endpoint is hit at most
-    // once per import screen, and resolving late means an APP_BASE_FOLDER set
-    // after startup is honoured without a restart.
+    // Resolved per request rather than cached at module load, so an
+    // APP_BASE_FOLDER set after startup is honoured without a restart. The
+    // cost is a handful of existsSync calls on a local path, once per import
+    // screen.
     res.json(resolveAppFolder());
   } catch (err) {
     // resolveAppFolder() is written not to throw, so reaching here means
-    // something genuinely unexpected happened. Hand it to the app-wide handler
-    // in routes/error-handler.ts rather than inventing a response shape.
+    // something genuinely unexpected happened.
     next(err);
   }
 });

@@ -8,14 +8,19 @@
  *   POST   /:id/images            -> POST   /api/coins/:id/images
  *   DELETE /:id/images/:imageId   -> DELETE /api/coins/:id/images/:imageId
  *
- * The GET is the on-demand half of the "don't ship every image on every app
- * load" fix: GET /api/coins can now be asked to omit image payloads (see
- * routes/coins/list-query.ts) and the detail panel / gallery pulls the full
- * images for the single coin the user is actually looking at from here.
+ * The GET is the on-demand half of "don't ship every image on every app load":
+ * GET /api/coins omits image payloads (see routes/coins/list-query.ts) and the
+ * detail panel / gallery pulls the full images for the single coin the user is
+ * looking at from here.
  *
  * Note that adding images here APPENDS to whatever the coin already has, while
  * `PUT /api/coins/:id` with an `imagePaths` key REPLACES the whole set. Both
  * behaviours are deliberate; see routes/coins/writes.ts.
+ *
+ * Because this route only ever appends, it does NOT need the SourcePath rescue
+ * that the replacing PUT does (write-helpers.ts, replaceImages): nothing here
+ * deletes an existing row, so no recorded path can be lost. A new row inserted
+ * with no sourcePath is a new unknown, not a destroyed known.
  *
  * Each image also carries an optional `sourcePath`: the absolute path of the
  * ORIGINAL full-resolution file on the machine hosting the app. ImageData is
@@ -32,16 +37,14 @@ import { Router, Request, Response } from 'express';
 import sql from 'mssql';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { safeRollback } from './write-helpers';
 import { normalizeImageEntries, type NormalizedImage } from './image-payload';
 
 const router = Router();
 
-// ============================================================
 // GET /api/coins/:id/images — full images for ONE coin, in display order
-// ============================================================
 //
 // Response shape (an array, ordered by SortOrder):
 //
@@ -52,6 +55,23 @@ const router = Router();
 //
 // `imageId` is what DELETE /api/coins/:id/images/:imageId needs, so returning
 // it here lets the gallery delete an image without another round trip.
+//
+// *** BUT THE ID GOES STALE ON EVERY COIN SAVE -- READ THIS BEFORE USING IT. ***
+//
+// `PUT /api/coins/:id` carrying `imagePaths` replaces the whole image set:
+// every row is deleted and re-inserted (write-helpers.ts, `replaceImages`).
+// `ImageId` is IDENTITY, so the rows come back with entirely new ids. An id
+// fetched here, held while the user edits and saves the coin, then used in a
+// DELETE, matches NOTHING -- the delete affects zero rows and reports success.
+// The photo stays on screen and nothing explains why. It cannot delete the
+// WRONG image (a stale IDENTITY value matches no row rather than another one),
+// so the failure mode is an inert button, not corruption.
+//
+// Nothing in the client calls the DELETE today, which is the only reason this
+// is harmless. If you are wiring up per-image delete: re-fetch this endpoint
+// immediately before the DELETE, or change the PUT to reconcile rows instead
+// of replacing them. The latter is the real fix and a deliberately larger
+// change; the replacement semantics are intentional (routes/coins/writes.ts).
 //
 // `sourcePath` is where the ORIGINAL full-resolution file lives on the host
 // machine (imageData is only a downscaled copy). It is null for every image
@@ -72,8 +92,6 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     logInfo(`Fetching images for coin ${id}`);
 
     const images = await withDb(async (db) => {
-      // Existence check first. SELECT CoinId (not *) because all we need to
-      // know is whether a row is there — the coin's own columns are irrelevant.
       const coin = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT CoinId FROM Coins WHERE CoinId = @id');
@@ -86,8 +104,6 @@ router.get('/:id/images', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT ImageId, ImageData, SortOrder, SourcePath FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
 
-      // SQL's ORDER BY has already done the sorting; recordset order is the
-      // display order, so we just translate CamelCase columns to camelCase JSON.
       return result.recordset.map((row: Record<string, unknown>) => ({
         imageId: row['ImageId'],
         imageData: row['ImageData'],
@@ -106,15 +122,16 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     }
 
     logInfo(`Retrieved ${images.length} image(s) for coin ${id}`);
-    res.json(images);
+    // Base64 payloads: after the coin list, the likeliest response in the
+    // whole API to be unbuildable. Sent as its own step so a failure here
+    // is never reported as a database fault.
+    sendJson(res, 'GET /api/coins/:id/images', images, "coin's photographs");
   } catch (err) {
-    sendDbError(res, 'GET /api/coins/:id/images', err, 'Failed to retrieve images');
+    sendDbError(res, 'GET /api/coins/:id/images', err, 'Failed to retrieve images', "coin's photographs");
   }
 });
 
-// ============================================================
 // POST /api/coins/:id/images — add images to a coin
-// ============================================================
 //
 // Accepted request bodies — the FIRST form is the compatibility path:
 //
@@ -126,22 +143,16 @@ router.get('/:id/images', async (req: Request, res: Response) => {
 // identical to how every pre-existing row looks. The per-element parsing lives
 // in image-payload.ts; see normalizeImageEntry() for the exact rules.
 //
-// ------------------------------------------------------------------
-// This handler is TRANSACTIONAL, and that is a bug fix
-// ------------------------------------------------------------------
-// The insert loop used to run each INSERT as its own autocommit statement. If
-// image 5 of 8 failed, images 1-4 were already committed, the caller got a 500,
-// and pressing "retry" inserted 1-4 a second time — duplicates the user then
-// had to delete by hand. Wrapping the batch in one transaction makes a failure
-// leave the coin exactly as it was, which is also how insertImages() (used by
-// POST /api/coins and PUT /api/coins/:id) has always behaved. The two paths are
-// now consistent: an image batch either lands completely or not at all.
+// This handler is TRANSACTIONAL on purpose: an image batch either lands
+// completely or not at all. Autocommitting each INSERT would leave images 1-4
+// of 8 committed behind a 500, and the user's retry would insert them a second
+// time. insertImages() (POST /api/coins, PUT /api/coins/:id) behaves the same
+// way, so the two write paths stay consistent.
 router.post('/:id/images', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
-  // Collapse the three accepted body shapes into one array before we go
-  // anywhere near the database. `images` is the array form; `image` /
-  // `imageData` are the single-image convenience keys.
+  // Collapse the three accepted body shapes into one array: `images` is the
+  // array form, `image` / `imageData` the single-image convenience keys.
   const rawImages: unknown[] = Array.isArray(req.body?.images)
     ? req.body.images
     : [req.body?.images ?? req.body?.image ?? req.body?.imageData];
@@ -171,14 +182,14 @@ router.post('/:id/images', async (req: Request, res: Response) => {
         await transaction.begin();
         began = true;
 
-        // MAX(SortOrder) is read INSIDE the transaction now, so it cannot be
-        // invalidated by a concurrent insert between reading it and using it.
+        // MAX(SortOrder) is read INSIDE the transaction so a concurrent insert
+        // cannot invalidate it between reading it and using it.
         const maxOrder = await new sql.Request(transaction)
           .input('coinId', DB_BINDINGS.coinId, id)
           .query('SELECT ISNULL(MAX(SortOrder), -1) AS max_order FROM CoinImages WHERE CoinId = @coinId');
 
-        // Defensive: an aggregate always returns a row, but if the driver hands
-        // us an empty recordset we start from zero rather than crashing.
+        // An aggregate always returns a row, but start from zero rather than
+        // crash if the driver hands back an empty recordset.
         let nextOrder = ((maxOrder.recordset[0]?.['max_order'] as number | undefined) ?? -1) + 1;
 
         const ids: number[] = [];
@@ -192,8 +203,6 @@ router.post('/:id/images', async (req: Request, res: Response) => {
               'INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) OUTPUT INSERTED.ImageId VALUES (@coinId, @imageData, @sortOrder, @sourcePath)'
             );
 
-          // Guard the OUTPUT clause the same way as the spot-price insert: if
-          // the driver returns no row we must not dereference undefined.
           const insertedRow = result.recordset[0];
           if (!insertedRow) {
             throw new Error('Image INSERT returned no row from its OUTPUT clause');
@@ -223,9 +232,7 @@ router.post('/:id/images', async (req: Request, res: Response) => {
   }
 });
 
-// ============================================================
 // DELETE /api/coins/:id/images/:imageId — remove a specific image
-// ============================================================
 router.delete('/:id/images/:imageId', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
   const imageId = toSingleValue(req.params['imageId']);

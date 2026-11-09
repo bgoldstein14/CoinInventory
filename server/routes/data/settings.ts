@@ -19,7 +19,7 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 
 const router = Router();
@@ -48,9 +48,9 @@ router.get('/settings/:key', async (req: Request, res: Response) => {
     let value: unknown;
     try { value = JSON.parse(raw); } catch { value = raw; }
 
-    res.json({ key, value });
+    sendJson(res, 'GET /api/settings/:key', { key, value }, 'setting');
   } catch (err) {
-    sendDbError(res, 'GET /api/settings/:key', err, 'Failed to retrieve setting');
+    sendDbError(res, 'GET /api/settings/:key', err, 'Failed to retrieve setting', 'setting');
   }
 });
 

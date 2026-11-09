@@ -23,7 +23,7 @@ REM closed the window instantly on failure and left no way to see why.
 if errorlevel 1 (
     echo.
     echo Coin Inventory exited with an error ^(code %errorlevel%^).
-    echo Check server\logs\app.log for details.
+    echo Check the newest log in server\logs\ for details.
     echo.
     pause
     exit /b %errorlevel%

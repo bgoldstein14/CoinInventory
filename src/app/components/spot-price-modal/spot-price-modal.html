@@ -8,20 +8,11 @@
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <!-- The old wording here said "coins with weight and metal content will
-           show melt values automatically", which was wrong twice over: melt
-           values did not appear at all (the grid column was a stub), and the
-           field it named was wrong. Melt is worked out from PM Weight (g) —
-           the weight of the PURE precious metal — NOT from the gross Weight
-           (g) field, which includes the alloy. A coin can have a gross
-           weight recorded and still show no melt value.
-
-           (That gross field was labelled "Weight (oz)" when this note was
-           written. It is grams now — see migrations/008-weight-to-grams.sql —
-           so the two fields no longer differ in unit, only in what they
-           measure. The distinction above is unchanged and still the point:
-           sharing a unit makes them easier to compare and no harder to mix
-           up.) -->
+      <!-- Melt is worked out from PM Weight (g) — the weight of the PURE
+           precious metal — NOT from the gross Weight (g) field, which
+           includes the alloy. Both are in grams, so they are easy to compare
+           and just as easy to mix up. A coin can have a gross weight
+           recorded and still show no melt value. -->
       <p class="hint-text">
         Fetch live COMEX spot prices or type them in. Any coin with a
         <strong>PM Weight (g)</strong> and a <strong>Metal Content</strong> of gold,

@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * Coin completeness — THE rule for "is this enough to be a coin record?"
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   One question, answered in exactly one place:
  *
@@ -25,7 +25,7 @@
  *   re-exports the same symbols so its own (unchanged) tests still work.
  *
  * Everything in here is a pure function. No Angular, no HTTP, no signals.
- * =========================================================================== */
+  */
 
 /**
  * The three "main details" a coin must be described by. A QIF security name

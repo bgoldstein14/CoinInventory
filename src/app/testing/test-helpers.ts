@@ -29,10 +29,42 @@ export function createMockDependencies() {
     getTransactions: vi.fn(() => of([])),
     getDenominations: vi.fn(() => of([])),
     getMintMarks: vi.fn(() => of([])),
+    // Catalogues. An empty list is a perfectly workable state -- the
+    // editor's picker offers only "(none)" and the grid shows bare reference
+    // numbers -- so it is the right default here. A test that cares
+    // overrides it. Note this entry is NOT optional cosmetics:
+    // ConnectionManager.loadLookupTables calls every one of these during
+    // hydrate(), so a mock missing a method fails with
+    // "apiService.getCatalogs is not a function" inside startup, which
+    // surfaces as a dozen unrelated spot-price tests going red.
+    getCatalogs: vi.fn(() => of([])),
+    createCatalog: vi.fn(() => of({})),
+    updateCatalog: vi.fn(() => of(undefined)),
+    deleteCatalog: vi.fn(() => of(undefined)),
+    // Issuers and the in-use counts. Only the reference-data maintenance
+    // screen reads these, so unlike the entries above they are NOT called
+    // during hydrate() — a test that omitted them would fail only inside
+    // that one dialog. They are stubbed anyway, so opening it in a test is
+    // not an undefined-is-not-a-function crash.
+    getIssuers: vi.fn(() => of([])),
+    createIssuer: vi.fn(() => of({})),
+    updateIssuer: vi.fn(() => of({})),
+    deleteIssuer: vi.fn(() => of(undefined)),
+    getReferenceUsage: vi.fn(() =>
+      of({ categories: {}, coinSets: {}, denominations: {}, mintMarks: {}, catalogs: {} })
+    ),
     getMetalContents: vi.fn(() => of([
       'Gold', 'Silver', 'Platinum', 'Palladium', 'Copper', 'Nickel', 'Copper-Nickel',
       'Bronze', 'Brass', 'Zinc', 'Steel', 'Aluminum', 'Nickel-Brass', 'Clad', 'Other'
     ])),
+    // The list endpoint does not carry photographs, so InventoryService
+    // fetches them one coin at a time (see inventory/coin-image-hydrator.ts).
+    // An empty answer is the right default: a test that cares about
+    // photographs overrides this, and every other test gets a selection that
+    // quietly resolves to "no pictures" instead of an undefined-is-not-a-
+    // function crash.
+    getCoinImages: vi.fn(() => of([])),
+    coinThumbnailUrl: vi.fn((coinId: string) => `/api/coins/${encodeURIComponent(coinId)}/thumbnail`),
     createCoin: vi.fn(() => of({})),
     updateCoin: vi.fn(() => of({})),
     deleteCoin: vi.fn(() => of({})),

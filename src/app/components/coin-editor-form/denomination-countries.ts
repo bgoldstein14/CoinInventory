@@ -1,33 +1,18 @@
-/* ===========================================================================
+ /*
  * denomination-countries.ts — which <optgroup> headings the denomination
  * dropdown should show.
- * ---------------------------------------------------------------------------
- * THE BUG THIS EXISTS TO PREVENT
- * ---------------------------------------------------------------------------
- * The coin editor groups its denomination dropdown by country. The template
- * used to loop a hard-coded `['US', 'GB']` and, inside each group, filter the
- * denominations down to the ones whose `country` matched.
  *
- * That has an ugly failure mode: if no denomination matches a heading, the
- * heading still renders — an <optgroup> with nothing in it. The owner hit
- * exactly this and reported that the dropdown "doesn't list anything but the
- * countries". The Settings dialog had rewritten every denomination's country
- * to 'United States', which matched neither 'US' nor 'GB', so both groups
- * emptied out and all that was left was two labels.
- *
- * The mirror-image failure was live too: the Categories & Sets dialog offers
- * 'CA' when adding a denomination, but 'CA' was not in the hard-coded pair, so
- * such a denomination could be created and then never appear anywhere.
- *
- * Deriving the headings from the data makes both impossible by construction.
- * A group exists if and only if some active denomination belongs to it, so
- * there can never be an empty heading, and never an entry with no heading to
- * live under.
+ * The headings are DERIVED FROM THE DATA rather than hard-coded. A group
+ * exists if and only if some active denomination belongs to it, which makes
+ * two failures impossible by construction: an <optgroup> heading rendered with
+ * nothing under it, and a denomination filed under a country with no heading
+ * to live in (the Categories & Sets dialog can create one under any code it
+ * offers).
  *
  * It is a separate file, rather than a method on the component, purely so it
  * can be unit-tested: CoinEditorForm takes a required signal input, which
  * needs TestBed and a DOM to construct, and this suite runs under Node.
- * =========================================================================== */
+  */
 
 import { Denomination } from '../../types/coin.model';
 

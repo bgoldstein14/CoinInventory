@@ -22,7 +22,7 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 
 const router = Router();
@@ -43,9 +43,9 @@ router.get('/mintmarks', async (_req: Request, res: Response) => {
       }));
     });
 
-    res.json(mintmarks);
+    sendJson(res, 'GET /api/mintmarks', mintmarks, 'mint mark list');
   } catch (err) {
-    sendDbError(res, 'GET /api/mintmarks', err, 'Failed to retrieve mint marks');
+    sendDbError(res, 'GET /api/mintmarks', err, 'Failed to retrieve mint marks', 'mint mark list');
   }
 });
 

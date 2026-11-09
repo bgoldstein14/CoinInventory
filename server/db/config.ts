@@ -50,9 +50,8 @@ export function buildDbConfig(): sql.config {
       // Never more than 10 sockets open against SQL Server at once.
       max: 10,
       // IMPORTANT: min: 1 keeps one warm connection alive. Without it the pool
-      // drains to zero while the user is idle, and the very next edit has to
-      // build a brand new connection — which is exactly when the old code used
-      // to blow up.
+      // drains to zero while the user is idle, and the very next edit pays to
+      // build a brand new connection — the moment most likely to fail.
       min: 1,
       // An idle connection above `min` is closed after 60s.
       idleTimeoutMillis: 60000,

@@ -12,9 +12,8 @@ describe('inventoryColumnOrder', () => {
   });
 });
 
-/* ===========================================================================
+/*
  * The Melt Value column
- * ---------------------------------------------------------------------------
  * This column was a stub that returned a dash for every coin, no matter what.
  * These tests pin down the three things that matter now that it is real:
  *
@@ -24,7 +23,7 @@ describe('inventoryColumnOrder', () => {
  *      unknown, not worthless; and
  *   3. purity is not applied twice. That was a live bug; see the comment at
  *      the `meltValue` case in inventory-columns.ts.
- * =========================================================================== */
+ */
 
 function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
   return {
@@ -143,97 +142,106 @@ describe('formatInventoryCell — meltValue column', () => {
   });
 });
 
-/* ===========================================================================
- * The "Certified By" column
- * ---------------------------------------------------------------------------
- * The owner asked to see the grading COMPANY to the left of the grade, in a
- * narrow column headed "Certified By".
+/*
+ * The Status and Storage columns
+ * Status is the grid's half of the want-list feature. The thing these tests
+ * are really guarding is not the column's position but its EMPTY CASE: every
+ * coin in the database predates the field, so the overwhelmingly common input
+ * to this cell is `undefined`, and it must render "Owned". If it rendered the
+ * em-dash the rest of the grid uses for unknowns, the owner would open the app
+ * and see a gap in the record of every coin he has.
  *
- * The obvious-looking shortcut was to reuse the existing `certNumber` column,
- * which already sits next to Grade. These tests exist partly to rule that out
- * and keep it ruled out: `certNumber` renders a BADGE carrying company AND
- * number ("PCGS #12345678"), it is off by default, and some users will already
- * have switched it on and be relying on seeing the number. Narrowing it to
- * just the company would silently take away data they had asked for.
- *
- * So `certCompany` is its own column, and the pair of them must stay
- * distinguishable: one is the company alone, the other is the full slab label.
- * =========================================================================== */
+ * Storage is the opposite: it genuinely is unknown until he types it, so it
+ * takes the ordinary dash.
+ */
 
-describe('the Certified By column', () => {
-  it(`is headed "Cert. By"`, () => {
-    // Not "Cert" (that header belongs to the certNumber badge column) and not
-    // "Company", which says nothing about coins.
-    expect(inventoryColumnLabels.certCompany).toBe("Cert. By");
+describe('the Status column', () => {
+  it('is headed "Status"', () => {
+    expect(inventoryColumnLabels.collectionStatus).toBe('Status');
   });
 
-  it('shows the grading company on its own, with no cert number', () => {
-    const coin = makeCoin({ certCompany: 'NGC', certNumber: '9000002-001' });
-    expect(formatInventoryCell(coin, 'certCompany')).toBe('NGC');
+  it('shows the human label, not the stored token', () => {
+    expect(formatInventoryCell(makeCoin({ collectionStatus: 'for-sale' }), 'collectionStatus'))
+      .toBe('For Sale');
+    expect(formatInventoryCell(makeCoin({ collectionStatus: 'wanted' }), 'collectionStatus'))
+      .toBe('Wanted');
   });
 
-  it('is NOT the same thing as the Cert column, even for the same coin', () => {
-    // The whole justification for adding a column rather than repurposing one.
-    // If these two ever render the same string, one of them is redundant and
-    // somebody has quietly broken the other.
-    const coin = makeCoin({ certCompany: 'PCGS', certNumber: '12345678' });
-
-    expect(formatInventoryCell(coin, 'certCompany')).toBe('PCGS');
-    expect(formatInventoryCell(coin, 'certNumber')).toContain('12345678');
-    expect(certBadgeLabel(coin)).toBe('PCGS #12345678');
-  });
-
-  it('shows the usual dash for a raw (uncertified) coin', () => {
-    // Most coins in a collection are raw. An empty cell would read as a bug;
-    // the em-dash is how every other unknown cell in this grid says "nothing
-    // recorded".
-    const coin = makeCoin({ certCompany: '', certNumber: '' });
-    expect(formatInventoryCell(coin, 'certCompany')).toBe('—');
-  });
-
-  it('shows the company even when the slab number was never typed in', () => {
-    // A perfectly normal half-entered record: the user knows it is in an NGC
-    // holder but has not keyed the number. The company is still true.
-    const coin = makeCoin({ certCompany: 'NGC', certNumber: '' });
-    expect(formatInventoryCell(coin, 'certCompany')).toBe('NGC');
+  it('renders a coin with NO status as Owned, never as a dash', () => {
+    // The pre-feature coin. This is the whole point.
+    const legacy = makeCoin();
+    expect(legacy.collectionStatus).toBeUndefined();
+    expect(formatInventoryCell(legacy, 'collectionStatus')).toBe('Owned');
+    expect(formatInventoryCell(legacy, 'collectionStatus'))
+      .not.toBe(formatInventoryCell(makeCoin({ grade: '' }), 'grade'));
   });
 
   it('is switched on by default', () => {
-    // "We need to show the certification company" — a column the user has to
-    // go and find in the Columns picker is not shown.
-    expect(defaultVisibleColumns).toContain('certCompany');
+    // A hidden Status column would make a wanted coin indistinguishable from
+    // an owned one in the grid — which is the exact confusion the feature
+    // exists to remove. Being in this list is also what makes it reach
+    // EXISTING users: the columns store unions a saved preference with these
+    // defaults, so no migration is needed.
+    expect(defaultVisibleColumns).toContain('collectionStatus');
   });
 
   it('appears exactly once in the canonical order', () => {
-    expect(inventoryColumnOrder.filter(c => c === 'certCompany')).toHaveLength(1);
+    expect(inventoryColumnOrder.filter(c => c === 'collectionStatus')).toHaveLength(1);
+  });
+});
+
+describe('the Storage column', () => {
+  it('is headed "Storage"', () => {
+    // Not "Location", which in a grid that already has a Country column reads
+    // as "where in the world is this coin from".
+    expect(inventoryColumnLabels.storageLocation).toBe('Storage');
   });
 
-  it('sits to the LEFT of Grade', () => {
-    // The literal request.
-    expect(inventoryColumnOrder.indexOf('certCompany'))
-      .toBeLessThan(inventoryColumnOrder.indexOf('grade'));
+  it('shows the free text exactly as typed', () => {
+    expect(formatInventoryCell(makeCoin({ storageLocation: 'Dansco 7070, page 4' }), 'storageLocation'))
+      .toBe('Dansco 7070, page 4');
   });
 
-  it('sits immediately before the Cert column, which keeps Cert next to Grade', () => {
-    // WHY NOT DIRECTLY BEFORE `grade`?
-    // Because `certNumber` is already there, and "certNumber immediately
-    // precedes grade" is itself an owner-stated invariant with tests of its
-    // own (see inventory-columns.store.spec.ts). Wedging the new column into
-    // that gap would have broken it.
-    //
-    // Putting Certified By immediately before Cert satisfies BOTH: the two
-    // cert columns form one block that ends flush against Grade, and because
-    // Cert is off by default, the column the user actually sees to the left of
-    // Grade is Certified By — exactly what was asked for. See the default
-    // visible order test in inventory-columns.store.spec.ts.
-    expect(inventoryColumnOrder.indexOf('certNumber') - inventoryColumnOrder.indexOf('certCompany')).toBe(1);
+  it('shows the ordinary dash when nothing has been recorded', () => {
+    // Unlike Status, this one really is unknown until the user says.
+    expect(formatInventoryCell(makeCoin(), 'storageLocation')).toBe('—');
+    expect(formatInventoryCell(makeCoin({ storageLocation: '' }), 'storageLocation')).toBe('—');
+  });
+
+  it('is OFF by default', () => {
+    // Long free text in a dense grid. Available in the Columns picker for
+    // anyone who wants it, but it does not push the money columns off screen
+    // for everybody else.
+    expect(defaultVisibleColumns).not.toContain('storageLocation');
+  });
+
+  it('sits next to the Set column, which asks the other half of the question', () => {
+    // Set = which grouping this coin belongs to; Storage = which shelf it is
+    // on. Two different questions about organisation, so they read together.
+    expect(inventoryColumnOrder.indexOf('storageLocation') - inventoryColumnOrder.indexOf('coinSet')).toBe(1);
+  });
+});
+
+describe('the new columns keep every existing ordering invariant', () => {
+  it('leaves Mint Mark immediately after Year', () => {
+    expect(inventoryColumnOrder.indexOf('mintMark') - inventoryColumnOrder.indexOf('year')).toBe(1);
+  });
+
+  it('leaves Cert immediately before Grade', () => {
+    // The long-standing invariant: the slab's certification and the grade
+    // printed on that slab read as one idea, so they sit together.
     expect(inventoryColumnOrder.indexOf('grade') - inventoryColumnOrder.indexOf('certNumber')).toBe(1);
   });
 
-  it('does not come between Year and Mint Mark', () => {
-    // The oldest ordering invariant in this file. Any insertion has to be
-    // checked against it, because the failure is silent: "1916" and "D" simply
-    // drift apart.
-    expect(inventoryColumnOrder.indexOf('mintMark') - inventoryColumnOrder.indexOf('year')).toBe(1);
+  it('leaves the first four columns reading as a coin is described', () => {
+    expect(inventoryColumnOrder.slice(0, 4)).toEqual(['year', 'mintMark', 'denomination', 'coinType']);
+  });
+
+  it('gives every column a label', () => {
+    // The Record<InventoryColumn, string> type enforces this at compile time,
+    // but a label of '' would type-check and render an empty header.
+    for (const column of inventoryColumnOrder) {
+      expect(inventoryColumnLabels[column].trim()).not.toBe('');
+    }
   });
 });

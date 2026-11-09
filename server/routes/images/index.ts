@@ -6,9 +6,6 @@
  *   file.ts    GET  /file    -> GET  /api/images/file?path=<absolute path>
  *   exists.ts  POST /exists  -> POST /api/images/exists
  *
- * ------------------------------------------------------------------
- * What this router is for, in one paragraph
- * ------------------------------------------------------------------
  * CoinImages.ImageData holds a downscaled base64 copy of each photo — small
  * enough to ship to the browser and display. CoinImages.SourcePath records
  * where the ORIGINAL file (up to ~46 MB) sits on the machine hosting the app.
@@ -21,14 +18,11 @@
  * connection pool at all, which is unusual enough in this backend to be worth
  * pointing out. `withDb()` and `sendDbError()` make no appearance here.
  *
- * Both files carry long headers of their own; the two things most worth knowing
- * before editing either:
- *
- *   - file.ts explains why the backend must serve the file at all (browsers
- *     refuse to navigate from an http page to a file:// URL) and documents the
- *     "read any image on the host" security tradeoff this route accepts.
- *   - exists.ts explains why the existence check is a single batched POST
- *     rather than one request per image.
+ * Before editing either file, read its header: file.ts explains why the
+ * backend must serve the file at all (browsers refuse to navigate from an
+ * http page to a file:// URL) and documents the "read any image on the host"
+ * security tradeoff; exists.ts explains why the existence check is a single
+ * batched POST rather than one request per image.
  */
 
 import { Router } from 'express';
@@ -38,7 +32,7 @@ import imageExistsRoutes from './exists';
 const router = Router();
 
 // Paths do not overlap (`GET /file` vs `POST /exists`), so mount order is not
-// significant here — it just matches the reading order of the header above.
+// significant here.
 router.use(imageFileRoutes);
 router.use(imageExistsRoutes);
 

@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * sibling-inference.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   STAGE 5, and the only stage that looks at MORE THAN ONE IMAGE AT A TIME:
  *   placing a photograph that could not identify a coin by itself, on the
@@ -9,74 +9,41 @@
  *   One public entry point, `inferFromSiblings`, called once per batch by
  *   ImageMatchingService.matchImages after every image has been decided.
  *
- * ---------------------------------------------------------------------------
- * THE OWNER'S WORDS, AND HOW NARROW THEY ARE
- * ---------------------------------------------------------------------------
- *   He opened with the want:
+ * WHEN THE INFERENCE IS ALLOWED, AND HOW NARROW THAT IS
  *
- *       "if I match it with an image, all related image files of similar
- *        names (including for both obverse/reverse/slab designations) should
- *        automatically be attached at that point"
+ *   The rule is: infer a match if the YEAR and the COIN TYPE agree, but NOT
+ *   if the inventory item is described as a proof and the pictures do not
+ *   contain the descriptor Proof/PF. (Proofs are always described as such in
+ *   the inventory as well as in the pictures, so a filename that is silent
+ *   about the strike is not silent by accident -- it is saying this is not
+ *   the proof.)
  *
- *   and when asked exactly when that inference is allowed, he answered:
+ *   Everything else about that rule is permissive, and this file is therefore
+ *   deliberately stingier than it has to be, under the standing tie-breaker
+ *   that an image can always be attached by hand but the automated process
+ *   must be very discriminatory.
  *
- *       "It should infer a match if the year and type match but not if the
- *        inventory item is described as a proof and the pictures don't
- *        contain that descriptor Proof/PF. Proofs are always described as
- *        such in the inventory as well as the pictures."
+ *   THE PROOF EXCLUSION IS NOT IMPLEMENTED SEPARATELY HERE. It used to be a
+ *   gate of its own called `proofExcluded`; it is enforced by the ordinary
+ *   hard vetoes instead. proof-strike.ts resolves a filename that says
+ *   nothing about the strike to 'business' rather than 'unknown', so a quiet
+ *   filename against a proof record is a STATED disagreement and
+ *   match-vetoes.ts disqualifies the pair at gate E below:
  *
- *   READ THAT SECOND SENTENCE CAREFULLY, BECAUSE IT IS NARROWER THAN THE
- *   QUESTION IT ANSWERS. It gives TWO conditions, not one:
- *
- *     1. the year and the coin type must agree, and
- *     2. THE PROOF EXCLUSION -- if the inventory coin is a proof and the
- *        filename does not say Proof/PF, that coin is OUT. He justifies it
- *        himself: proofs are always written on both sides, so a filename
- *        that is silent about the strike is not silent by accident. It is
- *        saying this is not the proof.
- *
- *   Everything else about his sentence is permissive, and this file is
- *   therefore deliberately stingier than it has to be, under his standing
- *   tie-breaker: "I can always force an image to be associated with a coin
- *   manually, but the automated process should be very descriminatory."
- *
- * ---------------------------------------------------------------------------
- * !! THE PROOF EXCLUSION IS NO LONGER IMPLEMENTED HERE -- READ THIS !!
- * ---------------------------------------------------------------------------
- *   Condition 2 above used to be a gate of its own in this file, a function
- *   called `proofExcluded`. IT HAS BEEN DELETED, and nothing was given up by
- *   deleting it. The rule is still enforced, by the ordinary hard vetoes.
- *
- *   What changed is that the owner generalised his own sentence:
- *
- *     "The Proof descriptor should always be part of the image file name as
- *      well as part of the inventory description otherwise it's assumed the
- *      coin is a business strike."
- *
- *   proof-strike.ts now resolves a filename that says nothing about the
- *   strike to 'business' rather than 'unknown', so a quiet filename against
- *   a proof record is a STATED disagreement and match-vetoes.ts disqualifies
- *   the pair outright -- at gate E below, one step before the old gate F
- *   would have run. The old gate was dead code the moment that landed:
- *
- *     coin is a proof + file says proof     -> no veto, no exclusion. Allowed.
- *     coin is a proof + file says nothing   -> file is now 'business', VETOED
- *                                              at gate E. Never reaches F.
- *     coin is a proof + file says SP        -> VETOED at gate E as before.
+ *     coin is a proof + file says proof     -> no veto. Allowed.
+ *     coin is a proof + file says nothing   -> file is 'business', VETOED.
+ *     coin is a proof + file says SP        -> VETOED.
  *     file strike 'unknown'                 -> only possible for an EMPTY
  *                                              filename, which gate B has
  *                                              already thrown out.
  *
- *   TWO MECHANISMS FOR ONE RULE IS A BUG WAITING TO HAPPEN -- the whole
- *   argument in the header of match-vetoes.ts for having a single source of
- *   truth applies here too -- so there is now one. What this file kept is the
- *   EXPLANATION: gate E still writes his wording into the skip line, because
- *   "this filename does not say Proof or PF" is what he needs to read, and
- *   it is more useful than the bare veto sentence.
+ *   TWO MECHANISMS FOR ONE RULE IS A BUG WAITING TO HAPPEN. What this file
+ *   keeps is the EXPLANATION: gate E writes "this filename does not say Proof
+ *   or PF" into the skip line, which is more useful than the bare veto
+ *   sentence.
  *
- * ---------------------------------------------------------------------------
  * WHAT A SIBLING IS -- THE DEFINITION, EXPLICITLY
- * ---------------------------------------------------------------------------
+ *
  *   A SIBLING IS A FILENAME THAT SHARES THE IDENTIFYING TEXT. IT IS NOT A
  *   FILE IN THE SAME FOLDER, AND THE FOLDER IS NEVER CONSULTED.
  *
@@ -111,31 +78,27 @@
  *   outright. "1861 - Obverse.jpg" is contained in every 1861 filename there
  *   is, and that is not a family resemblance, it is an empty one.
  *
- * ---------------------------------------------------------------------------
  * THE GATES, IN ORDER, AND WHAT EACH ONE IS FOR
- * ---------------------------------------------------------------------------
+ *
  *   A. The file was NOT already placed. This stage only ever fills a gap.
  *   B. It is a real single-coin photo (not a stamp, not IMG_0042.JPG).
  *   C. Its siblings all point at ONE coin. Two matched siblings naming two
  *      different coins means the shared text was not identifying after all.
- *   D. The year agrees and the coin type agrees -- his first condition.
+ *   D. The year agrees and the coin type agrees.
  *   E. Nothing is vetoed: no year conflict, no denomination conflict, no
- *      stated strike conflict. The ordinary rules still apply -- AND, since
- *      a silent filename now states "business strike", this gate is also
- *      where his second condition (the proof exclusion) is enforced. There
- *      used to be a separate gate F for it; see the note above.
+ *      stated strike conflict. Since a silent filename states "business
+ *      strike", this gate is also where the proof exclusion is enforced.
  *   F. NO RIVAL. No other coin in the inventory fits this filename just as
- *      well. This gate is not in his sentence; it is the tie-breaker applied
- *      to it, and it is what makes his own worked example come out right
- *      (below).
+ *      well. This is the tie-breaker, and it is what makes the worked example
+ *      below come out right.
  *
- * ---------------------------------------------------------------------------
- * HIS WORKED EXAMPLE, WHICH THIS FILE MUST REPRODUCE
- * ---------------------------------------------------------------------------
+ * THE WORKED EXAMPLE THIS FILE MUST REPRODUCE
+ *
  *       1861 3CS - Obverse 2.jpg
  *
- *   carries no grade. He owns FIVE 1861 Three Cent Silver records: one
- *   PCGS PF64 proof, plus an AU, an EF and two XFs. What has to happen:
+ *   carries no grade. The inventory holds FIVE 1861 Three Cent Silver
+ *   records: one PCGS PF64 proof, plus an AU, an EF and two XFs. What has to
+ *   happen:
  *
  *     - the proof is EXCLUDED, because the filename says nothing about
  *       proof -- which now means it positively says "business strike", so
@@ -150,9 +113,8 @@
  *   having both: the sibling rule must not be able to bulldoze a genuinely
  *   ambiguous case just because one shot of it happened to be matched.
  *
- * ---------------------------------------------------------------------------
  * WHY THIS IS A SEPARATE STAGE AND NOT PART OF match-decider.ts
- * ---------------------------------------------------------------------------
+ *
  *   match-decider.ts decides ONE image against the inventory and knows
  *   nothing about any other image; that independence is what makes it
  *   testable and what makes its three gates easy to reason about. Sibling
@@ -166,7 +128,7 @@
  *   out and why the reason string names the sibling that did the
  *   identifying -- so a wrong placement can be traced to the photograph
  *   that caused it in one glance.
- * =========================================================================== */
+  */
 
 import { ImageMatchResult } from '../../types/coin.model';
 import { CoinSignature, Signature } from './coin-signature';
@@ -237,20 +199,15 @@ function sharesIdentifyingText(quiet: ReadonlySet<string>, loud: ReadonlySet<str
 }
 
 /**
- * WHY A VETO STOPPED THIS INFERENCE, in words he will recognise.
+ * WHY A VETO STOPPED THIS INFERENCE, in words the user will recognise.
  *
  * MESSAGE ONLY -- IT DECIDES NOTHING. `findVetoes` has already refused the
  * pair by the time this is called; all this does is choose how to say so.
- * That separation is the point of deleting the old `proofExcluded` gate: one
- * mechanism makes the decision, and this just narrates it.
  *
- * The proof case gets his own wording rather than the generic veto sentence,
- * because it is the one outcome that will surprise him -- it is why a silent
- * second shot of a proof coin does not follow the shot that names the grade:
- *
- *     "not if the inventory item is described as a proof and the pictures
- *      don't contain that descriptor Proof/PF. Proofs are always described
- *      as such in the inventory as well as the pictures."
+ * The proof case gets its own wording rather than the generic veto sentence,
+ * because it is the one outcome that will surprise a reader: it is why a
+ * silent second shot of a proof coin does not follow the shot that names the
+ * grade.
  */
 function explainInferenceVeto(
   file: Signature,
@@ -274,22 +231,17 @@ function explainInferenceVeto(
 /**
  * Does this coin fit the filename as well as the sibling's coin does?
  *
- * GATE F, and the one gate that is not in the owner's sentence. It asks the
- * question his worked example turns on: having found a coin by inference, is
- * there anything ELSE in the inventory that the filename describes equally
- * well? If there is, the sibling has not actually identified anything and
- * the file stays listed.
+ * GATE F. Having found a coin by inference, is there anything ELSE in the
+ * inventory that the filename describes equally well? If there is, the
+ * sibling has not actually identified anything and the file stays listed.
  *
  * "Equally well" is deliberately generous about what counts as a rival --
  * same year, compatible denomination, compatible coin type, no veto --
  * because a generous rival test means a stingy stage, and stingy is the
  * direction asked for.
  *
- * THERE USED TO BE A SEPARATE `proofExcluded(file, coin)` CALL AFTER THE
- * VETO CHECK BELOW. It has been removed, not relaxed: a filename that says
- * nothing about the strike now states 'business', so a proof rival is
- * already thrown out by `findVetoes`. Keeping both would have been two
- * mechanisms for one rule -- see the note in this file's header.
+ * The strike needs no separate test: a filename that says nothing about it
+ * states 'business', so a proof rival is already thrown out by `findVetoes`.
  */
 function fitsEquallyWell(file: Signature, coin: Signature): boolean {
   if (file.year === null || coin.year === null) return false;
@@ -316,21 +268,20 @@ function fitsEquallyWell(file: Signature, coin: Signature): boolean {
 }
 
 /**
- * The year and the coin type agree -- the owner's FIRST condition.
+ * The year and the coin type agree.
  *
  * The year must be stated on both sides and must match; silence is not
  * agreement, which is the matcher's oldest rule and the reason an undated
  * ancient can never be placed this way.
  *
- * The coin type is softer, and it has to be. His three-cent records carry
- * the type "Three Cent Silver", every word of which the denomination has
- * already accounted for, so `parseCoin` quite correctly leaves the coin-type
- * token list EMPTY -- and his filenames say "3CS" and leave it empty too.
- * Demanding a positive type agreement there would switch this stage off for
- * the entire Early Proofs collection. So: when both sides name a type they
- * must agree at the same bar the scorer uses, and when either side is silent
- * the type simply does not speak. The denomination veto and gate G are what
- * carry the weight in that case.
+ * The coin type is softer, and it has to be. A three-cent record carries the
+ * type "Three Cent Silver", every word of which the denomination has already
+ * accounted for, so `parseCoin` quite correctly leaves the coin-type token
+ * list EMPTY -- and the filenames say "3CS" and leave it empty too. Demanding
+ * a positive type agreement there would switch this stage off for the entire
+ * Early Proofs collection. So: when both sides name a type they must agree at
+ * the same bar the scorer uses, and when either side is silent the type
+ * simply does not speak. The denomination veto and gate F carry the weight.
  */
 function yearAndTypeAgree(file: Signature, coin: Signature): boolean {
   if (file.year === null || coin.year === null) return false;
@@ -382,11 +333,11 @@ export function inferFromSiblings(
     // `excludedFromAutoImport` is in the same breath, and it has to be: this
     // stage is the one place a photograph can acquire a coin WITHOUT passing
     // the three gates, so leaving it out would be a side door straight past
-    // the owner's rule. A counterfeit shot is a textbook sibling of the
+    // the counterfeit rule. A counterfeit shot is a textbook sibling of the
     // genuine article -- "FAKE - 1860 3CS - VF - Obverse" shares its year,
-    // denomination and grade with his real 1860 3CS photographs -- and
+    // denomination and grade with the real 1860 3CS photographs -- and
     // without this line a placed genuine photo would drag the fake along
-    // behind it. "Ignore the Fake coins" means here too.
+    // behind it.
     if (result.parsed.excludedFromAutoImport) return result;
     if (result.parsed.isNonCoin || result.parsed.isEmpty) return result;
 
@@ -415,22 +366,16 @@ export function inferFromSiblings(
     // GATE D: "It should infer a match if the year and type match..."
     if (!yearAndTypeAgree(file, entry.signature)) return result;
 
-    /* GATE E: the ordinary hard vetoes -- AND, SINCE THE OWNER'S RULE
-     * LANDED, HIS PROOF EXCLUSION TOO.
+    /* GATE E: the ordinary hard vetoes -- AND THE PROOF EXCLUSION WITH THEM.
      *
-     * "...but not if the inventory item is described as a proof and the
-     *  pictures don't contain that descriptor Proof/PF."
+     * A filename that says nothing about the strike is read as saying
+     * "business strike" (proof-strike.ts), which makes it a stated conflict
+     * with a proof record and so a veto in its own right. There is no
+     * separate proof gate; the header walks through every combination.
      *
-     * That used to be a separate gate F immediately below this one. It is
-     * gone, because a filename that says nothing about the strike is now
-     * read as saying "business strike" (proof-strike.ts), which makes it a
-     * stated conflict with a proof record and so a veto in its own right.
-     * The long note in this file's header walks through every combination
-     * and shows the old gate could no longer fire.
-     *
-     * The REASON is still reported rather than swallowed, because this is
-     * the outcome most likely to surprise him: it is why a silent second
-     * shot of a proof coin does not follow the shot that names the grade. */
+     * The REASON is reported rather than swallowed, because this is the
+     * outcome most likely to surprise a user: it is why a silent second shot
+     * of a proof coin does not follow the shot that names the grade. */
     const verdict = findVetoes(file, entry.signature);
     if (verdict.vetoed) {
       return {

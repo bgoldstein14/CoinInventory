@@ -97,8 +97,8 @@
 }
 
 // Exceptions: coins rejected for having fewer than 2 of the 3 main details.
-// Styled as a "needs your attention" panel rather than an error, because the
-// user can choose to import them anyway.
+// Styled as a "needs your attention" panel rather than an error: the file is
+// not broken, these rows just cannot be identified as coins.
 .exception-list {
   margin-top: 14px;
   background: #fdf1ee;
@@ -185,14 +185,6 @@
   text-decoration: none;
   opacity: 1;
 }
-
-/*
- * NOTE: `.override-list` used to live here, styling the "Imported despite
- * missing details" panel. That panel and its "Import anyway" button have been
- * removed -- they created coins the backend refuses to save -- so the styles
- * went with them rather than being left orphaned. See the comment above the
- * exceptions panel in quicken-import-modal.html.
- */
 
 .import-preview {
   margin-top: 14px;

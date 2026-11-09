@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * photo-markers.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Reading the parts of a filename that describe the PHOTOGRAPH rather than
  *   the coin: which side is shown, which shot in a series it is, and which
@@ -33,7 +33,7 @@
  *   filename (where the " - " separators are still visible) and is imported by
  *   reference-tables.ts's vocabulary chain, so staying dependency-free keeps
  *   the module graph acyclic.
- * =========================================================================== */
+  */
 
 import { ParsedSide, PHOTO_VARIANT_WORDS, SIDE_WORDS } from './filename-vocabulary';
 

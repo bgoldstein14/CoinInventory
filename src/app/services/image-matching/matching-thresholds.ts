@@ -1,6 +1,6 @@
-/* ===========================================================================
+ /*
  * matching-thresholds.ts
- * ---------------------------------------------------------------------------
+ *
  * WHAT THIS FILE OWNS
  *   Every "magic number" the image matcher uses, and nothing else. No logic
  *   lives here -- just named constants and the reasoning behind each value.
@@ -15,13 +15,13 @@
  *
  *   Treat a change in here as a behaviour change: the scoring tests in
  *   image-matching.service.spec.ts are written against these exact values.
- * =========================================================================== */
+  */
 
-/* ---------------------------------------------------------------------------
+ /*
  * TUNING CONSTANTS
  * These are the numbers you would change if the matcher feels too eager or
  * too shy. Each one is explained so you can reason about a change.
- * ------------------------------------------------------------------------- */
+  */
 
 /**
  * Per-attribute weights. They sum to 1.0 so the raw score is already a
@@ -31,10 +31,10 @@
  * most discriminating fact -- most collections have many Morgan Dollars but
  * only one or two from any given year+mint.
  *
- * Mint mark is weighted LOW on purpose. That looks backwards, but it is the
- * key to defect #2: two coins that differ only by mint mark (1881-S vs 1881-O)
- * will end up only ~0.10 apart, which is inside the runner-up margin, so they
- * both get sent to review instead of one being silently chosen.
+ * Mint mark is weighted LOW on purpose. That looks backwards, but it is what
+ * keeps two coins differing only by mint mark (1881-S vs 1881-O) only ~0.10
+ * apart -- inside the runner-up margin, so they both go to review instead of
+ * one being silently chosen.
  *
  * CERT COMPANY and GRADE are the two smallest weights, and deliberately so.
  * This collection's filenames name them constantly:
@@ -49,9 +49,8 @@
  * between them, never two. Their small weights mean they can tip a close race
  * but can never carry a match on their own.
  *
- * The five original weights are UNCHANGED. Adding the two new ones takes the
- * total to 1.08, which very slightly lowers every coverage figure (see the
- * damping table below) -- the numbers there have been recomputed.
+ * The weights total 1.08 rather than 1.0; the coverage figures in the damping
+ * table below are computed against that total.
  */
 export const WEIGHTS = {
   year: 0.30,
@@ -70,8 +69,7 @@ export const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((sum, w) => sum + w, 0
  * Coverage damping.
  *
  * Problem: if the only comparable attribute is the year and it matches, the
- * naive normalized score is 1.0 -- "perfect", from one coincidence. That is
- * exactly defect #1.
+ * naive normalized score is 1.0 -- "perfect", from one coincidence.
  *
  * Fix: multiply the normalized score by how much of the available evidence we
  * were actually able to compare (`coverage`). Coverage is the comparable
@@ -101,10 +99,6 @@ export const DAMPING_RANGE = 0.30;
  * Auto-assign gate (a): the top candidate must score at least this much.
  * 0.85 is set just above the "denomination + coin type, no year" case (0.833)
  * and just below the "year + denomination" case (0.856).
- *
- * UNCHANGED by the real-filename work. The two new weights shifted the
- * coverage table slightly, but 0.85 still falls in the same gap between those
- * two cases, so the bar means exactly what it always meant.
  */
 export const AUTO_SCORE_THRESHOLD = 0.85;
 

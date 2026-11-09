@@ -81,7 +81,6 @@ describe('resolveDenominationLabel', () => {
     expect(resolveDenominationLabel('Half Dollar', LABELS)).toBe('50¢');
     expect(resolveDenominationLabel('Dime', LABELS)).toBe('10¢');
     expect(resolveDenominationLabel('Half Cent', LABELS)).toBe('½¢');
-    expect(resolveDenominationLabel('Nickel', LABELS)).toBe('5¢');
     expect(resolveDenominationLabel('Double Eagle', LABELS)).toBe('$20');
     expect(resolveDenominationLabel('Quarter Eagle', LABELS)).toBe('$2.50');
   });
@@ -181,10 +180,9 @@ describe('the real collection', () => {
    * ever held, parsed by the importer that will parse them again, measured
    * against the labels the database is seeded with.
    *
-   * Before this change six of them opened on "Other": four "8 Reales", one
-   * "100 Soles" and one "5s". The 5s is the bug — the lookup has that coin,
-   * spelled '5/- (Crown)'. The other five have no row under any spelling and
-   * are supposed to open the box.
+   * Only the genuinely foreign face values — "8 Reales", "100 Soles" — should
+   * open the custom box. '5s' must not: the lookup has that coin, spelled
+   * '5/- (Crown)'.
    */
   const coins = QIF_ACCOUNTS.flatMap(account => inventoryFor(account));
 
@@ -211,5 +209,34 @@ describe('the real collection', () => {
       if (resolved === null) continue;
       expect(LABELS, `"${value}" resolved to a label that is not in the lookup`).toContain(resolved);
     }
+  });
+});
+
+ /*
+ * "Nickel" and "Half Dime" must NOT fold onto 5¢
+ *
+ * A Half Dime (1794-1873, silver) and a Nickel (1866-) are different coins
+ * that merely share a face value, and each is seeded as its own United States
+ * denomination. Three labels folding to one key makes every five-cent coin
+ * AMBIGUOUS, and an ambiguous resolution is no link at all — the seed
+ * generator refuses such a file outright.
+  */
+describe('the five-cent rows are distinct, not aliases of one another', () => {
+  const FIVE_CENT_LABELS = ['5¢', 'Half Dime', 'Nickel'];
+
+  it('resolves each spelling to its own row', () => {
+    expect(resolveDenominationLabel('Nickel', FIVE_CENT_LABELS)).toBe('Nickel');
+    expect(resolveDenominationLabel('Half Dime', FIVE_CENT_LABELS)).toBe('Half Dime');
+    expect(resolveDenominationLabel('5¢', FIVE_CENT_LABELS)).toBe('5¢');
+  });
+
+  it('keeps all three on separate keys, which is what makes that possible', () => {
+    const keys = FIVE_CENT_LABELS.map(denominationKey);
+    expect(new Set(keys).size).toBe(3);
+  });
+
+  it('still folds "Five Cents" onto the generic row', () => {
+    // A spelling of 5¢, not a distinct coin — so this alias stays.
+    expect(resolveDenominationLabel('Five Cents', FIVE_CENT_LABELS)).toBe('5¢');
   });
 });

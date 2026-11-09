@@ -166,9 +166,7 @@ describe('LoggingService', () => {
     expect(calledUrl).not.toBe('/api/log');
   });
 
-  // ----------------------------------------------------------------
-  // Backoff behaviour
-  // ----------------------------------------------------------------
+  // ---- Backoff behaviour ----
   // The old implementation set `backendAvailable = false` on the first
   // failure and never reset it, so a single transient blip disabled backend
   // logging for the whole browser session -- losing exactly the log lines

@@ -9,6 +9,7 @@ import {
   PixelSize
 } from '../../features/inventory/photo-viewer-window';
 import { CoinImagePathsService } from '../../services/coin-image-paths.service';
+import { coinPhotoCount } from '../../services/coin-photos';
 import { CoinRecord } from '../../types/coin.model';
 import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link';
 
@@ -16,14 +17,7 @@ import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link'
  * CoinPhotoViewer — the full-size photo window you get by clicking a thumbnail
  * in the gallery.
  *
- * WHAT IT IS, IN THE OWNER'S WORDS
- *   "clicking on the image opens a large popup showing the full size coin
- *    image which is in a resizable window where the image takes up the full
- *    size of the window (which should start off only taking about 1/2 the
- *    display) allow me to shrink and grow the image window up to the highest
- *    resolution of the picture"
- *
- * So it is no longer a fixed lightbox. It is a WINDOW:
+ * It is a window, not a fixed lightbox:
  *
  *   - it opens at about half the display, shaped like the photo so the photo
  *     fills it exactly;
@@ -39,14 +33,13 @@ import { CoinImagePathLink } from '../coin-image-path-link/coin-image-path-link'
  * naturalWidth/naturalHeight and the size of the display — and bind the
  * answers to CSS.
  *
- * ---------------------------------------------------------------------------
  * WHICH PHOTO IT ACTUALLY SHOWS
- * ---------------------------------------------------------------------------
- * `coin.imagePaths[i]` is NOT the original. It is the downscaled ~250 KB copy
- * kept in the database. Opening "full size" on that would cap the window at a
- * resolution far below the real photo's, which is not what was asked for.
  *
- * So when the original camera file is still on disk, this viewer shows THAT,
+ * `coin.imagePaths[i]` is NOT the original. It is the downscaled ~250 KB copy
+ * kept in the database, so opening "full size" on it would cap the window at a
+ * resolution far below the real photo's.
+ *
+ * When the original camera file is still on disk, this viewer shows THAT,
  * streamed by the backend from `GET /api/images/file?path=…`. When it is not
  * (no path was ever recorded, or the file has since moved) it falls back to
  * the stored copy and the maximum shrinks accordingly — automatically, because
@@ -76,11 +69,27 @@ export class CoinPhotoViewer {
    * looked up by, so it all follows the previous/next buttons automatically.
    */
   protected readonly currentImage = computed<string | null>(
-    () => this.coin().imagePaths[this.images().photoViewerIndex()] ?? null
+    () => this.photos()[this.images().photoViewerIndex()] ?? null
   );
 
-  /** How many photos there are, for the "3 of 8" counter. */
-  protected readonly photoCount = computed(() => this.coin().imagePaths.length);
+  /**
+   * This coin's photographs, or an empty list while they are still arriving.
+   *
+   * The list endpoint does not carry them (see
+   * server/routes/coins/list-query.ts), so `coin().imagePaths` is ABSENT
+   * until InventoryService.loadCoinImages() fills it in. Reading the array
+   * directly would throw; an empty list here shows the viewer's own "no
+   * photo" state for the instant before the fetch lands.
+   */
+  protected readonly photos = computed(() => this.coin().imagePaths ?? []);
+
+  /**
+   * How many photos there are, for the "3 of 8" counter.
+   *
+   * From `imageCount` when the payloads have not arrived yet, so the counter
+   * says "1 of 8" rather than "1 of 0" for that moment.
+   */
+  protected readonly photoCount = computed(() => coinPhotoCount(this.coin()));
 
   /** 1-based position of the photo on screen, for the same counter. */
   protected readonly photoPosition = computed(() => this.images().photoViewerIndex() + 1);

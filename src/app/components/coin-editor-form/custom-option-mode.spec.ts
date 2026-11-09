@@ -9,8 +9,6 @@
  * is the state machine that decides whether the box is open, which is where
  * the bug actually lived: the old code used the coin's denomination VALUE as
  * that state, so writing a value closed the box.
- *
- * Each test below corresponds to one sentence of the owner's bug report.
  */
 import { describe, expect, it } from 'vitest';
 import {

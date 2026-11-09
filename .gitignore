@@ -47,8 +47,6 @@ server/.env
 # System files
 .DS_Store
 Thumbs.db
-server/logs/app.log
-server/logs/app.log
 
 # Claude Code local settings
 .claude/settings.local.json
@@ -58,4 +56,25 @@ server/logs/app.log
 *.lnk
 dump.txt
 TEMP-*
+
+# Runtime logs. NEVER COMMIT THESE.
+#
+# app.log records the machine name, the Windows username inside stack-trace
+# paths, and the absolute paths of the user's photo library. It was tracked by
+# accident for a long time despite being listed here -- .gitignore does not
+# untrack a file that is already tracked, so the rule looked like it was
+# working while 600 KB of personal paths went into every commit. Untracked
+# with `git rm --cached` on 2026-11-08.
+#
+# The whole directory is ignored, not just app.log, because log rotation will
+# produce dated siblings (app-2026-11-08.log and so on).
 server/logs/
+
+# The going-public checklist. NEVER COMMIT IT.
+#
+# To be useful it had to NAME the things it exists to remove: the street
+# address, the private company name, specific stock tickers, the machine name.
+# Publishing it would re-leak all of that and hand a reader a map of what to
+# search the history for. Its job is done -- the repo was cleaned on
+# 2026-11-08 -- so it is kept locally, outside version control, or not at all.
+docs/going-public-checklist.md

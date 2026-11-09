@@ -31,14 +31,12 @@
           </th>
           <th class="thumb-column">Photo</th>
           <!-- `column-<key>` is the ONLY hook stylesheets have for sizing an
-               individual column: every other column attribute (its label, its
-               position) is data, not markup, because the whole grid is one
-               @for over visibleInventoryColumns(). Without this class a rule
-               like "make Grade narrower" has nothing to select -- there is no
-               per-column <th> to hang a width on, and nth-child is useless
-               because the user can switch columns on and off, which changes
-               every index. The matching class goes on the <td> below so the
-               header and its cells agree on a width.
+               individual column: the whole grid is one @for over
+               visibleInventoryColumns(), so there is no per-column <th> to
+               hang a width on, and nth-child is useless because the user can
+               switch columns on and off, which changes every index. The
+               matching class goes on the <td> below so the header and its
+               cells agree on a width.
                See `Per-column widths` in inventory-table.scss. -->
           @for (column of columns().visibleInventoryColumns(); track column) {
             <th class="sortable-header column-{{ column }}" (click)="filters().setSortColumn(column)">
@@ -59,8 +57,27 @@
               <input type="checkbox" [checked]="selection().isCoinSelected(coin.id)" (click)="selection().toggleCoinSelection(coin.id, $event)" />
             </td>
             <td class="thumb-column">
-              @if (primaryImage(coin); as image) {
-                <img [src]="image" alt="" class="row-thumb" />
+              <!--
+                THE ROW THUMBNAIL. Three decisions here, all load-bearing.
+
+                1. `hasPhoto(coin)` is answered from `imageCount`, which the
+                   list endpoint computes with a SQL COUNT(*) and sends for
+                   free. A coin with no photographs renders no <img> and
+                   therefore makes NO REQUEST — on a real collection that is
+                   a large fraction of the rows.
+
+                2. The src is a URL, not inline image data. The list response
+                   must never carry image bytes; one image per HTTP response
+                   cannot be concatenated into an oversized JSON string.
+
+                3. `loading="lazy"` is the reason a long grid is not one
+                   request per row on load: the browser fetches only the rows
+                   near the viewport, and caches each one, so scrolling back
+                   up costs a 304. Deleting that attribute re-opens the
+                   problem quietly, and a test asserts it is still here.
+              -->
+              @if (hasPhoto(coin)) {
+                <img [src]="thumbnailUrl(coin)" alt="" class="row-thumb" loading="lazy" decoding="async" />
               } @else {
                 <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
               }
@@ -68,8 +85,7 @@
             @for (column of columns().visibleInventoryColumns(); track column; let firstColumn = $first) {
               <td class="column-{{ column }}">
                 <!-- The "Unsaved" chip rides in the first visible column so it
-                     reads as part of the row rather than as an extra column.
-                     Its tooltip spells out what the row still needs. -->
+                     reads as part of the row rather than as an extra column. -->
                 @if (firstColumn && inv.isDraftCoin(coin.id)) {
                   <span class="badge badge--draft" [title]="inv.draftHint(coin)">Unsaved</span>
                 }
@@ -82,41 +98,58 @@
                   <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
                 } @else if (column === 'meltValue') {
                   <!-- Melt gets its own branch for ONE reason: the tooltip.
-                       The number itself is still produced by the shared pure
-                       formatter below (that is what the third argument is
-                       for); all this branch adds is a `title` saying why the
-                       cell is a dash when it is one. Without it, "no spot
-                       prices have ever been fetched" — which one press of
-                       Fetch would fix for the whole grid — looks exactly like
-                       "this coin is base metal", which nothing can fix.
+                       The number itself still comes from the shared pure
+                       formatter (that is the third argument); all this branch
+                       adds is a `title` saying why the cell is a dash. Without
+                       it, "no spot prices have ever been fetched" — which one
+                       press of Fetch fixes for the whole grid — looks exactly
+                       like "this coin is base metal", which nothing can fix.
                        See InventoryService.meltValueHint. -->
                   <span [title]="inv.meltValueHint(coin)">{{ formatInventoryCell(coin, column, inv.spotPrices()) }}</span>
+                } @else if (column === 'catalogReference') {
+                  <!-- The catalogue reference needs the CATALOGS LOOKUP, for
+                       the same reason melt needs spot prices: the coin
+                       stores a foreign key and the name behind it lives on
+                       the service. The fourth argument is how it gets there,
+                       so the pure formatter stays testable with a plain
+                       object under Node with no jsdom.
+
+                       Do not drop it: without the list the cell falls back to
+                       the bare number ("6819" instead of "Sear 6819"), and
+                       since the search box builds the full string the two
+                       would stop agreeing. -->
+                  {{ formatInventoryCell(coin, column, undefined, inv.catalogs()) }}
                 } @else {
-                  {{ formatInventoryCell(coin, column) }}
+                  <!-- The fifth argument is the DENOMINATIONS lookup, needed
+                       for the same reason the fourth one is: the coin stores
+                       `denominationId` and the Label behind it lives on the
+                       service. See coinDenominationDisplay() in
+                       types/inventory-columns.ts. It rides on the catch-all
+                       branch because the denomination cell needs no special
+                       markup, only the argument; every other column ignores
+                       it. -->
+                  {{ formatInventoryCell(coin, column, undefined, undefined, inv.denominations()) }}
                 }
               </td>
             }
             <td>
               <div class="row-action-stack">
                 <!--
-                  The row's photo button.
-
-                  It used to be DISABLED and read "No images" for a coin with
-                  none, which made this — the most-used entry point — a dead
-                  end: the gallery it opens is the only place a photo can be
-                  attached to one specific coin, so a coin without photos
-                  could never get its first one. It is now always live, and
-                  the label says which of the two jobs the click will do.
-                  The gallery shows an empty state inviting the upload. See
+                  The row's photo button is ALWAYS live, never disabled for a
+                  coin with no photos: the gallery it opens is the only place
+                  a photo can be attached to one specific coin, so disabling
+                  it would leave such a coin unable to get its first one. The
+                  label says which of the two jobs the click will do, and the
+                  gallery shows an empty state inviting the upload. See
                   CoinImagesStore.canOpenImageGallery.
                 -->
                 <button
                   type="button"
                   class="secondary small-button"
-                  [title]="coin.imagePaths.length > 0 ? 'Show this coin\'s photos' : 'Attach the first photo to this coin'"
+                  [title]="hasPhoto(coin) ? 'Show this coin\'s photos' : 'Attach the first photo to this coin'"
                   (click)="$event.stopPropagation(); imagesRequested.emit(coin.id)"
                 >
-                  {{ coin.imagePaths.length > 0 ? 'Images' : 'Add images' }}
+                  {{ hasPhoto(coin) ? 'Images' : 'Add images' }}
                 </button>
                 <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); detailRequested.emit(coin.id)">
                   Details
@@ -125,12 +158,14 @@
             </td>
           </tr>
         } @empty {
+          <!-- The empty row has three cases, not two — see `zeroState` in
+               inventory-table.ts. Do not decide the message here: nothing
+               decided inside a template can be tested (no jsdom). -->
           <tr class="empty-row">
             <td [attr.colspan]="columns().visibleInventoryColumns().length + 3">
-              @if (inv.inventory().length === 0) {
-                No coins yet. Add one manually or import from a QIF/CSV file.
-              } @else {
-                No coins match the current search and filters.
+              {{ zeroState().message }}
+              @if (zeroState().hint; as hint) {
+                <span class="empty-row__hint">{{ hint }}</span>
               }
             </td>
           </tr>

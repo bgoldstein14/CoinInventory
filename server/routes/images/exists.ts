@@ -8,9 +8,7 @@
  *   Response: { "results": { "C:\\pics\\a.jpg": true,
  *                            "D:\\gone\\b.png": false } }
  *
- * ------------------------------------------------------------------
  * Why a POST, and why a batch
- * ------------------------------------------------------------------
  * The UI needs this the moment a coin is opened: for each of that coin's photos
  * it decides whether the "open the original" link is clickable or is shown
  * greyed out in a muted colour because the underlying file is gone. A coin can
@@ -23,9 +21,7 @@
  * stuffing eight of them into a query string risks running into URL length
  * limits and a pile of encoding bugs. A JSON body has neither problem.
  *
- * ------------------------------------------------------------------
  * Two rules this handler must never break
- * ------------------------------------------------------------------
  *   1. It NEVER throws because of a path. A malformed path, a disconnected
  *      network drive, a permissions error — every one of those is simply
  *      `false`, because from the user's point of view they all mean the same
@@ -111,26 +107,17 @@ router.post('/exists', async (req: Request, res: Response) => {
     results[p] = flags[index];
   });
 
-  // ----- Log WHICH paths are missing, not just how many -------------------
+  // Log WHICH paths are missing, not just how many. A bare count ("4 missing")
+  // cannot distinguish a renamed folder from a dropped network share, a
+  // permissions change or a stale row — only the path can.
   //
-  // THE BUG THIS FIXES
-  // This used to log only a count: "Checked 312 original image path(s); 4
-  // missing". The owner hit exactly the dead end that invites — he had not
-  // moved or deleted anything, so a bare "4 missing" gave him no way to tell
-  // whether it was a renamed folder, a dropped network share, a permissions
-  // change, or a stale row in the database. A count tells you a problem
-  // exists; it is the PATH that tells you which problem it is.
+  // At WARN, not INFO: a missing original is the one outcome here a human may
+  // need to act on, and it should survive a log level that filters out the
+  // routine "checked N paths" line below.
   //
-  // Logged at WARN, not INFO: a missing original is the one outcome here that
-  // a human may need to act on, and it should survive a log level that filters
-  // out the routine "checked N paths" line below.
-  //
-  // WHY THE LIST IS CAPPED
-  // MAX_PATHS_PER_REQUEST allows 500 paths, so a disconnected network share
-  // could make all 500 "missing" at once and bury the rest of the log. The
-  // first 25 are named — far more than the handful a real fault produces —
-  // and the remainder is summarised. The count is always exact, so nothing is
-  // silently lost by the cap.
+  // Capped because MAX_PATHS_PER_REQUEST allows 500, and a disconnected share
+  // could make all 500 missing at once and bury the rest of the log. The count
+  // is always exact, so the cap loses nothing silently.
   const missingPaths = uniquePaths.filter((_, index) => !flags[index]);
 
   if (missingPaths.length > 0) {

@@ -1,25 +1,17 @@
-/* ===========================================================================
- * photo-viewer-window.ts — the arithmetic and the source choice behind the
- * resizable full-size photo window.
- * ---------------------------------------------------------------------------
+/*
+ * The arithmetic and the source choice behind the resizable full-size photo
+ * window.
+ *
  * Pure functions, no Angular, no DOM. CoinPhotoViewer feeds them the numbers
  * it reads off the browser (the <img>'s naturalWidth/naturalHeight and the
  * window's innerWidth/innerHeight) and binds the answers straight to CSS.
  *
- * Why these few lines live on their own rather than inside the component:
- * every one of them is a RULE the owner asked for in words —
+ * They live on their own rather than inside the component because each is a
+ * stated behavioural rule, and rules deserve tests. None of this needs a
+ * browser, so none of it should need one to be checked — which matters here,
+ * because the tests run under Node with no DOM at all.
  *
- *   "a large popup ... in a resizable window where the image takes up the
- *    full size of the window (which should start off only taking about 1/2
- *    the display) allow me to shrink and grow the image window up to the
- *    highest resolution of the picture"
- *
- * — and rules stated in words deserve tests. None of this needs a browser, so
- * none of it should need one to be checked.
- *
- * ---------------------------------------------------------------------------
  * THE "HIGHEST RESOLUTION OF THE PICTURE" PROBLEM
- * ---------------------------------------------------------------------------
  * There are TWO copies of every photo in this app, and they are not the same
  * size:
  *
@@ -41,7 +33,7 @@
  * cap therefore needs no special case: it is always "the natural size of the
  * thing actually on screen", which is exactly what stops the user stretching
  * a 600px fallback to 4000px and wondering why it went soft.
- * =========================================================================== */
+ */
 
 import { ImagePathView } from './image-path-display';
 
@@ -64,12 +56,10 @@ export interface ViewerSource {
 /**
  * How much of the screen the window covers when it first opens, per axis.
  *
- * The owner asked for "about 1/2 the display". Half per AXIS — half the
- * screen's width and half its height — which is a quarter of the screen by
- * area. That ambiguity was put to him directly on 2026-10-17 and he settled
- * it: "Quarter of the screen area is fine." Recorded here because the two
- * readings differ by a factor of two and the next person to read this line
- * will wonder which was meant.
+ * The requirement is "about 1/2 the display", read as half per AXIS — half
+ * the screen's width and half its height, so a quarter of the screen by
+ * area. Spelled out because the two readings differ by a factor of two and
+ * the next reader of this line will wonder which was meant.
  *
  * It is a named constant on its own line precisely so that "a bit bigger
  * please" stays a one-character change rather than a hunt through a
@@ -125,9 +115,9 @@ export function chooseViewerSource(
  * half the display.
  *
  * Why the image's ASPECT RATIO drives this rather than a plain half-by-half
- * rectangle: the owner also asked that "the image takes up the full size of
- * the window". A window shaped like the photo means the photo fills it edge to
- * edge with no letterboxing at all on opening. (Resize it to some other shape
+ * rectangle: the photo is meant to take up the full size of the window. A
+ * window shaped like the photo means the photo fills it edge to edge with no
+ * letterboxing at all on opening. (Resize it to some other shape
  * afterwards and bars appear — that is `object-fit: contain` doing its job,
  * and it is the right trade: squashing a round coin into an oval would hide
  * exactly the detail this screen exists to show.)
@@ -167,11 +157,11 @@ export function initialViewerSize(
  * not one pixel more.
  *
  * Note what is deliberately NOT here — a clamp to the screen. A 4032 x 3024
- * camera original is bigger than the monitor, and the owner explicitly wants
- * to be able to grow the window "up to the highest resolution of the picture".
- * So the window is allowed to exceed the viewport and the backdrop scrolls
- * (see `overflow: auto` in the stylesheet). Capping at the screen would make
- * the feature unreachable on every photo it was asked for.
+ * camera original is bigger than the monitor, and the window must be growable
+ * up to the highest resolution of the picture. So it is allowed to exceed the
+ * viewport and the backdrop scrolls (see `overflow: auto` in the stylesheet).
+ * Capping at the screen would make the feature unreachable on exactly the
+ * photos it exists for.
  *
  * Returns null while the size is unknown, which the template reads as "put no
  * max-width on it yet".
@@ -201,9 +191,9 @@ export function minViewerSize(natural: PixelSize | null): PixelSize {
 /**
  * One short line telling the user which copy is on screen, and how big it is.
  *
- * Kept to a single clause on purpose. The owner asked to be told "briefly and
- * without nagging": the stored-copy case mentions the original once, as a
- * fact, and never suggests he should go and do something about it.
+ * Kept to a single clause on purpose: brief and non-nagging. The stored-copy
+ * case mentions the original once, as a fact, and never suggests the user
+ * should go and do something about it.
  */
 export function describeViewerSource(kind: ViewerSourceKind, natural: PixelSize | null): string {
   const dimensions = isMeasured(natural)

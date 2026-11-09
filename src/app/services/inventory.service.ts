@@ -7,16 +7,19 @@ import {
   Denomination,
   MintMarkOption
 } from '../types/coin.model';
+import { CatalogOption } from '../types/catalog-reference';
 import { ApiService } from './api.service';
 import { LoggingService } from './logging.service';
 import { NotificationService } from './notification.service';
 import { CoinChangeTracker } from './inventory/coin-change-tracker';
 import { CoinDraftRegistry } from './inventory/coin-draft-registry';
 import { CoinEditor } from './inventory/coin-editor';
+import { CoinImageHydrator } from './inventory/coin-image-hydrator';
 import { CoinCollection } from './inventory/coin-collection';
 import { LookupManager } from './inventory/lookup-manager';
 import { TransactionManager } from './inventory/transaction-manager';
 import { ConnectionManager } from './inventory/connection-manager';
+import { LoadFailure } from './inventory/load-failure';
 // The one-time "fill in the missing precious-metal data" maintenance pass.
 // The inference itself is shared with the Quicken import — see pm-fill.ts.
 import {
@@ -41,9 +44,9 @@ import { firstValueFrom } from 'rxjs';
 
 const defaultSpotPrices: SpotPrices = { gold: 0, silver: 0, platinum: 0, copper: 0 };
 
-/* ===========================================================================
+ /*
  * InventoryService
- * ---------------------------------------------------------------------------
+ *
  * The single front door to the coin collection. Components talk to THIS
  * service and nothing else. It owns the signals everybody reads, and hands
  * the real work to focused helpers in ./inventory/:
@@ -68,13 +71,11 @@ const defaultSpotPrices: SpotPrices = { gold: 0, silver: 0, platinum: 0, copper:
  *  2. The signals below are created here and PASSED IN to the helpers, so
  *     there is exactly one copy of every piece of state no matter who writes
  *     to it.
- * =========================================================================== */
+  */
 
 @Injectable({ providedIn: 'root' })
 export class InventoryService {
-  // ==========================================================================
-  // State — every signal below is public API; components read these directly.
-  // ==========================================================================
+  // ---- State — every signal below is public API; components read these directly. ----
   readonly inventory = signal<CoinRecord[]>([]);
   readonly selectedCoinId = signal<string | null>(null);
   readonly categoryOptions = signal<string[]>([]);
@@ -93,13 +94,39 @@ export class InventoryService {
   readonly connected = signal(false);
   readonly connectionError = signal<string | null>(null);
 
+   /*
+   * The same failure as `connectionError`, but CLASSIFIED.
+   *
+   * One bare string had to mean both "what failed" and "is my collection all
+   * right", and it got the second one wrong: the app can report "Failed to
+   * connect to database" while the database is handing over every coin and
+   * only the RESPONSE cannot be built.
+   *
+   * This signal carries the stage the server reported ('connection' /
+   * 'database' / 'delivery'), the banner heading, a short status-bar label,
+   * whether the data is KNOWN to be safe, and one technical line.
+   * `connectionError` is kept in step with its `message`, so anything reading
+   * the older signal still works. See services/inventory/load-failure.ts.
+    */
+  readonly loadFailure = signal<LoadFailure | null>(null);
+
   readonly denominations = signal<Denomination[]>([]);
   readonly mintMarks = signal<MintMarkOption[]>([]);
   readonly metalContents = signal<string[]>([]);
+  /**
+   * The reference catalogues a coin can be attributed to — Sear, RIC,
+   * Hendin, Krause (migration 012). A fifth lookup list alongside the four
+   * above, loaded in the same non-fatal phase of hydration and maintained
+   * from the same screen.
+   *
+   * READ IT THROUGH types/catalog-reference.ts. Nothing may resolve a name
+   * by hand: `catalogNameById()` copes with an id that arrived as a STRING
+   * from a CSV round-trip and still names a soft-deleted catalogue, and both
+   * are easy to get wrong in a one-line `find`.
+   */
+  readonly catalogs = signal<CatalogOption[]>([]);
 
-  // ==========================================================================
-  // Derived values — the calculations live in inventory-metrics.ts.
-  // ==========================================================================
+  // ---- Derived values — the calculations live in inventory-metrics.ts. ----
   readonly selectedCoin = computed(() =>
     this.inventory().find(c => c.id === this.selectedCoinId()) ?? null
   );
@@ -115,10 +142,6 @@ export class InventoryService {
   readonly inventoryCountries = computed(() => distinctCountries(this.inventory()));
 
   readonly inventorySources = computed(() => distinctSources(this.inventory()));
-
-  // NOTE: an `inventoryDealers` computed sat here. It was removed with the
-  // coin-level dealer field. Nothing ever read it: the dealer filter was a
-  // free-text input, not a dropdown fed from this list.
 
   /**
    * True once we have at least one non-zero spot price in memory.
@@ -139,10 +162,8 @@ export class InventoryService {
   private readonly logger = inject(LoggingService);
   private readonly notificationService = inject(NotificationService);
 
-  // ==========================================================================
   // The helpers. Declared last, and in dependency order, because a class field
   // can only use fields that are already declared above it.
-  // ==========================================================================
 
   /** Tracks confirmed-vs-unsaved state for every coin. See its file header. */
   private readonly changeTracker = new CoinChangeTracker(
@@ -160,6 +181,7 @@ export class InventoryService {
     this.coinSets,
     this.denominations,
     this.mintMarks,
+    this.catalogs,
     this.apiService,
     this.logger,
     this.notificationService
@@ -184,6 +206,17 @@ export class InventoryService {
     this.notificationService
   );
 
+  /**
+   * Pulls ONE coin's photographs from the server on demand and writes them
+   * onto its record. The list endpoint no longer sends them; see its file
+   * header for the outage that caused.
+   */
+  private readonly coinImages = new CoinImageHydrator(
+    this.inventory,
+    this.apiService,
+    this.logger
+  );
+
   private readonly editor = new CoinEditor(
     this.inventory,
     this.changeTracker,
@@ -197,11 +230,13 @@ export class InventoryService {
     connecting: this.connecting,
     connected: this.connected,
     connectionError: this.connectionError,
+    loadFailure: this.loadFailure,
     categoryOptions: this.categoryOptions,
     coinSets: this.coinSets,
     transactions: this.transactions,
     denominations: this.denominations,
     mintMarks: this.mintMarks,
+    catalogs: this.catalogs,
     metalContents: this.metalContents,
     spotPrices: this.spotPrices,
     spotPriceMeta: this.spotPriceMeta,
@@ -211,9 +246,7 @@ export class InventoryService {
     notificationService: this.notificationService
   });
 
-  // ==========================================================================
-  // Start-up / connection — see connection-manager.ts
-  // ==========================================================================
+  // ---- Start-up / connection — see connection-manager.ts ----
 
   /**
    * Load everything from the backend: the coins (fatal if they fail) and then
@@ -234,16 +267,45 @@ export class InventoryService {
     return this.connection.retryConnection();
   }
 
-  // ==========================================================================
-  // Coins — whole records go to CoinCollection, field edits go to CoinEditor
-  // ==========================================================================
+  // ---- Coins — whole records go to CoinCollection, field edits go to CoinEditor ----
 
   selectCoin(coinId: string): void {
     this.coins.selectCoin(coinId);
+    // Start pulling THIS coin's photographs. The list endpoint no longer
+    // carries them (see coinImages below), and the detail panel, the gallery
+    // and the viewer all read `coin.imagePaths` for whichever coin is
+    // selected — so selection is exactly the moment to go and get them.
+    // Cached per coin, and skipped entirely when `imageCount` is 0.
+    this.coinImages.ensure(coinId);
   }
 
   ensureSelectedCoin(): void {
     this.coins.ensureSelectedCoin();
+  }
+
+  // ---- Photographs — fetched one coin at a time. See coin-image-hydrator.ts. ----
+  //
+  // `GET /api/coins` returns `imageCount` and NO `imagePaths` key, because
+  // inlining every photograph of every coin made the response impossible to
+  // serialise once the collection passed ~105 coins (`RangeError: Invalid
+  // string length` out of JSON.stringify — see
+  // server/routes/coins/list-query.ts). These three methods are how the
+  // photographs come back, for one coin at a time.
+
+  /**
+   * Fetch one coin's photographs and write them onto its record.
+   *
+   * REJECTS if the fetch fails rather than resolving with `[]` — callers
+   * that are about to SAVE an image array must be stopped, not told the coin
+   * has no pictures. See the hydrator's file header.
+   */
+  loadCoinImages(coinId: string): Promise<string[]> {
+    return this.coinImages.load(coinId);
+  }
+
+  /** Fire-and-forget `loadCoinImages`, for callers with nowhere to put a promise. */
+  ensureCoinImages(coinId: string | null | undefined): void {
+    this.coinImages.ensure(coinId);
   }
 
   /**
@@ -322,9 +384,7 @@ export class InventoryService {
     return this.editor.updateCoinNow(coinId, updates);
   }
 
-  // ==========================================================================
-  // Maintenance — the one-time precious-metal backfill
-  // ==========================================================================
+  // ---- Maintenance — the one-time precious-metal backfill ----
 
   /**
    * Work out which coins are missing alloy data that can be inferred, without
@@ -362,9 +422,7 @@ export class InventoryService {
     return outcome;
   }
 
-  // ==========================================================================
-  // Transactions (buy / sell history attached to a coin)
-  // ==========================================================================
+  // ---- Transactions (buy / sell history attached to a coin) ----
 
   addTransaction(txn: TransactionRecord): void {
     this.txns.addTransaction(txn);
@@ -374,9 +432,7 @@ export class InventoryService {
     this.txns.deleteTransaction(txnId);
   }
 
-  // ==========================================================================
-  // Spot prices and melt value
-  // ==========================================================================
+  // ---- Spot prices and melt value ----
 
   /**
    * Put new prices in memory. Every melt figure on screen re-calculates at
@@ -459,9 +515,7 @@ export class InventoryService {
    * Refresh spot prices from live COMEX/NYMEX, automatically, once the app
    * has finished starting up. Fire-and-forget: callers do not await it.
    *
-   * ---------------------------------------------------------------------
-   * WHY IT RUNS AFTER HYDRATION RATHER THAN DURING IT
-   * ---------------------------------------------------------------------
+   * ---- WHY IT RUNS AFTER HYDRATION RATHER THAN DURING IT ----
    * This is the only outbound call to the public internet the app makes, and
    * it goes through a corporate network. It can be slow, it can hang, it can
    * be blocked outright. None of that is allowed to come between the user and
@@ -471,9 +525,7 @@ export class InventoryService {
    * nice property of doing it in this order: melt is never blank while we
    * wait on the network, it merely gets more current a moment later.
    *
-   * ---------------------------------------------------------------------
-   * WHY IT DOES NOT USE SpotPriceService
-   * ---------------------------------------------------------------------
+   * ---- WHY IT DOES NOT USE SpotPriceService ----
    * SpotPriceService.fetchSpotPrices() — what the modal's Fetch button calls —
    * reports failure with `showError`, and error toasts in this app are STICKY
    * (see NotificationService: info and warning auto-dismiss, error does not).
@@ -484,9 +536,7 @@ export class InventoryService {
    * stays quiet — a log line and nothing else. The manual button's loud
    * behaviour is deliberately left alone.
    *
-   * ---------------------------------------------------------------------
-   * WHAT A FAILURE MUST NOT DO
-   * ---------------------------------------------------------------------
+   * ---- WHAT A FAILURE MUST NOT DO ----
    * It must not wipe the prices we loaded from the database. Note that the
    * backend answers 200 with ZEROED prices and an `error` field when the
    * upstream is unreachable, rather than failing the request — so "it
@@ -494,9 +544,7 @@ export class InventoryService {
    * non-zero price`. Storing a zeroed result would blank every melt value in
    * the app, which is the precise opposite of what this feature is for.
    *
-   * ---------------------------------------------------------------------
-   * HOW OFTEN IT RUNS
-   * ---------------------------------------------------------------------
+   * ---- HOW OFTEN IT RUNS ----
    * At most once SUCCESSFULLY per app session. A failed attempt does not burn
    * the budget, so if start-up failed because the backend was down and the
    * user then presses "Retry connection", they get the fetch they missed.
@@ -569,9 +617,7 @@ export class InventoryService {
     return describeMeltValue(coin, this.spotPrices());
   }
 
-  // ==========================================================================
-  // Lookup lists — all delegated to LookupManager
-  // ==========================================================================
+  // ---- Lookup lists — all delegated to LookupManager ----
 
   mergeCategoryOptions(names: string[]): void {
     this.lookups.mergeCategoryOptions(names);
@@ -611,6 +657,29 @@ export class InventoryService {
 
   removeMintMark(id: number): Promise<void> {
     return this.lookups.removeMintMark(id);
+  }
+
+  /* -------------------------------------------------------------------------
+   * Catalogues (migration 012) — the same four delegations as every other
+   * lookup above. There is deliberately nothing special here: a catalogue is
+   * maintained exactly like a denomination or a mint mark, which is what
+   * makes the maintenance screen a near-copy of the ones already there.
+   * ---------------------------------------------------------------------- */
+
+  loadCatalogs(): Promise<void> {
+    return this.lookups.loadCatalogs();
+  }
+
+  addCatalog(c: Partial<CatalogOption>): Promise<void> {
+    return this.lookups.addCatalog(c);
+  }
+
+  renameCatalog(id: number, name: string): Promise<void> {
+    return this.lookups.renameCatalog(id, name);
+  }
+
+  removeCatalog(id: number): Promise<void> {
+    return this.lookups.removeCatalog(id);
   }
 }
 

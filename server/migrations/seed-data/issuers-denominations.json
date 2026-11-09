@@ -1,0 +1,7539 @@
+{
+  "issuers": [
+    {
+      "key": "united-states",
+      "name": "United States",
+      "isoCode": "US",
+      "kind": "modern",
+      "validFrom": 1792,
+      "validTo": null,
+      "sortOrder": 100
+    },
+    {
+      "key": "great-britain",
+      "name": "Great Britain",
+      "isoCode": "GB",
+      "kind": "modern",
+      "validFrom": 1707,
+      "validTo": null,
+      "sortOrder": 110
+    },
+    {
+      "key": "canada",
+      "name": "Canada",
+      "isoCode": "CA",
+      "kind": "modern",
+      "validFrom": 1858,
+      "validTo": null,
+      "sortOrder": 120
+    },
+    {
+      "key": "mexico",
+      "name": "Mexico",
+      "isoCode": "MX",
+      "kind": "modern",
+      "validFrom": 1821,
+      "validTo": null,
+      "sortOrder": 130
+    },
+    {
+      "key": "australia",
+      "name": "Australia",
+      "isoCode": "AU",
+      "kind": "modern",
+      "validFrom": 1855,
+      "validTo": null,
+      "sortOrder": 140
+    },
+    {
+      "key": "new-zealand",
+      "name": "New Zealand",
+      "isoCode": "NZ",
+      "kind": "modern",
+      "validFrom": 1933,
+      "validTo": null,
+      "sortOrder": 150
+    },
+    {
+      "key": "ireland",
+      "name": "Ireland",
+      "isoCode": "IE",
+      "kind": "modern",
+      "validFrom": 1928,
+      "validTo": null,
+      "sortOrder": 160
+    },
+    {
+      "key": "france",
+      "name": "France",
+      "isoCode": "FR",
+      "kind": "modern",
+      "validFrom": 1795,
+      "validTo": null,
+      "sortOrder": 170
+    },
+    {
+      "key": "germany",
+      "name": "Germany",
+      "isoCode": "DE",
+      "kind": "modern",
+      "validFrom": 1919,
+      "validTo": null,
+      "sortOrder": 180
+    },
+    {
+      "key": "austria",
+      "name": "Austria",
+      "isoCode": "AT",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 190
+    },
+    {
+      "key": "switzerland",
+      "name": "Switzerland",
+      "isoCode": "CH",
+      "kind": "modern",
+      "validFrom": 1850,
+      "validTo": null,
+      "sortOrder": 200
+    },
+    {
+      "key": "netherlands",
+      "name": "Netherlands",
+      "isoCode": "NL",
+      "kind": "modern",
+      "validFrom": 1815,
+      "validTo": null,
+      "sortOrder": 210
+    },
+    {
+      "key": "belgium",
+      "name": "Belgium",
+      "isoCode": "BE",
+      "kind": "modern",
+      "validFrom": 1832,
+      "validTo": null,
+      "sortOrder": 220
+    },
+    {
+      "key": "spain",
+      "name": "Spain",
+      "isoCode": "ES",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 230
+    },
+    {
+      "key": "portugal",
+      "name": "Portugal",
+      "isoCode": "PT",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 240
+    },
+    {
+      "key": "italy",
+      "name": "Italy",
+      "isoCode": "IT",
+      "kind": "modern",
+      "validFrom": 1861,
+      "validTo": null,
+      "sortOrder": 250
+    },
+    {
+      "key": "denmark",
+      "name": "Denmark",
+      "isoCode": "DK",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 260
+    },
+    {
+      "key": "sweden",
+      "name": "Sweden",
+      "isoCode": "SE",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 270
+    },
+    {
+      "key": "norway",
+      "name": "Norway",
+      "isoCode": "NO",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 280
+    },
+    {
+      "key": "finland",
+      "name": "Finland",
+      "isoCode": "FI",
+      "kind": "modern",
+      "validFrom": 1864,
+      "validTo": null,
+      "sortOrder": 290
+    },
+    {
+      "key": "russia",
+      "name": "Russia",
+      "isoCode": "RU",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 300
+    },
+    {
+      "key": "poland",
+      "name": "Poland",
+      "isoCode": "PL",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 310
+    },
+    {
+      "key": "china",
+      "name": "China",
+      "isoCode": "CN",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 320
+    },
+    {
+      "key": "japan",
+      "name": "Japan",
+      "isoCode": "JP",
+      "kind": "modern",
+      "validFrom": 1870,
+      "validTo": null,
+      "sortOrder": 330
+    },
+    {
+      "key": "south-korea",
+      "name": "South Korea",
+      "isoCode": "KR",
+      "kind": "modern",
+      "validFrom": 1948,
+      "validTo": null,
+      "sortOrder": 340
+    },
+    {
+      "key": "india",
+      "name": "India",
+      "isoCode": "IN",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 350
+    },
+    {
+      "key": "south-africa",
+      "name": "South Africa",
+      "isoCode": "ZA",
+      "kind": "modern",
+      "validFrom": 1892,
+      "validTo": null,
+      "sortOrder": 360
+    },
+    {
+      "key": "brazil",
+      "name": "Brazil",
+      "isoCode": "BR",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 370
+    },
+    {
+      "key": "argentina",
+      "name": "Argentina",
+      "isoCode": "AR",
+      "kind": "modern",
+      "validFrom": 1813,
+      "validTo": null,
+      "sortOrder": 380
+    },
+    {
+      "key": "peru",
+      "name": "Peru",
+      "isoCode": "PE",
+      "kind": "modern",
+      "validFrom": 1822,
+      "validTo": null,
+      "sortOrder": 390
+    },
+    {
+      "key": "chile",
+      "name": "Chile",
+      "isoCode": "CL",
+      "kind": "modern",
+      "validFrom": 1817,
+      "validTo": null,
+      "sortOrder": 400
+    },
+    {
+      "key": "colombia",
+      "name": "Colombia",
+      "isoCode": "CO",
+      "kind": "modern",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 410
+    },
+    {
+      "key": "israel",
+      "name": "Israel",
+      "isoCode": "IL",
+      "kind": "modern",
+      "validFrom": 1948,
+      "validTo": null,
+      "sortOrder": 420
+    },
+    {
+      "key": "spanish-colonial",
+      "name": "Spanish Colonial",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1536,
+      "validTo": 1825,
+      "sortOrder": 1000
+    },
+    {
+      "key": "british-colonial",
+      "name": "British Colonial",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": null,
+      "sortOrder": 1010
+    },
+    {
+      "key": "german-empire",
+      "name": "German Empire",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1871,
+      "validTo": 1918,
+      "sortOrder": 1020
+    },
+    {
+      "key": "prussia",
+      "name": "Prussia",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1871,
+      "sortOrder": 1030
+    },
+    {
+      "key": "bavaria",
+      "name": "Bavaria",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1871,
+      "sortOrder": 1040
+    },
+    {
+      "key": "saxony",
+      "name": "Saxony",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1871,
+      "sortOrder": 1050
+    },
+    {
+      "key": "wurttemberg",
+      "name": "Württemberg",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1871,
+      "sortOrder": 1060
+    },
+    {
+      "key": "baden",
+      "name": "Baden",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1871,
+      "sortOrder": 1070
+    },
+    {
+      "key": "papal-states",
+      "name": "Papal States",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1870,
+      "sortOrder": 1080
+    },
+    {
+      "key": "kingdom-of-sardinia",
+      "name": "Kingdom of Sardinia",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1720,
+      "validTo": 1861,
+      "sortOrder": 1090
+    },
+    {
+      "key": "two-sicilies",
+      "name": "Kingdom of the Two Sicilies",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1816,
+      "validTo": 1861,
+      "sortOrder": 1100
+    },
+    {
+      "key": "venice",
+      "name": "Republic of Venice",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1797,
+      "sortOrder": 1110
+    },
+    {
+      "key": "tuscany",
+      "name": "Grand Duchy of Tuscany",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": null,
+      "validTo": 1859,
+      "sortOrder": 1120
+    },
+    {
+      "key": "lombardy-venetia",
+      "name": "Lombardy-Venetia",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1815,
+      "validTo": 1866,
+      "sortOrder": 1130
+    },
+    {
+      "key": "confederate-states",
+      "name": "Confederate States of America",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1861,
+      "validTo": 1865,
+      "sortOrder": 1140
+    },
+    {
+      "key": "roman-republic",
+      "name": "Roman Republic",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -300,
+      "validTo": -27,
+      "sortOrder": 2000
+    },
+    {
+      "key": "roman-empire",
+      "name": "Roman Empire",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -27,
+      "validTo": 476,
+      "sortOrder": 2010
+    },
+    {
+      "key": "roman-provincial",
+      "name": "Roman Provincial",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -27,
+      "validTo": 297,
+      "sortOrder": 2020
+    },
+    {
+      "key": "byzantine-empire",
+      "name": "Byzantine Empire",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": 491,
+      "validTo": 1453,
+      "sortOrder": 2030
+    },
+    {
+      "key": "ancient-greece",
+      "name": "Ancient Greece",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -700,
+      "validTo": -30,
+      "sortOrder": 2040
+    },
+    {
+      "key": "macedonian-kingdom",
+      "name": "Macedonian Kingdom",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -500,
+      "validTo": -168,
+      "sortOrder": 2050
+    },
+    {
+      "key": "seleucid-empire",
+      "name": "Seleucid Empire",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -312,
+      "validTo": -63,
+      "sortOrder": 2060
+    },
+    {
+      "key": "ptolemaic-egypt",
+      "name": "Ptolemaic Egypt",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -305,
+      "validTo": -30,
+      "sortOrder": 2070
+    },
+    {
+      "key": "judaea",
+      "name": "Judaea",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -135,
+      "validTo": 135,
+      "sortOrder": 2080
+    },
+    {
+      "key": "celtic",
+      "name": "Celtic",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -300,
+      "validTo": 100,
+      "sortOrder": 2090
+    },
+    {
+      "key": "parthia",
+      "name": "Parthia",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -247,
+      "validTo": 224,
+      "sortOrder": 2100
+    },
+    {
+      "key": "sasanian-empire",
+      "name": "Sasanian Empire",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": 224,
+      "validTo": 651,
+      "sortOrder": 2110
+    },
+    {
+      "key": "achaemenid-persia",
+      "name": "Achaemenid Persia",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -550,
+      "validTo": -330,
+      "sortOrder": 2120
+    }
+  ],
+  "denominations": [
+    {
+      "issuer": "united-states",
+      "label": "½¢",
+      "faceValue": 0.005,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "united-states",
+      "label": "1¢",
+      "faceValue": 0.01,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "united-states",
+      "label": "2¢",
+      "faceValue": 0.02,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "united-states",
+      "label": "3CS",
+      "faceValue": 0.03,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "united-states",
+      "label": "3CN",
+      "faceValue": 0.03,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "united-states",
+      "label": "Half Dime",
+      "faceValue": 0.05,
+      "sortOrder": 55
+    },
+    {
+      "issuer": "united-states",
+      "label": "5¢",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "united-states",
+      "label": "Nickel",
+      "faceValue": 0.05,
+      "sortOrder": 65
+    },
+    {
+      "issuer": "united-states",
+      "label": "10¢",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "united-states",
+      "label": "20¢",
+      "faceValue": 0.2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "united-states",
+      "label": "25¢",
+      "faceValue": 0.25,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "united-states",
+      "label": "50¢",
+      "faceValue": 0.5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "united-states",
+      "label": "$1",
+      "faceValue": 1,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "united-states",
+      "label": "Trade Dollar",
+      "faceValue": 1,
+      "sortOrder": 115
+    },
+    {
+      "issuer": "united-states",
+      "label": "$2.50",
+      "faceValue": 2.5,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "united-states",
+      "label": "$3",
+      "faceValue": 3,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "united-states",
+      "label": "$5",
+      "faceValue": 5,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "united-states",
+      "label": "$10",
+      "faceValue": 10,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "united-states",
+      "label": "$20",
+      "faceValue": 20,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "united-states",
+      "label": "$25",
+      "faceValue": 25,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "united-states",
+      "label": "$50",
+      "faceValue": 50,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "united-states",
+      "label": "$100",
+      "faceValue": 100,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "great-britain",
+      "label": "½ Farthing",
+      "faceValue": 0.000521,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "great-britain",
+      "label": "Farthing",
+      "faceValue": 0.001042,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "great-britain",
+      "label": "½d",
+      "faceValue": 0.002083,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "great-britain",
+      "label": "1d",
+      "faceValue": 0.004167,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "great-britain",
+      "label": "3d",
+      "faceValue": 0.0125,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "great-britain",
+      "label": "4d (Groat)",
+      "faceValue": 0.016667,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "great-britain",
+      "label": "6d",
+      "faceValue": 0.025,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "great-britain",
+      "label": "1/-",
+      "faceValue": 0.05,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "great-britain",
+      "label": "2/- (Florin)",
+      "faceValue": 0.1,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "great-britain",
+      "label": "2/6 (Half Crown)",
+      "faceValue": 0.125,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "great-britain",
+      "label": "4/- (Double Florin)",
+      "faceValue": 0.2,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "great-britain",
+      "label": "5/- (Crown)",
+      "faceValue": 0.25,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "great-britain",
+      "label": "½ Sovereign",
+      "faceValue": 0.5,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "great-britain",
+      "label": "½ Guinea",
+      "faceValue": 0.525,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "great-britain",
+      "label": "Sovereign",
+      "faceValue": 1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "great-britain",
+      "label": "Guinea",
+      "faceValue": 1.05,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "great-britain",
+      "label": "2 Guineas",
+      "faceValue": 2.1,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "great-britain",
+      "label": "5 Guineas",
+      "faceValue": 5.25,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "great-britain",
+      "label": "½p",
+      "faceValue": 0.005,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "great-britain",
+      "label": "1p",
+      "faceValue": 0.01,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "great-britain",
+      "label": "2p",
+      "faceValue": 0.02,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "great-britain",
+      "label": "5p",
+      "faceValue": 0.05,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "great-britain",
+      "label": "10p",
+      "faceValue": 0.1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "great-britain",
+      "label": "20p",
+      "faceValue": 0.2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "great-britain",
+      "label": "25p (Crown)",
+      "faceValue": 0.25,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "great-britain",
+      "label": "50p",
+      "faceValue": 0.5,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£1",
+      "faceValue": 1,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£2",
+      "faceValue": 2,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£5",
+      "faceValue": 5,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£20",
+      "faceValue": 20,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£50",
+      "faceValue": 50,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "great-britain",
+      "label": "£100",
+      "faceValue": 100,
+      "sortOrder": 320
+    },
+    {
+      "issuer": "canada",
+      "label": "1¢",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "canada",
+      "label": "5¢",
+      "faceValue": 0.05,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "canada",
+      "label": "10¢",
+      "faceValue": 0.1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "canada",
+      "label": "25¢",
+      "faceValue": 0.25,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "canada",
+      "label": "50¢",
+      "faceValue": 0.5,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "canada",
+      "label": "$1",
+      "faceValue": 1,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "canada",
+      "label": "$2",
+      "faceValue": 2,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "canada",
+      "label": "$5",
+      "faceValue": 5,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "canada",
+      "label": "$10",
+      "faceValue": 10,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "canada",
+      "label": "$20",
+      "faceValue": 20,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "canada",
+      "label": "$50",
+      "faceValue": 50,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "canada",
+      "label": "$100",
+      "faceValue": 100,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "canada",
+      "label": "$200",
+      "faceValue": 200,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "mexico",
+      "label": "¼ Real",
+      "faceValue": 0.25,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "mexico",
+      "label": "½ Real",
+      "faceValue": 0.5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "mexico",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "mexico",
+      "label": "2 Reales",
+      "faceValue": 2,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "mexico",
+      "label": "4 Reales",
+      "faceValue": 4,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "mexico",
+      "label": "8 Reales",
+      "faceValue": 8,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "mexico",
+      "label": "½ Escudo",
+      "faceValue": 8,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "mexico",
+      "label": "1 Escudo",
+      "faceValue": 16,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "mexico",
+      "label": "2 Escudos",
+      "faceValue": 32,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "mexico",
+      "label": "4 Escudos",
+      "faceValue": 64,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "mexico",
+      "label": "8 Escudos",
+      "faceValue": 128,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "mexico",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "mexico",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "mexico",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "mexico",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "mexico",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "mexico",
+      "label": "25 Centavos",
+      "faceValue": 0.25,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "mexico",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "mexico",
+      "label": "1 Peso",
+      "faceValue": 1,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "mexico",
+      "label": "2 Pesos",
+      "faceValue": 2,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "mexico",
+      "label": "2½ Pesos",
+      "faceValue": 2.5,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "mexico",
+      "label": "5 Pesos",
+      "faceValue": 5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "mexico",
+      "label": "10 Pesos",
+      "faceValue": 10,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "mexico",
+      "label": "20 Pesos",
+      "faceValue": 20,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "mexico",
+      "label": "25 Pesos",
+      "faceValue": 25,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "mexico",
+      "label": "50 Pesos",
+      "faceValue": 50,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "mexico",
+      "label": "100 Pesos",
+      "faceValue": 100,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "mexico",
+      "label": "200 Pesos",
+      "faceValue": 200,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "mexico",
+      "label": "500 Pesos",
+      "faceValue": 500,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "mexico",
+      "label": "1000 Pesos",
+      "faceValue": 1000,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "mexico",
+      "label": "5000 Pesos",
+      "faceValue": 5000,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "australia",
+      "label": "Halfpenny",
+      "faceValue": 0.002083,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "australia",
+      "label": "Penny",
+      "faceValue": 0.004167,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "australia",
+      "label": "Threepence",
+      "faceValue": 0.0125,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "australia",
+      "label": "Sixpence",
+      "faceValue": 0.025,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "australia",
+      "label": "Shilling",
+      "faceValue": 0.05,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "australia",
+      "label": "Florin",
+      "faceValue": 0.1,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "australia",
+      "label": "Crown",
+      "faceValue": 0.25,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "australia",
+      "label": "½ Sovereign",
+      "faceValue": 0.5,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "australia",
+      "label": "Sovereign",
+      "faceValue": 1,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "australia",
+      "label": "1 Cent",
+      "faceValue": 0.01,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "australia",
+      "label": "2 Cents",
+      "faceValue": 0.02,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "australia",
+      "label": "5 Cents",
+      "faceValue": 0.05,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "australia",
+      "label": "10 Cents",
+      "faceValue": 0.1,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "australia",
+      "label": "20 Cents",
+      "faceValue": 0.2,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "australia",
+      "label": "50 Cents",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "australia",
+      "label": "1 Dollar",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "australia",
+      "label": "2 Dollars",
+      "faceValue": 2,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "australia",
+      "label": "5 Dollars",
+      "faceValue": 5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "australia",
+      "label": "10 Dollars",
+      "faceValue": 10,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "australia",
+      "label": "25 Dollars",
+      "faceValue": 25,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "australia",
+      "label": "50 Dollars",
+      "faceValue": 50,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "australia",
+      "label": "100 Dollars",
+      "faceValue": 100,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "australia",
+      "label": "200 Dollars",
+      "faceValue": 200,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Halfpenny",
+      "faceValue": 0.002083,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Penny",
+      "faceValue": 0.004167,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Threepence",
+      "faceValue": 0.0125,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Sixpence",
+      "faceValue": 0.025,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Shilling",
+      "faceValue": 0.05,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Florin",
+      "faceValue": 0.1,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Half Crown",
+      "faceValue": 0.125,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "Crown",
+      "faceValue": 0.25,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "1 Cent",
+      "faceValue": 0.01,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "2 Cents",
+      "faceValue": 0.02,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "5 Cents",
+      "faceValue": 0.05,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "10 Cents",
+      "faceValue": 0.1,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "20 Cents",
+      "faceValue": 0.2,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "50 Cents",
+      "faceValue": 0.5,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "1 Dollar",
+      "faceValue": 1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "2 Dollars",
+      "faceValue": 2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "5 Dollars",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "new-zealand",
+      "label": "10 Dollars",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "ireland",
+      "label": "Farthing",
+      "faceValue": 0.001042,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "ireland",
+      "label": "Halfpenny",
+      "faceValue": 0.002083,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "ireland",
+      "label": "Penny",
+      "faceValue": 0.004167,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "ireland",
+      "label": "Threepence",
+      "faceValue": 0.0125,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "ireland",
+      "label": "Sixpence",
+      "faceValue": 0.025,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "ireland",
+      "label": "Shilling",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "ireland",
+      "label": "Florin",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "ireland",
+      "label": "Half Crown",
+      "faceValue": 0.125,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "ireland",
+      "label": "½p",
+      "faceValue": 0.005,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "ireland",
+      "label": "1p",
+      "faceValue": 0.01,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "ireland",
+      "label": "2p",
+      "faceValue": 0.02,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "ireland",
+      "label": "5p",
+      "faceValue": 0.05,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "ireland",
+      "label": "10p",
+      "faceValue": 0.1,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "ireland",
+      "label": "20p",
+      "faceValue": 0.2,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "ireland",
+      "label": "50p",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "ireland",
+      "label": "£1",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "ireland",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "ireland",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "ireland",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "ireland",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "ireland",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "ireland",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "ireland",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "ireland",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "france",
+      "label": "1 Centime",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "france",
+      "label": "2 Centimes",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "france",
+      "label": "5 Centimes",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "france",
+      "label": "10 Centimes",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "france",
+      "label": "1 Décime",
+      "faceValue": 0.1,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "france",
+      "label": "20 Centimes",
+      "faceValue": 0.2,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "france",
+      "label": "25 Centimes",
+      "faceValue": 0.25,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "france",
+      "label": "50 Centimes",
+      "faceValue": 0.5,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "france",
+      "label": "¼ Franc",
+      "faceValue": 0.25,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "france",
+      "label": "½ Franc",
+      "faceValue": 0.5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "france",
+      "label": "1 Franc",
+      "faceValue": 1,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "france",
+      "label": "2 Francs",
+      "faceValue": 2,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "france",
+      "label": "5 Francs",
+      "faceValue": 5,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "france",
+      "label": "10 Francs",
+      "faceValue": 10,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "france",
+      "label": "20 Francs",
+      "faceValue": 20,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "france",
+      "label": "40 Francs",
+      "faceValue": 40,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "france",
+      "label": "50 Francs",
+      "faceValue": 50,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "france",
+      "label": "100 Francs",
+      "faceValue": 100,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "france",
+      "label": "500 Francs",
+      "faceValue": 500,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "france",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "france",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "france",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "france",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "france",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "france",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "france",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "france",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Pfennig",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Pfennig",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Pfennig",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "germany",
+      "label": "10 Pfennig",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "germany",
+      "label": "50 Pfennig",
+      "faceValue": 0.5,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Mark",
+      "faceValue": 1,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Mark",
+      "faceValue": 2,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "germany",
+      "label": "3 Mark",
+      "faceValue": 3,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Mark",
+      "faceValue": 5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Reichspfennig",
+      "faceValue": 0.01,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Reichspfennig",
+      "faceValue": 0.02,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "germany",
+      "label": "4 Reichspfennig",
+      "faceValue": 0.04,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Reichspfennig",
+      "faceValue": 0.05,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "germany",
+      "label": "10 Reichspfennig",
+      "faceValue": 0.1,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "germany",
+      "label": "50 Reichspfennig",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Reichsmark",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Reichsmark",
+      "faceValue": 2,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Reichsmark",
+      "faceValue": 5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Deutsche Mark",
+      "faceValue": 1,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Deutsche Mark",
+      "faceValue": 2,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Deutsche Mark",
+      "faceValue": 5,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "germany",
+      "label": "10 Deutsche Mark",
+      "faceValue": 10,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "germany",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "germany",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "germany",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "germany",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "germany",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "germany",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "austria",
+      "label": "Thaler",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "austria",
+      "label": "½ Kreuzer",
+      "faceValue": 0.5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Kreuzer",
+      "faceValue": 1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "austria",
+      "label": "4 Kreuzer",
+      "faceValue": 4,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "austria",
+      "label": "5 Kreuzer",
+      "faceValue": 5,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Kreuzer",
+      "faceValue": 10,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Kreuzer",
+      "faceValue": 20,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "austria",
+      "label": "¼ Florin",
+      "faceValue": 25,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Florin",
+      "faceValue": 100,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Florin",
+      "faceValue": 200,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "austria",
+      "label": "4 Ducats",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Heller",
+      "faceValue": 0.01,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Heller",
+      "faceValue": 0.02,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Heller",
+      "faceValue": 0.1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Heller",
+      "faceValue": 0.2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Krone",
+      "faceValue": 1,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Kronen",
+      "faceValue": 2,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "austria",
+      "label": "5 Kronen",
+      "faceValue": 5,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Kronen",
+      "faceValue": 10,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Kronen",
+      "faceValue": 20,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "austria",
+      "label": "100 Kronen",
+      "faceValue": 100,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Groschen",
+      "faceValue": 0.01,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Groschen",
+      "faceValue": 0.02,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "austria",
+      "label": "5 Groschen",
+      "faceValue": 0.05,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Groschen",
+      "faceValue": 0.1,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Groschen",
+      "faceValue": 0.2,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "austria",
+      "label": "50 Groschen",
+      "faceValue": 0.5,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Schilling",
+      "faceValue": 1,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Schilling",
+      "faceValue": 2,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "austria",
+      "label": "5 Schilling",
+      "faceValue": 5,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Schilling",
+      "faceValue": 10,
+      "sortOrder": 320
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Schilling",
+      "faceValue": 20,
+      "sortOrder": 330
+    },
+    {
+      "issuer": "austria",
+      "label": "25 Schilling",
+      "faceValue": 25,
+      "sortOrder": 340
+    },
+    {
+      "issuer": "austria",
+      "label": "50 Schilling",
+      "faceValue": 50,
+      "sortOrder": 350
+    },
+    {
+      "issuer": "austria",
+      "label": "100 Schilling",
+      "faceValue": 100,
+      "sortOrder": 360
+    },
+    {
+      "issuer": "austria",
+      "label": "500 Schilling",
+      "faceValue": 500,
+      "sortOrder": 370
+    },
+    {
+      "issuer": "austria",
+      "label": "1000 Schilling",
+      "faceValue": 1000,
+      "sortOrder": 380
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 390
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 400
+    },
+    {
+      "issuer": "austria",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 410
+    },
+    {
+      "issuer": "austria",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 420
+    },
+    {
+      "issuer": "austria",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 430
+    },
+    {
+      "issuer": "austria",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 440
+    },
+    {
+      "issuer": "austria",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 450
+    },
+    {
+      "issuer": "austria",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 460
+    },
+    {
+      "issuer": "switzerland",
+      "label": "1 Rappen",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "switzerland",
+      "label": "2 Rappen",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "switzerland",
+      "label": "5 Rappen",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "switzerland",
+      "label": "10 Rappen",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "switzerland",
+      "label": "20 Rappen",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "switzerland",
+      "label": "½ Franc",
+      "faceValue": 0.5,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "switzerland",
+      "label": "1 Franc",
+      "faceValue": 1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "switzerland",
+      "label": "2 Francs",
+      "faceValue": 2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "switzerland",
+      "label": "5 Francs",
+      "faceValue": 5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "switzerland",
+      "label": "10 Francs",
+      "faceValue": 10,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "switzerland",
+      "label": "20 Francs",
+      "faceValue": 20,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "switzerland",
+      "label": "100 Francs",
+      "faceValue": 100,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "netherlands",
+      "label": "½ Cent",
+      "faceValue": 0.005,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "netherlands",
+      "label": "1 Cent",
+      "faceValue": 0.01,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "netherlands",
+      "label": "2½ Cent",
+      "faceValue": 0.025,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "netherlands",
+      "label": "5 Cent",
+      "faceValue": 0.05,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "netherlands",
+      "label": "10 Cent",
+      "faceValue": 0.1,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "netherlands",
+      "label": "25 Cent",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "netherlands",
+      "label": "½ Gulden",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "netherlands",
+      "label": "1 Gulden",
+      "faceValue": 1,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "netherlands",
+      "label": "2½ Gulden",
+      "faceValue": 2.5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "netherlands",
+      "label": "5 Gulden",
+      "faceValue": 5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "netherlands",
+      "label": "10 Gulden",
+      "faceValue": 10,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "netherlands",
+      "label": "50 Gulden",
+      "faceValue": 50,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "netherlands",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "netherlands",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "netherlands",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "netherlands",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "netherlands",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "netherlands",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "netherlands",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "netherlands",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "netherlands",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "belgium",
+      "label": "1 Centime",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "belgium",
+      "label": "2 Centimes",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "belgium",
+      "label": "5 Centimes",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "belgium",
+      "label": "10 Centimes",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "belgium",
+      "label": "20 Centimes",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "belgium",
+      "label": "25 Centimes",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "belgium",
+      "label": "50 Centimes",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "belgium",
+      "label": "1 Franc",
+      "faceValue": 1,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "belgium",
+      "label": "2 Francs",
+      "faceValue": 2,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "belgium",
+      "label": "5 Francs",
+      "faceValue": 5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "belgium",
+      "label": "10 Francs",
+      "faceValue": 10,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "belgium",
+      "label": "20 Francs",
+      "faceValue": 20,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "belgium",
+      "label": "50 Francs",
+      "faceValue": 50,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "belgium",
+      "label": "100 Francs",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "belgium",
+      "label": "250 Francs",
+      "faceValue": 250,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "belgium",
+      "label": "500 Francs",
+      "faceValue": 500,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "belgium",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "belgium",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "belgium",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "belgium",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "belgium",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "belgium",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "belgium",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "belgium",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Maravedí",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Maravedís",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "spain",
+      "label": "4 Maravedís",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "spain",
+      "label": "8 Maravedís",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "spain",
+      "label": "½ Real",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Real",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Reales",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "spain",
+      "label": "4 Reales",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "spain",
+      "label": "8 Reales",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "spain",
+      "label": "10 Reales",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "spain",
+      "label": "20 Reales",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "spain",
+      "label": "100 Reales",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "spain",
+      "label": "½ Escudo",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Escudo",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Escudos",
+      "faceValue": null,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "spain",
+      "label": "4 Escudos",
+      "faceValue": null,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "spain",
+      "label": "8 Escudos",
+      "faceValue": null,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Céntimo",
+      "faceValue": 0.01,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Céntimos",
+      "faceValue": 0.02,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "spain",
+      "label": "5 Céntimos",
+      "faceValue": 0.05,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "spain",
+      "label": "10 Céntimos",
+      "faceValue": 0.1,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "spain",
+      "label": "25 Céntimos",
+      "faceValue": 0.25,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "spain",
+      "label": "50 Céntimos",
+      "faceValue": 0.5,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Peseta",
+      "faceValue": 1,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Pesetas",
+      "faceValue": 2,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "spain",
+      "label": "5 Pesetas",
+      "faceValue": 5,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "spain",
+      "label": "10 Pesetas",
+      "faceValue": 10,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "spain",
+      "label": "20 Pesetas",
+      "faceValue": 20,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "spain",
+      "label": "25 Pesetas",
+      "faceValue": 25,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "spain",
+      "label": "50 Pesetas",
+      "faceValue": 50,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "spain",
+      "label": "100 Pesetas",
+      "faceValue": 100,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "spain",
+      "label": "200 Pesetas",
+      "faceValue": 200,
+      "sortOrder": 320
+    },
+    {
+      "issuer": "spain",
+      "label": "500 Pesetas",
+      "faceValue": 500,
+      "sortOrder": 330
+    },
+    {
+      "issuer": "spain",
+      "label": "2000 Pesetas",
+      "faceValue": 2000,
+      "sortOrder": 340
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 350
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 360
+    },
+    {
+      "issuer": "spain",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 370
+    },
+    {
+      "issuer": "spain",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 380
+    },
+    {
+      "issuer": "spain",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 390
+    },
+    {
+      "issuer": "spain",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 400
+    },
+    {
+      "issuer": "spain",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 410
+    },
+    {
+      "issuer": "spain",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 420
+    },
+    {
+      "issuer": "portugal",
+      "label": "3 Réis",
+      "faceValue": 3,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "portugal",
+      "label": "5 Réis",
+      "faceValue": 5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "portugal",
+      "label": "10 Réis",
+      "faceValue": 10,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "portugal",
+      "label": "20 Réis",
+      "faceValue": 20,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "portugal",
+      "label": "40 Réis",
+      "faceValue": 40,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "portugal",
+      "label": "50 Réis",
+      "faceValue": 50,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "portugal",
+      "label": "100 Réis",
+      "faceValue": 100,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "portugal",
+      "label": "200 Réis",
+      "faceValue": 200,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "portugal",
+      "label": "500 Réis",
+      "faceValue": 500,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "portugal",
+      "label": "1000 Réis",
+      "faceValue": 1000,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "portugal",
+      "label": "2000 Réis",
+      "faceValue": 2000,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "portugal",
+      "label": "5000 Réis",
+      "faceValue": 5000,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "portugal",
+      "label": "10000 Réis",
+      "faceValue": 10000,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "portugal",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "portugal",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "portugal",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "portugal",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "portugal",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "portugal",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "portugal",
+      "label": "1 Escudo",
+      "faceValue": 1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "portugal",
+      "label": "2½ Escudos",
+      "faceValue": 2.5,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "portugal",
+      "label": "5 Escudos",
+      "faceValue": 5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "portugal",
+      "label": "10 Escudos",
+      "faceValue": 10,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "portugal",
+      "label": "20 Escudos",
+      "faceValue": 20,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "portugal",
+      "label": "25 Escudos",
+      "faceValue": 25,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "portugal",
+      "label": "50 Escudos",
+      "faceValue": 50,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "portugal",
+      "label": "100 Escudos",
+      "faceValue": 100,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "portugal",
+      "label": "200 Escudos",
+      "faceValue": 200,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "portugal",
+      "label": "500 Escudos",
+      "faceValue": 500,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "portugal",
+      "label": "1000 Escudos",
+      "faceValue": 1000,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "portugal",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "portugal",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 320
+    },
+    {
+      "issuer": "portugal",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 330
+    },
+    {
+      "issuer": "portugal",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 340
+    },
+    {
+      "issuer": "portugal",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 350
+    },
+    {
+      "issuer": "portugal",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 360
+    },
+    {
+      "issuer": "portugal",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 370
+    },
+    {
+      "issuer": "portugal",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 380
+    },
+    {
+      "issuer": "italy",
+      "label": "1 Centesimo",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "italy",
+      "label": "2 Centesimi",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "italy",
+      "label": "5 Centesimi",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "italy",
+      "label": "10 Centesimi",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "italy",
+      "label": "20 Centesimi",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "italy",
+      "label": "25 Centesimi",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "italy",
+      "label": "50 Centesimi",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "italy",
+      "label": "1 Lira",
+      "faceValue": 1,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "italy",
+      "label": "2 Lire",
+      "faceValue": 2,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "italy",
+      "label": "5 Lire",
+      "faceValue": 5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "italy",
+      "label": "10 Lire",
+      "faceValue": 10,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "italy",
+      "label": "20 Lire",
+      "faceValue": 20,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "italy",
+      "label": "50 Lire",
+      "faceValue": 50,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "italy",
+      "label": "100 Lire",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "italy",
+      "label": "200 Lire",
+      "faceValue": 200,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "italy",
+      "label": "500 Lire",
+      "faceValue": 500,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "italy",
+      "label": "1000 Lire",
+      "faceValue": 1000,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "italy",
+      "label": "5000 Lire",
+      "faceValue": 5000,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "italy",
+      "label": "10000 Lire",
+      "faceValue": 10000,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "italy",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "italy",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "italy",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "italy",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "italy",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "italy",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "italy",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "italy",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "denmark",
+      "label": "1 Skilling",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "denmark",
+      "label": "2 Skilling",
+      "faceValue": 2,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "denmark",
+      "label": "4 Skilling",
+      "faceValue": 4,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "denmark",
+      "label": "8 Skilling",
+      "faceValue": 8,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "denmark",
+      "label": "16 Skilling",
+      "faceValue": 16,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "denmark",
+      "label": "32 Skilling",
+      "faceValue": 32,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "denmark",
+      "label": "1 Rigsdaler",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "denmark",
+      "label": "2 Rigsdaler",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "denmark",
+      "label": "1 Speciedaler",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "denmark",
+      "label": "1 Øre",
+      "faceValue": 0.01,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "denmark",
+      "label": "2 Øre",
+      "faceValue": 0.02,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "denmark",
+      "label": "5 Øre",
+      "faceValue": 0.05,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "denmark",
+      "label": "10 Øre",
+      "faceValue": 0.1,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "denmark",
+      "label": "25 Øre",
+      "faceValue": 0.25,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "denmark",
+      "label": "50 Øre",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "denmark",
+      "label": "1 Krone",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "denmark",
+      "label": "2 Kroner",
+      "faceValue": 2,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "denmark",
+      "label": "5 Kroner",
+      "faceValue": 5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "denmark",
+      "label": "10 Kroner",
+      "faceValue": 10,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "denmark",
+      "label": "20 Kroner",
+      "faceValue": 20,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "denmark",
+      "label": "200 Kroner",
+      "faceValue": 200,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "denmark",
+      "label": "500 Kroner",
+      "faceValue": 500,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "sweden",
+      "label": "1 Riksdaler",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "sweden",
+      "label": "1 Öre",
+      "faceValue": 0.01,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "sweden",
+      "label": "2 Öre",
+      "faceValue": 0.02,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "sweden",
+      "label": "5 Öre",
+      "faceValue": 0.05,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "sweden",
+      "label": "10 Öre",
+      "faceValue": 0.1,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "sweden",
+      "label": "25 Öre",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "sweden",
+      "label": "50 Öre",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "sweden",
+      "label": "1 Krona",
+      "faceValue": 1,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "sweden",
+      "label": "2 Kronor",
+      "faceValue": 2,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "sweden",
+      "label": "5 Kronor",
+      "faceValue": 5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "sweden",
+      "label": "10 Kronor",
+      "faceValue": 10,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "sweden",
+      "label": "20 Kronor",
+      "faceValue": 20,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "sweden",
+      "label": "50 Kronor",
+      "faceValue": 50,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "sweden",
+      "label": "100 Kronor",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "sweden",
+      "label": "200 Kronor",
+      "faceValue": 200,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "sweden",
+      "label": "1000 Kronor",
+      "faceValue": 1000,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "norway",
+      "label": "1 Skilling",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "norway",
+      "label": "2 Skilling",
+      "faceValue": 2,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "norway",
+      "label": "3 Skilling",
+      "faceValue": 3,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "norway",
+      "label": "4 Skilling",
+      "faceValue": 4,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "norway",
+      "label": "8 Skilling",
+      "faceValue": 8,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "norway",
+      "label": "12 Skilling",
+      "faceValue": 12,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "norway",
+      "label": "24 Skilling",
+      "faceValue": 24,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "norway",
+      "label": "1 Speciedaler",
+      "faceValue": 120,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "norway",
+      "label": "1 Øre",
+      "faceValue": 0.01,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "norway",
+      "label": "2 Øre",
+      "faceValue": 0.02,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "norway",
+      "label": "5 Øre",
+      "faceValue": 0.05,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "norway",
+      "label": "10 Øre",
+      "faceValue": 0.1,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "norway",
+      "label": "25 Øre",
+      "faceValue": 0.25,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "norway",
+      "label": "50 Øre",
+      "faceValue": 0.5,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "norway",
+      "label": "1 Krone",
+      "faceValue": 1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "norway",
+      "label": "2 Kroner",
+      "faceValue": 2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "norway",
+      "label": "5 Kroner",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "norway",
+      "label": "10 Kroner",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "norway",
+      "label": "20 Kroner",
+      "faceValue": 20,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "norway",
+      "label": "50 Kroner",
+      "faceValue": 50,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "norway",
+      "label": "100 Kroner",
+      "faceValue": 100,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "norway",
+      "label": "200 Kroner",
+      "faceValue": 200,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "norway",
+      "label": "1500 Kroner",
+      "faceValue": 1500,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "finland",
+      "label": "1 Penni",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "finland",
+      "label": "5 Penniä",
+      "faceValue": 0.05,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "finland",
+      "label": "10 Penniä",
+      "faceValue": 0.1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "finland",
+      "label": "20 Penniä",
+      "faceValue": 0.2,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "finland",
+      "label": "25 Penniä",
+      "faceValue": 0.25,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "finland",
+      "label": "50 Penniä",
+      "faceValue": 0.5,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "finland",
+      "label": "1 Markka",
+      "faceValue": 1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "finland",
+      "label": "2 Markkaa",
+      "faceValue": 2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "finland",
+      "label": "5 Markkaa",
+      "faceValue": 5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "finland",
+      "label": "10 Markkaa",
+      "faceValue": 10,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "finland",
+      "label": "20 Markkaa",
+      "faceValue": 20,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "finland",
+      "label": "25 Markkaa",
+      "faceValue": 25,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "finland",
+      "label": "50 Markkaa",
+      "faceValue": 50,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "finland",
+      "label": "100 Markkaa",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "finland",
+      "label": "500 Markkaa",
+      "faceValue": 500,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "finland",
+      "label": "1000 Markkaa",
+      "faceValue": 1000,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "finland",
+      "label": "1 Euro Cent",
+      "faceValue": 0.01,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "finland",
+      "label": "2 Euro Cent",
+      "faceValue": 0.02,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "finland",
+      "label": "5 Euro Cent",
+      "faceValue": 0.05,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "finland",
+      "label": "10 Euro Cent",
+      "faceValue": 0.1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "finland",
+      "label": "20 Euro Cent",
+      "faceValue": 0.2,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "finland",
+      "label": "50 Euro Cent",
+      "faceValue": 0.5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "finland",
+      "label": "1 Euro",
+      "faceValue": 1,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "finland",
+      "label": "2 Euro",
+      "faceValue": 2,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "russia",
+      "label": "¼ Kopek",
+      "faceValue": 0.0025,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "russia",
+      "label": "½ Kopek",
+      "faceValue": 0.005,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "russia",
+      "label": "1 Kopek",
+      "faceValue": 0.01,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "russia",
+      "label": "2 Kopeks",
+      "faceValue": 0.02,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "russia",
+      "label": "3 Kopeks",
+      "faceValue": 0.03,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "russia",
+      "label": "5 Kopeks",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "russia",
+      "label": "10 Kopeks",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "russia",
+      "label": "15 Kopeks",
+      "faceValue": 0.15,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "russia",
+      "label": "20 Kopeks",
+      "faceValue": 0.2,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "russia",
+      "label": "25 Kopeks",
+      "faceValue": 0.25,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "russia",
+      "label": "50 Kopeks",
+      "faceValue": 0.5,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "russia",
+      "label": "1 Ruble",
+      "faceValue": 1,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "russia",
+      "label": "2 Rubles",
+      "faceValue": 2,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "russia",
+      "label": "3 Rubles",
+      "faceValue": 3,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "russia",
+      "label": "5 Rubles",
+      "faceValue": 5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "russia",
+      "label": "10 Rubles",
+      "faceValue": 10,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "russia",
+      "label": "15 Rubles",
+      "faceValue": 15,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "russia",
+      "label": "25 Rubles",
+      "faceValue": 25,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "russia",
+      "label": "50 Rubles",
+      "faceValue": 50,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "russia",
+      "label": "100 Rubles",
+      "faceValue": 100,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "poland",
+      "label": "1 Grosz",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "poland",
+      "label": "2 Grosze",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "poland",
+      "label": "5 Groszy",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "poland",
+      "label": "10 Groszy",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "poland",
+      "label": "20 Groszy",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "poland",
+      "label": "50 Groszy",
+      "faceValue": 0.5,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "poland",
+      "label": "1 Złoty",
+      "faceValue": 1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "poland",
+      "label": "2 Złote",
+      "faceValue": 2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "poland",
+      "label": "5 Złotych",
+      "faceValue": 5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "poland",
+      "label": "10 Złotych",
+      "faceValue": 10,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "poland",
+      "label": "20 Złotych",
+      "faceValue": 20,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "poland",
+      "label": "50 Złotych",
+      "faceValue": 50,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "poland",
+      "label": "100 Złotych",
+      "faceValue": 100,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "poland",
+      "label": "200 Złotych",
+      "faceValue": 200,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "poland",
+      "label": "500 Złotych",
+      "faceValue": 500,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "poland",
+      "label": "1000 Złotych",
+      "faceValue": 1000,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "poland",
+      "label": "2000 Złotych",
+      "faceValue": 2000,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "poland",
+      "label": "5000 Złotych",
+      "faceValue": 5000,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "poland",
+      "label": "10000 Złotych",
+      "faceValue": 10000,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "poland",
+      "label": "20000 Złotych",
+      "faceValue": 20000,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "poland",
+      "label": "100000 Złotych",
+      "faceValue": 100000,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "poland",
+      "label": "200000 Złotych",
+      "faceValue": 200000,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "china",
+      "label": "1 Cash",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "china",
+      "label": "10 Cash",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "china",
+      "label": "20 Cash",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "china",
+      "label": "100 Cash",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "china",
+      "label": "1 Cent",
+      "faceValue": 0.01,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "china",
+      "label": "5 Cents",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "china",
+      "label": "10 Cents",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "china",
+      "label": "20 Cents",
+      "faceValue": 0.2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "china",
+      "label": "50 Cents",
+      "faceValue": 0.5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "china",
+      "label": "1 Dollar",
+      "faceValue": 1,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "china",
+      "label": "1 Fen",
+      "faceValue": 0.01,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "china",
+      "label": "2 Fen",
+      "faceValue": 0.02,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "china",
+      "label": "5 Fen",
+      "faceValue": 0.05,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "china",
+      "label": "1 Jiao",
+      "faceValue": 0.1,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "china",
+      "label": "5 Jiao",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "china",
+      "label": "1 Yuan",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "china",
+      "label": "5 Yuan",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "china",
+      "label": "10 Yuan",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "china",
+      "label": "20 Yuan",
+      "faceValue": 20,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "china",
+      "label": "50 Yuan",
+      "faceValue": 50,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "china",
+      "label": "100 Yuan",
+      "faceValue": 100,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "china",
+      "label": "200 Yuan",
+      "faceValue": 200,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "china",
+      "label": "500 Yuan",
+      "faceValue": 500,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "japan",
+      "label": "1 Rin",
+      "faceValue": 0.001,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "japan",
+      "label": "5 Rin",
+      "faceValue": 0.005,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "japan",
+      "label": "½ Sen",
+      "faceValue": 0.005,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "japan",
+      "label": "1 Sen",
+      "faceValue": 0.01,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "japan",
+      "label": "2 Sen",
+      "faceValue": 0.02,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "japan",
+      "label": "5 Sen",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "japan",
+      "label": "10 Sen",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "japan",
+      "label": "20 Sen",
+      "faceValue": 0.2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "japan",
+      "label": "50 Sen",
+      "faceValue": 0.5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "japan",
+      "label": "1 Yen",
+      "faceValue": 1,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "japan",
+      "label": "2 Yen",
+      "faceValue": 2,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "japan",
+      "label": "5 Yen",
+      "faceValue": 5,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "japan",
+      "label": "10 Yen",
+      "faceValue": 10,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "japan",
+      "label": "20 Yen",
+      "faceValue": 20,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "japan",
+      "label": "50 Yen",
+      "faceValue": 50,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "japan",
+      "label": "100 Yen",
+      "faceValue": 100,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "japan",
+      "label": "500 Yen",
+      "faceValue": 500,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "japan",
+      "label": "1000 Yen",
+      "faceValue": 1000,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "japan",
+      "label": "10000 Yen",
+      "faceValue": 10000,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "japan",
+      "label": "100000 Yen",
+      "faceValue": 100000,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "south-korea",
+      "label": "1 Won",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "south-korea",
+      "label": "5 Won",
+      "faceValue": 5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "south-korea",
+      "label": "10 Won",
+      "faceValue": 10,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "south-korea",
+      "label": "50 Won",
+      "faceValue": 50,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "south-korea",
+      "label": "100 Won",
+      "faceValue": 100,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "south-korea",
+      "label": "500 Won",
+      "faceValue": 500,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "south-korea",
+      "label": "1000 Won",
+      "faceValue": 1000,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "south-korea",
+      "label": "10000 Won",
+      "faceValue": 10000,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "south-korea",
+      "label": "50000 Won",
+      "faceValue": 50000,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "india",
+      "label": "1 Pie",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "india",
+      "label": "1/12 Anna",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "india",
+      "label": "½ Pice",
+      "faceValue": 1.5,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "india",
+      "label": "1 Pice",
+      "faceValue": 3,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "india",
+      "label": "¼ Anna",
+      "faceValue": 3,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "india",
+      "label": "½ Anna",
+      "faceValue": 6,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "india",
+      "label": "1 Anna",
+      "faceValue": 12,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "india",
+      "label": "2 Annas",
+      "faceValue": 24,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "india",
+      "label": "¼ Rupee",
+      "faceValue": 48,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "india",
+      "label": "½ Rupee",
+      "faceValue": 96,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "india",
+      "label": "1 Rupee",
+      "faceValue": 192,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "india",
+      "label": "1 Mohur",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "india",
+      "label": "1 Paisa",
+      "faceValue": 0.01,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "india",
+      "label": "2 Paise",
+      "faceValue": 0.02,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "india",
+      "label": "3 Paise",
+      "faceValue": 0.03,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "india",
+      "label": "5 Paise",
+      "faceValue": 0.05,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "india",
+      "label": "10 Paise",
+      "faceValue": 0.1,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "india",
+      "label": "20 Paise",
+      "faceValue": 0.2,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "india",
+      "label": "25 Paise",
+      "faceValue": 0.25,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "india",
+      "label": "50 Paise",
+      "faceValue": 0.5,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "india",
+      "label": "2 Rupees",
+      "faceValue": 2,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "india",
+      "label": "5 Rupees",
+      "faceValue": 5,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "india",
+      "label": "10 Rupees",
+      "faceValue": 10,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "india",
+      "label": "20 Rupees",
+      "faceValue": 20,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "india",
+      "label": "50 Rupees",
+      "faceValue": 50,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "india",
+      "label": "100 Rupees",
+      "faceValue": 100,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "south-africa",
+      "label": "Farthing",
+      "faceValue": 0.001042,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "south-africa",
+      "label": "½ Penny",
+      "faceValue": 0.002083,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "south-africa",
+      "label": "1 Penny",
+      "faceValue": 0.004167,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "south-africa",
+      "label": "3 Pence",
+      "faceValue": 0.0125,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "south-africa",
+      "label": "6 Pence",
+      "faceValue": 0.025,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "south-africa",
+      "label": "1 Shilling",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "south-africa",
+      "label": "2 Shillings",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "south-africa",
+      "label": "2½ Shillings",
+      "faceValue": 0.125,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "south-africa",
+      "label": "5 Shillings",
+      "faceValue": 0.25,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "south-africa",
+      "label": "½ Pond",
+      "faceValue": 0.5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "south-africa",
+      "label": "1 Pond",
+      "faceValue": 1,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "south-africa",
+      "label": "½ Sovereign",
+      "faceValue": 0.5,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "south-africa",
+      "label": "Sovereign",
+      "faceValue": 1,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "south-africa",
+      "label": "½ Cent",
+      "faceValue": 0.005,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "south-africa",
+      "label": "1 Cent",
+      "faceValue": 0.01,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "south-africa",
+      "label": "2 Cents",
+      "faceValue": 0.02,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "south-africa",
+      "label": "5 Cents",
+      "faceValue": 0.05,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "south-africa",
+      "label": "10 Cents",
+      "faceValue": 0.1,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "south-africa",
+      "label": "20 Cents",
+      "faceValue": 0.2,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "south-africa",
+      "label": "50 Cents",
+      "faceValue": 0.5,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "south-africa",
+      "label": "1 Rand",
+      "faceValue": 1,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "south-africa",
+      "label": "2 Rand",
+      "faceValue": 2,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "south-africa",
+      "label": "5 Rand",
+      "faceValue": 5,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "brazil",
+      "label": "10 Réis",
+      "faceValue": 10,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "brazil",
+      "label": "20 Réis",
+      "faceValue": 20,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "brazil",
+      "label": "40 Réis",
+      "faceValue": 40,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "brazil",
+      "label": "50 Réis",
+      "faceValue": 50,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "brazil",
+      "label": "100 Réis",
+      "faceValue": 100,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "brazil",
+      "label": "200 Réis",
+      "faceValue": 200,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "brazil",
+      "label": "400 Réis",
+      "faceValue": 400,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "brazil",
+      "label": "500 Réis",
+      "faceValue": 500,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "brazil",
+      "label": "960 Réis",
+      "faceValue": 960,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "brazil",
+      "label": "1000 Réis",
+      "faceValue": 1000,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "brazil",
+      "label": "2000 Réis",
+      "faceValue": 2000,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "brazil",
+      "label": "4000 Réis",
+      "faceValue": 4000,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "brazil",
+      "label": "5000 Réis",
+      "faceValue": 5000,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "brazil",
+      "label": "10000 Réis",
+      "faceValue": 10000,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "brazil",
+      "label": "20000 Réis",
+      "faceValue": 20000,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "brazil",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "brazil",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "brazil",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "brazil",
+      "label": "1 Cruzeiro",
+      "faceValue": 1,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "brazil",
+      "label": "2 Cruzeiros",
+      "faceValue": 2,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "brazil",
+      "label": "5 Cruzeiros",
+      "faceValue": 5,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "brazil",
+      "label": "10 Cruzeiros",
+      "faceValue": 10,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "brazil",
+      "label": "20 Cruzeiros",
+      "faceValue": 20,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "brazil",
+      "label": "50 Cruzeiros",
+      "faceValue": 50,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "brazil",
+      "label": "100 Cruzeiros",
+      "faceValue": 100,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "brazil",
+      "label": "500 Cruzeiros",
+      "faceValue": 500,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "brazil",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "brazil",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "brazil",
+      "label": "25 Centavos",
+      "faceValue": 0.25,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "brazil",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "argentina",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "argentina",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "argentina",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "argentina",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "argentina",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "argentina",
+      "label": "25 Centavos",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "argentina",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "argentina",
+      "label": "1 Peso",
+      "faceValue": 1,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "argentina",
+      "label": "2 Pesos",
+      "faceValue": 2,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "argentina",
+      "label": "5 Pesos",
+      "faceValue": 5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "argentina",
+      "label": "10 Pesos",
+      "faceValue": 10,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "argentina",
+      "label": "20 Pesos",
+      "faceValue": 20,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "argentina",
+      "label": "50 Pesos",
+      "faceValue": 50,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "argentina",
+      "label": "100 Pesos",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "argentina",
+      "label": "500 Pesos",
+      "faceValue": 500,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "argentina",
+      "label": "1000 Pesos",
+      "faceValue": 1000,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "argentina",
+      "label": "½ Argentino",
+      "faceValue": 2.5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "argentina",
+      "label": "1 Argentino",
+      "faceValue": 5,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "peru",
+      "label": "½ Real",
+      "faceValue": 0.5,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "peru",
+      "label": "2 Reales",
+      "faceValue": 2,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "peru",
+      "label": "4 Reales",
+      "faceValue": 4,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "peru",
+      "label": "8 Reales",
+      "faceValue": 8,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "peru",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "peru",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "peru",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "peru",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "peru",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "peru",
+      "label": "½ Dinero",
+      "faceValue": 0.05,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Dinero",
+      "faceValue": 0.1,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "peru",
+      "label": "⅕ Sol",
+      "faceValue": 0.2,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "peru",
+      "label": "½ Sol",
+      "faceValue": 0.5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Sol",
+      "faceValue": 1,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "peru",
+      "label": "5 Soles",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "peru",
+      "label": "10 Soles",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "peru",
+      "label": "20 Soles",
+      "faceValue": 20,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "peru",
+      "label": "50 Soles",
+      "faceValue": 50,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "peru",
+      "label": "100 Soles",
+      "faceValue": 100,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "peru",
+      "label": "⅕ Libra",
+      "faceValue": 0.2,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "peru",
+      "label": "½ Libra",
+      "faceValue": 0.5,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Libra",
+      "faceValue": 1,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Céntimo",
+      "faceValue": 0.01,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "peru",
+      "label": "5 Céntimos",
+      "faceValue": 0.05,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "peru",
+      "label": "10 Céntimos",
+      "faceValue": 0.1,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "peru",
+      "label": "20 Céntimos",
+      "faceValue": 0.2,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "peru",
+      "label": "50 Céntimos",
+      "faceValue": 0.5,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "peru",
+      "label": "1 Nuevo Sol",
+      "faceValue": 1,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "peru",
+      "label": "2 Nuevos Soles",
+      "faceValue": 2,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "peru",
+      "label": "5 Nuevos Soles",
+      "faceValue": 5,
+      "sortOrder": 320
+    },
+    {
+      "issuer": "chile",
+      "label": "½ Real",
+      "faceValue": 0.5,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "chile",
+      "label": "2 Reales",
+      "faceValue": 2,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "chile",
+      "label": "4 Reales",
+      "faceValue": 4,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "chile",
+      "label": "8 Reales",
+      "faceValue": 8,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "chile",
+      "label": "½ Centavo",
+      "faceValue": 0.005,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "chile",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "chile",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "chile",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "chile",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "chile",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "chile",
+      "label": "½ Décimo",
+      "faceValue": 0.05,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Décimo",
+      "faceValue": 0.1,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Peso",
+      "faceValue": 1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "chile",
+      "label": "2 Pesos",
+      "faceValue": 2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "chile",
+      "label": "5 Pesos",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "chile",
+      "label": "10 Pesos",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "chile",
+      "label": "20 Pesos",
+      "faceValue": 20,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "chile",
+      "label": "50 Pesos",
+      "faceValue": 50,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "chile",
+      "label": "100 Pesos",
+      "faceValue": 100,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "chile",
+      "label": "500 Pesos",
+      "faceValue": 500,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Centésimo",
+      "faceValue": 0.01,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "chile",
+      "label": "5 Centésimos",
+      "faceValue": 0.05,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "chile",
+      "label": "10 Centésimos",
+      "faceValue": 0.1,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "chile",
+      "label": "50 Centésimos",
+      "faceValue": 0.5,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "chile",
+      "label": "1 Escudo",
+      "faceValue": 1,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "chile",
+      "label": "5 Escudos",
+      "faceValue": 5,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "chile",
+      "label": "10 Escudos",
+      "faceValue": 10,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "chile",
+      "label": "50 Escudos",
+      "faceValue": 50,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "chile",
+      "label": "100 Escudos",
+      "faceValue": 100,
+      "sortOrder": 310
+    },
+    {
+      "issuer": "colombia",
+      "label": "¼ Real",
+      "faceValue": 0.25,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "colombia",
+      "label": "½ Real",
+      "faceValue": 0.5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "colombia",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "colombia",
+      "label": "2 Reales",
+      "faceValue": 2,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "colombia",
+      "label": "8 Reales",
+      "faceValue": 8,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "colombia",
+      "label": "1 Centavo",
+      "faceValue": 0.01,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "colombia",
+      "label": "2 Centavos",
+      "faceValue": 0.02,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "colombia",
+      "label": "2½ Centavos",
+      "faceValue": 0.025,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "colombia",
+      "label": "5 Centavos",
+      "faceValue": 0.05,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "colombia",
+      "label": "10 Centavos",
+      "faceValue": 0.1,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "colombia",
+      "label": "20 Centavos",
+      "faceValue": 0.2,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "colombia",
+      "label": "25 Centavos",
+      "faceValue": 0.25,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "colombia",
+      "label": "50 Centavos",
+      "faceValue": 0.5,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "colombia",
+      "label": "1 Décimo",
+      "faceValue": 0.1,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "colombia",
+      "label": "1 Peso",
+      "faceValue": 1,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "colombia",
+      "label": "2 Pesos",
+      "faceValue": 2,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "colombia",
+      "label": "5 Pesos",
+      "faceValue": 5,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "colombia",
+      "label": "10 Pesos",
+      "faceValue": 10,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "colombia",
+      "label": "20 Pesos",
+      "faceValue": 20,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "colombia",
+      "label": "50 Pesos",
+      "faceValue": 50,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "colombia",
+      "label": "100 Pesos",
+      "faceValue": 100,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "colombia",
+      "label": "200 Pesos",
+      "faceValue": 200,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "colombia",
+      "label": "500 Pesos",
+      "faceValue": 500,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "colombia",
+      "label": "1000 Pesos",
+      "faceValue": 1000,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "israel",
+      "label": "1 Pruta",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "israel",
+      "label": "5 Pruta",
+      "faceValue": 5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "israel",
+      "label": "10 Pruta",
+      "faceValue": 10,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "israel",
+      "label": "25 Pruta",
+      "faceValue": 25,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "israel",
+      "label": "50 Pruta",
+      "faceValue": 50,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "israel",
+      "label": "100 Pruta",
+      "faceValue": 100,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "israel",
+      "label": "250 Pruta",
+      "faceValue": 250,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "israel",
+      "label": "500 Pruta",
+      "faceValue": 500,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "israel",
+      "label": "1 Agora",
+      "faceValue": 0.01,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "israel",
+      "label": "5 Agorot",
+      "faceValue": 0.05,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "israel",
+      "label": "10 Agorot",
+      "faceValue": 0.1,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "israel",
+      "label": "25 Agorot",
+      "faceValue": 0.25,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "israel",
+      "label": "½ Lira",
+      "faceValue": 0.5,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "israel",
+      "label": "1 Lira",
+      "faceValue": 1,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "israel",
+      "label": "5 Lirot",
+      "faceValue": 5,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "israel",
+      "label": "10 Lirot",
+      "faceValue": 10,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "israel",
+      "label": "25 Lirot",
+      "faceValue": 25,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "israel",
+      "label": "50 Lirot",
+      "faceValue": 50,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "israel",
+      "label": "100 Lirot",
+      "faceValue": 100,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "israel",
+      "label": "1 Sheqel",
+      "faceValue": 1,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "israel",
+      "label": "5 Sheqalim",
+      "faceValue": 5,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "israel",
+      "label": "10 Sheqalim",
+      "faceValue": 10,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "israel",
+      "label": "100 Sheqalim",
+      "faceValue": 100,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "israel",
+      "label": "500 Sheqalim",
+      "faceValue": 500,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "israel",
+      "label": "1000 Sheqalim",
+      "faceValue": 1000,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "israel",
+      "label": "½ New Sheqel",
+      "faceValue": 0.5,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "israel",
+      "label": "1 New Sheqel",
+      "faceValue": 1,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "israel",
+      "label": "2 New Sheqalim",
+      "faceValue": 2,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "israel",
+      "label": "5 New Sheqalim",
+      "faceValue": 5,
+      "sortOrder": 290
+    },
+    {
+      "issuer": "israel",
+      "label": "10 New Sheqalim",
+      "faceValue": 10,
+      "sortOrder": 300
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "¼ Real",
+      "faceValue": 0.25,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "½ Real",
+      "faceValue": 0.5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "1 Real",
+      "faceValue": 1,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "2 Reales",
+      "faceValue": 2,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "4 Reales",
+      "faceValue": 4,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "8 Reales",
+      "faceValue": 8,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "½ Escudo",
+      "faceValue": 8,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "1 Escudo",
+      "faceValue": 16,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "2 Escudos",
+      "faceValue": 32,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "4 Escudos",
+      "faceValue": 64,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "spanish-colonial",
+      "label": "8 Escudos",
+      "faceValue": 128,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "Farthing",
+      "faceValue": 0.001042,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "½ Penny",
+      "faceValue": 0.002083,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "1 Penny",
+      "faceValue": 0.004167,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "3 Pence",
+      "faceValue": 0.0125,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "6 Pence",
+      "faceValue": 0.025,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "1 Shilling",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "1 Florin",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "½ Crown",
+      "faceValue": 0.125,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "1 Crown",
+      "faceValue": 0.25,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "british-colonial",
+      "label": "Trade Dollar",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "german-empire",
+      "label": "1 Pfennig",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "german-empire",
+      "label": "2 Pfennig",
+      "faceValue": 0.02,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "german-empire",
+      "label": "5 Pfennig",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "german-empire",
+      "label": "10 Pfennig",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "german-empire",
+      "label": "20 Pfennig",
+      "faceValue": 0.2,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "german-empire",
+      "label": "25 Pfennig",
+      "faceValue": 0.25,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "german-empire",
+      "label": "50 Pfennig",
+      "faceValue": 0.5,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "german-empire",
+      "label": "½ Mark",
+      "faceValue": 0.5,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "german-empire",
+      "label": "1 Mark",
+      "faceValue": 1,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "german-empire",
+      "label": "2 Mark",
+      "faceValue": 2,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "german-empire",
+      "label": "3 Mark",
+      "faceValue": 3,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "german-empire",
+      "label": "5 Mark",
+      "faceValue": 5,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "german-empire",
+      "label": "10 Mark",
+      "faceValue": 10,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "german-empire",
+      "label": "20 Mark",
+      "faceValue": 20,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Pfennig",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "prussia",
+      "label": "2 Pfennige",
+      "faceValue": 2,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "prussia",
+      "label": "3 Pfennige",
+      "faceValue": 3,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "prussia",
+      "label": "4 Pfennige",
+      "faceValue": 4,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Silbergroschen",
+      "faceValue": 12,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "prussia",
+      "label": "2 Silbergroschen",
+      "faceValue": 24,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "prussia",
+      "label": "2½ Silbergroschen",
+      "faceValue": 30,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "prussia",
+      "label": "⅙ Thaler",
+      "faceValue": 60,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "prussia",
+      "label": "⅓ Thaler",
+      "faceValue": 120,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Thaler",
+      "faceValue": 360,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "prussia",
+      "label": "2 Thaler",
+      "faceValue": 720,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Vereinsthaler",
+      "faceValue": 360,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "prussia",
+      "label": "1 Friedrich d’Or",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Heller",
+      "faceValue": 0.5,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Pfennig",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Kreuzer",
+      "faceValue": 4,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "bavaria",
+      "label": "3 Kreuzer",
+      "faceValue": 12,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "bavaria",
+      "label": "6 Kreuzer",
+      "faceValue": 24,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "bavaria",
+      "label": "½ Gulden",
+      "faceValue": 120,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Gulden",
+      "faceValue": 240,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "bavaria",
+      "label": "2 Gulden",
+      "faceValue": 480,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Thaler",
+      "faceValue": 420,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "bavaria",
+      "label": "2 Thaler",
+      "faceValue": 840,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Vereinsthaler",
+      "faceValue": 420,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "bavaria",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "saxony",
+      "label": "1 Pfennig",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "saxony",
+      "label": "2 Pfennige",
+      "faceValue": 2,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "saxony",
+      "label": "5 Pfennige",
+      "faceValue": 5,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "saxony",
+      "label": "10 Pfennige",
+      "faceValue": 10,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "saxony",
+      "label": "1 Neugroschen",
+      "faceValue": 10,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "saxony",
+      "label": "2 Neugroschen",
+      "faceValue": 20,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "saxony",
+      "label": "⅙ Thaler",
+      "faceValue": 50,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "saxony",
+      "label": "⅓ Thaler",
+      "faceValue": 100,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "saxony",
+      "label": "1 Thaler",
+      "faceValue": 300,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "saxony",
+      "label": "2 Thaler",
+      "faceValue": 600,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "saxony",
+      "label": "1 Vereinsthaler",
+      "faceValue": 300,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "saxony",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Heller",
+      "faceValue": 0.5,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Pfennig",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Kreuzer",
+      "faceValue": 4,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "3 Kreuzer",
+      "faceValue": 12,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "6 Kreuzer",
+      "faceValue": 24,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "½ Gulden",
+      "faceValue": 120,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Gulden",
+      "faceValue": 240,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "2 Gulden",
+      "faceValue": 480,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Thaler",
+      "faceValue": 420,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "2 Thaler",
+      "faceValue": 840,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Vereinsthaler",
+      "faceValue": 420,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "wurttemberg",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Pfennig",
+      "faceValue": 1,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Kreuzer",
+      "faceValue": 4,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "baden",
+      "label": "3 Kreuzer",
+      "faceValue": 12,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "baden",
+      "label": "6 Kreuzer",
+      "faceValue": 24,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "baden",
+      "label": "½ Gulden",
+      "faceValue": 120,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Gulden",
+      "faceValue": 240,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "baden",
+      "label": "2 Gulden",
+      "faceValue": 480,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Thaler",
+      "faceValue": 420,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "baden",
+      "label": "2 Thaler",
+      "faceValue": 840,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Vereinsthaler",
+      "faceValue": 420,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "baden",
+      "label": "1 Ducat",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Quattrino",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Soldo",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "papal-states",
+      "label": "½ Baiocco",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Baiocco",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "papal-states",
+      "label": "2 Baiocchi",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "papal-states",
+      "label": "5 Baiocchi",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Grosso",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Giulio",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Paolo",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Testone",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "papal-states",
+      "label": "½ Scudo",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Scudo",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Doppia",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Zecchino",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Centesimo",
+      "faceValue": 0.01,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "papal-states",
+      "label": "2 Centesimi",
+      "faceValue": 0.02,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "papal-states",
+      "label": "5 Centesimi",
+      "faceValue": 0.05,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "papal-states",
+      "label": "10 Centesimi",
+      "faceValue": 0.1,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "papal-states",
+      "label": "20 Centesimi",
+      "faceValue": 0.2,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "papal-states",
+      "label": "50 Centesimi",
+      "faceValue": 0.5,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "papal-states",
+      "label": "1 Lira",
+      "faceValue": 1,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "papal-states",
+      "label": "2 Lire",
+      "faceValue": 2,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "papal-states",
+      "label": "5 Lire",
+      "faceValue": 5,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "papal-states",
+      "label": "10 Lire",
+      "faceValue": 10,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "papal-states",
+      "label": "20 Lire",
+      "faceValue": 20,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "papal-states",
+      "label": "100 Lire",
+      "faceValue": 100,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "1 Centesimo",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "3 Centesimi",
+      "faceValue": 0.03,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "5 Centesimi",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "10 Centesimi",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "25 Centesimi",
+      "faceValue": 0.25,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "50 Centesimi",
+      "faceValue": 0.5,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "1 Lira",
+      "faceValue": 1,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "2 Lire",
+      "faceValue": 2,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "5 Lire",
+      "faceValue": 5,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "10 Lire",
+      "faceValue": 10,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "20 Lire",
+      "faceValue": 20,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "50 Lire",
+      "faceValue": 50,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "kingdom-of-sardinia",
+      "label": "100 Lire",
+      "faceValue": 100,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "1 Tornese",
+      "faceValue": 0.5,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "2 Tornesi",
+      "faceValue": 1,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "3 Tornesi",
+      "faceValue": 1.5,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "5 Tornesi",
+      "faceValue": 2.5,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "10 Tornesi",
+      "faceValue": 5,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "1 Grano",
+      "faceValue": 1,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "2 Grana",
+      "faceValue": 2,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "5 Grana",
+      "faceValue": 5,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "10 Grana",
+      "faceValue": 10,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "20 Grana",
+      "faceValue": 20,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "60 Grana",
+      "faceValue": 60,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "120 Grana",
+      "faceValue": 120,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "1 Piastra",
+      "faceValue": 120,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "1 Ducato",
+      "faceValue": 100,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "3 Ducati",
+      "faceValue": 300,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "6 Ducati",
+      "faceValue": 600,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "15 Ducati",
+      "faceValue": 1500,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "two-sicilies",
+      "label": "30 Ducati",
+      "faceValue": 3000,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Bagattino",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Soldo",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Gazzetta",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Grosso",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Lira",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Ducato",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Zecchino",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Scudo",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Osella",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "venice",
+      "label": "1 Tallero",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Quattrino",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Soldo",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Crazia",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Giulio",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Paolo",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Lira",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Fiorino",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Testone",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Francescone",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Scudo",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Zecchino",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "tuscany",
+      "label": "1 Ruspone",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "1 Centesimo",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "3 Centesimi",
+      "faceValue": 0.03,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "5 Centesimi",
+      "faceValue": 0.05,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "10 Centesimi",
+      "faceValue": 0.1,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "15 Centesimi",
+      "faceValue": 0.15,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "1 Soldo",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "3 Soldi",
+      "faceValue": 0.15,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "5 Soldi",
+      "faceValue": 0.25,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "¼ Lira",
+      "faceValue": 0.25,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "½ Lira",
+      "faceValue": 0.5,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "1 Lira",
+      "faceValue": 1,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "1 Scudo",
+      "faceValue": 6,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "½ Sovrano",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "lombardy-venetia",
+      "label": "1 Sovrano",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "confederate-states",
+      "label": "1¢",
+      "faceValue": 0.01,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "confederate-states",
+      "label": "50¢",
+      "faceValue": 0.5,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Quartuncia",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Semuncia",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Uncia",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Sextans",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Quadrans",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Triens",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Semis",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "As",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Dupondius",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Tressis",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Decussis",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Quinarius",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Sestertius",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Victoriatus",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Denarius",
+      "faceValue": null,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Quadrigatus",
+      "faceValue": null,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "roman-republic",
+      "label": "Aureus",
+      "faceValue": null,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Quadrans",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Semis",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "As",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Dupondius",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Sestertius",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Double Sestertius",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Quinarius",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Denarius",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Cistophorus",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Antoninianus",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Argenteus",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Radiate",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Follis",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Nummus",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Centenionalis",
+      "faceValue": null,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Maiorina",
+      "faceValue": null,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Siliqua",
+      "faceValue": null,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Half Siliqua",
+      "faceValue": null,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Miliarense",
+      "faceValue": null,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Quinarius Aureus",
+      "faceValue": null,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Aureus",
+      "faceValue": null,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Solidus",
+      "faceValue": null,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Semissis",
+      "faceValue": null,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "roman-empire",
+      "label": "Tremissis",
+      "faceValue": null,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Chalkous",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Diobol",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Assarion",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Tridrachm",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "roman-provincial",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Nummus",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Pentanummium",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Decanummium",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Half Follis",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Follis",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Siliqua",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Hexagram",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Miliaresion",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Tremissis",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Semissis",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Solidus",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Histamenon",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Tetarteron",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Hyperpyron",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Electrum Aspron Trachy",
+      "faceValue": null,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "byzantine-empire",
+      "label": "Billon Aspron Trachy",
+      "faceValue": null,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Tetartemorion",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Trihemiobol",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Diobol",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Triobol",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Tetrobol",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 110
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Dekadrachm",
+      "faceValue": null,
+      "sortOrder": 120
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Myshemihekte",
+      "faceValue": null,
+      "sortOrder": 130
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hemihekte",
+      "faceValue": null,
+      "sortOrder": 140
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hekte",
+      "faceValue": null,
+      "sortOrder": 150
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Trite",
+      "faceValue": null,
+      "sortOrder": 160
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Quarter Stater",
+      "faceValue": null,
+      "sortOrder": 170
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Half Stater",
+      "faceValue": null,
+      "sortOrder": 180
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 190
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Distater",
+      "faceValue": null,
+      "sortOrder": 200
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Chalkous",
+      "faceValue": null,
+      "sortOrder": 210
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Dichalkon",
+      "faceValue": null,
+      "sortOrder": 220
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Onkia",
+      "faceValue": null,
+      "sortOrder": 230
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hexas",
+      "faceValue": null,
+      "sortOrder": 240
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Trias",
+      "faceValue": null,
+      "sortOrder": 250
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Tetras",
+      "faceValue": null,
+      "sortOrder": 260
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Hemilitron",
+      "faceValue": null,
+      "sortOrder": 270
+    },
+    {
+      "issuer": "ancient-greece",
+      "label": "Litra",
+      "faceValue": null,
+      "sortOrder": 280
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Diobol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Tetrobol",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "macedonian-kingdom",
+      "label": "Distater",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Chalkous",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "seleucid-empire",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Chalkous",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Diobol",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Octobol",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "ptolemaic-egypt",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 100
+    },
+    {
+      "issuer": "judaea",
+      "label": "Lepton",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "judaea",
+      "label": "Half Prutah",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "judaea",
+      "label": "Prutah",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "judaea",
+      "label": "Zuz",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "judaea",
+      "label": "Quarter Shekel",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "judaea",
+      "label": "Half Shekel",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "judaea",
+      "label": "Shekel",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "judaea",
+      "label": "Sela",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "celtic",
+      "label": "Potin",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "celtic",
+      "label": "Bronze Unit",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "celtic",
+      "label": "Silver Half Unit",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "celtic",
+      "label": "Silver Unit",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "celtic",
+      "label": "Quarter Stater",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "celtic",
+      "label": "Half Stater",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "celtic",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "parthia",
+      "label": "Chalkous",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "parthia",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "parthia",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "parthia",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "sasanian-empire",
+      "label": "Pashiz",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "sasanian-empire",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "sasanian-empire",
+      "label": "Hemidrachm",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "sasanian-empire",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "sasanian-empire",
+      "label": "Dinar",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "achaemenid-persia",
+      "label": "Siglos",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "achaemenid-persia",
+      "label": "Daric",
+      "faceValue": null,
+      "sortOrder": 20
+    }
+  ]
+}

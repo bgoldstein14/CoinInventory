@@ -87,12 +87,18 @@ describe('runAttach — recording where the original file lives', () => {
   it('still appends and de-duplicates the displayed imagePaths', async () => {
     // The second argument is unchanged by this feature: plain data URLs, the
     // coin's existing photos first, and no duplicates.
+    //
+    // `existingPhotoMode: 'add'` is now needed to reach that path. Appending
+    // used to be unconditional, which is the bug that caused a re-imported
+    // folder to attach every photo in it a second time -- so the
+    // See services/image-import/existing-photo-mode.ts.
     const existing = makeCoin({ imagePaths: ['data:image/jpeg;base64,ALREADY-HERE'] });
     const files = new Map([['obverse.jpg', pickedFile('obverse.jpg', 'obverse.jpg')]]);
     const attach = vi.fn();
 
     await runAttach([makeRow('obverse.jpg')], {
-      files, inventory: [existing], baseFolder: BASE, attach, encode: stubEncode
+      files, inventory: [existing], baseFolder: BASE, attach, encode: stubEncode,
+      existingPhotoMode: 'add'
     });
 
     const imagePaths = attach.mock.calls[0][1] as string[];

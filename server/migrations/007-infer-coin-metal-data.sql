@@ -16,29 +16,12 @@
 -- ============================================================
 -- WHY
 -- ============================================================
--- The owner, on the metal:
---
---     "Can we do a one-time fix for metal content. Most coins with PM don't
---      have a choice. Let's fix it at the database level with a one-time
---      script. The metal content can be inferred by all the context given by
---      the coin detail already there."
---
--- He is right, and the point is worth restating precisely: for most coins the
--- metal is not genuinely unknown. It is already implied by the denomination,
--- the year, the coin type or the category sitting in the same row. A $20
--- Saint-Gaudens cannot be made of anything but gold. A 1916 Mercury dime
--- cannot be made of anything but silver. This script writes down what the row
--- already implies, wherever the implication is unambiguous.
---
--- Then, on Composition -- a column he had asked to have DROPPED, "because you
--- never filled it in" -- he changed his mind once it became clear it could be
--- populated: "Maybe if you fill it in for all coins, that would be good
--- then... we'd need something to initialize it, preferably from the database
--- side as a one-shot SQL."
---
--- And finally, on the numbers: "might as well fix the coin weight (total
--- weight in grams), PM weight (grams), PM %. Let's do it all. Most is still
--- missing in the DB."
+-- For most coins the metal is not genuinely unknown. It is already implied by
+-- the denomination, the year, the coin type or the category sitting in the
+-- same row: a $20 Saint-Gaudens cannot be made of anything but gold, a 1916
+-- Mercury dime cannot be made of anything but silver. This script writes down
+-- what the row already implies, wherever the implication is unambiguous, for
+-- four columns that are mostly empty in practice.
 --
 -- ------------------------------------------------------------
 -- SCOPE: FOUR COLUMNS IN, ONE COLUMN DELIBERATELY OUT
@@ -51,18 +34,15 @@
 -- DOES NOT WRITE:  Coins.Weight
 --
 -- *** Coins.Weight IS NOT THIS SCRIPT'S BUSINESS. DO NOT ADD IT HERE. ***
--- That column currently holds the coin's GROSS weight in TROY OUNCES, and the
--- owner has separately decided to change its units to GRAMS. That is not a
--- fill-in-the-blanks job like this one -- it means multiplying every existing
--- value by 31.1035, which is a one-way transformation of data that is already
--- there, and which is impossible to distinguish afterwards from a value that
--- was always in grams. Run it twice and every weight is 31x too big with
--- nothing in the row to reveal it.
---
--- That is why it lives in its own file, migration 008, written separately so
--- it can be reasoned about, previewed and reverted entirely on its own.
--- Bundling a destructive unit conversion into a cautious blank-filler would
--- mean the two could only ever be rolled back together.
+-- At this point that column holds the coin's GROSS weight in TROY OUNCES, and
+-- converting it to GRAMS is not a fill-in-the-blanks job like this one: it
+-- means multiplying every existing value by 31.1035, a one-way transformation
+-- of data that is already there and impossible to distinguish afterwards from
+-- a value that was always in grams. Run it twice and every weight is 31x too
+-- big with nothing in the row to reveal it. That is why it lives in its own
+-- file, migration 008 -- bundling a destructive unit conversion into a
+-- cautious blank-filler would mean the two could only be rolled back
+-- together.
 --
 -- Note also that Weight and PmWeightGrams measure DIFFERENT THINGS in
 -- DIFFERENT UNITS -- gross coin versus pure precious metal, ounces versus
@@ -179,9 +159,9 @@
 --   * 1866-73 five cents . the silver half dime (1853-1873) and the
 --                          copper-nickel nickel (1866-1941) overlap; refused.
 --
--- Those are every case the owner asked to be left alone, and not one of them
--- needed a special rule. They fall out of the design. Verified by the parity
--- spec, which asserts the SQL refuses wherever `lookupCoinAlloy` refuses.
+-- Those are every case that must be left alone, and not one of them needed a
+-- special rule: they fall out of the design. Verified by the parity spec,
+-- which asserts the SQL refuses wherever `lookupCoinAlloy` refuses.
 --
 -- ------------------------------------------------------------
 -- SO WHAT DOES THIS SCRIPT ADD, OVER THE IN-APP BACKFILL?
@@ -205,10 +185,9 @@
 --
 -- This script derives a hint from the rest of the row -- an explicit "Gold" in
 -- the coin type, a "Silver Dollars" category, a design name that only ever
--- existed in one metal -- and hands THAT to the resolver. That is precisely
--- what the owner meant by "inferred by all the context given by the coin
--- detail already there", and it is why running this first UNLOCKS rows rather
--- than merely racing the in-app backfill to them.
+-- existed in one metal -- and hands THAT to the resolver. That is why running
+-- this first UNLOCKS rows rather than merely racing the in-app backfill to
+-- them.
 --
 --     RUN THIS SCRIPT, THEN RUN THE PM BACKFILL IN THE SETTINGS DIALOG.
 --     The backfill will pick up anything this script could not reach, using

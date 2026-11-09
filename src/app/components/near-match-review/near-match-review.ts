@@ -6,7 +6,7 @@ import { BatchImageRow, NearMatchGroup } from '../../types/coin.model';
  * NearMatchReview — TIER 2 of the batch image import: one coin, and the photos
  * that are one yes/no away from being attached to it.
  *
- * WHAT A NEAR MATCH IS (and why this component exists at all)
+ * WHAT A NEAR MATCH IS
  * The filename and the coin agree on all four identifying attributes — year,
  * coin type, denomination and grade — so they are the same coin; but something
  * ELSE is off (a mint mark that disagrees, a variety, a cert number, or simply
@@ -14,8 +14,8 @@ import { BatchImageRow, NearMatchGroup } from '../../types/coin.model';
  * attach it unasked. The rule itself lives in
  * `services/image-matching/near-match.ts`; this file only draws it.
  *
- * THE ONE DESIGN CONSTRAINT, in the owner's words: "One action, not a form."
- * So a row offers exactly three things and nothing else:
+ * THE ONE DESIGN CONSTRAINT: one action, not a form. A row offers exactly
+ * three things and nothing else:
  *
  *   Attach              accept the suggested coin
  *   a dropdown          pick one of the OTHER coins that also passed the
@@ -23,18 +23,16 @@ import { BatchImageRow, NearMatchGroup } from '../../types/coin.model';
  *                       the test rejected must not be one click away)
  *   Skip                leave this photo alone
  *
- * There is deliberately no free-text coin search here. That belonged to the
- * old screen, where every unplaced file was the user's problem to solve by
- * hand; the point of the three tiers is that a file nobody can suggest a coin
- * for never reaches this list in the first place.
+ * There is deliberately no free-text coin search here. The point of the three
+ * tiers is that a file nobody can suggest a coin for never reaches this list
+ * in the first place, so hand-solving does not belong on this screen.
  *
  * WHY THE UNIT IS A COIN AND NOT A FILE
- * A coin on this share routinely has 8-10 photos: both faces, the slab label,
- * numbered retakes and derivative renderings. When they near-match, they all
- * near-match the same coin — the owner's "multiple images apparently for each
- * side of the same coin". Asking the same question five times is exactly the
- * manual work this redesign removes, so the group header carries an
- * "Attach all" that settles the whole coin at once.
+ * A coin routinely has 8-10 photos: both faces, the slab label, numbered
+ * retakes and derivative renderings. When they near-match, they all
+ * near-match the same coin, and asking the same question five times is the
+ * manual work this screen exists to remove — hence the group header's
+ * "Attach all", which settles the whole coin at once.
  *
  * It is a dumb component: every piece of state arrives as an input and every
  * decision leaves as an output. The session owns the rows.

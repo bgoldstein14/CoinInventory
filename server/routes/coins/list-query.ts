@@ -1,88 +1,69 @@
 /**
  * routes/coins/list-query.ts — the SQL and row-assembly behind GET /api/coins.
  *
- * ------------------------------------------------------------------
- * WHY THIS MODULE EXISTS (the "hundreds of megabytes" problem)
- * ------------------------------------------------------------------
- * Coin photos are stored as base64 text in CoinImages.ImageData, which is an
- * NVARCHAR(MAX) column. After the batch photo import each image is roughly
- * 250 KB of text, and many coins have several images.
+ * Coin photos are stored as base64 text in CoinImages.ImageData (NVARCHAR(MAX)),
+ * roughly 250 KB per image, several images per coin. Returning every image of
+ * every coin from this endpoint does not merely make the response large: past
+ * about a hundred coins `res.json()` throws `RangeError: Invalid string length`
+ * from JSON.stringify, because the concatenated base64 exceeds V8's maximum
+ * string length. That is a hard wall, not a budget — the response works at 104
+ * coins and cannot be serialised at 105. No server setting, memory limit or
+ * payload cap is involved, and the client sees only a 500, so it is easy to
+ * misdiagnose as a database fault.
  *
- * GET /api/coins originally did `SELECT * FROM CoinImages` and stuffed EVERY
- * image of EVERY coin into the response, on every single app load. Do the
- * arithmetic: 300 coins x 2 images x 250 KB is about 150 MB of JSON — per page
- * load. That makes the app unusable.
+ * So the list endpoint has two jobs kept deliberately separate:
  *
- * So the list endpoint now has two jobs kept deliberately separate:
+ *   1. ALWAYS report how many images a coin has, as `imageCount`, via a
+ *      COUNT(*) aggregate in SQL Server so the image *text* never leaves the
+ *      database. Counting rows in JavaScript would mean fetching them first,
+ *      which is the exact thing being avoided.
  *
- *   1. ALWAYS report how many images a coin has, as `imageCount`. This is done
- *      with a COUNT(*) aggregate in SQL Server, so the image *text* never
- *      leaves the database. Counting rows in JavaScript would mean fetching
- *      them first, which is the exact thing we are trying to avoid.
+ *   2. OMIT THE IMAGE PAYLOADS by default, always. The base64 set is opt-in via
+ *      `?includeImages=true` and nothing in the shipped app asks for it. Screens
+ *      that need photographs fetch them one coin at a time from
+ *      `GET /api/coins/:id/images`, and grid thumbnails come one binary response
+ *      at a time from `GET /api/coins/:id/thumbnail`.
  *
- *   2. OPTIONALLY omit the image payloads entirely, via
- *      `GET /api/coins?includeImages=false`. The detail panel and gallery then
- *      fetch the full images for one coin on demand from
- *      `GET /api/coins/:id/images` (see routes/coins/images.ts).
+ * The size of this response is therefore bounded by the number of coins and
+ * nothing else; it cannot grow with the photo library.
  *
- * All database work is done through the `db` handle that `withDb()` hands the
- * caller — this module never touches the pool directly and never calls
- * resetPool(). See db/index.ts for why that matters.
+ * All database work goes through the `db` handle `withDb()` hands the caller —
+ * this module never touches the pool directly and never calls resetPool(). See
+ * db/index.ts for why that matters.
  */
 
 import sql from 'mssql';
 import { rowToCoin } from '../../db';
 
-// ============================================================
-// The `includeImages` query parameter
-// ============================================================
-
 /**
  * Decides whether a GET /api/coins request wants the image payloads inline.
  *
- * *******************************************************************
- * *** TEMPORARY DEFAULT — THIS IS NOT THE FINAL BEHAVIOUR ***
+ * THE DEFAULT IS "OMIT". An absent parameter means `false`: no `imagePaths`
+ * key on any coin in the response. Flipping that back re-creates the
+ * `RangeError: Invalid string length` outage described in the file header, and
+ * it fails all at once rather than gradually. Nothing in the shipped app
+ * passes this parameter; it survives for ad-hoc use and for the tests that pin
+ * both behaviours.
  *
- * When the parameter is ABSENT we currently return `true`, i.e. `imagePaths`
- * is still fully populated exactly as it always was. That is deliberate and
- * TEMPORARY: the Angular client has not been switched over to the new
- * `GET /api/coins/:id/images` endpoint yet, and silently dropping `imagePaths`
- * from the default response would break it.
- *
- * The plan is to FLIP THIS DEFAULT TO `false` in a follow-up change, once the
- * client fetches full images on demand. Do not read the current default as a
- * settled decision — it is a compatibility shim with a known expiry date.
- * When it flips, the only line that needs to change is the `return true` below.
- * *******************************************************************
- *
- * Accepted "no" spellings are 'false', '0' and 'no' (case-insensitive), because
- * query strings are just text and different HTTP clients spell booleans
- * differently. Anything else — including a missing parameter, or a repeated one
- * where we take the first value — means "yes, include them".
+ * Parsing fails TOWARDS omitting. Accepted "yes" spellings are 'true', '1' and
+ * 'yes' (case-insensitive), because different HTTP clients spell booleans
+ * differently; anything else — absent, empty, a typo like 'ture', an array, an
+ * object — means omit. Of the two ways to misread this parameter, one produces
+ * a slightly disappointing response a caller notices and fixes, and the other
+ * produces an exception that takes the application down.
  *
  * @param rawParam - `req.query['includeImages']`, whatever shape Express gives
  *                   it (string, array of strings, parsed object, or undefined).
  */
 export function shouldIncludeImages(rawParam: unknown): boolean {
-  // Express types a query parameter as possibly repeated (?a=1&a=2). Ours is
-  // never repeated in practice, so collapse an array down to its first value.
+  // Express types a query parameter as possibly repeated (?a=1&a=2).
   const value = Array.isArray(rawParam) ? rawParam[0] : rawParam;
 
-  // Absent, or something exotic that is not a plain string -> use the default.
-  if (typeof value !== 'string') return true;
+  if (typeof value !== 'string') return false;
 
   const normalized = value.trim().toLowerCase();
-  if (normalized === 'false' || normalized === '0' || normalized === 'no') {
-    return false;
-  }
-
-  // <-- the temporary default described above lives here
-  return true;
+  return normalized === 'true' || normalized === '1' || normalized === 'yes';
 }
-
-// ============================================================
-// Loading the list
-// ============================================================
 
 /**
  * Runs the queries behind GET /api/coins and assembles the JSON array.
@@ -91,15 +72,10 @@ export function shouldIncludeImages(rawParam: unknown): boolean {
  * the mssql mock by queueing one response per `query()` call, in order:
  *
  *   includeImages = true   ->  1. coins   2. images   3. image counts
- *   includeImages = false  ->  1. coins   2. image counts
+ *   includeImages = false  ->  1. coins   2. image counts   <- THE DEFAULT
  *
- * (There used to be a tags query sitting between the images and the counts.
- * The tag feature was removed, so the sequence is one query shorter than it was
- * and everything after the images step shifted down a number. If you are
- * cross-referencing an older commit or comment, that is why the numbers differ.)
- *
- * (The images query is genuinely skipped when it is not needed; that skip is
- * the whole point of the flag.)
+ * The images query is genuinely skipped when it is not needed; that skip is
+ * the whole point of the flag.
  *
  * @param db            - The healthy pool handed over by `withDb()`.
  * @param includeImages - When false, the returned objects have no `imagePaths`
@@ -116,10 +92,8 @@ export async function loadCoinList(
   );
 
   // ----- 2. Image payloads, only if the caller actually wants them ------
-  // Note the explicit column list instead of `SELECT *`: there is no reason to
-  // drag ImageId and SortOrder across the wire when all we do is group by coin.
-  // ORDER BY CoinId, SortOrder gives each coin's images in display order (the
-  // grouping loop below preserves the order rows arrive in).
+  // ORDER BY CoinId, SortOrder gives each coin's images in display order; the
+  // grouping loop below preserves the order rows arrive in.
   const imagesByCoinId = new Map<string, string[]>();
   if (includeImages) {
     const imagesResult = await db.request().query(
@@ -134,21 +108,13 @@ export async function loadCoinList(
 
   // ----- 3. imageCount: the COUNT(*) aggregate -------------------------
   //
-  // This is the cheap half of the fix, and it is cheap precisely BECAUSE the
-  // work happens inside SQL Server:
+  // COUNT(*) counts rows without reading any column values, so SQL Server
+  // satisfies this from the IX_CoinImages_CoinId_SortOrder index (see
+  // setup-database.sql) and never touches the ImageData blobs. The result is a
+  // few kilobytes however large the photo library grows.
   //
-  //   SELECT CoinId, COUNT(*) AS ImageCount FROM CoinImages GROUP BY CoinId
-  //
-  // COUNT(*) counts rows without reading any column values, so SQL Server can
-  // satisfy the whole query from the IX_CoinImages_CoinId_SortOrder index (see
-  // setup-database.sql) and never touches the multi-megabyte ImageData blobs.
-  // The result set is one small row per coin that HAS images — a few kilobytes
-  // in total, no matter how large the photo library grows.
-  //
-  // The tempting alternative — fetch the image rows and do
-  // `rows.filter(r => r.CoinId === id).length` in JavaScript — would defeat the
-  // entire purpose, because fetching the rows is the expensive part. Do not
-  // "simplify" this into that.
+  // Do NOT "simplify" this into fetching the image rows and counting them in
+  // JavaScript: fetching the rows is the expensive part this avoids.
   const countsResult = await db.request().query(
     'SELECT CoinId, COUNT(*) AS ImageCount FROM CoinImages GROUP BY CoinId'
   );
@@ -168,9 +134,23 @@ export async function loadCoinList(
       imageCount: imageCountByCoinId.get(coinId) ?? 0,
     };
 
-    // Only add the key when images were requested. Assigning `undefined` would
-    // still create an `imagePaths` property, and JSON.stringify would drop it
-    // anyway, so branch explicitly to keep the intent obvious.
+    /*
+     * OMIT THE KEY. DO NOT SET IT TO `undefined`, AND NEVER TO `[]`.
+     *
+     * `PUT /api/coins/:id` carrying an `imagePaths` key REPLACES the coin's
+     * whole image set (write-helpers.ts, replaceImages), so an EMPTY array is
+     * a destructive instruction: "this coin has no photographs, delete the
+     * ones it has". Returning `imagePaths: []` for a coin whose photos were
+     * merely not loaded would let any round trip that echoes the field back
+     * destroy the user's photographs silently. An ABSENT key cannot be
+     * mistaken that way, and the client distinguishes the two (see
+     * CoinRecord.imagePaths in src/app/types/coin.model.ts).
+     *
+     * `undefined` is wrong too, even though JSON.stringify drops it: the
+     * property would still exist, so `'imagePaths' in coin` and
+     * `Object.keys()` would report it — and the server's own update guard is
+     * written as `hasOwnProperty('imagePaths')`.
+     */
     if (includeImages) {
       coin['imagePaths'] = imagesByCoinId.get(coinId) ?? [];
     }

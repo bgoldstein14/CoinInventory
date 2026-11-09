@@ -11,10 +11,9 @@
  *     schema's NVARCHAR(400) so a long path is not silently truncated.
  *   - The LEGACY bare-string body must keep working. The Angular client has not
  *     migrated yet, so if these tests fail the frontend is broken too.
- *   - The insert batch must roll back AS A UNIT. Each INSERT used to run in its
- *     own autocommit statement, so failing halfway through committed the
- *     earlier images anyway; the caller saw a 500, retried, and ended up with
- *     duplicates it had to delete by hand.
+ *   - The insert batch must roll back AS A UNIT. Autocommitting each INSERT
+ *     commits the earlier images when a later one fails; the caller sees a
+ *     500, retries, and ends up with duplicates to delete by hand.
  *
  * As in the other spec files, `mssql` is replaced with the shared mock and the
  * handler's queries are satisfied IN CALL ORDER with mockResolvedValueOnce:
@@ -44,9 +43,7 @@ beforeEach(() => {
   resetMssqlMock();
 });
 
-// ============================================================
 // POST /api/coins/:id/images
-// ============================================================
 
 /** Queues the existence check + MAX(SortOrder) that every POST starts with. */
 function queuePostPreamble(coinId = 'abc-123', maxOrder = -1): void {

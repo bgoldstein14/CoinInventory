@@ -5,14 +5,19 @@
  * relative to that:
  *
  *   GET /      -> GET /api/coins       all coins, with an `imageCount` and
- *                                      (for now) the images inline unless
- *                                      ?includeImages=false
+ *                                      NO image payloads, unless the caller
+ *                                      explicitly asks ?includeImages=true
  *   GET /:id   -> GET /api/coins/:id   one coin, with its images
+ *
+ * Note the asymmetry between those two, which is deliberate: the LIST never
+ * carries photographs and the SINGLE coin always does. One coin's images are
+ * a few megabytes at worst and are what the user is actually looking at; a
+ * whole collection's are a response that cannot be built at all.
  *
  * The list query itself — the SQL, the COUNT(*) aggregate behind `imageCount`,
  * and the `includeImages` flag — lives in routes/coins/list-query.ts, which
- * also documents WHY the list must be able to omit image payloads (the short
- * version: returning every base64 image on every app load is ~150 MB of JSON).
+ * also documents WHY the list must omit image payloads (short version: past
+ * ~100 coins `res.json()` throws `RangeError: Invalid string length`).
  *
  * Reads are separated from writes (routes/coins/writes.ts) because they are
  * completely different in shape: these two handlers are plain SELECTs plus a
@@ -29,26 +34,27 @@
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
 import { withDb, rowToCoin, DB_BINDINGS } from '../../db';
-import { sendDbError } from '../db-error-response';
+import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { loadCoinList, shouldIncludeImages } from './list-query';
 
 const router = Router();
 
-// ============================================================
-// GET /api/coins — all coins with imageCount and (for now) images
-// ============================================================
+// GET /api/coins — all coins, with imageCount and WITHOUT the images
 //
-// `?includeImages=false` drops the `imagePaths` array from every coin, which is
-// what the app should use once the client fetches full images on demand from
-// GET /api/coins/:id/images.
+// THE DEFAULT IS "NO IMAGE PAYLOADS". With the parameter absent there is no
+// `imagePaths` key on any coin — not an empty array, no key at all, so a
+// client can tell "not loaded" from "this coin has no photographs". Every
+// coin still carries `imageCount`, which answers "does this coin have photos,
+// and how many" without moving a single byte of base64.
 //
-// NOTE ON THE DEFAULT: with the parameter absent, `imagePaths` is STILL
-// populated, exactly as before. That is a deliberate, temporary compatibility
-// shim while the Angular client is migrated — it is scheduled to flip to
-// "omit by default" in a follow-up change. The full explanation is on
-// shouldIncludeImages() in list-query.ts; please read it before relying on the
-// current default.
+// `?includeImages=true` inlines the payloads for an ad-hoc caller. Nothing in
+// the shipped app passes it, and it is the shape that cannot be serialised on
+// a real collection — see shouldIncludeImages() in list-query.ts.
+//
+// The client gets its photographs from the per-coin endpoints instead:
+// GET /api/coins/:id/images for the real thing, and
+// GET /api/coins/:id/thumbnail for one binary row thumbnail at a time.
 router.get('/', async (req: Request, res: Response) => {
   const includeImages = shouldIncludeImages(req.query['includeImages']);
 
@@ -58,15 +64,23 @@ router.get('/', async (req: Request, res: Response) => {
     const coins = await withDb((db) => loadCoinList(db, includeImages));
 
     logInfo(`Retrieved ${coins.length} coins`);
-    res.json(coins);
+
+    /*
+     * SENDING IS ITS OWN STEP, AND THAT IS THE WHOLE POINT. `res.json(coins)`
+     * can throw `RangeError: Invalid string length` with every row already in
+     * hand, and a single catch block around both the read and the send cannot
+     * tell those apart — so it blames the database. sendJson() wraps nothing
+     * but the send, which earns the user the honest answer: the coin list
+     * could not be drawn, and the data is safe. See db-error-response.ts.
+     */
+    sendJson(res, 'GET /api/coins', coins, 'coin list');
   } catch (err) {
-    sendDbError(res, 'GET /api/coins', err, 'Failed to retrieve coins');
+    // Reached ONLY when the read failed: the connection, or the query.
+    sendDbError(res, 'GET /api/coins', err, 'Failed to retrieve coins', 'coin list');
   }
 });
 
-// ============================================================
 // GET /api/coins/:id — single coin with its images
-// ============================================================
 router.get('/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
@@ -88,9 +102,6 @@ router.get('/:id', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
 
-      // There was a third query here reading CoinTags. The tag feature was
-      // removed (nothing in the app could ever create a tag), so this handler
-      // now runs exactly two queries: the coin, then its images.
       return {
         ...rowToCoin(coinResult.recordset[0]),
         imagePaths: imagesResult.recordset.map((r: Record<string, unknown>) => r['ImageData'] as string),
@@ -103,9 +114,11 @@ router.get('/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    res.json(coin);
+    // This endpoint DOES inline the coin's photographs, so it is the second
+    // most likely response in the API to be unbuildable. Same split.
+    sendJson(res, 'GET /api/coins/:id', coin, 'coin');
   } catch (err) {
-    sendDbError(res, 'GET /api/coins/:id', err, 'Failed to retrieve coin');
+    sendDbError(res, 'GET /api/coins/:id', err, 'Failed to retrieve coin', 'coin');
   }
 });
 

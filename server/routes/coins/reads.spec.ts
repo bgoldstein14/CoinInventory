@@ -9,11 +9,14 @@
  * The mssql mock answers queries IN CALL ORDER, so the number of queued
  * recordsets must match the number of queries the handler runs:
  *
- *   GET /api/coins      ->  1. coins   2. images   3. image counts
+ *   GET /api/coins      ->  1. coins   2. image counts
  *   GET /api/coins/:id  ->  1. coin    2. images
  *
- * Both sequences used to carry a tags query at the end. The tag feature was
- * removed, so each is one query shorter now.
+ * GET /api/coins runs no image-payload read at all unless the caller passes
+ * ?includeImages=true — see list-query.spec.ts for why. The single-coin
+ * endpoint still returns its images inline: one coin's photographs is a few
+ * megabytes at worst, which is the entire reason a per-coin endpoint exists
+ * for the client to fall back to.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -35,15 +38,14 @@ describe('GET /api/coins', () => {
   it('returns an empty array when no coins exist', async () => {
     mockRequest.query
       .mockResolvedValueOnce({ recordset: [] })  // 1. coins
-      .mockResolvedValueOnce({ recordset: [] })  // 2. images
-      .mockResolvedValueOnce({ recordset: [] }); // 3. image counts
+      .mockResolvedValueOnce({ recordset: [] }); // 2. image counts
 
     const res = await request(app).get('/api/coins');
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
 
-  it('returns coins with images joined', async () => {
+  it('maps every column, and carries imageCount INSTEAD OF the images', async () => {
     // Mock data uses CamelCase database column names (CoinId, Denomination, CoinType, etc.)
     const coinRow = {
       CoinId: 'abc-123',
@@ -74,9 +76,8 @@ describe('GET /api/coins', () => {
     };
 
     mockRequest.query
-      .mockResolvedValueOnce({ recordset: [coinRow] })                                              // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageData: 'data:image/png;base64,abc' }] }) // 2. images
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageCount: 1 }] });                // 3. image counts
+      .mockResolvedValueOnce({ recordset: [coinRow] })                               // 1. coins
+      .mockResolvedValueOnce({ recordset: [{ CoinId: 'abc-123', ImageCount: 1 }] }); // 2. image counts
 
     const res = await request(app).get('/api/coins');
     expect(res.status).toBe(200);
@@ -89,7 +90,12 @@ describe('GET /api/coins', () => {
     expect(coin.year).toBe('1921');
     expect(coin.grade).toBe('MS-65');
     expect(coin.hasCacSticker).toBe(true);
-    expect(coin.imagePaths).toEqual(['data:image/png;base64,abc']);
+    // NOT an empty array — THE KEY IS ABSENT. That distinction is the whole
+    // contract: a client has to be able to tell "this coin's photographs were
+    // not loaded" from "this coin has no photographs", because echoing the
+    // second one back in a PUT would delete the first one's pictures.
+    expect(coin).not.toHaveProperty('imagePaths');
+    expect(coin.imageCount).toBe(1);
     // The tag feature is gone, so the key must not come back at all.
     expect(coin).not.toHaveProperty('tags');
     // The coin-level dealer field is gone too, so the key must not come back

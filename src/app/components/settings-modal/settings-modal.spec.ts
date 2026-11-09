@@ -33,7 +33,6 @@ describe('SettingsModal', () => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  // Moved here from app.spec.ts along with the code it exercises.
   it('allows category maintenance from settings', () => {
     const { modal, inv } = createModal();
 
@@ -46,13 +45,6 @@ describe('SettingsModal', () => {
   });
 
   it('applies a metal content edit straight to the live list', () => {
-    // This used to also assert that a bulk-edit textarea had been refreshed to
-    // match. Those textareas are gone: they duplicated the chips and were the
-    // source of a family of bugs -- rebuilding a reference record from a line
-    // of text discarded its country, its id, and (for denominations) its real
-    // label, which is what emptied the denomination dropdown. The chips apply
-    // and persist one entry at a time, so there is no second copy of the list
-    // left to go stale.
     const { modal, inv } = createModal();
 
     modal['metalContentDraft'].set('Electrum');
@@ -64,26 +56,24 @@ describe('SettingsModal', () => {
     expect(inv.metalContents()).not.toContain('Electrum');
   });
 
-  it('adds a denomination under US, the code the data actually uses', () => {
-    // 'United States' here was the reported bug: the coin editor groups its
-    // dropdown by this value and the seeded rows use 'US', so a full country
-    // name filed the new entry under a group of its own and the dropdown
-    // showed headings with nothing under them.
-    //
-    // The assertion is on what gets SENT, not on what lands in the signal:
-    // addDenomination stores whatever the server echoes back, so checking the
-    // local list would be testing the mock rather than this component.
-    const { modal, mockApiService } = createModal();
-    mockApiService.createDenomination = vi.fn(() => of({
-      denominationId: 99, label: 'Crown', country: 'US', sortOrder: 10, isActive: true
-    }));
+  it('cannot create a denomination at all any more', () => {
+    /* Creating a denomination from Settings cannot ask for an issuer, so it
+     * could only ever produce a row with a guessed country and no issuer at
+     * all. The capability was removed rather than weakened, and this asserts
+     * it is REALLY gone: a stale method left behind on the class is a button
+     * somebody re-adds to the template. */
+    const { modal } = createModal();
+    const asRecord = modal as unknown as Record<string, unknown>;
 
-    modal['denominationDraft'].set('Crown');
-    modal['addDenomination']();
+    expect(asRecord['addDenomination']).toBeUndefined();
+    expect(asRecord['removeDenominationEntry']).toBeUndefined();
+    expect(asRecord['denominationDraft']).toBeUndefined();
 
-    expect(mockApiService.createDenomination).toHaveBeenCalledWith(
-      expect.objectContaining({ label: 'Crown', country: 'US' })
-    );
+    // The sibling lists are untouched, which is what makes the three
+    // assertions above a statement about denominations rather than about
+    // the component having been gutted.
+    expect(typeof asRecord['addCategory']).toBe('function');
+    expect(typeof asRecord['addMintMark']).toBe('function');
   });
 
   it('ignores blank drafts', () => {
@@ -100,15 +90,13 @@ describe('SettingsModal', () => {
   });
 });
 
-/* ===========================================================================
- * MAINTENANCE — backfill precious-metal data
- * ---------------------------------------------------------------------------
+/* MAINTENANCE — backfill precious-metal data.
+ *
  * The planner's own rules are tested in services/pm-backfill.spec.ts. What is
  * tested HERE is the part that only exists once the plan is wired to a real
  * InventoryService: that the preview the user confirms is what reaches the
  * backend, that each coin is written exactly once with a minimal payload, and
- * that unrelated columns are never sent.
- * ======================================================================== */
+ * that unrelated columns are never sent. */
 
 /** A coin with everything blank except whatever the test overrides. */
 function coin(overrides: Partial<CoinRecord>): CoinRecord {
@@ -145,7 +133,7 @@ describe('SettingsModal — precious-metal backfill', () => {
     inv.inventory.set([
       // Fillable: nothing recorded at all.
       coin({ id: 'saint', denomination: '$20', year: '1927', notes: 'bought at auction' }),
-      // Fillable: the owner typed the metal; the four gaps get completed.
+      // Fillable: the metal is recorded; the four gaps get completed.
       coin({ id: 'kennedy', denomination: '50¢', year: '1964', metalContent: 'Silver' }),
       // Already complete: all five present, gross Weight included. Without
       // the weight this coin would become fillable and stop being the
@@ -205,10 +193,10 @@ describe('SettingsModal — precious-metal backfill', () => {
   });
 
   it('sends ONLY precious-metal fields in each payload', async () => {
-    /* THE RULE THIS GUARDS: `PUT /api/coins/:id` applies whatever it is given,
-     * and this project has previously blanked out columns by sending whole
-     * records. The Saint-Gaudens below carries a note and a purchase price
-     * that must not appear in the body. */
+    /* THE RULE THIS GUARDS: `PUT /api/coins/:id` applies whatever it is
+     * given, so sending a whole record blanks out every column the sender
+     * did not fill in. The Saint-Gaudens below carries a note and a purchase
+     * price that must not appear in the body. */
     const { modal, inv, mockApiService } = createModal();
     loadMixedInventory(inv);
 
@@ -232,7 +220,7 @@ describe('SettingsModal — precious-metal backfill', () => {
       pmPercent: 90,
       pmWeightGrams: 30.09,
       // The coin's GROSS weight in grams — a different number from the
-      // 30.09 g of gold above, and the fifth field the backfill now writes.
+      // 30.09 g of gold above.
       weight: 33.436
     });
     expect(saint).not.toHaveProperty('notes');

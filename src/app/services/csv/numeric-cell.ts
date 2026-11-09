@@ -1,20 +1,15 @@
-/* ===========================================================================
+ /*
  * numeric-cell.ts — turning a spreadsheet cell into a number.
- * ---------------------------------------------------------------------------
- * WHY THIS FILE EXISTS
- * ---------------------------------------------------------------------------
+ * ---- WHY THIS FILE EXISTS ----
  * CSV import has four numeric fields: Purchase Price, Current Value, Sold
- * Price and Weight (g). The original one-liner that parsed them was:
+ * Price and Weight (g). The obvious one-liner for them is:
  *
  *     Number(value.replace(/[$,]/g, '')) || 0
  *
- * That strips dollar signs and thousands separators, which handles
- * "$1,250.00" correctly. The problem is everything else it does NOT handle,
- * combined with `Number()` being far stricter than most people expect:
- * `Number()` returns NaN unless the ENTIRE string is a valid number, and the
- * `|| 0` then quietly turns that NaN into a zero.
- *
- * So a weight typed the way a collector actually writes it:
+ * That handles "$1,250.00". The problem is everything else, combined with
+ * `Number()` being far stricter than most people expect: it returns NaN
+ * unless the ENTIRE string is a valid number, and `|| 0` quietly turns that
+ * NaN into a zero. So a weight typed the way a collector actually writes it:
  *
  *     0.7734 ozt      ->  NaN  ->  0
  *     0.7734oz        ->  NaN  ->  0
@@ -22,19 +17,16 @@
  *     1250 USD        ->  NaN  ->  0
  *     (1,250.00)      ->  NaN  ->  0      (accounting negative)
  *
- * ...imported as ZERO, with no warning and nothing in the exceptions list.
- * Weight is the field where this bites hardest, because a weight is meaningless
+ * ...imports as ZERO, with no warning and nothing in the exceptions list.
+ * Weight is where this bites hardest, because a weight is meaningless
  * without its unit and so people habitually type the unit.
  *
- * (Two corrections to that last paragraph as originally written, kept visible
- * because both are easy to re-introduce. The gross Weight column is now in
- * GRAMS, not troy ounces — see server/migrations/008-weight-to-grams.sql. And
- * melt value is NOT computed from it: melt uses `pmWeightGrams` alone, so a
- * weight that imports as 0 loses the gross weight and nothing else.)
+ * Two facts that are easy to forget here: the gross Weight column is in
+ * GRAMS, not troy ounces (server/migrations/008-weight-to-grams.sql), and
+ * melt value is NOT computed from it -- melt uses `pmWeightGrams` alone, so
+ * a weight that imports as 0 loses the gross weight and nothing else.
  *
- * ---------------------------------------------------------------------------
- * WHAT THIS DOES INSTEAD
- * ---------------------------------------------------------------------------
+ * ---- WHAT THIS DOES INSTEAD ----
  * Pull the number out of the cell and ignore the decoration around it. The
  * rules are applied in a deliberate order, because some of them would
  * otherwise mask each other — the fraction check in particular MUST run
@@ -44,7 +36,7 @@
  * read at all still falls back to 0, which is the same behaviour as before —
  * see the note at the bottom about why that fallback is still not good enough
  * and what would fix it properly.
- * =========================================================================== */
+  */
 
 /**
  * Currency symbols to discard. Only the symbol is removed, never a digit.

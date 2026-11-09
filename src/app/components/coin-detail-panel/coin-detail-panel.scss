@@ -1,13 +1,13 @@
-// Styles for the detail sidebar frame: heading, badges, action buttons and the
-// transaction history. Moved here from the old `styles/_detail-panel.scss`
-// partial. The editable form's own styles now live with CoinEditorForm.
+// Styles for the detail sidebar frame: action buttons, original-file list and
+// the transaction history. The editable form's own styles live with
+// CoinEditorForm.
 @use '../../styles/controls' as *;
 @use '../../styles/panel' as *;
 @use '../../styles/field' as *;
 
-// The host element is not part of the original markup, so keep it out of the
-// layout: `<aside class="panel detail-panel">` must remain a direct child of
-// the `.main-content` grid for the two-column layout to work.
+// Keep the component host out of the layout: `<aside class="panel
+// detail-panel">` must remain a direct child of the `.main-content` grid for
+// the two-column layout to work.
 :host { display: contents; }
 
 // ---- Detail panel ----
@@ -22,20 +22,9 @@
   min-height: 0;
 }
 
-// The header holds only the action buttons now. It used to carry, on its left,
-// an eyebrow, an <h2> of coin type + denomination, and a row of grade / cert /
-// CAC badges — all of which restated fields the editor shows directly below,
-// so all of them were removed.
-//
-// Consequences of those removals, handled here:
-//  - the `h2 { ... }` and `.detail-badges` rules are gone with their elements;
-//  - `justify-content` is `flex-end` rather than `space-between`. With nothing
-//    on the left, `space-between` has only one child to place and would pin
-//    the buttons to the LEFT edge, which is not where they were or belong;
-//  - the `min-height` is gone too. It existed to stop the header collapsing on
-//    a coin with no badges, so the panel did not jump as you clicked between
-//    coins. With the badges removed the row is always exactly button height,
-//    so there is nothing left to vary.
+// The header holds only the action buttons. `justify-content` must stay
+// `flex-end`: with a single child, `space-between` would pin the buttons to
+// the LEFT edge.
 .detail-header {
   display: flex;
   justify-content: flex-end;
@@ -158,9 +147,9 @@
 .txn-date { color: #7a6a53; }
 .txn-dealer { color: #5c4935; font-style: italic; }
 
-// Each control is now wrapped in a `.detail-field` label, so the flex
-// children here are the labels rather than the bare inputs. The control's
-// own appearance (border, padding, background) comes from the shared
+// Each control is wrapped in a `.detail-field` label, so the flex children
+// here are the labels rather than the bare inputs. The control's own
+// appearance (border, padding, background) comes from the shared
 // `styles/_field.scss` rule, which is what keeps this row visually identical
 // to the coin editor above it.
 .add-transaction-form {
@@ -171,7 +160,7 @@
 
   .detail-field { flex: 0 0 auto; }
 
-  // Sizes that used to be set on the inputs directly now size the wrapper.
+  // Sizes go on the `.detail-field` wrapper, not on the control itself.
   select { min-width: 100px; }
   input[type="date"] { width: 130px; }
 }
@@ -183,7 +172,7 @@
 
 // ---- Responsive & print ----
 // On a narrow screen the sidebar stops being sticky and just flows with the
-// page; on paper it is dropped entirely. (Both moved from `_overlays.scss`.)
+// page; on paper it is dropped entirely.
 
 @media (max-width: 900px) {
   .detail-panel { position: static; max-height: none; }

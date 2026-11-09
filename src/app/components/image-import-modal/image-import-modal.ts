@@ -15,16 +15,14 @@ import { NearMatchReview } from '../near-match-review/near-match-review';
  * much work there actually is, answer the handful of questions that need
  * answering, and save.
  *
- * WHY THIS FILE IS SO SHORT
  * All of the state and behaviour lives in BatchImportSession (see
  * services/image-import/batch-import-session.ts), which documents the
  * four-step flow: filter the files, match on file NAMES only, review, then
  * read + downscale + save just the ticked photos. This component is the shell
  * that owns one session and renders it.
  *
- * ---------------------------------------------------------------------------
  * THE THREE TIERS, WHICH ARE THE SHAPE OF THIS SCREEN
- * ---------------------------------------------------------------------------
+ *
  * The photo library is ~2,140 files, so anything that needs a decision PER
  * FILE is unusable. The review is therefore split by what question can be
  * asked, not by how confident the matcher was:
@@ -36,19 +34,18 @@ import { NearMatchReview } from '../near-match-review/near-match-review';
  *                     off. Accept, pick another near candidate, or skip.
  *   3. NOT IMPORTED   skipped automatically, listed READ-ONLY — there is no
  *                     apparent match, so there is no question worth asking.
- *                     Modelled on the "Not imported" exception panels in the
- *                     QIF and CSV importers: filename, what we read, why it
- *                     was skipped. Nothing is silently dropped.
+ *                     Like the "Not imported" panels in the QIF and CSV
+ *                     importers it shows the filename, what we read and why
+ *                     it was skipped. Nothing is silently dropped.
  *
  *                     Each row carries ONE opt-in control, "Attach anyway",
  *                     and nothing else. It is the deliberate exception to the
- *                     read-only rule: the four-attribute near-match bar is
- *                     strict by instruction and is NOT being relaxed, but a
- *                     photo the matcher scores at 97% must not be a dead end
- *                     just because its filename omits a grade. Opt-in means
- *                     exactly that — until the user clicks it, nothing
- *                     expands, nothing prompts, and the list behaves like the
- *                     report it was before.
+ *                     read-only rule: the four-attribute near-match bar stays
+ *                     strict and is NOT relaxed, but a photo the matcher
+ *                     scores at 97% must not be a dead end just because its
+ *                     filename omits a grade. Opt-in means exactly that --
+ *                     until the user clicks, nothing expands and nothing
+ *                     prompts.
  *
  * The rule that decides a tier lives in
  * services/image-matching/near-match.ts, not here. This component only draws
@@ -86,18 +83,15 @@ export class ImageImportModal {
     inject(ApiService, { optional: true }) ?? undefined
   );
 
-  /* ---------------------------------------------------------------------
-   * How much of the two long lists to actually render
-   * ---------------------------------------------------------------------
-   * Selecting the share's root can leave several hundred not-imported files -
-   * group shots, stamps, bond coupons, camera-default names - and the tier-2
-   * queue can run to a few dozen coins. Putting all of that in the DOM at once
-   * is slow to create and slow to update forever after.
+  /* How much of the two long lists to actually render.
    *
-   * So both lists are paged: a screenful at a time, with a "show more" button.
-   * This is purely a rendering decision, which is why it lives in the
-   * component rather than in the session - the data is all there either way.
-   * ------------------------------------------------------------------- */
+   * Selecting the share's root can leave several hundred not-imported files
+   * - group shots, stamps, bond coupons, camera-default names - and the
+   * tier-2 queue can run to a few dozen coins. All of that in the DOM at
+   * once is slow to create and slow to update forever after, so both lists
+   * are paged with a "show more" button. Purely a rendering decision, which
+   * is why it lives here rather than in the session - the data is all there
+   * either way. */
 
   /** Entries added per "show more" click, and shown initially. */
   private static readonly PAGE_SIZE = 25;

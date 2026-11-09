@@ -1,14 +1,10 @@
 /**
  * test-support/mssql-mock.ts — the fake `mssql` module every spec file shares.
  *
- * ------------------------------------------------------------------
- * Why this exists
- * ------------------------------------------------------------------
- * db/pool.ts no longer calls the global `sql.connect()`. It constructs
- * `new sql.ConnectionPool(config)` and — critically — attaches an 'error'
- * listener to it before connecting. So the mock pool must be a real
- * EventEmitter, otherwise the crash regression test in db/connection.spec.ts
- * cannot emit 'error' on it.
+ * db/pool.ts constructs `new sql.ConnectionPool(config)` and — critically —
+ * attaches an 'error' listener before connecting, so the mock pool must be a
+ * real EventEmitter: otherwise the crash regression test in
+ * db/connection.spec.ts cannot emit 'error' on it.
  *
  * Getting that right is fiddly, so it is written once here rather than copied
  * into each spec file. A spec opts in with:
@@ -79,9 +75,9 @@ export const mockPool = {
 /**
  * Give the mock pool genuine Node EventEmitter behaviour.
  *
- * Using the real EventEmitter matters: the production crash was Node's
- * "emit('error') with no listeners throws" rule, and a hand-rolled stub would
- * not reproduce it.
+ * Using the real EventEmitter matters: the crash being guarded against is
+ * Node's "emit('error') with no listeners throws" rule, and a hand-rolled
+ * stub would not reproduce it.
  */
 Object.setPrototypeOf(mockPool, EventEmitter.prototype);
 EventEmitter.call(mockPool as unknown as EventEmitter);
@@ -99,6 +95,12 @@ export const poolConstructorSpy = vi.fn();
 export function createMssqlMock() {
   const NVarChar = (len?: number) => ({ type: 'nvarchar', length: len });
   (NVarChar as unknown as { MAX: string }).MAX = 'max';
+
+  // Issuers.IsoCode is CHAR(2) — the only fixed-width column in the schema.
+  // Without this entry `sql.Char(2)` in db/bindings.ts is a call on
+  // undefined, which throws at module load and takes every server spec down
+  // with it rather than failing one test.
+  const Char = (len?: number) => ({ type: 'char', length: len });
 
   class MockTransaction {
     begin = mockTransaction.begin;
@@ -129,6 +131,7 @@ export function createMssqlMock() {
       ConnectionError: MockConnectionError,
       connect: vi.fn().mockResolvedValue(mockPool),
       NVarChar,
+      Char,
       Int: { type: 'int' },
       Bit: { type: 'bit' },
       Date: { type: 'date' },

@@ -1,0 +1,15 @@
+# Keep the "Open a blank issue" link available.
+#
+# THIS IS NOT THE DEFAULT AND IT MATTERS HERE. The in-app reporter
+# (Help > Report a problem) deep-links to /issues/new with a pre-filled
+# `body=`, and GitHub IGNORES a pre-filled body when the user lands on a YAML
+# issue form. Blank issues must therefore stay enabled, or every report filed
+# from inside the application arrives empty.
+#
+# The forms below are for people who come to the repository directly.
+blank_issues_enabled: true
+
+contact_links:
+  - name: What the problem reporter collects
+    url: https://github.com/OWNER/coin-inventory/blob/main/docs/what-support-collects.md
+    about: Exactly what goes into a report, and what never does.

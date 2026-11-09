@@ -1,41 +1,30 @@
-/* ===========================================================================
- * tier3-rescue.spec.ts
- * ---------------------------------------------------------------------------
- * WHAT THIS FILE PROVES
- *   That tier 3 -- the read-only "not imported" list -- now has a way back in,
- *   WITHOUT having become a queue and WITHOUT the matcher having been made
- *   braver.
+/*
+ * WHAT THIS FILE PROVES: that tier 3 -- the read-only "not imported" list --
+ * has a way back in, WITHOUT having become a queue and WITHOUT the matcher
+ * having been made braver. Both halves matter, so the file is in two parts:
  *
- *   Those two halves are equally important, so the file is in two parts:
+ *   1. THE HATCH WORKS. A skipped row can be rescued from the matcher's own
+ *      ranked candidates, or from the free-text CoinLookup search when there
+ *      are no candidates at all; it then travels the ordinary attach path.
  *
- *     1. THE HATCH WORKS. A skipped row can be rescued from the matcher's own
- *        ranked candidates, or from the free-text CoinLookup search when there
- *        are no candidates at all; it then travels the ordinary attach path.
+ *   2. THE HATCH COSTS NOTHING. A row nobody touches stays skipped and
+ *      writes nothing; the control is opt-in, so no panel exists until it is
+ *      clicked; the read-only list keeps its paging; and the TIER ASSIGNMENT
+ *      ITSELF is identical before and after any amount of rescuing.
  *
- *     2. THE HATCH COSTS NOTHING. A row nobody touches stays skipped and
- *        writes nothing; the control is opt-in, so no panel exists until it is
- *        clicked; the read-only list keeps its paging; and -- the constraint
- *        the owner was most explicit about -- the TIER ASSIGNMENT ITSELF is
- *        byte-for-byte the same before and after any amount of rescuing.
+ * WHY THE TIER-ASSIGNMENT TEST IS WRITTEN THE WAY IT IS. It asserts that
+ * tiers do not CHANGE, rather than that specific files land in specific
+ * tiers. The four-attribute bar and the grade-equivalence rule behind it are
+ * owned by services/image-matching/near-match.ts and tuned there; pinning
+ * exact tier membership here would fail every time that rule is legitimately
+ * adjusted. What this spec guards is that an escape hatch bolted onto the
+ * review screen cannot reach back and alter how the matcher classified
+ * anything -- hence the before/after snapshot.
  *
- * ---------------------------------------------------------------------------
- * WHY THE TIER-ASSIGNMENT TEST IS WRITTEN THE WAY IT IS
- * ---------------------------------------------------------------------------
- *   It deliberately asserts that tiers do not CHANGE, rather than asserting
- *   that specific files land in specific tiers. The four-attribute bar and the
- *   grade-equivalence rule behind it are owned by
- *   services/image-matching/near-match.ts and are tuned there; pinning exact
- *   tier membership here would make this spec fail every time that rule is
- *   legitimately adjusted, which would be noise rather than protection.
- *
- *   What this spec guards is the thing THIS work could plausibly break: that
- *   an escape hatch bolted onto the review screen cannot reach back and alter
- *   how the matcher classified anything. Hence the before/after snapshot.
- *
- *   The fixtures below rely only on a filename carrying NO GRADE AT ALL, which
- *   is a hard "absence is not agreement" failure and is not affected by how
- *   forgiving the comparison of two PRESENT grades is.
- * =========================================================================== */
+ * The fixtures rely only on a filename carrying NO GRADE AT ALL, a hard
+ * "absence is not agreement" failure, unaffected by how forgiving the
+ * comparison of two PRESENT grades is.
+ */
 
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -102,15 +91,14 @@ function tierMap(modal: ImageImportModal): Record<string, string> {
   return tiers;
 }
 
-/* ---------------------------------------------------------------------------
- * THE FIXTURE: the owner's own worst case, in miniature.
+/* THE FIXTURE: the worst case, in miniature.
  *
  * "1881 Morgan Dollar NGC 2599001.jpg" is verbatim from the share. Against a
  * matching Morgan record it scores very highly -- 97% on the real inventory --
  * and the near-match bar still refuses it, because the FILENAME STATES NO
  * GRADE and absence is never agreement. Under a strictly button-less tier 3
- * the right coin would be sitting at the top of a ranked list nobody can see.
- * ------------------------------------------------------------------------- */
+ * the right coin would be sitting at the top of a ranked list nobody can
+ * see. */
 const MORGAN_NO_GRADE = '1881 Morgan Dollar NGC 2599001.jpg';
 
 /** A camera-default name: tier 3 with NO candidates at all, so the ranked list
@@ -125,8 +113,8 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
   /** The inventory used throughout: one well-filled Morgan, one unrelated coin. */
   function stockInventory(inv: InventoryService) {
     return {
-      /* TWO 1881 Morgan dollars, because that is what the real collection
-       * holds and it is what makes this the interesting case:
+      /* TWO 1881 Morgan dollars, which is what makes this the interesting
+       * case:
        *
        *   - both records are COMPLETE, grade included; it is the FILENAME
        *     that states no grade, which is why the four-attribute bar
@@ -134,8 +122,8 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
        *   - two equally good fits means the auto-assign gates refuse it as
        *     well, so it is not quietly attached either.
        *
-       * The result is exactly the owner's dead end: a very high-scoring
-       * photo, a ranked candidate list that contains the right coin, and
+       * The result is the dead end this feature exists for: a very
+       * high-scoring photo, a ranked list that holds the right coin, and
        * nothing on screen that could reach it. Neither record carries the
        * cert number from the filename - if one did, that would be an
        * independent strong attribute and the gates would attach the file
@@ -152,9 +140,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     };
   }
 
-  /* =======================================================================
-   * 1. THE HATCH IS OPT-IN
-   * ===================================================================== */
+  /* 1. THE HATCH IS OPT-IN */
 
   it('shows no control state and asks nothing until the user opens a row', async () => {
     const { modal, inv } = createModal();
@@ -194,9 +180,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(rowFor(modal, MORGAN_NO_GRADE).decision).toBe('skipped');
   });
 
-  /* =======================================================================
-   * 2. RESCUE VIA THE MATCHER'S OWN RANKED CANDIDATES
-   * ===================================================================== */
+  /* 2. RESCUE VIA THE MATCHER'S OWN RANKED CANDIDATES */
 
   it('rescues a skipped row from the ranked candidates the matcher already produced', async () => {
     const { modal, inv } = createModal();
@@ -244,9 +228,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(sess(modal).attachCount()).toBe(0);
   });
 
-  /* =======================================================================
-   * 3. RESCUE VIA THE FREE-TEXT SEARCH (reusing CoinLookup)
-   * ===================================================================== */
+  /* 3. RESCUE VIA THE FREE-TEXT SEARCH (reusing CoinLookup) */
 
   it('rescues a row with no candidates at all using the CoinLookup search', async () => {
     const { modal, inv } = createModal();
@@ -287,9 +269,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(sess(modal).coins.term(CAMERA_NAME)).toBe('');
   });
 
-  /* =======================================================================
-   * 4. UNDO, AND WHAT AN UNTOUCHED ROW DOES
-   * ===================================================================== */
+  /* 4. UNDO, AND WHAT AN UNTOUCHED ROW DOES */
 
   it('puts a rescued row straight back to skipped on Undo', async () => {
     const { modal, inv } = createModal();
@@ -349,9 +329,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(summary.skipped).toBe(1);
   });
 
-  /* =======================================================================
-   * 5. THE SUMMARY SENTENCE AT THE TOP OF THE SCREEN
-   * ===================================================================== */
+  /* 5. THE SUMMARY SENTENCE AT THE TOP OF THE SCREEN */
 
   it('moves a rescued photo out of "skipped" and into "will be attached"', async () => {
     const { modal, inv } = createModal();
@@ -386,9 +364,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(after.willAttach).toBe(sess(modal).readyToAttach().length);
   });
 
-  /* =======================================================================
-   * 6. PAGING
-   * ===================================================================== */
+  /* 6. PAGING */
 
   it('keeps the read-only list paged at 25 when a row on the page is rescued', async () => {
     const { modal, inv } = createModal();
@@ -415,9 +391,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(modal['visibleNotImported']()).toHaveLength(50);
   });
 
-  /* =======================================================================
-   * 7. THE CONSTRAINT: THE BAR DOES NOT MOVE
-   * ===================================================================== */
+  /* 7. THE CONSTRAINT: THE BAR DOES NOT MOVE */
 
   it('does not change the tier assignment of a single file, however much is rescued', async () => {
     const { modal, inv } = createModal();
@@ -444,7 +418,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     sess(modal).openRescue(CAMERA_NAME);
     sess(modal).rescueWithSearch(CAMERA_NAME, peace.id);
 
-    // THE ASSERTION THE OWNER ASKED FOR: the escape hatch is a UI override,
+    // THE LOAD-BEARING ASSERTION: the escape hatch is a UI override,
     // not a loosening of the matcher. Every file is classified exactly as it
     // was, and the matcher's own verdict (`status`) is untouched as well.
     expect(tierMap(modal)).toEqual(before);
@@ -513,37 +487,26 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
   });
 });
 
-/* ===========================================================================
- * PART 3 -- THE ROWS THAT GET NO HATCH, AND THE LINE THAT PROTECTS
- * ---------------------------------------------------------------------------
+/*
+ * PART 3 -- THE ROWS THAT GET NO HATCH, AND THE LINE THAT PROTECTS THEM.
+ *
  * Counterfeits and multi-coin shots are the one group tier 3 does NOT offer
- * to rescue. The owner, about the group shots, and he said the same about the
- * fakes:
- *
- *   "Never automatically attach nor offer as attachable in the automated
- *    import. A user can try to manually choose such a photo manually at a
- *    later time to attach to a coin(s)."
- *   "Ignore the Fake coins."
- *
- * Everything in PART 1 and PART 2 above is the "attachable in the automated
- * import" that those rows must not have. So these tests are the mirror image
- * of those: the same controls, asserted absent.
+ * to rescue. The policy for both: never automatically attach, and never
+ * OFFER as attachable in the automated import. Everything in PART 1 and
+ * PART 2 above is exactly that offer, so these tests are the mirror image:
+ * the same controls, asserted absent.
  *
  * THE OTHER HALF IS EQUALLY LOAD-BEARING, AND IT IS WHY THIS IS NOT SIMPLY
- * "HIDE THE ROW". He was explicit that the restriction stops at the automated
- * run:
- *
- *   "I never want a picture file to be off limits from choosing to attach to
- *    a coin even if the descriptor has nothing relevant to the coin itself."
- *   "Maybe it's an article about the coin or something like that that I'd
- *    want to attach."
- *   "I should be able to manually add a Fake coin to my inventory, just don't
- *    worry about automating such a thing."
+ * "HIDE THE ROW". The restriction stops at the automated run. A manual
+ * attach is unconditional: no picture file is ever off limits to a user who
+ * chooses to attach it to a coin, even when its name has nothing to do with
+ * that coin -- it may be an article about it, or a fake the user keeps as an
+ * inventory record on purpose.
  *
  * So the asymmetry below -- withheld by the importer, freely available by
- * hand -- is the actual requirement, and it is the thing a future change is
+ * hand -- is the requirement itself, and it is the thing a future change is
  * most likely to break silently. Both sides are pinned.
- * ========================================================================= */
+ */
 
 /** Verbatim from the share. Complete, valid descriptor; the coin is a fake. */
 const COUNTERFEIT_PHOTO = 'FAKE - 1860 3CS - VF - Obverse.jpg';
@@ -557,7 +520,7 @@ describe('tier 3 — photos the automated import will not offer', () => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  /** Three genuine 1860/1861 three-cent silvers — the collision he actually has. */
+  /** Three genuine 1860/1861 three-cent silvers — a real-world collision. */
   function threeCentInventory(inv: InventoryService) {
     return {
       genuine1860: addCoin(inv, {
@@ -566,10 +529,10 @@ describe('tier 3 — photos the automated import will not offer', () => {
       genuine1861: addCoin(inv, {
         coinType: 'Three Cent Silver', denomination: '3CS', year: '1861', grade: 'XF'
       }),
-      /* And the counterfeit he really does hold as an inventory record. It is
-       * in the inventory exactly like any other coin — it has to be, because
-       * he asked to be able to add one by hand — and the only thing different
-       * about it is that the automated matcher will not consider it. */
+      /* And a counterfeit held as an inventory record. It is an ordinary
+       * coin row — adding one by hand is allowed — and the only thing
+       * different about it is that the automated matcher will not consider
+       * it. */
       fakeRecord: addCoin(inv, {
         coinType: 'Three Cent Silver FAKE', denomination: '3CS', year: '1861', grade: 'XF45'
       })
@@ -632,8 +595,8 @@ describe('tier 3 — photos the automated import will not offer', () => {
   it('keeps a counterfeit RECORD out of the automated candidate pool', async () => {
     /* The same rule pointing the other way, and the reason it is needed: a
      * GENUINE 1861 3CS photograph must not land on the record
-     * "1861 3CS - XF45 - FAKE". He owns five real 1861 3CS records and three
-     * counterfeit ones, so this collision is live in his actual data. */
+     * "1861 3CS - XF45 - FAKE". The real collection holds five genuine 1861
+     * 3CS records and three counterfeit ones, so the collision is live. */
     const { modal, inv } = createModal();
     const { genuine1861, fakeRecord } = threeCentInventory(inv);
 
@@ -653,16 +616,14 @@ describe('tier 3 — photos the automated import will not offer', () => {
     expect(reachable).toContain(genuine1861.id);
   });
 
-  /* =======================================================================
-   * THE OTHER SIDE OF THE LINE: EVERYTHING MANUAL STILL WORKS
-   * ===================================================================== */
+  /* THE OTHER SIDE OF THE LINE: EVERYTHING MANUAL STILL WORKS */
 
   it('still finds a FAKE record in the free-text coin search', () => {
-    /* The single most likely way to break his instruction by accident. The
+    /* The single most likely way to break the policy by accident. The
      * exclusion lives in `buildCoinSignatures`, which only the automated
      * matcher calls; implement it one level lower — in the inventory service,
-     * or in `searchCoins` — and the fake would vanish from the manual search
-     * too, which is the escape hatch his whole answer depends on. */
+     * or in `searchCoins` — and the fake vanishes from the manual search too,
+     * which is the route the whole policy depends on. */
     const { modal, inv } = createModal();
     const { fakeRecord } = threeCentInventory(inv);
     const matching = new ImageMatchingService();
@@ -676,12 +637,10 @@ describe('tier 3 — photos the automated import will not offer', () => {
   });
 
   it('lets any file whatsoever be attached to any coin by hand', async () => {
-    /* "I never want a picture file to be off limits from choosing to attach
-     *  to a coin even if the descriptor has nothing relevant to the coin
-     *  itself." — so this runs the three worst cases through the manual
-     *  assignment path: a counterfeit, a collage, and a scan that is not a
-     *  photograph of a coin at all ("Maybe it's an article about the coin or
-     *  something like that that I'd want to attach").
+    /* No picture file is ever off limits to a manual attach, however
+     * irrelevant its name. So this runs the three worst cases through the
+     * by-hand path: a counterfeit, a collage, and a scan that is not a
+     * photograph of a coin at all (an article about one, say).
      *
      * `assignCoin` is the import screen's own by-hand path and is NOT gated
      * on the tier, which is what makes it the right thing to assert here. The
