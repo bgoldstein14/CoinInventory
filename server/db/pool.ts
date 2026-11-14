@@ -1,140 +1,187 @@
 /**
- * db/pool.ts — the connection pool lifecycle. THE MOST IMPORTANT FILE IN THE
- * BACKEND. Read db/index.ts first for the story of the crash this code fixes.
+ * db/pool.ts — the database handle's lifecycle. Read db/index.ts first.
  *
  * This file owns:
- *   - creating the one shared `sql.ConnectionPool` (and attaching its 'error'
- *     listener before connecting — that listener IS the crash fix)
- *   - the single-flight guard so concurrent callers share one connect attempt
- *   - the generation counter so a stale reset cannot destroy a fresh pool
- *   - `getPool()`  — hand out the pool
- *   - `resetPool()`— tear the pool down (shutdown / tests / a dead connection)
+ *   - opening the one shared database (and creating its folder, its schema
+ *     and its reference data the first time)
+ *   - the single-flight guard so concurrent callers share one open attempt
+ *   - the generation counter so a stale reset cannot destroy a fresh handle
+ *   - `getPool()`  — hand out the connection
+ *   - `resetPool()`— close it (shutdown / tests / a handle that went bad)
  *   - `withDb()`   — the wrapper EVERY route handler should use
  *
- * Nothing else in the codebase is allowed to construct a ConnectionPool, and
- * in particular NO ROUTE HANDLER MAY CALL resetPool(). Route code tearing down
- * the shared pool on ordinary errors was a primary cause of the original crash.
+ * Nothing else in the codebase is allowed to open a database, and in
+ * particular NO ROUTE HANDLER MAY CALL resetPool(). Route code tearing down
+ * the shared connection on ordinary errors was a primary cause of the
+ * original production crash.
+ *
+ *
+ * *** WHAT CHANGED WITH SQLITE, AND WHAT DELIBERATELY DID NOT ***
+ *
+ * The crash this layer was built around was specific to `mssql`: its
+ * ConnectionPool is an EventEmitter, a Node EventEmitter with zero 'error'
+ * listeners THROWS when 'error' is emitted on it, and that throw happened on
+ * a socket callback where nothing could catch it — so a dropped idle
+ * connection killed the whole Express process. There is no socket here, no
+ * EventEmitter and no pool, so that failure mode does not exist and the
+ * listener that guarded against it is gone. It has NOT been re-created in a
+ * fake form: a guard against a mechanism that is absent is a comment
+ * pretending to be code. db/connection.spec.ts records the deletion.
+ *
+ * Everything else was kept, because the reasons for it survive the engine:
+ *
+ *   - SINGLE FLIGHT. The Angular app fires ~7 API calls in parallel on load.
+ *     Without the guard each would see "no handle" and each would open the
+ *     file, apply the schema and run the seed — seven times, concurrently,
+ *     against one file.
+ *   - GENERATION COUNTER. A request that fails slowly must not be able to
+ *     close a handle that was opened after it started.
+ *   - ONE AUTOMATIC RETRY, CONNECTION-CLASS ERRORS ONLY. A locked or
+ *     momentarily unavailable file is worth retrying once. A constraint
+ *     violation is not, and retrying it would run the caller's function —
+ *     including its writes — a second time.
+ *   - NO PER-REQUEST HEALTH CHECK. It halved round trips and removed a race
+ *     where the check closed a handle other requests were using. It would be
+ *     even more pointless here, where the "connection" is a file descriptor.
  */
 
-import sql from 'mssql';
-import { logInfo, logWarn, logError } from '../logger';
-import { buildDbConfig } from './config';
-import { isConnectionError } from './errors';
+import fs from 'fs';
 
-// Connection pool (single-flight, generation-guarded singleton)
+import { logInfo, logWarn, logError } from '../logger';
+import { buildDbConfig, IN_MEMORY_DATABASE, type DbConfig } from './config';
+import { isConnectionError } from './errors';
+import { openSqliteDatabase, SQLITE_DRIVER_NAME } from './driver';
+import { DbConnection } from './sql-api';
+import { applySchema, enableWriteAheadLog } from './schema';
+import { seedReferenceData } from './seed';
 
 /**
- * Everything we track about one physical pool. `generation` is the key idea:
- * every pool we ever build gets a unique, increasing id. Callers remember the
- * generation they used, so when they later ask us to tear the pool down we can
- * check "is this still the pool you were talking about?" and ignore the request
- * if we have already moved on. Without that guard, a slow request failing at
- * 10:00:05 could destroy a healthy pool that was created at 10:00:04.
+ * Everything we track about one open database. `generation` is the key idea:
+ * every handle we ever build gets a unique, increasing id. Callers remember
+ * the generation they used, so when they later ask us to tear it down we can
+ * check "is this still the handle you were talking about?" and ignore the
+ * request if we have already moved on.
  */
-interface PooledConnection {
+interface OpenConnection {
   readonly generation: number;
-  readonly pool: sql.ConnectionPool;
-  /** Flipped to false by the pool 'error' listener or by resetPool(). */
+  readonly connection: DbConnection;
+  /** Flipped to false by resetPool(). */
   healthy: boolean;
 }
 
-/** The pool currently in use, or null if we have none. */
-let current: PooledConnection | null = null;
+/** The connection currently in use, or null if we have none. */
+let current: OpenConnection | null = null;
 
-/**
- * The in-flight connect attempt, if any. This is the "single-flight" guard:
- * the Angular app fires ~7 API calls in parallel on load, and without this they
- * would each see `current === null` and each open a competing pool.
- */
-let connectPromise: Promise<PooledConnection> | null = null;
+/** The in-flight open attempt, if any. This is the single-flight guard. */
+let openPromise: Promise<OpenConnection> | null = null;
 
-/** Monotonically increasing id handed to each new pool. */
+/** Monotonically increasing id handed to each new handle. */
 let generationCounter = 0;
 
-/** How many times we retry the *initial* connect before surfacing the failure. */
-const CONNECT_ATTEMPTS = 3;
-const CONNECT_BASE_DELAY_MS = 1000;
+/** How many times we retry the INITIAL open before surfacing the failure. */
+const OPEN_ATTEMPTS = 3;
+const OPEN_BASE_DELAY_MS = 250;
 
 const delay = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * Builds and connects one pool, retrying a few times with a short backoff.
- * Never called directly by routes — go through getPool()/withDb().
+ * Makes sure the folder the database file goes in exists.
+ *
+ * On a first run under §4.10a this is `%LOCALAPPDATA%\CoinInventory`, which
+ * the installer is not required to create — the application owns its own
+ * data directory so that a portable copy, a different user profile and a
+ * restored backup all work without the installer having been involved.
  */
-async function createPooledConnection(): Promise<PooledConnection> {
+function ensureDirectory(config: DbConfig): void {
+  if (config.directory === null) return;
+  fs.mkdirSync(config.directory, { recursive: true });
+}
+
+/**
+ * Opens the database once, retrying a few times with a short backoff, and
+ * brings it up to date.
+ *
+ * The three steps after opening are all idempotent, which is what lets them
+ * run on EVERY open rather than only on a first run — there is no "is this a
+ * new database?" test to get wrong.
+ */
+async function openConnection(): Promise<OpenConnection> {
   const config = buildDbConfig();
   let lastError: unknown;
 
-  for (let attempt = 1; attempt <= CONNECT_ATTEMPTS; attempt++) {
+  for (let attempt = 1; attempt <= OPEN_ATTEMPTS; attempt++) {
     const generation = ++generationCounter;
 
-    // Construct the pool explicitly instead of calling the global
-    // sql.connect(), which stashes the pool in a hidden module-level global
-    // inside the mssql package where nobody can reason about who owns it.
-    const pool = new sql.ConnectionPool(config);
-    const handle: PooledConnection = { generation, pool, healthy: true };
-
-    // *** THE ACTUAL CRASH FIX ***
-    // Attach the 'error' listener IMMEDIATELY, before connect() is called,
-    // so there is never a window where the pool can emit 'error' with no
-    // listener attached. An EventEmitter with no 'error' listener throws,
-    // and that throw kills the Node process.
-    //
-    // We log it, mark the pool unhealthy so the next caller rebuilds it,
-    // and deliberately do NOT rethrow.
-    pool.on('error', (err: unknown) => {
-      handle.healthy = false;
-      logError(`SQL connection pool (generation ${generation}) reported an error; it will be rebuilt on next use`, err);
-    });
-
     try {
-      logInfo(`Connecting to SQL Server at ${config.server}/${config.database} (attempt ${attempt}/${CONNECT_ATTEMPTS})...`);
-      await pool.connect();
-      logInfo(`Connected to SQL Server successfully (pool generation ${generation})`);
-      return handle;
-    } catch (err) {
-      lastError = err;
-      handle.healthy = false;
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      logError(`Failed to connect to SQL Server (attempt ${attempt}/${CONNECT_ATTEMPTS})`, errorMessage);
+      logInfo(
+        `Opening the coin database at ${config.file} via ${SQLITE_DRIVER_NAME} ` +
+          `(attempt ${attempt}/${OPEN_ATTEMPTS})...`
+      );
 
-      // Release the half-built pool's resources. It may already be dead; that's fine.
-      try {
-        await pool.close();
-      } catch {
-        // Ignore cleanup failures on a pool that never fully opened.
+      ensureDirectory(config);
+
+      const database = openSqliteDatabase({
+        filename: config.file,
+        enableForeignKeyConstraints: config.enableForeignKeyConstraints,
+        busyTimeoutMs: config.busyTimeoutMs,
+      });
+
+      if (config.file !== IN_MEMORY_DATABASE) enableWriteAheadLog(database);
+      applySchema(database);
+      const seeded = seedReferenceData(database);
+
+      const total =
+        seeded.issuers +
+        seeded.denominations +
+        seeded.catalogs +
+        seeded.categories +
+        seeded.metalContents +
+        seeded.mintMarks;
+      if (total > 0) {
+        logInfo(
+          `Seeded reference data: ${seeded.issuers} issuer(s), ` +
+            `${seeded.denominations} denomination(s), ${seeded.catalogs} catalogue(s), ` +
+            `${seeded.categories} category/ies, ${seeded.metalContents} metal content(s), ` +
+            `${seeded.mintMarks} mint mark(s).`
+        );
       }
 
-      if (attempt < CONNECT_ATTEMPTS) {
-        await delay(CONNECT_BASE_DELAY_MS * attempt);
+      logInfo(`Coin database ready (generation ${generation}).`);
+      return { generation, connection: new DbConnection(database), healthy: true };
+    } catch (err) {
+      lastError = err;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      logError(
+        `Failed to open the coin database (attempt ${attempt}/${OPEN_ATTEMPTS})`,
+        errorMessage
+      );
+
+      if (attempt < OPEN_ATTEMPTS) {
+        await delay(OPEN_BASE_DELAY_MS * attempt);
       }
     }
   }
 
   throw lastError instanceof Error
     ? lastError
-    : new Error(`Unable to establish SQL Server connection: ${String(lastError)}`);
+    : new Error(`Unable to open the coin database: ${String(lastError)}`);
 }
 
 /**
- * Returns the current healthy pool handle, creating one if needed.
- * Concurrent callers share a single connect attempt (see `connectPromise`).
+ * Returns the current healthy connection, opening one if needed.
+ * Concurrent callers share a single open attempt (see `openPromise`).
  */
-async function acquirePooledConnection(): Promise<PooledConnection> {
-  // Fast path: we already have a pool and nothing has reported it broken.
-  if (current && current.healthy) {
+async function acquireConnection(): Promise<OpenConnection> {
+  if (current && current.healthy && !current.connection.isClosed) {
     return current;
   }
 
-  // We have a pool but its 'error' listener marked it unhealthy — discard it.
-  if (current && !current.healthy) {
+  if (current && (!current.healthy || current.connection.isClosed)) {
     await resetPool(current.generation);
   }
 
-  // Another caller is already connecting: await their attempt instead of
-  // starting a competing one.
-  if (!connectPromise) {
-    connectPromise = createPooledConnection()
+  if (!openPromise) {
+    openPromise = openConnection()
       .then((handle) => {
         current = handle;
         return handle;
@@ -142,34 +189,37 @@ async function acquirePooledConnection(): Promise<PooledConnection> {
       .finally(() => {
         // Clear the single-flight slot whether we succeeded or failed, so the
         // next request is free to try again.
-        connectPromise = null;
+        openPromise = null;
       });
   }
 
-  return connectPromise;
+  return openPromise;
 }
 
 /**
- * Gets (or lazily creates) the shared SQL Server connection pool.
+ * Gets (or lazily opens) the shared database connection.
  *
- * Prefer `withDb()` in route handlers — it adds the automatic single retry for
- * dropped connections. `getPool()` remains for callers that just need the pool.
+ * Still called `getPool()`. The name is a small lie now — there is no pool —
+ * but it is exported from db/index.ts, re-exported from server.ts and named
+ * in the specs, and renaming it would be churn in a change that is already
+ * large. It will be worth renaming when something else is touching those
+ * files anyway.
  */
-export async function getPool(): Promise<sql.ConnectionPool> {
-  const handle = await acquirePooledConnection();
-  return handle.pool;
+export async function getPool(): Promise<DbConnection> {
+  const handle = await acquireConnection();
+  return handle.connection;
 }
 
 /**
- * Tears down the current pool so the next caller builds a fresh one.
+ * Closes the current database so the next caller opens a fresh one.
  *
- * @param generation - Optional. When supplied, the reset is IGNORED unless that
- *   generation is still the live pool. Callers should always pass the
- *   generation they actually used, so a slow/late failure cannot destroy a pool
- *   that was created after it. Calling with no argument forces an
+ * @param generation - Optional. When supplied, the reset is IGNORED unless
+ *   that generation is still the live handle. Callers should always pass the
+ *   generation they actually used, so a slow/late failure cannot close a
+ *   handle that was opened after it. Calling with no argument forces an
  *   unconditional reset (used at shutdown and by tests).
  *
- * Safe to call concurrently: `current` is cleared *before* the await, so a
+ * Safe to call concurrently: `current` is cleared BEFORE the await, so a
  * second concurrent caller sees null and returns immediately.
  */
 export async function resetPool(generation?: number): Promise<void> {
@@ -178,27 +228,26 @@ export async function resetPool(generation?: number): Promise<void> {
 
   if (generation !== undefined && generation !== handle.generation) {
     logInfo(
-      `Ignoring stale pool reset for generation ${generation}; the live pool is generation ${handle.generation}.`
+      `Ignoring stale database reset for generation ${generation}; the live handle is generation ${handle.generation}.`
     );
     return;
   }
 
-  // Detach before awaiting so concurrent resetPool() calls become no-ops.
   current = null;
   handle.healthy = false;
 
-  logInfo(`Closing SQL connection pool (generation ${handle.generation}).`);
+  logInfo(`Closing the coin database (generation ${handle.generation}).`);
   try {
-    await handle.pool.close();
+    handle.connection.close();
   } catch {
-    // The old pool may already be dead or half-open; ignore cleanup failures
-    // and let the next request build a fresh one.
+    // The handle may already be gone; ignore cleanup failures and let the
+    // next request open a fresh one.
   }
 }
 
 /**
- * Runs `fn` against the shared pool, with exactly one automatic retry when — and
- * only when — the failure was a connection-level error.
+ * Runs `fn` against the shared connection, with exactly one automatic retry
+ * when — and only when — the failure was a connection-level error.
  *
  * This is the function every route handler should use:
  *
@@ -207,31 +256,30 @@ export async function resetPool(generation?: number): Promise<void> {
  *     return result.recordset;
  *   });
  *
- * Connection-class errors ONLY. Calling `resetPool()` from every catch block
- * means a constraint violation or a too-long string nukes the shared pool and
- * breaks every other request in flight. Ordinary query errors propagate on
- * the first throw, untouched.
+ * Connection-class errors ONLY. Retrying every failure means a constraint
+ * violation or a too-long string runs the caller's writes twice. Ordinary
+ * query errors propagate on the first throw, untouched.
  */
-export async function withDb<T>(fn: (db: sql.ConnectionPool) => Promise<T>): Promise<T> {
-  const handle = await acquirePooledConnection();
+export async function withDb<T>(fn: (db: DbConnection) => Promise<T>): Promise<T> {
+  const handle = await acquireConnection();
 
   try {
-    return await fn(handle.pool);
+    return await fn(handle.connection);
   } catch (err) {
     if (!isConnectionError(err)) {
-      // Not a connection problem — leave the pool alone and let the route's
+      // Not a connection problem — leave the handle alone and let the route's
       // catch block decide on the HTTP status.
       throw err;
     }
 
     logWarn(
-      `Database call failed with a connection-level error on pool generation ${handle.generation}; rebuilding the pool and retrying once.`
+      `Database call failed with a connection-level error on generation ${handle.generation}; reopening and retrying once.`
     );
 
-    // Generation-guarded: only kills the pool we actually used.
+    // Generation-guarded: only closes the handle we actually used.
     await resetPool(handle.generation);
 
-    const retryHandle = await acquirePooledConnection();
-    return await fn(retryHandle.pool);
+    const retryHandle = await acquireConnection();
+    return await fn(retryHandle.connection);
   }
 }

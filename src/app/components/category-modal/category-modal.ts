@@ -29,7 +29,11 @@ import {
   ReferenceSectionId,
   resolveReferenceSection,
 } from './reference-sections';
-import { MaintenanceDenomination, groupDenominations } from './denomination-grouping';
+import {
+  MaintenanceDenomination,
+  compareIssuersByName,
+  groupDenominations,
+} from './denomination-grouping';
 import {
   EMPTY_REFERENCE_USAGE,
   describeUsage,
@@ -38,13 +42,29 @@ import {
   usageCount,
 } from './reference-usage';
 import {
-  ISSUER_KINDS,
   ISSUER_NAME_MAX_LENGTH,
   IssuerDraft,
   blankIssuerDraft,
   describeIssuerRemoval,
+  previewIssuerKind,
   validateIssuerDraft,
 } from './issuer-draft';
+import {
+  DenominationLookupResult,
+  DenominationProposal,
+  LOOKUP_SOURCE,
+  LookupPhase,
+  chosenLabels,
+  describeDenominationsAdded,
+  describeLookupConsent,
+  describeLookupDeclined,
+  describeLookupInProgress,
+  describeLookupOutcome,
+  setAllProposals,
+  toProposals,
+  toggleProposal,
+} from './issuer-lookup';
+import { StorageKeys, StorageService } from '../../services/storage.service';
 
 /**
  * CategoryModal — the reference-data maintenance screen.
@@ -64,6 +84,9 @@ import {
  *     denomination-grouping.ts  grouping by issuer, and the search rules
  *     reference-usage.ts        the in-use counts and the removal prompts
  *     issuer-draft.ts           what a new issuer is allowed to be
+ *     issuer-kind.ts            the kind the year span implies
+ *     issuer-lookup.ts          what the online lookup proposes, and what
+ *                               the user is told about every outcome
  *
  * What is left here is wiring: signals, service calls, and the order things
  * happen in. category-modal.spec.ts tests that wiring without rendering.
@@ -105,6 +128,7 @@ export class CategoryModal {
   private readonly inventoryService = inject(InventoryService);
   private readonly api = inject(ApiService);
   private readonly notifications = inject(NotificationService);
+  private readonly storage = inject(StorageService);
   protected get inv() { return this.inventoryService; }
 
   readonly closed = output<void>();
@@ -146,9 +170,27 @@ export class CategoryModal {
   protected readonly issuers = signal<IssuerRecord[]>([]);
   protected readonly usage = signal<ReferenceUsageCounts>(EMPTY_REFERENCE_USAGE);
 
+  /**
+   * The issuers A-Z — what BOTH issuer-shaped controls on this screen
+   * render: the Issuers pane's list, and the Denominations pane's "which
+   * issuer" <select>.
+   *
+   * Sorted here and not only on the server. `GET /api/issuers` does order
+   * by name now, but that is the wire, and this list is also written to
+   * locally: `addIssuerFromDraft` appends the row the server just created
+   * rather than re-fetching, so a new 'Burma' would otherwise sit at the
+   * bottom under Württemberg — in the one list the user is looking at to
+   * check their addition worked.
+   *
+   * A copy, because `.sort()` mutates and the array is signal state that
+   * `denominationGroups` also reads.
+   */
+  protected readonly sortedIssuers = computed(() => [...this.issuers()].sort(compareIssuersByName));
+
   constructor() {
     void this.loadIssuers();
     void this.refreshUsage();
+    void this.loadLookUpOnlinePreference();
   }
 
   private async loadIssuers(): Promise<void> {
@@ -206,6 +248,10 @@ export class CategoryModal {
     return usageCount(this.usage().catalogs, id);
   }
 
+  metalContentUsage(name: string): number {
+    return usageCount(this.usage().metalContents, name);
+  }
+
   // ===================== Categories =====================
 
   protected readonly newCategoryOption = signal<string>('');
@@ -242,45 +288,237 @@ export class CategoryModal {
 
   // ===================== Issuers =====================
 
-  protected readonly issuerKinds = ISSUER_KINDS;
   protected readonly issuerNameMaxLength = ISSUER_NAME_MAX_LENGTH;
   protected readonly issuerDraft = signal<IssuerDraft>(blankIssuerDraft());
   protected readonly issuerError = signal<string>('');
 
-  /** Patch one field of the draft without the template rebuilding the object. */
-  protected setIssuerField(field: keyof IssuerDraft, value: string): void {
+  /**
+   * The kind the year boxes imply, shown live beside them.
+   *
+   * THIS IS WHY DROPPING THE PICKER IS NOT THE SAME AS HIDING A FIELD. The
+   * user can still see the classification; they just do not have to state
+   * it. Typing 1918 into "To" turns the tag from modern to historical in
+   * front of them, which teaches the rule better than a select ever did.
+   */
+  protected readonly derivedIssuerKind = computed(() => previewIssuerKind(this.issuerDraft()));
+
+  /** Patch one text field of the draft without the template rebuilding it. */
+  protected setIssuerField(field: 'name' | 'isoCode' | 'validFrom' | 'validTo', value: string): void {
     this.issuerDraft.set({ ...this.issuerDraft(), [field]: value });
     this.issuerError.set('');
   }
 
+  // ----- The online denomination lookup -----
+
+  protected readonly lookupConsentLabel = describeLookupConsent(LOOKUP_SOURCE);
+  protected readonly lookupPhase = signal<LookupPhase>('idle');
+  protected readonly lookupMessage = signal<string>('');
+  protected readonly lookupProposals = signal<DenominationProposal[]>([]);
+  protected readonly lookupIssuer = signal<IssuerRecord | null>(null);
+  protected readonly lookupSource = signal<string>(LOOKUP_SOURCE);
+  protected readonly lookupBusy = signal<boolean>(false);
+
+  protected readonly chosenProposalCount = computed(() => chosenLabels(this.lookupProposals()).length);
+
   /**
-   * Create an issuer the seed missed.
+   * Turn the lookup on or off, and REMEMBER IT.
    *
-   * This is the manual path and the whole of it. An optional online lookup to
-   * seed the issuer's denominations is deliberately NOT built — see the note
-   * at the bottom of this file.
+   * A user who turns this off once means it. Written straight through
+   * rather than on save, because the next thing they do after unticking it
+   * might be to close the dialog.
+   */
+  protected setLookUpOnline(value: boolean): void {
+    this.issuerDraft.set({ ...this.issuerDraft(), lookUpOnline: value });
+    void this.storage.set(StorageKeys.IssuerLookupOnline, value);
+  }
+
+  /** Restore the remembered answer. Absent or unreadable means the default. */
+  private async loadLookUpOnlinePreference(): Promise<void> {
+    const stored = await this.storage.get<boolean>(StorageKeys.IssuerLookupOnline);
+    if (typeof stored !== 'boolean') return;
+    this.issuerDraft.set({ ...this.issuerDraft(), lookUpOnline: stored });
+  }
+
+  /**
+   * Create an issuer the seed missed, then offer to fill it.
+   *
+   * THE TWO STEPS ARE SEPARATE AND THE SECOND CANNOT BREAK THE FIRST. The
+   * issuer is created, pushed into the list and announced before anything
+   * is asked of the network; the lookup then runs against a row that
+   * already exists. A lookup that hangs, fails or returns nonsense cannot
+   * cost the user the issuer they just typed.
    */
   async addIssuerFromDraft(): Promise<void> {
+    const draft = this.issuerDraft();
     const existingNames = this.issuers().map((issuer) => issuer.name);
-    const validated = validateIssuerDraft(this.issuerDraft(), existingNames);
+    const validated = validateIssuerDraft(draft, existingNames);
 
     if (!validated.ok) {
       this.issuerError.set(validated.error);
       return;
     }
 
+    let created: IssuerRecord;
     try {
-      const created = await firstValueFrom(this.api.createIssuer(validated.issuer));
-      this.issuers.set([...this.issuers(), created]);
-      this.issuerDraft.set(blankIssuerDraft());
-      this.issuerError.set('');
-      this.notifications.showInfo(`Added issuer: ${created.name}`);
+      created = await firstValueFrom(this.api.createIssuer(validated.issuer));
     } catch (error) {
       // THE FORM IS NOT CLEARED. What the user typed is the only copy of it,
       // and throwing it away in the one situation where they need it again
       // is the worst possible moment to be tidy.
       this.issuerError.set(describeHttpError(error) || 'Could not add that issuer.');
+      return;
     }
+
+    this.issuers.set([...this.issuers(), created]);
+    // The checkbox survives the clear. It is a standing preference, not a
+    // field of this particular issuer.
+    this.issuerDraft.set(blankIssuerDraft(draft.lookUpOnline));
+    this.issuerError.set('');
+
+    await this.offerDenominations(created, draft.lookUpOnline);
+  }
+
+  /**
+   * Ask about the new issuer's denominations — or, if refused, do not ask.
+   *
+   * *** UNTICKED MEANS NO REQUEST IS MADE. *** Not made-and-ignored. The
+   * `return` below is the entire guarantee: there is nothing a route or a
+   * response handler could do about a packet that has already left, so the
+   * decision has to live at the call site and it has to be this early.
+   */
+  private async offerDenominations(issuer: IssuerRecord, lookUpOnline: boolean): Promise<void> {
+    this.lookupIssuer.set(issuer);
+    this.lookupProposals.set([]);
+
+    if (!lookUpOnline) {
+      this.settleOffline(issuer, describeLookupDeclined(issuer.name));
+      return;
+    }
+
+    this.lookupPhase.set('asking');
+    this.lookupBusy.set(true);
+    this.lookupMessage.set(describeLookupInProgress(issuer.name, this.lookupSource()));
+
+    let result: DenominationLookupResult;
+    try {
+      result = await firstValueFrom(this.api.lookUpDenominations(issuer.name));
+    } catch {
+      // Our OWN server being unreachable, which is a different failure from
+      // the one the route reports, and reads the same to the user.
+      result = { outcome: 'unavailable', source: this.lookupSource(), proposals: [], reason: 'no connection' };
+    } finally {
+      this.lookupBusy.set(false);
+    }
+
+    if (result.source) this.lookupSource.set(result.source);
+
+    const proposals = toProposals(result.proposals ?? []);
+    const message = describeLookupOutcome(issuer.name, result);
+
+    if (proposals.length === 0) {
+      this.settleOffline(issuer, message);
+      return;
+    }
+
+    this.lookupProposals.set(proposals);
+    this.lookupMessage.set(message);
+    this.lookupPhase.set('proposing');
+  }
+
+  /**
+   * Nothing to offer: say so, and put the user where they can type.
+   *
+   * The issuer is PRESELECTED in the denominations pane and the pane is
+   * opened. "An issuer that silently has none is the current bug", and an
+   * issuer that noisily has none but leaves the user to find the right
+   * dropdown is most of the same bug.
+   */
+  private settleOffline(issuer: IssuerRecord, message: string): void {
+    this.lookupPhase.set('settled');
+    this.lookupMessage.set(message);
+    this.newDenominationIssuerId.set(issuer.issuerId);
+    this.denominationError.set('');
+    this.selectSection('denominations');
+    this.notifications.showInfo(message);
+  }
+
+  protected toggleProposal(label: string): void {
+    this.lookupProposals.set(toggleProposal(this.lookupProposals(), label));
+  }
+
+  protected setAllProposals(chosen: boolean): void {
+    this.lookupProposals.set(setAllProposals(this.lookupProposals(), chosen));
+  }
+
+  /**
+   * Write the ticked proposals, and only those.
+   *
+   * `chosenLabels` is the ONLY route from a proposal to a row. Nothing
+   * above this line writes, which is the "propose, never auto-insert" rule
+   * expressed as code rather than as a comment.
+   */
+  async acceptProposals(): Promise<void> {
+    const issuer = this.lookupIssuer();
+    if (!issuer || this.lookupBusy()) return;
+
+    const labels = chosenLabels(this.lookupProposals());
+    this.lookupBusy.set(true);
+
+    try {
+      let sortOrder = Math.max(0, ...this.inv.denominations().map((row) => row.sortOrder));
+
+      for (const label of labels) {
+        sortOrder += 10;
+        await this.inv.addDenomination({
+          label,
+          // Kept in step with the issuer, like the manual add path: the
+          // editor's dropdown still groups by country, and a blank one
+          // would make these rows invisible there.
+          country: issuer.isoCode ?? issuer.name,
+          issuerId: issuer.issuerId,
+          sortOrder,
+          isActive: true,
+        });
+      }
+
+      this.issuers.set(
+        this.issuers().map((row) =>
+          row.issuerId === issuer.issuerId
+            ? { ...row, denominationCount: row.denominationCount + labels.length }
+            : row
+        )
+      );
+    } finally {
+      this.lookupBusy.set(false);
+    }
+
+    // ALWAYS STATED, INCLUDING ZERO: how many, and by what route.
+    const outcome = describeDenominationsAdded(issuer.name, labels.length, this.lookupSource());
+    this.notifications.showInfo(outcome);
+    this.lookupMessage.set(outcome);
+    this.lookupProposals.set([]);
+    this.lookupPhase.set('settled');
+
+    // Straight to the list the user now wants to check.
+    this.newDenominationIssuerId.set(issuer.issuerId);
+    this.selectSection('denominations');
+    await this.refreshUsage();
+  }
+
+  /** Take none of them, and fall through to the manual route. */
+  dismissProposals(): void {
+    const issuer = this.lookupIssuer();
+    if (!issuer) return;
+    this.lookupProposals.set([]);
+    this.settleOffline(issuer, describeDenominationsAdded(issuer.name, 0, this.lookupSource()));
+  }
+
+  /** Put the banner away. */
+  protected clearLookup(): void {
+    this.lookupPhase.set('idle');
+    this.lookupMessage.set('');
+    this.lookupProposals.set([]);
+    this.lookupIssuer.set(null);
   }
 
   /**
@@ -673,6 +911,58 @@ export class CategoryModal {
     await this.inv.removeMintMark(mintMark.mintMarkId);
   }
 
+  /*
+   * ===================== Metal content =====================
+   *
+   * MOVED HERE FROM THE SETTINGS DIALOG, WHICH NO LONGER EDITS ANY LIST.
+   * Settings carried chip editors for categories, mint marks and sets as
+   * well — second editors for lists this screen already owned, which is how
+   * the two drifted. Metal content was the only one with no pane here, so
+   * it was moved rather than deleted, and it gained what the Settings
+   * version never had: the in-use count beside each entry and a
+   * confirmation that quotes it.
+   *
+   * *** THE COIN KEEPS ITS METAL. *** `Coins.MetalContent` is an NVARCHAR
+   * column, not a foreign key — removing an entry takes it out of the
+   * editor's dropdown and changes no coin, which is exactly what
+   * `planReferenceRemoval` promises. That is why this uses the general
+   * wording and not `planDenominationRemoval`'s: there is no id to null and
+   * nothing to re-link, so the denomination sentence would offer a recovery
+   * step that does not exist here.
+   *
+   * *** THE ONE HONEST LIMITATION, CARRIED OVER UNCHANGED. ***
+   * `/api/metalcontents` is READ-ONLY (the list is seeded by
+   * setup-database.sql), so both methods below write the signal and nothing
+   * else — an edit lasts until the next reload. That is precisely what the
+   * Settings version did, so nothing has got worse by moving; it is noted
+   * here, rather than left to be discovered, because every OTHER list on
+   * this screen persists and the difference is invisible from the UI.
+   * Giving MetalContents the POST/DELETE the other lookups have is the fix,
+   * and it is a server change, not a change to this file.
+   */
+
+  protected readonly newMetalContent = signal<string>('');
+
+  addMetalContentFromDraft(): void {
+    const value = this.newMetalContent().trim();
+    if (!value) return;
+
+    // De-duplicated and sorted, as the Settings version did: the editor's
+    // dropdown renders this list in order and a second 'Gold' in it is a
+    // choice the user cannot tell apart from the first.
+    const next = [...new Set([...this.inv.metalContents(), value])].sort((left, right) =>
+      left.localeCompare(right)
+    );
+    this.inv.metalContents.set(next);
+    this.newMetalContent.set('');
+  }
+
+  removeMetalContent(value: string): void {
+    const plan = planReferenceRemoval('metal content', value, this.metalContentUsage(value));
+    if (!confirmAction(plan.prompt)) return;
+    this.inv.metalContents.set(this.inv.metalContents().filter((item) => item !== value));
+  }
+
   // ===================== Catalogues =====================
 
   protected readonly newCatalogName = signal<string>('');
@@ -727,32 +1017,44 @@ export class CategoryModal {
 }
 
 /*
- * THE ONLINE ISSUER LOOKUP IS DELIBERATELY NOT BUILT.
+ * THE ONLINE ISSUER LOOKUP, AND THE THREE OBJECTIONS IT HAD TO ANSWER
  *
- * The idea is to seed a newly added issuer's denominations from an open
- * numismatic dataset instead of handing the user an empty list. It stops at
- * the manual path above for three reasons, in increasing order of weight:
+ * This note used to say the lookup was deliberately NOT built. It is built
+ * now, on the owner's decision, and the three reasons it was refused are
+ * worth keeping because each one shaped what got built:
  *
- * 1. IT IS EXPECTED TO FAIL FOR THE COMMON CASE. Nomisma's open datasets
- *    cover ancient and Hellenistic issuers well and modern world coinage
- *    essentially not at all — it would succeed for Parthia and fail for
- *    Burma. A collector adding a modern country the seed missed is the
- *    failing case.
+ * 1. "IT IS EXPECTED TO FAIL FOR THE COMMON CASE." Still true, and now
+ *    measured rather than predicted: Wikidata answered with nothing for
+ *    Athens, one candidate for Parthia, four for Burma and nine for Japan.
+ *    What changed is that a miss is no longer a dead end. The answer to a
+ *    miss was the OTHER half of this piece of work -- eight researched
+ *    ancient issuers added to the bundled seed -- plus the offline path
+ *    below, which names the outcome and drops the user into the
+ *    denominations pane with the issuer already chosen.
  *
- * 2. THE ENDPOINT IS UNPROVEN. numismatics.org answers HTTP 403 to automated
- *    requests; Nomisma's SPARQL endpoint is the only realistic route and has
- *    never been exercised with a real query.
+ * 2. "THE ENDPOINT IS UNPROVEN." It is proven now. numismatics.org still
+ *    answers 403 to automated requests; Wikidata's SPARQL endpoint was
+ *    exercised with real queries, and the first query written for it timed
+ *    out (HTTP 504 after 65 seconds) on 'Burma'. That failure is why the
+ *    query in server/routes/lookups/wikidata-denominations.ts is shaped
+ *    the way it is, and why there is a hard 8-second timeout behind it.
  *
- * 3. IT COULD NOT BE VERIFIED, AND THAT IS DECISIVE. A lookup whose correct
- *    behaviour is "returns nothing, and that is not an error" is
- *    indistinguishable from one that is broken, or one that was never wired
- *    up. A visible blank beats a silently wrong value; an untested silent
- *    failure path is the worst of both.
+ * 3. "IT COULD NOT BE VERIFIED, AND THAT IS DECISIVE." This was the real
+ *    objection and it is the one that is actually answered:
+ *    server/routes/lookups/denomination-lookup.spec.ts exercises a dead
+ *    network, a timeout, a 504, a body that is not JSON and a body of the
+ *    wrong shape, with the fetch swapped out, so the suite does not depend
+ *    on a third party being up. A path whose correct behaviour is "returns
+ *    nothing, and that is not an error" is no longer indistinguishable
+ *    from a broken one.
  *
- * IF IT IS BUILT, nothing above needs rewriting: `addIssuerFromDraft` creates
- * the issuer and returns, so a lookup hangs off the end of the `try` block as
- * a second, independent step that cannot block or fail the creation. It must
- * also record PROVENANCE, so the user can tell which denominations they
- * vouched for themselves — that means a column and therefore a migration, so
- * it is a separate change rather than an addition to this file.
+ * WHAT IS STILL NOT BUILT, AND WHY THAT IS NOW FINE
+ *
+ * PROVENANCE. The old note required a column recording which denominations
+ * came from a lookup, so the user could tell which ones they had vouched
+ * for themselves. There is no such column and none is needed, because
+ * NOTHING IS WRITTEN WITHOUT THE USER TICKING IT. Every row that reaches
+ * the database went through `chosenLabels`, so the answer to "which of
+ * these did I vouch for" is "all of them" by construction. Had the lookup
+ * auto-inserted, the column would have been mandatory.
  */

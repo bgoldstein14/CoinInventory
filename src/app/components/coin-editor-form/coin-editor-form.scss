@@ -194,8 +194,27 @@
   }
 }
 
+// SIZED TO THE DATA, like the catalogue number below it. A slab number is
+// 7-10 characters — "2599001" (PCGS), "481230-004" (NGC, the longest shape
+// there is). 13ch covers ten digits plus the input's 7px horizontal padding
+// and 1px border on each side, which the global `box-sizing: border-box`
+// makes the declared width pay for.
+//
+// This REPLACES an inline `style="width: 125%"` on the input itself. A
+// percentage width resolves against the grid cell, so 125% was by definition
+// wider than the cell: the box overflowed into the Catalogue column and the
+// <select> there — later in the document, so painted later — sat on top of
+// it. Nothing on this row is percentage-sized any more.
+//
+// `max-width` stays on the wrapper so the caption, which is `nowrap`, sets
+// the floor rather than the box: "Certification Number" is the widest thing
+// in this cell now, and it fits in the ~121px third of the row.
 .detail-field--cert-number {
-  max-width: 220px;
+  max-width: 160px;
+
+  input {
+    width: 13ch;
+  }
 }
 
 // ---- The catalogue reference ----
@@ -243,8 +262,24 @@
 }
 
 // ---- Notes ----
+//
+// THIS IS THE LAST THING IN THE SIDEBAR'S FLEX COLUMN, so every stray pixel
+// here is a pixel at the very bottom edge of the panel. The rules below are
+// written to add none of their own. They do NOT, however, fix the notes box
+// being cut off: that is the detail PANEL clipping its own overflow (see
+// `.detail-panel` in coin-detail-panel.scss, `overflow: hidden` on a
+// height-capped flex column with no scrolling child). Nothing in this file
+// can give the panel a scrollbar.
 
 .detail-notes { margin-top: 8px; }
+
+// The label wraps the caption and the textarea. Left inline it generates a
+// line box, and an inline-block textarea sits on that line's baseline — which
+// reserves room for a descender UNDER the box that nothing ever draws in.
+// Those few pixels are pure phantom height at the bottom of the panel.
+.detail-notes label {
+  display: block;
+}
 
 .detail-notes-label {
   display: block;
@@ -255,6 +290,10 @@
 }
 
 .detail-notes textarea {
+  // `block`, not the browser default `inline-block`: see above. It also makes
+  // `width: 100%` mean the full row rather than the full row plus whatever
+  // whitespace the line box contributes.
+  display: block;
   width: 100%;
   min-height: 52px;
   resize: vertical;

@@ -225,6 +225,24 @@ export class App {
   protected openSettingsModal(): void { this.showSettingsModal.set(true); }
   protected closeSettingsModal(): void { this.showSettingsModal.set(false); }
 
+  /**
+   * Settings > "Open Reference Data".
+   *
+   * The reference lists used to be edited inside Settings; the button that
+   * raises this is the one route left to where they live now, so a user who
+   * knew the old address is taken there rather than told to go and find it.
+   *
+   * Settings CLOSES. Both are backdrop modals, and leaving this one behind
+   * the other would dim the screen twice and put a Cancel button under a
+   * dialog the user is still working in. `openCategoryModal()` is reused
+   * rather than setting the signals here, so this opens on the default pane
+   * exactly like every other non-banner caller.
+   */
+  protected openReferenceDataFromSettings(): void {
+    this.closeSettingsModal();
+    this.openCategoryModal();
+  }
+
   protected onQuickenImported(coins: CoinRecord[]): void {
     this.inv.addCoins(coins);
   }
@@ -259,19 +277,32 @@ export class App {
     this.images.closeImageGallery();
   }
 
-  /** The "Details" button: opens the sidebar, or closes it if it was already showing this coin. */
+  /**
+   * A COIN WAS ASKED FOR. The one code path behind every gesture that means
+   * "show me this coin": clicking a grid row, pressing Enter or Space on a
+   * focused row, and creating a new row with Add Coin.
+   *
+   * IT IS NOT A TOGGLE ANY MORE, and that is deliberate. It used to be
+   * reached only from a per-row "Details" button, where closing on a second
+   * press is the right behaviour for a button. The ROW is now what opens the
+   * panel, and a row is not a button: clicking the row you are currently
+   * reading should not make the information vanish. The panel's own Close
+   * button is the way out, and clicking another row moves the panel to it.
+   */
   protected openCoinDetail(coinId: string): void {
-    const alreadyOpen = this.showDetailPanel() && this.selectedCoin?.id === coinId;
     this.selectCoin(coinId);
-    this.showDetailPanel.set(!alreadyOpen);
-    if (alreadyOpen) {
-      this.images.closeImageGallery();
-    }
+    this.showDetailPanel.set(true);
   }
 
   protected closeDetailPanel(): void {
     this.showDetailPanel.set(false);
     this.images.closeImageGallery();
+    // Forget any outstanding "put the caret in the first field". The panel
+    // is destroyed when it closes, so the NEXT one is a fresh instance that
+    // has never acted on this request — and if the next thing the user does
+    // is click a grid row, acting on it would throw focus out of the grid
+    // and stop the arrow keys working. See CoinDetailPanel.applyPendingFocus.
+    this.detailFieldFocusRequest.set(0);
   }
 
   /** The "Images" button on a table row: select that coin, then show its photos. */
@@ -280,9 +311,40 @@ export class App {
     this.images.openImageGallery();
   }
 
+  /**
+   * ADD COIN — create a row AND open it.
+   *
+   * It used to create the draft row and stop there, so the user got an empty
+   * row with no visible place to type and had to discover that a second
+   * click was needed before they could enter anything. A new coin is just a
+   * row you immediately want to look at, so it goes through
+   * `openCoinDetail` — the same code path a row click takes — and then asks
+   * the panel for the caret.
+   *
+   * `selectCoin` (inside openCoinDetail) closes the image gallery, which is
+   * what the old body did explicitly.
+   */
   protected addBlankCoin(): void {
-    this.inv.addBlankCoin();
-    this.images.closeImageGallery();
+    const coin = this.inv.addBlankCoin();
+    this.openCoinDetail(coin.id);
+    this.requestDetailFieldFocus();
+  }
+
+  /**
+   * Ask the open detail panel to put the caret in its first field.
+   *
+   * A COUNTER rather than a flag: pressing Add Coin twice must move the
+   * caret twice, and a boolean already set to `true` would make the second
+   * press do nothing. See CoinDetailPanel.focusFirstFieldRequest.
+   *
+   * Only Add Coin calls this. Opening the panel from a row deliberately
+   * leaves focus in the grid, or the arrow keys would stop working the
+   * instant the panel appeared.
+   */
+  protected readonly detailFieldFocusRequest = signal(0);
+
+  private requestDetailFieldFocus(): void {
+    this.detailFieldFocusRequest.update(count => count + 1);
   }
 
   protected deleteSelectedCoin(): void {
@@ -292,8 +354,7 @@ export class App {
     const confirmed = confirmAction(`Delete ${coin.coinType || 'this coin'}${coin.year ? ` (${coin.year})` : ''}?`);
 
     if (!confirmed) return;
-    this.showDetailPanel.set(false);
-    this.images.closeImageGallery();
+    this.closeDetailPanel();
     this.inv.deleteCoin(coin.id);
   }
 

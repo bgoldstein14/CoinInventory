@@ -102,7 +102,6 @@
    sentence instead of five identical boxes. */
 .reference-input--iso   { flex: 0 0 56px; text-transform: uppercase; }
 .reference-input--year  { flex: 0 0 72px; }
-.reference-input--kind  { flex: 0 0 120px; }
 .reference-input--mark  { flex: 0 0 90px; }
 .reference-input--issuer { flex: 0 1 200px; }
 
@@ -291,5 +290,114 @@
 
   .reference-nav__item--active {
     box-shadow: inset 0 -3px 0 #b07d3a;
+  }
+}
+
+/* ----- The derived kind, and the consent to look denominations up ------- */
+
+/* The kind the year boxes imply. A TAG and not a control: the user reads
+ * it, they do not set it. Dimmer than the stored tags on the list below so
+ * it does not read as something waiting to be filled in. */
+.reference-row__tag--derived {
+  align-self: center;
+  background: #fdf8ef;
+}
+
+/* The only place this application offers to send anything anywhere, so the
+ * label is given a whole line of its own rather than being squeezed in
+ * beside the inputs. */
+.reference-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 2px 0 10px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: #5a4a35;
+  cursor: pointer;
+
+  input {
+    width: auto;
+    margin: 2px 0 0;
+    flex: 0 0 auto;
+  }
+}
+
+/* ----- What happened to the new issuer's denominations ------------------ */
+
+/* Sits above the pane body and OUTSIDE the pane switch, because the
+ * offline path moves the user to the Denominations pane and the sentence
+ * explaining why has to travel with them. */
+.lookup-result {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #ecdcc0;
+  border-left: 3px solid #b07d3a;
+  border-radius: 8px;
+  background: #fffdf9;
+}
+
+.lookup-result__message {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #5a4a35;
+}
+
+.lookup-result__list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  max-height: 220px;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 2px 10px;
+}
+
+.lookup-result__item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.82rem;
+  color: #5a4a35;
+  cursor: pointer;
+
+  input {
+    width: auto;
+    margin: 0;
+    flex: 0 0 auto;
+  }
+}
+
+.lookup-result__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+/* A button that reads as a link: for the secondary choices beside a real
+ * button, where a second bordered button would compete with it. */
+.link-button {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  color: #8a6a35;
+  text-decoration: underline;
+  cursor: pointer;
+
+  &:hover {
+    color: #5a4a35;
+  }
+
+  &:disabled {
+    color: #b7ab98;
+    cursor: default;
+    text-decoration: none;
   }
 }

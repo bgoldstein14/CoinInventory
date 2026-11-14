@@ -15,17 +15,24 @@ import {
   MaintenanceDenomination,
   MaintenanceIssuer,
   UNASSIGNED_ISSUER_HEADING,
+  compareIssuersByName,
   groupDenominations,
   normalizeSearchText,
 } from './denomination-grouping';
 
 /**
- * DELIBERATELY NOT IN SORT ORDER.
+ * DELIBERATELY NOT IN ALPHABETICAL ORDER, AND DELIBERATELY NOT IN SortOrder
+ * ORDER EITHER.
  *
- * If this list arrived already sorted, both "returns them in issuer sort
- * order" and "does not mutate the arrays it was given" would pass whether or
- * not the code sorted anything, and whether or not it sorted IN PLACE. A
- * fixture in the expected order is cover that covers nothing.
+ * If this list arrived already sorted, both "returns them A-Z" and "does not
+ * mutate the arrays it was given" would pass whether or not the code sorted
+ * anything, and whether or not it sorted IN PLACE. A fixture in the expected
+ * order is cover that covers nothing.
+ *
+ * The `sortOrder` values are the OPPOSITE of the alphabetical answer on
+ * purpose — United States is 1 and Burma is 99, so A-Z is very nearly the
+ * reverse of the old SortOrder order. A grouping that quietly went back to
+ * SortOrder cannot pass the order tests below by coincidence.
  */
 const ISSUERS: readonly MaintenanceIssuer[] = Object.freeze([
   { issuerId: 5, name: 'Burma', isoCode: 'MM', kind: 'modern', sortOrder: 99 },
@@ -56,14 +63,18 @@ function labelsUnder(groups: ReturnType<typeof groupDenominations>, heading: str
 }
 
 describe('groupDenominations — unfiltered', () => {
-  it('returns one group per issuer, in issuer sort order', () => {
+  it('returns one group per issuer, A-Z by name', () => {
+    // NOT SortOrder. The fixture's SortOrder would give United States,
+    // Mexico, Spanish Colonial, Roman Empire, Burma — very nearly the
+    // reverse of this — so the assertion distinguishes the two orders
+    // rather than merely agreeing with whichever one the code picked.
     const groups = groupDenominations(DENOMINATIONS, ISSUERS);
     expect(headings(groups).slice(0, 5)).toEqual([
-      'United States',
-      'Mexico',
-      'Spanish Colonial',
-      'Roman Empire',
       'Burma',
+      'Mexico',
+      'Roman Empire',
+      'Spanish Colonial',
+      'United States',
     ]);
   });
 
@@ -237,6 +248,80 @@ describe('groupDenominations — search', () => {
     // nothing.
     const groups = groupDenominations(DENOMINATIONS, ISSUERS, '25');
     expect(groups.find((group) => group.heading === 'United States')?.inUseTotal).toBe(7);
+  });
+});
+
+/*
+ * ISSUER ORDER — THE OWNER ASKED FOR ALPHABETICAL
+ *
+ * "The Issuers and Denominations screens need to have the Issuers in
+ * alphabetic order." Both screens read this comparator: the Issuers pane and
+ * the Denominations pane's issuer <select> sort with it directly
+ * (category-modal.ts `sortedIssuers`), and the Denominations pane's group
+ * headings get it through `groupDenominations`.
+ *
+ * Every assertion below is written so that it FAILS for the obvious wrong
+ * implementations, not merely passes for the right one:
+ *   - sorting by SortOrder            -> caught by the fixture order tests
+ *   - sorting by raw code point       -> caught by 'austria' vs 'Belgium'
+ *   - case-SENSITIVE localeCompare    -> caught by 'Mexico' vs 'mexico'
+ */
+describe('compareIssuersByName', () => {
+  const sorted = (issuers: MaintenanceIssuer[]): string[] =>
+    [...issuers].sort(compareIssuersByName).map((issuer) => issuer.name);
+
+  it('ignores case, so a lower-case name does not fall off the end', () => {
+    // A raw `<` or a code-point sort puts every capital before every
+    // lower-case letter: 'Belgium' (B = 66) ahead of 'austria' (a = 97).
+    // The user typed the name, and the user's capitalisation is not an
+    // instruction about where the row belongs.
+    expect(
+      sorted([
+        { issuerId: 1, name: 'Belgium', kind: 'modern' },
+        { issuerId: 2, name: 'austria', kind: 'modern' },
+        { issuerId: 3, name: 'CANADA', kind: 'modern' },
+      ])
+    ).toEqual(['austria', 'Belgium', 'CANADA']);
+  });
+
+  it('pays no attention to SortOrder at all', () => {
+    // The seed's bands — modern 100-420, historical 1000-1150, ancient
+    // 2000-2120 — would put Zanzibar first here.
+    expect(
+      sorted([
+        { issuerId: 1, name: 'Zanzibar', kind: 'modern', sortOrder: 1 },
+        { issuerId: 2, name: 'Austria', kind: 'ancient', sortOrder: 9999 },
+      ])
+    ).toEqual(['Austria', 'Zanzibar']);
+  });
+
+  it('is total and stable when two names differ only in case', () => {
+    // Case is folded, so these two tie on name and the ID decides. Without
+    // that tiebreak the pair compares equal and may swap between renders;
+    // with a case-SENSITIVE compare, ICU puts 'mexico' first instead, so
+    // this assertion distinguishes the two.
+    const pair: MaintenanceIssuer[] = [
+      { issuerId: 7, name: 'mexico', kind: 'modern' },
+      { issuerId: 3, name: 'Mexico', kind: 'modern' },
+    ];
+    expect(sorted(pair)).toEqual(['Mexico', 'mexico']);
+    expect(sorted([...pair].reverse())).toEqual(['Mexico', 'mexico']);
+  });
+
+  it('answers zero only for a row compared with itself', () => {
+    const issuer: MaintenanceIssuer = { issuerId: 1, name: 'Mexico', kind: 'modern' };
+    expect(compareIssuersByName(issuer, issuer)).toBe(0);
+    expect(compareIssuersByName(issuer, { issuerId: 2, name: 'Mexico', kind: 'modern' })).toBeLessThan(0);
+  });
+
+  it('keeps the groups A-Z while the rows inside one stay in SortOrder', () => {
+    // THE HALF THAT MUST NOT BREAK. The request was about ISSUERS. A
+    // denomination's SortOrder is the only sane order within an issuer --
+    // France carries '1 Franc' and '1 Euro' both at FaceValue 1 -- so
+    // alphabetising the headings must not alphabetise their contents.
+    const groups = groupDenominations(DENOMINATIONS, ISSUERS);
+    expect(headings(groups).slice(0, 2)).toEqual(['Burma', 'Mexico']);
+    expect(labelsUnder(groups, 'Mexico')).toEqual(['8 Reales', '1 Peso']);
   });
 });
 

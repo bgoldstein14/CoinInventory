@@ -418,10 +418,16 @@
   <div class="detail-editor__row detail-editor__row--certs">
     <label class="detail-field detail-field--compact detail-field--cert-number">
       <span>Certification Number</span>
+      <!-- NO INLINE WIDTH HERE. This input used to carry
+           `style="width: 125%"`, which made it a quarter wider than its own
+           grid cell; the surplus spilled into the Catalogue cell beside it,
+           and because the Catalogue <select> comes later in the document it
+           painted on top of the overflowing box. Slab numbers are 7-10
+           characters, so the width is set from the data in
+           coin-editor-form.scss alongside every other field width. -->
       <input
         [ngModel]="coin().certNumber"
         (ngModelChange)="updateSelectedCoin('certNumber', $event)"
-        style="width: 125%; min-width: 125%; max-width: 125%;"
       />
     </label>
 

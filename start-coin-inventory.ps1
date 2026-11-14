@@ -73,6 +73,24 @@ if (-not $node) {
     }
 }
 
+# The database driver is `node:sqlite`, which is part of Node itself and was
+# only stabilised in Node 22.5. On an older Node the server dies with
+# "Cannot find module 'node:sqlite'", which says nothing about the real
+# problem. Check the version here and say what is actually wrong.
+$nodeVersion = (& node --version) -replace '^v', ''
+$nodeMajor = [int]($nodeVersion -split '\.')[0]
+$nodeMinor = [int]($nodeVersion -split '\.')[1]
+if ($nodeMajor -lt 22 -or ($nodeMajor -eq 22 -and $nodeMinor -lt 5)) {
+    Remove-Item -Path $lockFile -Force -ErrorAction SilentlyContinue
+    Write-Host ''
+    Write-Host "Node $nodeVersion is too old for Coin Inventory." -ForegroundColor Red
+    Write-Host 'The database needs Node 22.5 or newer (the built-in SQLite support).' -ForegroundColor Red
+    Write-Host 'Install the current version from https://nodejs.org/ and run this again.' -ForegroundColor Red
+    Write-Host ''
+    Start-Sleep -Seconds 15
+    exit 1
+}
+
 # Install dependencies ONLY when they are actually missing.
 #
 # The previous launcher in setup\ ran "npm install" on every single start.

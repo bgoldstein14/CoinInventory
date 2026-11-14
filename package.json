@@ -9,7 +9,8 @@
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
     "test": "vitest run --root src",
-    "test:server": "cd server && npm test"
+    "test:server": "cd server && npm test",
+    "migrate:from-sqlserver": "cd server && npm run migrate:from-sqlserver --"
   },
   "private": true,
   "packageManager": "npm@11.17.0",
@@ -41,5 +42,8 @@
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   }
 }

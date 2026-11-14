@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
@@ -28,65 +30,96 @@ function createModal() {
   return { modal, inv, mockApiService };
 }
 
-describe('SettingsModal', () => {
+/**
+ * The template with its comments removed.
+ *
+ * *** REQUIRED, NOT TIDINESS. *** This template explains at length which
+ * reference lists used to be here and why they went, and that explanation
+ * NAMES every list the assertions below look for. Asserting against the
+ * raw text would match the prose and pass with the chip editors still on
+ * screen — which is exactly the failure mode these tests exist to catch.
+ */
+function settingsTemplate(): string {
+  return readFileSync(join(__dirname, 'settings-modal.html'), 'utf8').replace(/<!--[\s\S]*?-->/g, '');
+}
+
+describe('SettingsModal — settings, and nothing else', () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  it('allows category maintenance from settings', () => {
-    const { modal, inv } = createModal();
+  /* THE LISTS MOVED TO REFERENCE DATA.
+   *
+   * Categories, mint marks and sets/albums were edited in BOTH places, and
+   * the Settings copy was the weaker one: a chip removed an entry on one
+   * click with no count of the coins using it and no confirmation. Metal
+   * content was the only one with no pane on the Reference Data screen, so
+   * it was moved there rather than deleted — see
+   * category-modal.spec.ts > 'CategoryModal — metal content', which is
+   * where the add/remove coverage deleted from this file now lives. */
 
-    modal['categoryDraft'].set('Custom Category');
-    modal['addCategory']();
-    expect(inv.categoryOptions()).toContain('Custom Category');
-
-    modal['removeCategory']('Custom Category');
-    expect(inv.categoryOptions()).not.toContain('Custom Category');
-  });
-
-  it('applies a metal content edit straight to the live list', () => {
-    const { modal, inv } = createModal();
-
-    modal['metalContentDraft'].set('Electrum');
-    modal['addMetalContent']();
-
-    expect(inv.metalContents()).toContain('Electrum');
-
-    modal['removeMetalContent']('Electrum');
-    expect(inv.metalContents()).not.toContain('Electrum');
-  });
-
-  it('cannot create a denomination at all any more', () => {
-    /* Creating a denomination from Settings cannot ask for an issuer, so it
-     * could only ever produce a row with a guessed country and no issuer at
-     * all. The capability was removed rather than weakened, and this asserts
-     * it is REALLY gone: a stale method left behind on the class is a button
-     * somebody re-adds to the template. */
+  it('cannot edit any reference list any more', () => {
+    /* Asserted on the CLASS, not only the template: a stale method left
+     * behind is a button somebody re-adds to the markup later, and the
+     * chips are only a duplicate editor for as long as nobody notices
+     * they are still reachable. */
     const { modal } = createModal();
     const asRecord = modal as unknown as Record<string, unknown>;
 
-    expect(asRecord['addDenomination']).toBeUndefined();
-    expect(asRecord['removeDenominationEntry']).toBeUndefined();
-    expect(asRecord['denominationDraft']).toBeUndefined();
+    for (const gone of [
+      'addCategory', 'removeCategory', 'categoryDraft',
+      'addMintMark', 'removeMintMarkEntry', 'mintMarkDraft',
+      'addMetalContent', 'removeMetalContent', 'metalContentDraft',
+      'addCoinSet', 'removeCoinSet', 'coinSetDraft',
+      // Denominations were never editable here; the pointer that stood in
+      // for them has gone too, with the rest of the section.
+      'addDenomination', 'removeDenominationEntry', 'denominationDraft',
+    ]) {
+      expect(asRecord[gone], `${gone} is still on SettingsModal`).toBeUndefined();
+    }
 
-    // The sibling lists are untouched, which is what makes the three
-    // assertions above a statement about denominations rather than about
-    // the component having been gutted.
-    expect(typeof asRecord['addCategory']).toBe('function');
-    expect(typeof asRecord['addMintMark']).toBe('function');
+    // The settings themselves are untouched, which is what makes the list
+    // above a statement about the reference lists rather than about the
+    // component having been gutted.
+    expect(typeof asRecord['saveSettings']).toBe('function');
+    expect(typeof asRecord['previewPmBackfill']).toBe('function');
   });
 
-  it('ignores blank drafts', () => {
-    const { modal, inv } = createModal();
+  it('has no reference-list markup left in the template', () => {
+    const template = settingsTemplate();
 
-    modal['categoryDraft'].set('   ');
-    modal['addCategory']();
-    expect(inv.categoryOptions()).toHaveLength(0);
+    expect(template).not.toContain('Reference lists');
+    expect(template).not.toContain('settings-chip-list');
+    expect(template).not.toContain('settings-inline-add');
+    expect(template).not.toContain('chip-button');
+    // The signals the chips were bound to, by name.
+    expect(template).not.toContain('categoryDraft');
+    expect(template).not.toContain('mintMarkDraft');
+    expect(template).not.toContain('metalContentDraft');
+    expect(template).not.toContain('coinSetDraft');
+    // Including the denominations pointer, which was a list entry too.
+    expect(template).not.toContain('inv.denominations()');
+  });
 
-    modal['metalContentDraft'].set('   ');
-    const before = inv.metalContents().length;
-    modal['addMetalContent']();
-    expect(inv.metalContents()).toHaveLength(before);
+  it('offers one route to where the lists went', () => {
+    /* NOT optional tidiness. Somebody who learned that categories live in
+     * Settings has to be taken to the new screen, not merely told it
+     * exists — so this is a button that emits, not a sentence. */
+    const template = settingsTemplate();
+
+    expect(template).toContain('referenceDataRequested.emit()');
+    expect(template).toContain('Reference Data');
+    // Exactly one, so the "single clear route" does not quietly become
+    // three links in three sections.
+    expect(template.split('referenceDataRequested.emit()').length - 1).toBe(1);
+  });
+
+  it('keeps the two things that really are settings', () => {
+    const template = settingsTemplate();
+
+    expect(template).toContain('showTransactionsInDetailsChange.emit');
+    expect(template).toContain('<h3>Maintenance</h3>');
+    expect(template).toContain('previewPmBackfill()');
   });
 });
 

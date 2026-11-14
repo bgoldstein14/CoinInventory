@@ -1,51 +1,42 @@
 /**
  * db/coin-fields.spec.ts — guards COIN_FIELDS against schema drift.
  *
- * Parameter types vs. the SQL schema
+ * *** THIS TEST GOT MORE IMPORTANT WHEN THE ENGINE BECAME SQLITE, NOT LESS. ***
  *
- * Declaring a parameter shorter than its column silently truncates the user's
- * data; declaring it longer makes SQL Server raise error 8152 and abort the
- * transaction. Both were happening. These tests read setup-database.sql and
- * fail if COIN_FIELDS ever drifts away from it again.
+ * Under SQL Server the declared lengths in COIN_FIELDS were a SECOND opinion:
+ * the column itself enforced the width, and a binding that disagreed produced
+ * either silent truncation (binding shorter) or error 8152 (binding longer).
+ * Either way the database had the last word.
+ *
+ * SQLite enforces nothing. A column this file calls NVarChar(50) will hold
+ * four thousand characters without complaint, so the binding table is no
+ * longer a description of what the database does — it is the only thing that
+ * does it (db/bind-values.ts). A drift here is not a disagreement any more,
+ * it is a hole.
+ *
+ * So these tests read db/schema.sql and fail if COIN_FIELDS drifts away from
+ * it. The widths live in that file as a trailing `-- NVARCHAR(50)` comment,
+ * because writing `NVARCHAR(50)` as the SQLite column type would parse and
+ * enforce nothing, which would mislead the next reader; see
+ * test-support/schema-columns.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
-import { resetMssqlMock } from '../test-support/mssql-mock';
+import '../test-support/sqlite-test-db';
+import { parseTable } from '../test-support/schema-columns';
 import { COIN_FIELDS } from './index';
 
-beforeEach(() => {
-  resetMssqlMock();
-});
-
-describe('COIN_FIELDS matches setup-database.sql', () => {
-  // setup-database.sql lives one level up, in the server/ root.
-  const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'setup-database.sql'), 'utf8');
-  const coinsBlock = schemaSql.match(/CREATE TABLE Coins \(([\s\S]*?)\n\);/)?.[1] ?? '';
-
-  /** column name -> { type, length } parsed straight out of the DDL. */
-  const schemaColumns = new Map<string, { type: string; length?: number }>();
-  for (const line of coinsBlock.split('\n')) {
-    const match = line.match(/^\s*(\w+)\s+(NVARCHAR|DECIMAL|BIT|INT|UNIQUEIDENTIFIER)\s*(?:\(\s*([^)]*?)\s*\))?/i);
-    if (!match) continue;
-    const [, column, rawType, rawArgs] = match;
-    const firstArg = rawArgs?.split(',')[0]?.trim();
-    schemaColumns.set(column, {
-      type: rawType.toUpperCase(),
-      length: firstArg && /^\d+$/.test(firstArg) ? Number(firstArg) : undefined,
-    });
-  }
+describe('COIN_FIELDS matches db/schema.sql', () => {
+  const schemaColumns = parseTable('Coins');
 
   it('parsed the Coins table out of the schema file', () => {
     expect(schemaColumns.size).toBeGreaterThan(20);
-    expect(schemaColumns.get('Year')).toEqual({ type: 'NVARCHAR', length: 50 });
+    expect(schemaColumns.get('Year')).toMatchObject({
+      storage: 'TEXT',
+      declared: 'NVARCHAR(50)',
+      maxLength: 50,
+    });
   });
 
   it('declares every NVARCHAR parameter at exactly the schema length', () => {
@@ -54,19 +45,53 @@ describe('COIN_FIELDS matches setup-database.sql', () => {
     for (const [key, binding] of Object.entries(COIN_FIELDS)) {
       const schemaColumn = schemaColumns.get(binding.column);
       if (!schemaColumn) {
-        mismatches.push(`${key}: column ${binding.column} is not in setup-database.sql`);
+        mismatches.push(`${key}: column ${binding.column} is not in db/schema.sql`);
         continue;
       }
-      if (schemaColumn.type !== 'NVARCHAR') continue;
+      if (!schemaColumn.declared.startsWith('NVARCHAR')) continue;
 
-      if (binding.maxLength !== schemaColumn.length) {
+      if (binding.maxLength !== schemaColumn.maxLength) {
         mismatches.push(
-          `${key} (${binding.column}): route declares ${binding.maxLength ?? 'MAX'}, schema is ${schemaColumn.length ?? 'MAX'}`
+          `${key} (${binding.column}): binding declares ${binding.maxLength ?? 'MAX'}, schema is ${schemaColumn.maxLength ?? 'MAX'}`
+        );
+      }
+      if (binding.sqlType.maxLength !== schemaColumn.maxLength) {
+        mismatches.push(
+          `${key} (${binding.column}): sqlType declares ${binding.sqlType.maxLength ?? 'MAX'}, schema is ${schemaColumn.maxLength ?? 'MAX'}`
         );
       }
     }
 
     expect(mismatches).toEqual([]);
+  });
+
+  /**
+   * The six columns design §4.1 singles out, plus the fourth decimal on
+   * Copper. A scale that disagrees with the schema is the one kind of drift
+   * nobody can see in the data: the number still looks like a coin weight.
+   */
+  it('declares every DECIMAL parameter at exactly the schema precision and scale', () => {
+    const mismatches: string[] = [];
+
+    for (const [key, binding] of Object.entries(COIN_FIELDS)) {
+      const schemaColumn = schemaColumns.get(binding.column);
+      if (!schemaColumn || !schemaColumn.declared.startsWith('DECIMAL')) continue;
+
+      if (binding.sqlType.declared !== schemaColumn.declared) {
+        mismatches.push(
+          `${key} (${binding.column}): binding is ${binding.sqlType.declared}, schema is ${schemaColumn.declared}`
+        );
+      }
+    }
+
+    expect(mismatches).toEqual([]);
+    // Guard against the loop above having found nothing to check.
+    expect(COIN_FIELDS['weight'].sqlType.declared).toBe('DECIMAL(12,5)');
+    expect(COIN_FIELDS['pmWeightGrams'].sqlType.declared).toBe('DECIMAL(12,5)');
+    expect(COIN_FIELDS['pmPercent'].sqlType.declared).toBe('DECIMAL(5,2)');
+    expect(COIN_FIELDS['purchasePrice'].sqlType.declared).toBe('DECIMAL(12,2)');
+    expect(COIN_FIELDS['currentValue'].sqlType.declared).toBe('DECIMAL(12,2)');
+    expect(COIN_FIELDS['soldPrice'].sqlType.declared).toBe('DECIMAL(12,2)');
   });
 
   it('keeps the historically wrong columns correct', () => {
@@ -88,14 +113,17 @@ describe('COIN_FIELDS matches setup-database.sql', () => {
     // This does NOT concern Transactions.Dealer, which still exists and is
     // bound as DB_BINDINGS.transactionDealer in db/bindings.ts.
     expect(COIN_FIELDS['dealer']).toBeUndefined();
+    expect(parseTable('Coins').has('Dealer')).toBe(false);
+    expect(parseTable('Transactions').has('Dealer')).toBe(true);
   });
 
-  it('binds the text-based date columns as text, not sql.Date', () => {
+  it('binds the text-based date columns as text, not as a date type', () => {
     // PurchaseDate / SoldDate are NVARCHAR(30) in the schema. Binding a JS Date
     // into them produced a locale-dependent string that would not round-trip.
     for (const key of ['purchaseDate', 'soldDate']) {
       expect(COIN_FIELDS[key].maxLength).toBe(30);
-      expect(COIN_FIELDS[key].sqlType).toMatchObject({ type: 'nvarchar', length: 30 });
+      expect(COIN_FIELDS[key].sqlType).toMatchObject({ storage: 'text', maxLength: 30 });
+      expect(schemaColumns.get(COIN_FIELDS[key].column)?.storage).toBe('TEXT');
     }
   });
 });

@@ -34,9 +34,8 @@
  */
 
 import { Router, Request, Response } from 'express';
-import sql from 'mssql';
 import { logInfo, logWarn } from '../../logger';
-import { withDb, DB_BINDINGS } from '../../db';
+import { withDb, DB_BINDINGS, DbRequest, DbTransaction } from '../../db';
 import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { safeRollback } from './write-helpers';
@@ -172,7 +171,7 @@ router.post('/:id/images', async (req: Request, res: Response) => {
 
       if (coin.recordset.length === 0) return null;
 
-      const transaction = new sql.Transaction(db);
+      const transaction = new DbTransaction(db);
 
       // `began` tracks whether begin() actually succeeded, so safeRollback is
       // never handed a transaction that was never started.
@@ -184,9 +183,9 @@ router.post('/:id/images', async (req: Request, res: Response) => {
 
         // MAX(SortOrder) is read INSIDE the transaction so a concurrent insert
         // cannot invalidate it between reading it and using it.
-        const maxOrder = await new sql.Request(transaction)
+        const maxOrder = await new DbRequest(transaction)
           .input('coinId', DB_BINDINGS.coinId, id)
-          .query('SELECT ISNULL(MAX(SortOrder), -1) AS max_order FROM CoinImages WHERE CoinId = @coinId');
+          .query('SELECT IFNULL(MAX(SortOrder), -1) AS max_order FROM CoinImages WHERE CoinId = @coinId');
 
         // An aggregate always returns a row, but start from zero rather than
         // crash if the driver hands back an empty recordset.
@@ -194,13 +193,13 @@ router.post('/:id/images', async (req: Request, res: Response) => {
 
         const ids: number[] = [];
         for (const image of images) {
-          const result = await new sql.Request(transaction)
+          const result = await new DbRequest(transaction)
             .input('coinId', DB_BINDINGS.coinId, id)
             .input('imageData', DB_BINDINGS.imageData, image.imageData)
             .input('sortOrder', DB_BINDINGS.sortOrder, nextOrder++)
             .input('sourcePath', DB_BINDINGS.imageSourcePath, image.sourcePath)
             .query(
-              'INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) OUTPUT INSERTED.ImageId VALUES (@coinId, @imageData, @sortOrder, @sourcePath)'
+              'INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) VALUES (@coinId, @imageData, @sortOrder, @sourcePath) RETURNING ImageId'
             );
 
           const insertedRow = result.recordset[0];

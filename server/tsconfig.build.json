@@ -15,11 +15,19 @@
   // pool.on('error') listener, whose missing error handler was killing the
   // whole Node process. Keeping build output limited to production sources
   // makes that far less likely to go unnoticed.
+  //
+  // migrate-sqlserver/ is excluded for a third reason: it is a SCRIPT, not
+  // part of the application. Nothing in the server imports it, it is the
+  // only code left that talks to SQL Server, and it is deleted once the
+  // owner's collection has moved. Compiling it into dist/ would ship an
+  // mssql dependency inside the installer for a program that no longer has
+  // a SQL Server to talk to.
   "extends": "./tsconfig.json",
   "exclude": [
     "node_modules",
     "dist",
     "**/*.spec.ts",
-    "test-support"
+    "test-support",
+    "migrate-sqlserver"
   ]
 }

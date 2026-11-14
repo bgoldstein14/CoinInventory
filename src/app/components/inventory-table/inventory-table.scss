@@ -173,6 +173,27 @@
     background: #e8edf8;
     box-shadow: inset 3px 0 0 #4f6dba;
   }
+
+  // KEYBOARD FOCUS MUST BE VISIBLE.
+  //
+  // The rows are now the control — arrow keys move between them and
+  // Enter/Space opens the Details panel — and a focus ring is the only thing
+  // telling a keyboard user which row they are on. Without it the arrow keys
+  // move an invisible cursor.
+  //
+  // `:focus-visible` rather than `:focus`, so a mouse click does not leave a
+  // ring behind on a row the user has already finished with. A row focused
+  // by an arrow key still matches, because the browser counts that as
+  // keyboard interaction.
+  //
+  // `outline-offset: -2px` draws the ring INSIDE the row: an outline on a
+  // <tr> otherwise straddles the row borders and is clipped by the scrolling
+  // wrapper on the first and last rows.
+  &:focus-visible {
+    outline: 2px solid #8e5b2d;
+    outline-offset: -2px;
+    background: #faf2e4;
+  }
 }
 
 .empty-row td {
@@ -205,6 +226,25 @@
   padding: 1px 6px;
   margin-right: 6px;
   cursor: help;
+}
+
+// "Needs Denomination" — what the chip's tooltip used to keep to itself.
+//
+// Deliberately NOT styled as an error. A row the user is still typing is an
+// expected state; the same warm brown the "Unsaved" chip uses says "not
+// finished" without saying "you broke something". Only a save that was
+// attempted and REFUSED turns red, and even then this is a quiet label —
+// the loud channel for that is the toast CoinEditor already raises.
+.draft-need {
+  font-size: 0.65rem;
+  color: #8a5a10;
+  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.draft-need--failed {
+  color: #a3281f;
+  font-weight: 600;
 }
 
 // ---- Row thumbnails ----

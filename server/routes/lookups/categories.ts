@@ -52,13 +52,17 @@ router.post('/categories', async (req: Request, res: Response) => {
     await withDb(async (db) => {
       await db.request()
         .input('name', DB_BINDINGS.categoryName, trimmedName)
+        // `INSERT ... SELECT ... WHERE NOT EXISTS` rather than T-SQL's
+        // `IF NOT EXISTS ... INSERT`: one statement, so the check and the
+        // insert cannot be separated, and SQLite has no procedural IF.
         .query(`
-          IF NOT EXISTS (
+          INSERT INTO Categories (CategoryName)
+          SELECT @name
+          WHERE NOT EXISTS (
             SELECT 1
             FROM Categories
             WHERE LOWER(LTRIM(RTRIM(CategoryName))) = LOWER(LTRIM(RTRIM(@name)))
           )
-            INSERT INTO Categories (CategoryName) VALUES (@name)
         `);
     });
 

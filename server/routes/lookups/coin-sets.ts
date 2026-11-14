@@ -57,9 +57,12 @@ router.post('/coin-sets', async (req: Request, res: Response) => {
     await withDb(async (db) => {
       await db.request()
         .input('name', DB_BINDINGS.setName, trimmedName)
+        // One statement rather than T-SQL's `IF NOT EXISTS ... INSERT`;
+        // see the note on the same query in categories.ts.
         .query(`
-          IF NOT EXISTS (SELECT 1 FROM CoinSets WHERE SetName = @name)
-            INSERT INTO CoinSets (SetName) VALUES (@name)
+          INSERT INTO CoinSets (SetName)
+          SELECT @name
+          WHERE NOT EXISTS (SELECT 1 FROM CoinSets WHERE SetName = @name)
         `);
     });
 

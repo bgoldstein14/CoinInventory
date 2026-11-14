@@ -8,7 +8,7 @@
 -- Generator: server/migrations/seed-sql.ts
 -- Regenerate: cd server && npx tsx migrations/generate-seed-migration.ts
 --
--- Contents: 61 issuer(s), 1164 denomination(s).
+-- Contents: 70 issuer(s), 1207 denomination(s).
 --
 -- An edit made here is lost the next time anybody regenerates, and a seed
 -- that disagrees with its source file is worse than no seed at all -- the
@@ -150,6 +150,7 @@ INSERT INTO #SeedIssuer (IssuerKey, Name, IsoCode, Kind, ValidFrom, ValidTo, Sor
 (N'tuscany', N'Grand Duchy of Tuscany', NULL, N'historical', NULL, 1859, 1120),
 (N'lombardy-venetia', N'Lombardy-Venetia', NULL, N'historical', 1815, 1866, 1130),
 (N'confederate-states', N'Confederate States of America', NULL, N'historical', 1861, 1865, 1140),
+(N'palestine-mandate', N'British Mandate for Palestine', NULL, N'historical', 1927, 1948, 1150),
 (N'roman-republic', N'Roman Republic', NULL, N'ancient', -300, -27, 2000),
 (N'roman-empire', N'Roman Empire', NULL, N'ancient', -27, 476, 2010),
 (N'roman-provincial', N'Roman Provincial', NULL, N'ancient', -27, 297, 2020),
@@ -162,7 +163,15 @@ INSERT INTO #SeedIssuer (IssuerKey, Name, IsoCode, Kind, ValidFrom, ValidTo, Sor
 (N'celtic', N'Celtic', NULL, N'ancient', -300, 100, 2090),
 (N'parthia', N'Parthia', NULL, N'ancient', -247, 224, 2100),
 (N'sasanian-empire', N'Sasanian Empire', NULL, N'ancient', 224, 651, 2110),
-(N'achaemenid-persia', N'Achaemenid Persia', NULL, N'ancient', -550, -330, 2120);
+(N'achaemenid-persia', N'Achaemenid Persia', NULL, N'ancient', -550, -330, 2120),
+(N'lydia', N'Kingdom of Lydia', NULL, N'ancient', -650, -546, 3000),
+(N'aegina', N'Aegina', NULL, N'ancient', -700, -340, 3010),
+(N'athens', N'Athens', NULL, N'ancient', -545, -322, 3020),
+(N'corinth', N'Corinth', NULL, N'ancient', -627, -146, 3030),
+(N'syracuse', N'Syracuse', NULL, N'ancient', -600, -212, 3040),
+(N'carthage', N'Carthage', NULL, N'ancient', -410, -146, 3050),
+(N'greco-bactrian-kingdom', N'Greco-Bactrian Kingdom', NULL, N'ancient', -256, -120, 3060),
+(N'hasmonean-kingdom', N'Hasmonean Kingdom', NULL, N'ancient', -164, -37, 3070);
 GO
 
 DECLARE @IssuersBefore INT = (SELECT COUNT(*) FROM Issuers);
@@ -1236,6 +1245,13 @@ INSERT INTO #SeedDenomination (IssuerKey, Label, FaceValue, SortOrder) VALUES
 (N'lombardy-venetia', N'1 Sovrano', NULL, 140),
 (N'confederate-states', N'1' + NCHAR(162), 0.01, 10),
 (N'confederate-states', N'50' + NCHAR(162), 0.5, 20),
+(N'palestine-mandate', N'1 Mil', 0.001, 10),
+(N'palestine-mandate', N'2 Mils', 0.002, 20),
+(N'palestine-mandate', N'5 Mils', 0.005, 30),
+(N'palestine-mandate', N'10 Mils', 0.01, 40),
+(N'palestine-mandate', N'20 Mils', 0.02, 50),
+(N'palestine-mandate', N'50 Mils', 0.05, 60),
+(N'palestine-mandate', N'100 Mils', 0.1, 70),
 (N'roman-republic', N'Quartuncia', NULL, 10),
 (N'roman-republic', N'Semuncia', NULL, 20),
 (N'roman-republic', N'Uncia', NULL, 30),
@@ -1385,7 +1401,43 @@ INSERT INTO #SeedDenomination (IssuerKey, Label, FaceValue, SortOrder) VALUES
 (N'sasanian-empire', N'Drachm', NULL, 40),
 (N'sasanian-empire', N'Dinar', NULL, 50),
 (N'achaemenid-persia', N'Siglos', NULL, 10),
-(N'achaemenid-persia', N'Daric', NULL, 20);
+(N'achaemenid-persia', N'Daric', NULL, 20),
+(N'lydia', N'1/96 Stater', NULL, 10),
+(N'lydia', N'1/48 Stater', NULL, 20),
+(N'lydia', N'1/24 Stater', NULL, 30),
+(N'lydia', N'Hekte', NULL, 40),
+(N'lydia', N'Trite', NULL, 50),
+(N'lydia', N'Silver Stater', NULL, 60),
+(N'lydia', N'Gold Stater', NULL, 70),
+(N'aegina', N'Drachm', NULL, 10),
+(N'aegina', N'Stater', NULL, 20),
+(N'athens', N'Tetartemorion', NULL, 10),
+(N'athens', N'Hemiobol', NULL, 20),
+(N'athens', N'Obol', NULL, 30),
+(N'athens', N'Trihemiobol', NULL, 40),
+(N'athens', N'Diobol', NULL, 50),
+(N'athens', N'Triobol', NULL, 60),
+(N'athens', N'Drachm', NULL, 70),
+(N'athens', N'Didrachm', NULL, 80),
+(N'athens', N'Tetradrachm', NULL, 90),
+(N'corinth', N'Obol', NULL, 10),
+(N'corinth', N'Drachm', NULL, 20),
+(N'corinth', N'Stater', NULL, 30),
+(N'syracuse', N'Tetradrachm', NULL, 10),
+(N'syracuse', N'Dekadrachm', NULL, 20),
+(N'carthage', N'Tenth Shekel', NULL, 10),
+(N'carthage', N'Fifth Shekel', NULL, 20),
+(N'carthage', N'Quarter Shekel', NULL, 30),
+(N'carthage', N'Half Shekel', NULL, 40),
+(N'carthage', N'Shekel', NULL, 50),
+(N'carthage', N'Tetradrachm', NULL, 60),
+(N'greco-bactrian-kingdom', N'Tetradrachm', NULL, 10),
+(N'greco-bactrian-kingdom', N'Pentadrachm', NULL, 20),
+(N'greco-bactrian-kingdom', N'Stater', NULL, 30),
+(N'greco-bactrian-kingdom', N'20 Stater', NULL, 40),
+(N'hasmonean-kingdom', N'Lepton', NULL, 10),
+(N'hasmonean-kingdom', N'Half Prutah', NULL, 20),
+(N'hasmonean-kingdom', N'Prutah', NULL, 30);
 GO
 
 INSERT INTO Denominations (Label, Country, IssuerId, FaceValue, SortOrder, IsActive)

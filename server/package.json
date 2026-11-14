@@ -1,14 +1,15 @@
 {
   "name": "coin-inventory-server",
   "version": "1.0.0",
-  "description": "SQL Server backend for the Coin Inventory Angular app",
+  "description": "SQLite-backed Express API for the Coin Inventory Angular app",
   "private": true,
   "scripts": {
     "start": "node dist/server.js",
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch server.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "migrate:from-sqlserver": "tsx migrate-sqlserver/cli.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
@@ -30,5 +31,8 @@
     "tsx": "^4.19.3",
     "typescript": "~5.7.0",
     "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22.5.0"
   }
 }

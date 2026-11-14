@@ -231,10 +231,20 @@ The general lesson, which applies to any future convenience editor: a
 denomination is not a bare string. It is owned by an issuer and carries a
 country the coin editor's dropdown groups by. A control that cannot ask for
 those fields cannot create a valid row, and a second, weaker editor for the
-same data is a way to enter data the better one would have refused. The
-remaining four lists in Settings (categories, sets/albums, mint marks, metal
-contents) are each a single string with no foreign key, which is why they are
-still edited there.
+same data is a way to enter data the better one would have refused.
+
+**That argument turned out to apply to the other four lists as well, and they
+have now gone the same way.** Categories, sets/albums, mint marks and metal
+contents are each a single string with no foreign key, so a chip list *could*
+create a valid row for them — but the Settings chips still removed an entry on
+one click with no in-use count and no confirmation, while the Reference Data
+pane named the number of coins affected and asked first. Three of the four
+existed in both places and drifted; metal content existed only in Settings, so
+it was given a pane rather than deleted. Settings now edits no reference list
+at all and carries one button that opens the screen that does. The general
+lesson stands and generalises: the problem was never that a denomination is
+complicated, it was that one list had two editors with different standards of
+care.
 
 ### Why bulk textarea editing of reference lists was removed
 

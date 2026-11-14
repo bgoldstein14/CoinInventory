@@ -51,7 +51,10 @@ export function createMockDependencies() {
     updateIssuer: vi.fn(() => of({})),
     deleteIssuer: vi.fn(() => of(undefined)),
     getReferenceUsage: vi.fn(() =>
-      of({ categories: {}, coinSets: {}, denominations: {}, mintMarks: {}, catalogs: {} })
+      of({
+        categories: {}, coinSets: {}, denominations: {}, mintMarks: {}, catalogs: {},
+        metalContents: {}
+      })
     ),
     getMetalContents: vi.fn(() => of([
       'Gold', 'Silver', 'Platinum', 'Palladium', 'Copper', 'Nickel', 'Copper-Nickel',
@@ -64,7 +67,13 @@ export function createMockDependencies() {
     // quietly resolves to "no pictures" instead of an undefined-is-not-a-
     // function crash.
     getCoinImages: vi.fn(() => of([])),
-    coinThumbnailUrl: vi.fn((coinId: string) => `/api/coins/${encodeURIComponent(coinId)}/thumbnail`),
+    // Mirrors the real signature, including the cache-busting revision: a
+    // mock that ignored it would let a regression through silently, since
+    // the whole point of the parameter is that the URL must CHANGE.
+    coinThumbnailUrl: vi.fn((coinId: string, revision = 0) => {
+      const url = `/api/coins/${encodeURIComponent(coinId)}/thumbnail`;
+      return revision > 0 ? `${url}?v=${revision}` : url;
+    }),
     createCoin: vi.fn(() => of({})),
     updateCoin: vi.fn(() => of({})),
     deleteCoin: vi.fn(() => of({})),

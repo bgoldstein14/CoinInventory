@@ -11,9 +11,10 @@
  * FALLBACK rather than the default.
  *
  * WHY THE SECTIONS ARE DATA. The sidebar is `@for (section of sections; ...)`.
- * Adding a seventh type is one entry here plus one `@case` in the pane, and
+ * Adding another type is one entry here plus one `@case` in the pane, and
  * the navigation, the highlighting and the keyboard handling come for free
- * and cannot drift from each other.
+ * and cannot drift from each other. Metal Content was added exactly that
+ * way when it moved off the Settings dialog; nothing else had to change.
  *
  * Pure, dependency-free and DOM-free so it is testable under Node without
  * jsdom, like every other piece of logic in this project.
@@ -33,6 +34,7 @@ export type ReferenceSectionId =
   | 'denominations'
   | 'unlinked'
   | 'mint-marks'
+  | 'metal-content'
   | 'catalogues';
 
 export interface ReferenceSection {
@@ -93,6 +95,21 @@ export const REFERENCE_SECTIONS: readonly ReferenceSection[] = [
     id: 'mint-marks',
     title: 'Mint Marks',
     hint: 'The mint letters offered in the coin editor — D for Denver, S for San Francisco.',
+  },
+  /*
+   * Metal content. It sits beside mint marks because it is the same kind of
+   * list — a plain string the coin records as TEXT rather than a foreign
+   * key — and it arrived here from the Settings dialog, which used to carry
+   * its own chip editor for it. Categories, mint marks and sets had editors
+   * in BOTH places and drifted; this one had no home here at all, so it got
+   * a pane rather than a deletion.
+   */
+  {
+    id: 'metal-content',
+    title: 'Metal Content',
+    hint:
+      'What a coin is made of — the choices in the editor’s Metal dropdown, and what the ' +
+      'melt-value calculation reads. Removing one leaves the metal already recorded on each coin.',
   },
   {
     id: 'catalogues',

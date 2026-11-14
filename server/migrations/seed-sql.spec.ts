@@ -446,6 +446,23 @@ describe('the authored seed and the migration generated from it', () => {
     expect(missing).toEqual([]);
   });
 
+  it('is pure ASCII once generated, the REAL seed and not just a fixture', () => {
+    // The ASCII rule is tested above against the two-row VALID fixture,
+    // which contains no '¢' and no '£' and therefore cannot fail. The seed
+    // that actually ships does: 'Écu', '½¢', '£1', 'Württemberg'. Those are
+    // legal IN THE JSON -- the JSON is read by Node as UTF-8 -- and must
+    // come out of the generator as NCHAR(n), because the .sql is read by
+    // sqlcmd, whose code page is whatever the machine says it is.
+    //
+    // This is the test that would catch a future escaping change, and it is
+    // the one the Palestine labels had to pass: '1 Mil' through '100 Mils'
+    // are plain ASCII, so they add nothing new here, which is the point.
+    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
+    const nonAscii = [...onDisk].filter((character) => character.charCodeAt(0) > 127);
+    expect(nonAscii).toEqual([]);
+    expect(onDisk).toContain('NCHAR(');
+  });
+
   it('gives every label in the seed a unique fold WITHIN its issuer', () => {
     // Same failure, reached a different way: two labels in the JSON that
     // are spelled differently but mean the same coin to the alias layer.
@@ -480,5 +497,382 @@ describe('the authored seed and the migration generated from it', () => {
       }
     }
     expect(collisions).toEqual([]);
+  });
+});
+
+/*
+ * THE BRITISH MANDATE FOR PALESTINE
+ *
+ * Added on request. Everything asserted below is a FACT ABOUT THE COINAGE
+ * that was checked against sources before it was typed, which is the only
+ * reason a seed entry is worth testing at all:
+ *
+ *   - The Palestine Currency Order was made 7 February 1927 and the
+ *     Palestine pound, divided into 1,000 mils, entered circulation on
+ *     1 November 1927. The Mandate expired at midnight on 14/15 May 1948
+ *     and the Palestine Currency Board was dissolved that month.
+ *     (en.wikipedia.org/wiki/Palestine_pound,
+ *      en.wikipedia.org/wiki/Mandatory_Palestine)
+ *
+ *   - SEVEN circulating denominations, all struck at the Royal Mint:
+ *     1, 2, 5, 10, 20, 50 and 100 mils. The 5, 10 and 20 are centre-holed
+ *     cupro-nickel (bronze 1942-44, when nickel went to the war); the 50
+ *     and 100 are .720 silver. Coins are dated 1927-1947, though the
+ *     1947s were melted rather than released, so 1946 is the last year
+ *     anything circulated. (Krause KM# 1-7 via worldcoinscatalog.com,
+ *     chiefacoins.com, numista.com/7298, coinweek.com)
+ *
+ *   - NOTHING ABOVE 100 MILS WAS A COIN. A gold Palestine pound was
+ *     authorised by the 1927 Order at a silver:gold ratio of 10.5:1 and
+ *     was never minted. 500 mils (= half a pound) and up were BANKNOTES
+ *     issued by the Palestine Currency Board. That is the single easiest
+ *     mistake to make here -- Israel's 250 and 500 PRUTA, already in this
+ *     seed, are post-1948 and belong to a different issuer -- so it has a
+ *     test of its own below.
+ *
+ *   - NO ISO CODE. Issuers.IsoCode is CHAR(2), an ISO 3166-1 alpha-2
+ *     country code; ISO 3166 was first published in 1974 and the Mandate
+ *     ended in 1948. 'PS' belongs to the State of Palestine, a different
+ *     entity, and 'IL' is already this seed's Israel. Null is the honest
+ *     answer, and the validator accepts it.
+ */
+
+describe('the British Mandate for Palestine', () => {
+  const MANDATE_KEY = 'palestine-mandate';
+
+  interface FullSeedFile {
+    issuers: {
+      key: string;
+      name: string;
+      isoCode: string | null;
+      kind: string;
+      validFrom: number | null;
+      validTo: number | null;
+      sortOrder: number;
+    }[];
+    denominations: { issuer: string; label: string; faceValue: number | null; sortOrder: number }[];
+  }
+
+  const seed = JSON.parse(fs.readFileSync(SEED_DATA_PATH, 'utf8')) as FullSeedFile;
+  const issuer = seed.issuers.find((candidate) => candidate.key === MANDATE_KEY);
+  const rows = seed.denominations.filter((row) => row.issuer === MANDATE_KEY);
+
+  it('is in the seed, as a historical issuer with a closed date range', () => {
+    expect(issuer).toBeDefined();
+    expect(issuer).toMatchObject({
+      name: 'British Mandate for Palestine',
+      kind: 'historical',
+      isoCode: null,
+      validFrom: 1927,
+      validTo: 1948,
+    });
+  });
+
+  it('sits in the historical band of SortOrder, after the last entry there', () => {
+    // The bands are the stored curator order: modern 100-420, historical
+    // 1000-1150, ancient 2000-2120. A 'historical' issuer numbered 430
+    // would read as modern to anyone maintaining this file, and POST
+    // /issuers computes MAX + 10 on top of whatever the highest is.
+    const historical = seed.issuers.filter((candidate) => candidate.kind === 'historical');
+
+    expect(issuer?.sortOrder).toBeGreaterThanOrEqual(1000);
+    expect(issuer?.sortOrder).toBeLessThan(2000);
+    expect(issuer?.sortOrder).toBe(Math.max(...historical.map((candidate) => candidate.sortOrder)));
+  });
+
+  it('carries exactly the seven circulating denominations', () => {
+    expect(rows.map((row) => row.label)).toEqual([
+      '1 Mil',
+      '2 Mils',
+      '5 Mils',
+      '10 Mils',
+      '20 Mils',
+      '50 Mils',
+      '100 Mils',
+    ]);
+  });
+
+  it('prices every one of them in pounds, because a mil is a thousandth', () => {
+    // faceValue is in the issuer's MAIN unit throughout this file -- the
+    // United States '1c' is 0.01, Great Britain's '6d' is 0.025 -- so a
+    // mil is 0.001 and not 1. Derived from the label rather than listed
+    // again, so the assertion cannot agree with a typo it copied.
+    for (const row of rows) {
+      const mils = Number(/^(\d+) Mils?$/.exec(row.label)?.[1]);
+      expect(mils, `could not read a mil count out of ${row.label}`).toBeGreaterThan(0);
+      expect(row.faceValue).toBeCloseTo(mils / 1000, 10);
+    }
+  });
+
+  it('has no coin above 100 mils, because above that they were banknotes', () => {
+    // The gold pound was authorised in 1927 and never struck; 500 mils
+    // (half a pound), 1, 5, 10, 50 and 100 pounds were notes. Inventing a
+    // '500 Mils' coin here would be inventing a coin.
+    const highest = Math.max(...rows.map((row) => row.faceValue ?? 0));
+    expect(highest).toBe(0.1);
+    expect(rows.some((row) => /pound|lira|500|250/i.test(row.label))).toBe(false);
+  });
+
+  it('reaches the generated migration, issuer and denominations both', () => {
+    // The JSON is what gets reviewed; the .sql is what the owner runs.
+    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
+    expect(onDisk).toContain("N'British Mandate for Palestine'");
+    for (const row of rows) {
+      expect(onDisk).toContain(`(N'${MANDATE_KEY}', N'${row.label}', ${row.faceValue}, ${row.sortOrder})`);
+    }
+  });
+
+  it('can be picked up by re-running 013 against a database that predates it', () => {
+    // THE INSTRUCTION THE OWNER NEEDS, AS A TEST. Both inserts are
+    // NOT EXISTS-guarded -- issuers by Name, denominations by
+    // (IssuerId, Label) -- so running 013 again on a database that already
+    // holds the other 61 issuers adds Palestine and its seven rows and
+    // nothing else. Without the guards a second run would double every
+    // denomination, and two candidates under one issuer resolve to NULL.
+    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
+    expect(onDisk).toMatch(
+      /INSERT INTO Issuers[\s\S]*?WHERE NOT EXISTS \(SELECT 1 FROM Issuers i WHERE i\.Name = s\.Name\)/
+    );
+    expect(onDisk).toMatch(
+      /INSERT INTO Denominations[\s\S]*?WHERE NOT EXISTS \(\s*SELECT 1 FROM Denominations d\s*WHERE d\.IssuerId = i\.IssuerId AND d\.Label = s\.Label\s*\)/
+    );
+  });
+});
+
+/*
+ * THE EIGHT ANCIENT ISSUERS ADDED AFTER THE MANDATE
+ *
+ * Added by the same reviewed, offline route: researched against sources,
+ * typed into the JSON, regenerated. The rule the author worked to is the
+ * one in seed-sql.ts's header -- ACCURACY OVER COVERAGE -- and it shows in
+ * how SHORT several of these lists are. Aegina gets two denominations and
+ * Syracuse gets two, not because those cities struck two coins, but because
+ * two is what the sources consulted actually attested BY NAME. A collector
+ * adding the third himself is a normal action; a wrong third that shipped
+ * with the app is a silent error he has no reason to doubt.
+ *
+ * WHERE EACH LIST CAME FROM (every URL below was read, not recalled):
+ *
+ *   Kingdom of Lydia  trite, hekte and the 1/24, 1/48 and 1/96 electrum
+ *                     fractions: en.wikipedia.org/wiki/Electrum. The gold
+ *                     and silver Croeseid staters (10.7 g heavy and 8.1 g
+ *                     light gold; 10.7 g silver):
+ *                     en.wikipedia.org/wiki/Croeseid. The full electrum
+ *                     stater is DELIBERATELY ABSENT -- the Lydia article
+ *                     says no complete specimen has been found and that
+ *                     the 4.7 g trite may itself be the stater, and a
+ *                     disputed coin is exactly what must not be seeded.
+ *                     The hemihekte is absent for the same reason.
+ *
+ *   Aegina            "The Aeginetic stater was divided into two drachmae
+ *                     of 6.1 grams of silver", and the captioned 404-340
+ *                     BC land-tortoise drachma:
+ *                     en.wikipedia.org/wiki/Aegina. No obol or smaller
+ *                     fraction is attested there FOR AEGINA -- the
+ *                     fraction table on the Ancient Greek coinage page is
+ *                     Attic and generic -- so none is seeded.
+ *
+ *   Athens            Tetradrachm, didrachm (the Wappenmunzen didrachm
+ *                     c. 545 BC) and the tetartemorion ("known to have
+ *                     been struck in Athens, Colophon, and several other
+ *                     cities"):
+ *                     en.wikipedia.org/wiki/Ancient_Greek_coinage. The
+ *                     obol, hemiobol, trihemiobol, diobol, triobol and
+ *                     drachm, all named for Classical Athens:
+ *                     en.wikipedia.org/wiki/Obol_(coin). NOT seeded,
+ *                     because no page read attested them FOR ATHENS: the
+ *                     dekadrachm, the tetrobol, the tritartemorion, the
+ *                     hemitetartemorion, the bronze chalkous and the
+ *                     407/406 BC emergency gold.
+ *
+ *   Corinth           Stater (8.6 g, "divided into three silver drachmae
+ *                     of 2.9 g") and drachm:
+ *                     en.wikipedia.org/wiki/Stater. The obol, from
+ *                     "Corinth ... was documented having 0.42-gram
+ *                     obols": en.wikipedia.org/wiki/Obol_(coin).
+ *
+ *   Syracuse          Tetradrachm ("A Syracusan tetradrachm (circa
+ *                     415-405 BC)") and dekadrachm ("the silver decadrachm
+ *                     coin from Syracuse signed by ... Kimon and
+ *                     Euainetos"):
+ *                     en.wikipedia.org/wiki/Ancient_Greek_coinage. The
+ *                     Sicilian bronze litra fractions are attested for
+ *                     SICILY and not for Syracuse
+ *                     (en.wikipedia.org/wiki/Litra), so they stay where
+ *                     they already are, under "Ancient Greece".
+ *
+ *   Carthage          Shekel ("The base denomination was the shekel"), the
+ *                     gold shekel of 7.20 g, and the electrum half,
+ *                     quarter, fifth and tenth:
+ *                     en.wikipedia.org/wiki/Carthaginian_coinage. The
+ *                     silver tetradrachm, from the same page: "the silver
+ *                     was only minted in tetradrachms", Attic 17.26 g.
+ *
+ *   Greco-Bactrian    Stater (the kingdom's currency), the 20-stater
+ *                     ("the largest gold coin ever minted in the ancient
+ *                     world", 169.2 g) and the tetradrachm:
+ *                     en.wikipedia.org/wiki/Greco-Bactrian_Kingdom and
+ *                     en.wikipedia.org/wiki/Eucratides_I, which also
+ *                     attests the "Pentadrachm (5 drachms) of Eucratides I
+ *                     Megas".
+ *
+ *   Hasmonean         "Only bronze coins in various denominations have
+ *                     been found; the smallest being a prutah or a half
+ *                     prutah": en.wikipedia.org/wiki/Hasmonean_coinage.
+ *                     The lepton, "first minted under Alexander Jannaeus
+ *                     prior to 76 BCE": en.wikipedia.org/wiki/Greek_lepton.
+ *                     NO SILVER. That page names one Roman denarius
+ *                     associated with the Hasmoneans, and a Roman coin is
+ *                     not a Hasmonean denomination.
+ *
+ * DATES. validFrom is the earliest year a source gives for the issuer or
+ * its coinage; validTo is the end of the issuer, which for the Greek
+ * cities is POLITICAL rather than numismatic, because no page read dated
+ * the end of their coinage. Both are approximate, in the same broad-brush
+ * spirit as the ancient entries already here ("Ancient Greece" is -700 to
+ * -30). They are load-bearing for nothing except the derived Kind, and
+ * every one of them is comfortably before 500.
+ */
+
+describe('the eight ancient issuers added after the Mandate', () => {
+  interface AncientSeedShape {
+    issuers: {
+      key: string;
+      name: string;
+      isoCode: string | null;
+      kind: string;
+      validFrom: number | null;
+      validTo: number | null;
+      sortOrder: number;
+    }[];
+    denominations: { issuer: string; label: string; faceValue: number | null; sortOrder: number }[];
+  }
+
+  const ancientSeed = JSON.parse(fs.readFileSync(SEED_DATA_PATH, 'utf8')) as AncientSeedShape;
+
+  const ADDED: Record<string, string[]> = {
+    lydia: ['1/96 Stater', '1/48 Stater', '1/24 Stater', 'Hekte', 'Trite', 'Silver Stater', 'Gold Stater'],
+    aegina: ['Drachm', 'Stater'],
+    athens: [
+      'Tetartemorion',
+      'Hemiobol',
+      'Obol',
+      'Trihemiobol',
+      'Diobol',
+      'Triobol',
+      'Drachm',
+      'Didrachm',
+      'Tetradrachm',
+    ],
+    corinth: ['Obol', 'Drachm', 'Stater'],
+    syracuse: ['Tetradrachm', 'Dekadrachm'],
+    carthage: ['Tenth Shekel', 'Fifth Shekel', 'Quarter Shekel', 'Half Shekel', 'Shekel', 'Tetradrachm'],
+    'greco-bactrian-kingdom': ['Tetradrachm', 'Pentadrachm', 'Stater', '20 Stater'],
+    'hasmonean-kingdom': ['Lepton', 'Half Prutah', 'Prutah'],
+  };
+
+  it('are all in the seed, as ancient issuers with closed BC spans and no ISO code', () => {
+    // No ISO code: Issuers.IsoCode is CHAR(2), an ISO 3166-1 alpha-2
+    // country code, and ISO 3166 was first published in 1974. For a city
+    // that stopped striking coins in 340 BC there is no code to omit.
+    for (const key of Object.keys(ADDED)) {
+      const issuer = ancientSeed.issuers.find((candidate) => candidate.key === key);
+      expect(issuer, `${key} is missing from the seed`).toBeDefined();
+      expect(issuer?.kind, key).toBe('ancient');
+      expect(issuer?.isoCode, key).toBeNull();
+      expect(issuer?.validFrom ?? 0, `${key} validFrom`).toBeLessThan(0);
+      expect(issuer?.validTo ?? 0, `${key} validTo`).toBeLessThan(0);
+      expect(issuer?.validTo ?? 0, `${key} ends after it starts`).toBeGreaterThan(issuer?.validFrom ?? 0);
+    }
+  });
+
+  it('is consistent with the derivation rule, so none of them needs a stored kind to stay ancient', () => {
+    // Every validFrom here is BC and therefore below the rule's threshold
+    // of 500. If somebody later adds an "ancient" issuer starting in 600
+    // AD, the form would derive 'historical' for it and the seed and the
+    // screen would disagree about the same row.
+    for (const key of Object.keys(ADDED)) {
+      const issuer = ancientSeed.issuers.find((candidate) => candidate.key === key);
+      expect(issuer?.validFrom ?? 0, `${key} must derive as ancient`).toBeLessThan(500);
+    }
+  });
+
+  it('carries exactly the researched denominations, in ascending value order', () => {
+    for (const [key, labels] of Object.entries(ADDED)) {
+      const denominationRows = ancientSeed.denominations.filter((row) => row.issuer === key);
+      expect(denominationRows.map((row) => row.label), key).toEqual(labels);
+      // Smallest first, in steps of ten, which is what the rest of the
+      // file does and the order the maintenance screen renders.
+      expect(denominationRows.map((row) => row.sortOrder), `${key} sort order`).toEqual(
+        labels.map((_unused, index) => (index + 1) * 10)
+      );
+    }
+  });
+
+  it('prices none of them, because an ancient denomination has no decimal face value', () => {
+    // Every ancient issuer already in this file does the same. A drachm is
+    // not 1.00 of anything this column could mean, and inventing a number
+    // would make it sort and compare against the United States cent.
+    for (const key of Object.keys(ADDED)) {
+      for (const row of ancientSeed.denominations.filter((candidate) => candidate.issuer === key)) {
+        expect(row.faceValue, `${key} / ${row.label}`).toBeNull();
+      }
+    }
+  });
+
+  it('gives no issuer the same label twice, across the whole file', () => {
+    // *** THE FAILURE THAT WOULD DELETE A DENOMINATION RATHER THAN ADD
+    // ONE. *** Two rows with the same label under one issuer make every
+    // resolution of that text AMBIGUOUS, and ambiguous resolves to NULL.
+    // validateSeed enforces this too; it is restated here so the next
+    // person adding a ninth issuer meets the rule where they are working.
+    const seen = new Set<string>();
+    for (const row of ancientSeed.denominations) {
+      const pair = `${row.issuer}\u0000${row.label.toLowerCase()}`;
+      expect(seen.has(pair), `${row.issuer} has '${row.label}' twice`).toBe(false);
+      seen.add(pair);
+    }
+  });
+
+  it('does not reuse a sort order the owner may already have taken', () => {
+    // The seeded ancient band ends at 2120, and the owner's live database
+    // already holds an issuer HE added, which took MAX(SortOrder) + 10 =
+    // 2130. Continuing the band would have put a seeded row on a number
+    // belonging to a row this seed must never touch. These start at 3000.
+    for (const key of Object.keys(ADDED)) {
+      const issuer = ancientSeed.issuers.find((candidate) => candidate.key === key);
+      expect(issuer?.sortOrder ?? 0, key).toBeGreaterThanOrEqual(3000);
+    }
+  });
+
+  it('reaches the generated migration, issuers and denominations both', () => {
+    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
+    for (const [key, labels] of Object.entries(ADDED)) {
+      const issuer = ancientSeed.issuers.find((candidate) => candidate.key === key);
+      expect(onDisk, key).toContain(`N'${issuer?.name}'`);
+      for (const label of labels) {
+        expect(onDisk, `${key} / ${label}`).toContain(`(N'${key}', N'${label}', NULL,`);
+      }
+    }
+  });
+
+  it('can be picked up by re-running 013, or simply by reopening the app', () => {
+    // BOTH ROUTES ARE GUARDED, which is the whole instruction the owner
+    // needs. Migration 013 inserts issuers WHERE NOT EXISTS by Name and
+    // denominations WHERE NOT EXISTS by (IssuerId, Label); db/seed.ts does
+    // the same thing in SQLite on EVERY open. So the eight new issuers and
+    // their 36 denominations appear on his next launch, his own additions
+    // and his 40 edits are untouched, and nothing is doubled.
+    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
+    expect(onDisk).toMatch(
+      /INSERT INTO Issuers[\s\S]*?WHERE NOT EXISTS \(SELECT 1 FROM Issuers i WHERE i\.Name = s\.Name\)/
+    );
+    expect(onDisk).toMatch(
+      /INSERT INTO Denominations[\s\S]*?WHERE NOT EXISTS \(\s*SELECT 1 FROM Denominations d\s*WHERE d\.IssuerId = i\.IssuerId AND d\.Label = s\.Label\s*\)/
+    );
+
+    const seeder = fs.readFileSync(path.join(__dirname, '..', 'db', 'seed.ts'), 'utf8');
+    expect(seeder).toContain('WHERE NOT EXISTS (SELECT 1 FROM Issuers WHERE Name = @name)');
+    expect(seeder).toContain('(SELECT 1 FROM Denominations WHERE IssuerId = @issuerId AND Label = @label)');
   });
 });

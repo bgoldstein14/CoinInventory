@@ -13,9 +13,8 @@
  * data-loss bug, not a feature.
  */
 
-import sql from 'mssql';
 import { logError } from '../../logger';
-import { DB_BINDINGS } from '../../db';
+import { DB_BINDINGS, DbRequest, DbTransaction } from '../../db';
 import { normalizeImageEntries } from './image-payload';
 
 /**
@@ -33,7 +32,7 @@ import { normalizeImageEntries } from './image-payload';
  * @param transaction - The transaction to unwind, or null if `begin()` never ran.
  * @param context     - Route label used in the log line.
  */
-export async function safeRollback(transaction: sql.Transaction | null, context: string): Promise<void> {
+export async function safeRollback(transaction: DbTransaction | null, context: string): Promise<void> {
   if (!transaction) return;
 
   try {
@@ -58,7 +57,7 @@ export async function safeRollback(transaction: sql.Transaction | null, context:
  * NORMALIZED list, not in the raw request).
  */
 export async function insertImages(
-  transaction: sql.Transaction,
+  transaction: DbTransaction,
   coinId: string,
   images: unknown,
   /**
@@ -78,7 +77,7 @@ export async function insertImages(
     // back to whatever the coin already had recorded for this same image.
     const sourcePath = resolveSourcePath(image.imageData, image.sourcePath, knownSourcePaths);
 
-    await new sql.Request(transaction)
+    await new DbRequest(transaction)
       .input('coinId', DB_BINDINGS.coinId, coinId)
       .input('imageData', DB_BINDINGS.imageData, image.imageData)
       .input('sortOrder', DB_BINDINGS.sortOrder, i)
@@ -168,10 +167,10 @@ export function resolveSourcePath(
  * it reaches the rest of the code.
  */
 export async function readExistingSourcePaths(
-  transaction: sql.Transaction,
+  transaction: DbTransaction,
   coinId: string
 ): Promise<Map<string, string>> {
-  const result = await new sql.Request(transaction)
+  const result = await new DbRequest(transaction)
     .input('coinId', DB_BINDINGS.coinId, coinId)
     // ORDER BY SortOrder is load-bearing, not cosmetic: it is what makes
     // "lowest SortOrder wins" true for duplicated image data.
@@ -214,7 +213,7 @@ export async function readExistingSourcePaths(
  * it.
  */
 export async function replaceImages(
-  transaction: sql.Transaction,
+  transaction: DbTransaction,
   coinId: string,
   images: unknown
 ): Promise<void> {
@@ -225,7 +224,7 @@ export async function replaceImages(
     ? await readExistingSourcePaths(transaction, coinId)
     : undefined;
 
-  await new sql.Request(transaction)
+  await new DbRequest(transaction)
     .input('coinId', DB_BINDINGS.coinId, coinId)
     .query('DELETE FROM CoinImages WHERE CoinId = @coinId');
 

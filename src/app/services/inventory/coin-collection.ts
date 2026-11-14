@@ -148,6 +148,7 @@ export class CoinCollection {
         .then(() => ({ ok: true as const, coin }))
         .catch((error) => {
           this.logger.error(`Failed to create coin "${coin.coinType} ${coin.year}" (${coin.id}) in database`, describeHttpError(error));
+          this.markFailedCreateUnsaved(coin.id, error);
           return { ok: false as const, coin, error };
         })
     );
@@ -210,6 +211,7 @@ export class CoinCollection {
         firstValueFrom(this.apiService.createCoin(coin))
           .catch((error) => {
             this.logger.error(`Failed to import coin ${coin.id} to database`, describeHttpError(error));
+            this.markFailedCreateUnsaved(coin.id, error);
           })
       );
       Promise.all(createPromises)
@@ -225,6 +227,37 @@ export class CoinCollection {
       this.logger.error('Failed to parse import data', String(e));
       this.notificationService.showError('Failed to parse import data');
     }
+  }
+
+  /**
+   * A bulk create came back refused: stop the row pretending to be saved.
+   *
+   * ---- THE HOLE THIS CLOSES ----
+   * Both bulk paths above seed the change tracker with the record they are
+   * ABOUT to POST, because on success the server will hold exactly that. On
+   * failure that seeded snapshot was simply left in place, and the row was
+   * left in the grid with no mark on it at all. The consequences compound:
+   *
+   *   - the row looks identical to a saved one, so the user keeps editing it;
+   *   - every later edit takes the normal route and PUTs to a CoinId the
+   *     database does not have, which 404s (see
+   *     server/routes/coins/writes.ts) — forever, because a PUT never
+   *     creates;
+   *   - the grid requests a thumbnail for it, which 404s too.
+   *
+   * Forgetting the fictional baseline and marking the coin a draft puts it
+   * back on the one path that can actually rescue it: the next qualifying
+   * edit POSTs it again. The row and the user's data stay on screen — the
+   * alternative, deleting rows out from under an import, is the worse bug.
+   *
+   * Nothing is done for a row the user has already removed.
+   */
+  private markFailedCreateUnsaved(coinId: string, error: unknown): void {
+    if (!this.inventory().some(c => c.id === coinId)) return;
+
+    this.tracker.clear(coinId);
+    this.drafts.recordCreateFailure(coinId, describeHttpError(error));
+    this.drafts.markDraft(coinId);
   }
 
   /* ---- Deleting coins ---- */

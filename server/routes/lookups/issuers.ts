@@ -8,13 +8,13 @@
  * Mounted (via routes/lookups/index.ts) at /api:
  *
  *   GET    /issuers      -> active issuers, with their denomination and coin
- *                           counts, in picker order
+ *                           counts, A-Z by name
  *   POST   /issuers      -> create one (returns the new IssuerId)
  *   PUT    /issuers/:id  -> edit one IN PLACE, keeping its id
  *   DELETE /issuers/:id  -> soft-delete (IsActive = 0), refused while
  *                           denominations still point at it
  *
- * The seed (migration 013) covers 61 issuers, chosen for accuracy over
+ * The seed (migration 013) covers 70 issuers, chosen for accuracy over
  * coverage: a user adding a missing denomination is a normal action, while a
  * user trusting a wrong one that shipped with the app is a silent error. That
  * trade only works if adding the missing one is possible, which is what these
@@ -40,6 +40,19 @@
  *      * Kind is NVARCHAR(20) with no CHECK constraint, so 'imaginary' is
  *        stored happily and then cannot be grouped, filtered or rendered.
  *
+ * 2a. KIND IS NOW DERIVED FROM THE YEAR SPAN AND NOT TAKEN FROM THE CLIENT.
+ *    See issuer-kind.ts for the rule and the measurement behind it. The form
+ *    stopped asking for it, because it drives no behaviour and the years
+ *    already say it. Two consequences live in this file:
+ *      * A `kind` in the body is still REFUSED if it is not one of the three
+ *        (a client sending 'imaginary' is broken and should hear so), but it
+ *        no longer decides the stored value. It is consulted only when the
+ *        year span is empty and therefore says nothing.
+ *      * PUT reads the row's CURRENT Kind first and falls back to it for an
+ *        undated issuer, which is what stops `British Colonial` -- the one
+ *        seeded issuer with no dates and a curated 'historical' -- being
+ *        silently rewritten the first time somebody fixes a typo in it.
+ *
  * 3. PUT EDITS IN PLACE. Denominations reference an issuer BY ID, so
  *    remove-and-re-add — all the text lookups offer — would orphan every
  *    denomination filed under it. Same argument as catalogs.ts.
@@ -56,11 +69,9 @@ import { logInfo, logWarn } from '../../logger';
 import { withDb, DB_BINDINGS } from '../../db';
 import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
+import { IssuerKind, isIssuerKind, resolveIssuerKind } from './issuer-kind';
 
 const router = Router();
-
-/** The three values Issuers.Kind is allowed to hold. */
-const ISSUER_KINDS = new Set(['modern', 'historical', 'ancient']);
 
 /** Issuers.Name NVARCHAR(100). */
 const NAME_MAX_LENGTH = 100;
@@ -74,7 +85,12 @@ const NAME_MAX_LENGTH = 100;
 interface ValidIssuerBody {
   name: string;
   isoCode: string | null;
-  kind: string;
+  /**
+   * A `kind` the client happened to send. NOT the value that gets stored —
+   * see note 2a in the header. It is consulted only when the year span is
+   * empty, and is null for the current form, which no longer sends one.
+   */
+  suppliedKind: IssuerKind | null;
   validFrom: number | null;
   validTo: number | null;
 }
@@ -88,9 +104,19 @@ function readIssuerBody(body: unknown): { ok: true; value: ValidIssuerBody } | {
     return { ok: false, error: `name must be ${NAME_MAX_LENGTH} characters or fewer` };
   }
 
-  const kind = typeof raw['kind'] === 'string' ? raw['kind'].trim().toLowerCase() : '';
-  if (!ISSUER_KINDS.has(kind)) {
-    return { ok: false, error: "kind must be one of 'modern', 'historical' or 'ancient'" };
+  // Absent is the normal case: the form derives kind from the years and
+  // sends none. Present-but-wrong is still a 400, because Kind is
+  // NVARCHAR(20) with no CHECK constraint and a client that believes it can
+  // set 'imaginary' is a client with a bug worth hearing about. Present-and-
+  // valid is accepted but does NOT decide the stored value; see note 2a.
+  const rawKind = raw['kind'];
+  let suppliedKind: IssuerKind | null = null;
+  if (rawKind !== undefined && rawKind !== null && rawKind !== '') {
+    const text = typeof rawKind === 'string' ? rawKind.trim().toLowerCase() : rawKind;
+    if (!isIssuerKind(text)) {
+      return { ok: false, error: "kind must be one of 'modern', 'historical' or 'ancient'" };
+    }
+    suppliedKind = text;
   }
 
   // Absent, null and '' all mean "this issuer has no ISO code", which is the
@@ -126,7 +152,25 @@ function readIssuerBody(body: unknown): { ok: true; value: ValidIssuerBody } | {
     return { ok: false, error: 'validTo must not be before validFrom' };
   }
 
-  return { ok: true, value: { name, isoCode, kind, validFrom, validTo } };
+  return { ok: true, value: { name, isoCode, suppliedKind, validFrom, validTo } };
+}
+
+/**
+ * The Kind column as it stands on a row right now, or null if there is no
+ * such row.
+ *
+ * PUT needs it so that an issuer whose years say nothing keeps the kind it
+ * already had instead of being reset. `British Colonial` is that issuer.
+ */
+async function storedKindOf(id: number): Promise<IssuerKind | null> {
+  return withDb(async (db) => {
+    const result = await db.request()
+      .input('id', DB_BINDINGS.issuerId, id)
+      .query('SELECT Kind FROM Issuers WHERE IssuerId = @id');
+
+    const raw = result.recordset[0]?.['Kind'];
+    return isIssuerKind(raw) ? raw : null;
+  });
 }
 
 /**
@@ -146,9 +190,10 @@ async function findNameClash(name: string, excludeId: number | null): Promise<st
       .input('name', DB_BINDINGS.issuerName, name)
       .input('id', DB_BINDINGS.issuerId, excludeId ?? 0)
       .query(`
-        SELECT TOP 1 Name FROM Issuers
+        SELECT Name FROM Issuers
         WHERE LOWER(LTRIM(RTRIM(Name))) = LOWER(LTRIM(RTRIM(@name)))
           AND IssuerId <> @id
+        LIMIT 1
       `);
 
     const row = result.recordset[0];
@@ -177,7 +222,15 @@ router.get('/issuers', async (_req: Request, res: Response) => {
         LEFT JOIN Coins c        ON c.DenominationId = d.DenominationId
         WHERE i.IsActive = 1
         GROUP BY i.IssuerId, i.Name, i.IsoCode, i.Kind, i.ValidFrom, i.ValidTo, i.SortOrder
-        ORDER BY i.SortOrder, i.Name
+        -- ALPHABETICAL, NOT SortOrder. SortOrder is a curator's order --
+        -- the seed bands it modern / historical / ancient -- and with 70
+        -- issuers on screen that is an order nobody can scan. Catalogs
+        -- deliberately does the opposite (see catalogs.ts) because its
+        -- list is short and its numbering is meaningful; this one is
+        -- neither. The default collation is case-insensitive, so Name
+        -- alone already folds case; IssuerId makes the order TOTAL, which
+        -- a paged or re-fetched list needs.
+        ORDER BY i.Name, i.IssuerId
       `);
 
       return result.recordset.map((row: Record<string, unknown>) => ({
@@ -222,23 +275,31 @@ router.post('/issuers', async (req: Request, res: Response) => {
       return;
     }
 
-    logInfo(`Creating issuer: ${issuer.name} (${issuer.kind})`);
+    // DERIVED, not taken from the body. No row exists yet, so an issuer
+    // with no years at all becomes 'modern' unless the client insisted
+    // otherwise — see issuer-kind.ts.
+    const kind = resolveIssuerKind(issuer.validFrom, issuer.validTo, issuer.suppliedKind);
+
+    logInfo(`Creating issuer: ${issuer.name} (${kind}, derived)`);
 
     const created = await withDb(async (db) => {
       const result = await db.request()
         .input('name', DB_BINDINGS.issuerName, issuer.name)
         .input('isoCode', DB_BINDINGS.issuerIsoCode, issuer.isoCode)
-        .input('kind', DB_BINDINGS.issuerKind, issuer.kind)
+        .input('kind', DB_BINDINGS.issuerKind, kind)
         .input('validFrom', DB_BINDINGS.issuerYear, issuer.validFrom)
         .input('validTo', DB_BINDINGS.issuerYear, issuer.validTo)
         // SortOrder computed in SQL, for the same reason catalogues do it:
         // two tabs cannot both claim the same slot, and a user's addition
-        // belongs AFTER the seeded 61 rather than jumping above them.
+        // belongs AFTER the seeded 70 rather than jumping above them.
+        // GET no longer orders by it — the list is A-Z — but the column is
+        // NOT NULL and is still the stored curator's order, so a new row
+        // needs a value that is its own and is not zero.
         .query(`
           INSERT INTO Issuers (Name, IsoCode, Kind, ValidFrom, ValidTo, SortOrder, IsActive)
-          OUTPUT INSERTED.IssuerId, INSERTED.SortOrder
           SELECT @name, @isoCode, @kind, @validFrom, @validTo, COALESCE(MAX(SortOrder), 0) + 10, 1
           FROM Issuers
+          RETURNING IssuerId, SortOrder
         `);
 
       const row = result.recordset[0];
@@ -251,7 +312,7 @@ router.post('/issuers', async (req: Request, res: Response) => {
       issuerId: created['IssuerId'],
       name: issuer.name,
       isoCode: issuer.isoCode,
-      kind: issuer.kind,
+      kind,
       validFrom: issuer.validFrom,
       validTo: issuer.validTo,
       sortOrder: created['SortOrder'] ?? 0,
@@ -283,14 +344,24 @@ router.put('/issuers/:id', async (req: Request, res: Response) => {
       return;
     }
 
-    logInfo(`Updating issuer ${id}`);
+    // DERIVED, with the row's CURRENT Kind as the fallback for an issuer
+    // whose years say nothing. That fallback is the whole reason this read
+    // exists: without it, saving `British Colonial` — no dates, curated as
+    // 'historical' — would silently rewrite it to 'modern'.
+    const kind = resolveIssuerKind(
+      issuer.validFrom,
+      issuer.validTo,
+      issuer.suppliedKind ?? (await storedKindOf(id))
+    );
+
+    logInfo(`Updating issuer ${id} (${kind}, derived)`);
 
     const rowsAffected = await withDb(async (db) => {
       const result = await db.request()
         .input('id', DB_BINDINGS.issuerId, id)
         .input('name', DB_BINDINGS.issuerName, issuer.name)
         .input('isoCode', DB_BINDINGS.issuerIsoCode, issuer.isoCode)
-        .input('kind', DB_BINDINGS.issuerKind, issuer.kind)
+        .input('kind', DB_BINDINGS.issuerKind, kind)
         .input('validFrom', DB_BINDINGS.issuerYear, issuer.validFrom)
         .input('validTo', DB_BINDINGS.issuerYear, issuer.validTo)
         .query(`
@@ -312,7 +383,7 @@ router.put('/issuers/:id', async (req: Request, res: Response) => {
       issuerId: id,
       name: issuer.name,
       isoCode: issuer.isoCode,
-      kind: issuer.kind,
+      kind,
       validFrom: issuer.validFrom,
       validTo: issuer.validTo,
       isActive: true,

@@ -12,11 +12,23 @@
 
 // ---- Detail panel ----
 
+// The panel is a height-capped flex column inside an app that is locked to one
+// viewport (`:host { height: 100dvh; overflow: hidden }` in _base.scss), so
+// nothing outside it can ever scroll. That makes the overflow rule here the
+// only thing deciding whether content past the cap is REACHABLE or merely
+// CLIPPED.
+//
+// It must not be `overflow: hidden`. The flex children below default to
+// `min-height: auto` and so refuse to shrink below their content; the column
+// then overruns its cap and the surplus is cut off with no way to scroll to
+// it. Notes is last in the stack and was the visible casualty, but the
+// transaction history underneath it was being clipped the same way.
 .detail-panel {
   position: sticky;
   top: 12px;
   max-height: calc(100vh - 70px);
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -169,6 +181,32 @@
 
 // Notes takes whatever room is left on the row.
 .detail-field--txn-notes { flex: 1 1 120px; min-width: 120px; }
+
+// ---- "Needs a Denomination before it can be saved" ----
+//
+// A coin that is still being typed is an EXPECTED state, so this reads as a
+// note rather than a failure: the same warm brown as the grid's "Unsaved"
+// chip, no icon, no border box. It replaces nothing the user did wrong.
+//
+// Only `--failed` — a save the server was asked for and refused — goes red,
+// because that one really is an error the user cannot fix by typing.
+
+.detail-draft-note {
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: #fdf6e8;
+  border: 1px solid #ecd9b4;
+  color: #8a5a10;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.detail-draft-note--failed {
+  background: #fdeceb;
+  border-color: #efc2bd;
+  color: #a3281f;
+}
 
 // ---- Responsive & print ----
 // On a narrow screen the sidebar stops being sticky and just flows with the

@@ -20,51 +20,67 @@
  * is the difference between a working app and an unusable one. If you are
  * about to relax one of these assertions, that is the bug you are re-opening.
  *
- * Queries are satisfied IN CALL ORDER by the shared mssql mock:
+ * *** THE COINS AND THEIR PHOTOGRAPHS ARE REAL NOW. *** They are inserted
+ * into an in-memory SQLite database built from db/schema.sql, and the outage
+ * test puts a genuine multi-kilobyte base64 blob in CoinImages before asking
+ * for the list — so "no image text in the response" is now a statement about
+ * a database that really contains image text. The previous version queued one
+ * canned recordset per `query()` call in call order:
  *
  *   includeImages = true   ->  1. coins   2. images   3. image counts
  *   includeImages = false  ->  1. coins   2. image counts
  *
- * THESE NUMBERS ARE LOAD-BEARING. `mockResolvedValueOnce` queues one answer per
- * `query()` call with no idea which query is asking, so the Nth queued recordset
- * is handed to the Nth query loadCoinList() happens to run. Insert or remove a
- * query in list-query.ts and every mock after it silently answers the wrong
- * question — a coin row would arrive where an image-count row was expected.
+ * which meant the Nth queued recordset went to whichever query happened to be
+ * Nth, and inserting a query in list-query.ts silently shifted every answer
+ * after it. The statement COUNT is still asserted, because "the image-payload
+ * query was skipped" is the whole point of the flag — but it is now counted
+ * out of what really ran rather than out of what the test queued.
  *
- * The coin rows below are intentionally minimal: rowToCoin() defaults every
- * column it does not find, so only CoinId matters for these assertions.
+ * The coins below carry only the columns the assertions read; db/schema.sql
+ * makes every other column nullable, and rowToCoin() defaults what it does
+ * not find.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import request from 'supertest';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
-import { mockRequest, resetMssqlMock } from '../../test-support/mssql-mock';
+import {
+  executedSql,
+  findQuery,
+  insertCoin,
+  withTestDb,
+} from '../../test-support/sqlite-test-db';
 import { shouldIncludeImages } from './list-query';
 import { app } from '../../server';
-
-beforeEach(() => {
-  resetMssqlMock();
-});
 
 const COIN_A = { CoinId: 'coin-a', Denomination: '$1', Year: '1921' };
 const COIN_B = { CoinId: 'coin-b', Denomination: '5c', Year: '1937' };
 
+/** Gives a coin `count` photographs. The FOREIGN KEY needs the coin first. */
+async function givenImages(coinId: string, count: number, data = 'data:image/png;base64,x'): Promise<void> {
+  await withTestDb((database) => {
+    const insert = database.prepare(
+      'INSERT INTO CoinImages (CoinId, ImageData, SortOrder) ' +
+        'VALUES (@coinId, @imageData, @sortOrder)'
+    );
+    for (let order = 0; order < count; order++) {
+      insert.run({ coinId, imageData: data, sortOrder: order });
+    }
+  });
+}
+
 describe('GET /api/coins — imageCount', () => {
   it('reports imageCount from the COUNT(*) aggregate, and 0 for coins with none', async () => {
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A, COIN_B] })                    // 1. coins
-      // 2. the aggregate. coin-b has no image rows at all, so SQL's GROUP BY
-      // simply does not return a row for it — the handler must default it to 0.
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 4 }] });
+    // coin-b has no image rows at all, so SQL's GROUP BY simply does not
+    // return a row for it — the handler must default it to 0.
+    await insertCoin(COIN_A);
+    await insertCoin(COIN_B);
+    await givenImages('coin-a', 4);
 
     const res = await request(app).get('/api/coins');
 
     expect(res.status).toBe(200);
+    // ORDER BY Denomination, Year: '$1' sorts before '5c'.
     expect(res.body[0].id).toBe('coin-a');
     expect(res.body[0].imageCount).toBe(4);
     expect(res.body[1].id).toBe('coin-b');
@@ -72,28 +88,24 @@ describe('GET /api/coins — imageCount', () => {
   });
 
   it('counts with a SQL aggregate rather than by fetching the image rows', async () => {
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })                             // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 2 }] }); // 2. counts
+    await insertCoin(COIN_A);
+    await givenImages('coin-a', 2);
 
     await request(app).get('/api/coins');
 
-    // The 2nd query (index 1) is the count. It must be a COUNT(*) GROUP BY — if
-    // someone ever replaces it with a SELECT of the rows, this fails loudly.
-    const countQuery = mockRequest.query.mock.calls[1]?.[0] as string;
-    expect(countQuery).toContain('COUNT(*)');
-    expect(countQuery).toContain('GROUP BY CoinId');
-    expect(countQuery).not.toContain('ImageData');
+    // The count query must be a COUNT(*) GROUP BY — if someone ever replaces
+    // it with a SELECT of the rows, this fails loudly. A returned count
+    // cannot show HOW it was arrived at, so this stays a text assertion.
+    const countQuery = findQuery('COUNT(*)');
+    expect(countQuery?.sql).toContain('GROUP BY CoinId');
+    expect(countQuery?.sql).not.toContain('ImageData');
   });
 });
 
 describe('GET /api/coins — includeImages', () => {
   it('omits imagePaths entirely when includeImages=false', async () => {
-    // Only two queries now: the image-payload query is skipped, which is the
-    // whole point of the flag.
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })                              // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 3 }] }); // 2. counts
+    await insertCoin(COIN_A);
+    await givenImages('coin-a', 3);
 
     const res = await request(app).get('/api/coins?includeImages=false');
 
@@ -103,9 +115,10 @@ describe('GET /api/coins — includeImages', () => {
     expect(res.body[0].imageCount).toBe(3);
 
     // Two queries, not three — no image payload was ever read.
-    expect(mockRequest.query).toHaveBeenCalledTimes(2);
-    for (const call of mockRequest.query.mock.calls) {
-      expect(call[0] as string).not.toContain('SELECT CoinId, ImageData');
+    const statements = executedSql();
+    expect(statements).toHaveLength(2);
+    for (const statement of statements) {
+      expect(statement).not.toContain('SELECT CoinId, ImageData');
     }
   });
 
@@ -113,16 +126,15 @@ describe('GET /api/coins — includeImages', () => {
     // Exactly the same two queries as ?includeImages=false, because the
     // absent parameter now MEANS false. If a third query appears here the
     // default has been flipped back and the outage is live again.
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })                              // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 2 }] }); // 2. counts
+    await insertCoin(COIN_A);
+    await givenImages('coin-a', 2);
 
     const res = await request(app).get('/api/coins');
 
     expect(res.status).toBe(200);
     expect(res.body[0]).not.toHaveProperty('imagePaths');
     expect(res.body[0].imageCount).toBe(2);
-    expect(mockRequest.query).toHaveBeenCalledTimes(2);
+    expect(executedSql()).toHaveLength(2);
   });
 
   it('ships NO base64 payload in the default list, for a coin that has images', async () => {
@@ -136,12 +148,16 @@ describe('GET /api/coins — includeImages', () => {
      * future "preview"/"thumbnail" field quietly inlined the same blob. The
      * rule is simpler and stricter than any key name: NO IMAGE TEXT, ANYWHERE
      * IN THE LIST RESPONSE.
+     *
+     * The blob is IN THE DATABASE for this test, not merely in a mock the
+     * route might never have consulted — so a handler that started selecting
+     * ImageData would really have it in hand and would really put it on the
+     * wire.
       */
     const BASE64 = 'data:image/jpeg;base64,' + 'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo='.repeat(64);
 
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })                              // 1. coins
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageCount: 7 }] }); // 2. counts
+    await insertCoin(COIN_A);
+    await givenImages('coin-a', 7, BASE64);
 
     const res = await request(app).get('/api/coins');
 
@@ -153,9 +169,9 @@ describe('GET /api/coins — includeImages', () => {
     expect(res.text.length).toBeLessThan(4000);
 
     // And the proof that it is cheap rather than merely tidy: the image
-    // payload query was never sent to SQL Server in the first place.
-    for (const call of mockRequest.query.mock.calls) {
-      expect(call[0] as string).not.toContain('ImageData');
+    // payload query was never sent to the database in the first place.
+    for (const statement of executedSql()) {
+      expect(statement).not.toContain('ImageData');
     }
 
     // The count still gets through, which is what lets the grid say
@@ -164,33 +180,29 @@ describe('GET /api/coins — includeImages', () => {
   });
 
   it('includes imagePaths ONLY when explicitly asked with includeImages=true', async () => {
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })
-      .mockResolvedValueOnce({ recordset: [{ CoinId: 'coin-a', ImageData: 'yes' }] })
-      .mockResolvedValueOnce({ recordset: [] });
+    await insertCoin(COIN_A);
+    await givenImages('coin-a', 1, 'yes');
 
     const res = await request(app).get('/api/coins?includeImages=true');
 
     expect(res.status).toBe(200);
     expect(res.body[0].imagePaths).toEqual(['yes']);
-    expect(mockRequest.query).toHaveBeenCalledTimes(3);
+    expect(executedSql()).toHaveLength(3);
   });
 
   it('never queries the dropped CoinTags table', async () => {
-    // The tag feature is gone, table and all. If a stray tags query came back,
-    // it would both fail against the real database (the table no longer exists
-    // after migration 005) and shift every later mock answer by one.
-    mockRequest.query
-      .mockResolvedValueOnce({ recordset: [COIN_A] })
-      .mockResolvedValueOnce({ recordset: [] })
-      .mockResolvedValueOnce({ recordset: [] });
+    // The tag feature is gone, table and all. A stray tags query would now
+    // FAIL OUTRIGHT rather than merely shifting a queued mock answer by one,
+    // because db/schema.sql has no such table to select from — so this test
+    // has teeth it did not have before.
+    await insertCoin(COIN_A);
 
     const res = await request(app).get('/api/coins');
 
     expect(res.status).toBe(200);
     expect(res.body[0]).not.toHaveProperty('tags');
-    for (const call of mockRequest.query.mock.calls) {
-      expect(call[0] as string).not.toContain('CoinTags');
+    for (const statement of executedSql()) {
+      expect(statement).not.toContain('CoinTags');
     }
   });
 });

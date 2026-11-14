@@ -102,8 +102,8 @@ router.post('/catalogs', async (req: Request, res: Response) => {
         // sent by the client so two tabs cannot both claim the same slot.
         .query(`
           INSERT INTO Catalogs (Name, SortOrder, IsActive)
-          OUTPUT INSERTED.CatalogId, INSERTED.SortOrder
           SELECT @name, COALESCE(MAX(SortOrder), 0) + 1, 1 FROM Catalogs
+          RETURNING CatalogId, SortOrder
         `);
 
       const row = result.recordset[0];

@@ -32,8 +32,7 @@
  * db/index.ts for why that matters.
  */
 
-import sql from 'mssql';
-import { rowToCoin } from '../../db';
+import { rowToCoin, type DbConnection } from '../../db';
 
 /**
  * Decides whether a GET /api/coins request wants the image payloads inline.
@@ -83,7 +82,7 @@ export function shouldIncludeImages(rawParam: unknown): boolean {
  *                        a client can tell "not loaded" from "no images").
  */
 export async function loadCoinList(
-  db: sql.ConnectionPool,
+  db: DbConnection,
   includeImages: boolean
 ): Promise<Record<string, unknown>[]> {
   // ----- 1. The coins themselves ---------------------------------------

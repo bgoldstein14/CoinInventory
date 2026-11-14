@@ -20,7 +20,20 @@
  *                                           screen shows before it offers to
  *                                           delete something.
  *
- * All eight paths are distinct literal prefixes, so mount order cannot change
+ * ...plus one endpoint that is not a table and not even a database read:
+ *
+ *   denomination-lookup.ts /api/denomination-lookup
+ *                                           asks Wikidata what denominations
+ *                                           an issuer struck, so a newly
+ *                                           added issuer does not start
+ *                                           empty and silent. PROPOSES ONLY;
+ *                                           nothing is written without the
+ *                                           user confirming it. The app's
+ *                                           only outbound request, and the
+ *                                           issuer form has a checkbox to
+ *                                           refuse it.
+ *
+ * All nine paths are distinct literal prefixes, so mount order cannot change
  * which handler answers a request.
  */
 
@@ -33,6 +46,7 @@ import denominationRoutes from './denominations';
 import mintMarkRoutes from './mint-marks';
 import catalogRoutes from './catalogs';
 import referenceUsageRoutes from './reference-usage';
+import denominationLookupRoutes from './denomination-lookup';
 
 const router = Router();
 
@@ -44,5 +58,6 @@ router.use(denominationRoutes);
 router.use(mintMarkRoutes);
 router.use(catalogRoutes);
 router.use(referenceUsageRoutes);
+router.use(denominationLookupRoutes);
 
 export default router;

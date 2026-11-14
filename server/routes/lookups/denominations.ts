@@ -19,9 +19,10 @@
 
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
-import { withDb, DB_BINDINGS } from '../../db';
+import { withDb, DB_BINDINGS, DbRequest, DbTransaction } from '../../db';
 import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
+import { safeRollback } from '../coins/write-helpers';
 
 const router = Router();
 
@@ -91,8 +92,8 @@ router.post('/denominations', async (req: Request, res: Response) => {
         .input('sortOrder', DB_BINDINGS.denominationSortOrder, sortOrder ?? 0)
         .query(`
           INSERT INTO Denominations (Label, Country, IssuerId, SortOrder, IsActive)
-          OUTPUT INSERTED.DenominationId
           VALUES (@label, @country, @issuerId, @sortOrder, 1)
+          RETURNING DenominationId
         `);
 
       // Guard the OUTPUT clause rather than blindly dereferencing [0].
@@ -186,19 +187,26 @@ router.put('/denominations/:id', async (req: Request, res: Response) => {
  * Reactivating the row would silently re-link coins the user had already
  * decided to detach. Nulling makes the user's decision real.
  *
- * WHY ONE BATCH, AND WHY COINS FIRST.
- * One `query()` call, so a connection dropped between the two statements
+ * WHY ONE TRANSACTION, AND WHY COINS FIRST.
+ * The two UPDATEs run inside one transaction, so a failure between them
  * cannot leave the job half done. Coins first because FK_Coins_Denomination
  * guarantees no coin points at a denomination that does not exist, which
  * makes unlinking-then-deactivating safe in every order of failure;
  * deactivating first would open a window — and on a failure, a permanent
  * state — in which coins point at a row the API no longer returns.
  *
- * `@@ROWCOUNT` is captured into a variable immediately after the first
- * UPDATE, because the next statement resets it. The trailing SELECT reports
- * both numbers: whether a row was there at all (404 if not) and how many
- * coins were unlinked, so the UI can confirm what just happened with the
- * same number it warned about.
+ * *** THIS USED TO BE A SINGLE T-SQL BATCH AND COULD NOT STAY ONE. *** It
+ * read `UPDATE ...; DECLARE @unlinked INT = @@ROWCOUNT; UPDATE ...; SELECT
+ * @@ROWCOUNT, @unlinked;` — four statements in one call, with the row counts
+ * carried in a local variable because the next statement resets @@ROWCOUNT.
+ * SQLite has neither @@ROWCOUNT nor DECLARE, and — worse — its prepare()
+ * compiles the FIRST statement of a multi-statement string and discards the
+ * rest in silence, so a naive translation would have unlinked the coins and
+ * never deactivated the denomination while reporting success. db/sql-api.ts
+ * refuses a multi-statement query outright for exactly that reason. The
+ * explicit transaction below is what replaces the batch, and the row counts
+ * come back from each statement's own `rowsAffected`, which is clearer than
+ * the variable ever was.
   */
 router.delete('/denominations/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
@@ -207,20 +215,31 @@ router.delete('/denominations/:id', async (req: Request, res: Response) => {
     logInfo(`Soft-deleting denomination ${id} and unlinking its coins`);
 
     const outcome = await withDb(async (db) => {
-      const result = await db.request()
-        .input('id', DB_BINDINGS.denominationId, Number.parseInt(id, 10))
-        .query(`
-          UPDATE Coins SET DenominationId = NULL WHERE DenominationId = @id;
-          DECLARE @unlinked INT = @@ROWCOUNT;
-          UPDATE Denominations SET IsActive = 0 WHERE DenominationId = @id;
-          SELECT @@ROWCOUNT AS Removed, @unlinked AS CoinsUnlinked;
-        `);
+      const transaction = new DbTransaction(db);
+      let began = false;
 
-      const row = result.recordset[0] ?? {};
-      return {
-        removed: Number(row['Removed'] ?? 0),
-        coinsUnlinked: Number(row['CoinsUnlinked'] ?? 0),
-      };
+      try {
+        await transaction.begin();
+        began = true;
+
+        const unlinked = await new DbRequest(transaction)
+          .input('id', DB_BINDINGS.denominationId, Number.parseInt(id, 10))
+          .query('UPDATE Coins SET DenominationId = NULL WHERE DenominationId = @id');
+
+        const deactivated = await new DbRequest(transaction)
+          .input('id', DB_BINDINGS.denominationId, Number.parseInt(id, 10))
+          .query('UPDATE Denominations SET IsActive = 0 WHERE DenominationId = @id');
+
+        await transaction.commit();
+
+        return {
+          removed: deactivated.rowsAffected[0] ?? 0,
+          coinsUnlinked: unlinked.rowsAffected[0] ?? 0,
+        };
+      } catch (innerErr) {
+        await safeRollback(began ? transaction : null, 'DELETE /api/denominations/:id');
+        throw innerErr;
+      }
     });
 
     if (outcome.removed === 0) {

@@ -14,10 +14,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_LOOK_UP_ONLINE,
   ISSUER_KINDS,
   ISSUER_NAME_MAX_LENGTH,
   blankIssuerDraft,
   describeIssuerRemoval,
+  previewIssuerKind,
   validateIssuerDraft,
 } from './issuer-draft';
 
@@ -26,8 +28,26 @@ function draft(overrides: Partial<ReturnType<typeof blankIssuerDraft>> = {}) {
 }
 
 describe('blankIssuerDraft', () => {
-  it('starts on a kind the form can show, so the picker is never unset', () => {
-    expect(ISSUER_KINDS).toContain(blankIssuerDraft().kind);
+  it('has NO kind at all, because the form stopped asking for one', () => {
+    // It is derived from the year span on save. The old draft carried a
+    // 'modern' default because an unset <select> shows a blank first row;
+    // there is no <select> now, so there is nothing to default.
+    expect('kind' in blankIssuerDraft()).toBe(false);
+  });
+
+  it('turns the online lookup ON unless the caller says otherwise', () => {
+    // Default ON because the lookup is a feature that was asked for.
+    // Shipping it switched off would be shipping it unbuilt.
+    expect(blankIssuerDraft().lookUpOnline).toBe(DEFAULT_LOOK_UP_ONLINE);
+    expect(DEFAULT_LOOK_UP_ONLINE).toBe(true);
+  });
+
+  it('carries a refusal across a clear, so a cleared form does not re-tick it', () => {
+    // The form is blanked after every successful add. A user who turned
+    // the lookup off once and got it back on the next issuer would have to
+    // turn it off again, for ever.
+    expect(blankIssuerDraft(false).lookUpOnline).toBe(false);
+    expect(blankIssuerDraft(true).lookUpOnline).toBe(true);
   });
 
   it('starts with every text field empty', () => {
@@ -50,7 +70,6 @@ describe('validateIssuerDraft — the happy path', () => {
     expect(result.issuer).toEqual({
       name: 'Burma',
       isoCode: null,
-      kind: 'modern',
       validFrom: null,
       validTo: null,
     });
@@ -153,15 +172,41 @@ describe('validateIssuerDraft — what it refuses, and why', () => {
     expect(validateIssuerDraft(draft({ validFrom: '1849', validTo: '1849' }), []).ok).toBe(true);
   });
 
-  it('refuses a kind the schema does not define', () => {
-    const result = validateIssuerDraft(draft({ kind: 'imaginary' }), []);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.error).toContain('imaginary');
+  it('still documents exactly the three values the column may hold', () => {
+    // No picker offers them any more, but the column's domain has not
+    // changed and both copies of the derivation rule answer to it.
+    expect([...ISSUER_KINDS]).toEqual(['modern', 'historical', 'ancient']);
+  });
+});
+
+describe('previewIssuerKind', () => {
+  it('shows the kind the typed years imply, so dropping the picker hides nothing', () => {
+    expect(previewIssuerKind(draft({ validFrom: '-247', validTo: '224' }))).toBe('ancient');
+    expect(previewIssuerKind(draft({ validFrom: '1871', validTo: '1918' }))).toBe('historical');
+    expect(previewIssuerKind(draft({ validFrom: '1948' }))).toBe('modern');
   });
 
-  it('offers exactly the three kinds the column documents', () => {
-    expect([...ISSUER_KINDS]).toEqual(['modern', 'historical', 'ancient']);
+  it('defaults an empty form to modern rather than going blank', () => {
+    expect(previewIssuerKind(draft())).toBe('modern');
+  });
+
+  it('treats a half-typed year as absent instead of refusing to show anything', () => {
+    // The user is mid-keystroke. '-' is not a year yet, and a tag that
+    // disappeared while they typed would be worse than one that waits.
+    expect(previewIssuerKind(draft({ validFrom: '-' }))).toBe('modern');
+    expect(previewIssuerKind(draft({ validFrom: '18x' , validTo: '1918' }))).toBe('historical');
+  });
+
+  it('agrees with what the form will actually send', () => {
+    // The preview and the payload must come from the same two fields, or
+    // the tag is a decoration that can quietly be wrong.
+    const form = draft({ validFrom: '491', validTo: '1453' });
+    const validated = validateIssuerDraft(form, []);
+    expect(validated.ok).toBe(true);
+    if (!validated.ok) return;
+    expect(validated.issuer.validFrom).toBe(491);
+    expect(validated.issuer.validTo).toBe(1453);
+    expect(previewIssuerKind(form)).toBe('ancient');
   });
 });
 

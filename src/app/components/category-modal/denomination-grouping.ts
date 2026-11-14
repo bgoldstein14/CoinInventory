@@ -67,6 +67,12 @@ export interface MaintenanceIssuer {
   /** Plain INT years. Negative means BC; null means open-ended. */
   validFrom?: number | null;
   validTo?: number | null;
+  /**
+   * `Issuers.SortOrder`. Carried because the wire carries it, NOT because
+   * this module reads it: group order is alphabetical (see
+   * `compareIssuersByName`). Denomination order within a group still uses
+   * the denomination's own sortOrder.
+   */
   sortOrder?: number;
   /** How many denominations point at it. Supplied by the server's count. */
   denominationCount?: number;
@@ -138,11 +144,42 @@ function issuerMatchesQuery(issuer: MaintenanceIssuer, query: string): boolean {
   return normalizeSearchText(issuer.isoCode) === query;
 }
 
-/** Group order: the seed's SortOrder first, then name so ties are stable. */
-function compareIssuers(left: MaintenanceIssuer, right: MaintenanceIssuer): number {
-  const bySortOrder = (left.sortOrder ?? 0) - (right.sortOrder ?? 0);
-  if (bySortOrder !== 0) return bySortOrder;
-  return left.name.localeCompare(right.name);
+/**
+ * Group order: THE ISSUER'S NAME, A-Z, case-insensitively.
+ *
+ * *** NOT SortOrder, AND THAT IS THE WHOLE POINT. *** The seed numbers its
+ * issuers in bands — modern 100-420, historical 1000-1150, ancient
+ * 2000-2120 — which is a curator's order, not an order anybody can search
+ * by eye. Sixty-two headings in that order means scrolling to find
+ * 'Portugal' because it happens to sit between Spain and Italy. The owner
+ * asked for alphabetical and alphabetical is what a list of this length
+ * needs.
+ *
+ * SortOrder HAS NOT STOPPED MATTERING. It still orders the denominations
+ * WITHIN each group (see compareDenominations, which is deliberately
+ * untouched), it is still what POST /issuers computes as MAX + 10, and it
+ * is still carried on the wire. It simply no longer decides which heading
+ * comes first.
+ *
+ * `sensitivity: 'accent'` folds case but NOT accents, which is exactly
+ * "case-insensitive": 'austria' and 'Austria' tie, while 'Württemberg'
+ * keeps its own place rather than being silently merged with a
+ * hypothetical 'Wurttemberg'. The locale is pinned to 'en' rather than
+ * left to the host so that the order a test asserts is the order the user
+ * sees, on any machine.
+ *
+ * The id breaks the tie, which makes the order TOTAL. Without it two
+ * issuers whose names differ only in case — which UQ_Issuers_Name allows
+ * through only in theory, but a half-built draft row allows in practice —
+ * would compare equal and could swap places between renders.
+ */
+export function compareIssuersByName(
+  left: Pick<MaintenanceIssuer, 'issuerId' | 'name'>,
+  right: Pick<MaintenanceIssuer, 'issuerId' | 'name'>
+): number {
+  const byName = left.name.localeCompare(right.name, 'en', { sensitivity: 'accent' });
+  if (byName !== 0) return byName;
+  return left.issuerId - right.issuerId;
 }
 
 /**
@@ -203,7 +240,7 @@ export function groupDenominations(
 
   const groups: DenominationGroup[] = [];
 
-  for (const issuer of [...issuers].sort(compareIssuers)) {
+  for (const issuer of [...issuers].sort(compareIssuersByName)) {
     const all = byIssuer.get(issuer.issuerId) ?? [];
     const issuerMatched = filtering ? issuerMatchesQuery(issuer, query) : false;
 

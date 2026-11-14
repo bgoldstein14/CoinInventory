@@ -28,31 +28,44 @@
  * so they share one function rather than carrying two copies that can drift.
  * The catalogue tests in db/catalog-columns.spec.ts still pass unchanged,
  * which is what proves the sharing did not change either one's behaviour.
+ *
+ * *** WHAT THE MOVE TO SQLITE CHANGED HERE. ***
+ *
+ *   - The DDL is read out of db/schema.sql through
+ *     test-support/schema-columns.ts instead of being regexed out of
+ *     setup-database.sql by hand. SQLite cannot be told `NVARCHAR(100)`, so
+ *     the declared type lives in the trailing `-- NVARCHAR(100)` comment that
+ *     module parses.
+ *
+ *   - *** THE maxLength ON `denomination` IS NOW THE ONLY THING ENFORCING
+ *     THAT WIDTH. *** SQLite enforces none; db/bind-values.ts enforces this
+ *     one, reading it out of COIN_FIELDS. Drift between the binding and the
+ *     schema is no longer a disagreement the engine settles — it is a hole.
+ *
+ *   - The last block is new: it reads a row that really went through SQLite
+ *     rather than a hand-built object, which is the only way to know that
+ *     what the mapper receives is what the database hands over. The full
+ *     end-to-end HTTP proof lives in routes/coins/denomination-id.spec.ts.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
-import { resetMssqlMock } from '../test-support/mssql-mock';
+import { insertCoin, queryRows } from '../test-support/sqlite-test-db';
+import { parseTable } from '../test-support/schema-columns';
 import { COIN_FIELDS, normalizeCoinValue, rowToCoin } from './index';
 
-beforeEach(() => {
-  resetMssqlMock();
-});
-
-const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'setup-database.sql'), 'utf8');
-const coinsDdl = schemaSql.match(/CREATE TABLE Coins \(([\s\S]*?)\n\);/)?.[1] ?? '';
+const schemaColumns = parseTable('Coins');
 
 describe('COIN_FIELDS binds Coins.DenominationId', () => {
   it('parsed the Coins DDL, so the assertions below are not vacuous', () => {
-    expect(coinsDdl).toMatch(/CoinId/);
-    expect(coinsDdl).toMatch(/DenominationId\s+INT\s+NULL/);
+    expect(schemaColumns.has('CoinId')).toBe(true);
+    // INTEGER is what SQLite stores; `-- INT` is the declared type the
+    // bindings are compared against.
+    expect(schemaColumns.get('DenominationId')).toMatchObject({
+      storage: 'INTEGER',
+      declared: 'INT',
+      notNull: false,
+    });
   });
 
   it('has an entry at all — without one the UPDATE never names the column', () => {
@@ -67,6 +80,10 @@ describe('COIN_FIELDS binds Coins.DenominationId', () => {
     // INT, so no maxLength — db/coin-fields.spec.ts only length-checks
     // NVARCHAR bindings and declaring one here would be meaningless.
     expect(COIN_FIELDS['denominationId'].maxLength).toBeUndefined();
+    expect(COIN_FIELDS['denominationId'].sqlType).toMatchObject({
+      storage: 'int',
+      declared: 'INT',
+    });
   });
 
   it('keeps Denomination bound as text beside it, unchanged', () => {
@@ -75,6 +92,19 @@ describe('COIN_FIELDS binds Coins.DenominationId', () => {
     // the other is what the design calls a failure even if it works.
     expect(COIN_FIELDS['denomination'].column).toBe('Denomination');
     expect(COIN_FIELDS['denomination'].maxLength).toBe(100);
+    // ...and that 100 is no longer a second opinion. SQLite would store any
+    // length; db/bind-values.ts refuses the 101st character using exactly
+    // this number, so it had better be the number db/schema.sql declares.
+    expect(COIN_FIELDS['denomination'].sqlType).toMatchObject({
+      storage: 'text',
+      maxLength: 100,
+      declared: 'NVARCHAR(100)',
+    });
+    expect(schemaColumns.get('Denomination')).toMatchObject({
+      storage: 'TEXT',
+      declared: 'NVARCHAR(100)',
+      maxLength: 100,
+    });
   });
 
   it('gives it no insert default', () => {
@@ -157,5 +187,37 @@ describe('reading DenominationId back out', () => {
     const coin = rowToCoin({ CoinId: 'abc', Denomination: 'Pillar Dollar', DenominationId: 7 });
     expect(coin['denomination']).toBe('Pillar Dollar');
     expect(coin['denominationId']).toBe(7);
+  });
+});
+
+/**
+ * The four tests above hand rowToCoin() an object written by hand, which
+ * proves the mapping rule and nothing about whether a real row looks like
+ * that. These two close the gap: the row comes out of SQLite.
+ */
+describe('reading DenominationId back out of a real row', () => {
+  it('hands the mapper a number, so the link survives the database', async () => {
+    // SQLite is dynamically typed: a value stored as text in an INTEGER
+    // column comes back as a string, and `denominationId === 7` on the
+    // client would then be false for a coin that is perfectly well linked.
+    await insertCoin({ CoinId: 'abc', Denomination: 'Pillar Dollar', DenominationId: 7 });
+
+    const [row] = await queryRows("SELECT * FROM Coins WHERE CoinId = 'abc'");
+    expect(typeof row['DenominationId']).toBe('number');
+
+    const coin = rowToCoin(row);
+    expect(coin['denominationId']).toBe(7);
+    expect(coin['denomination']).toBe('Pillar Dollar');
+  });
+
+  it('hands the mapper SQL NULL for an unresolved coin, which maps to null', async () => {
+    // The ordinary state of an imported coin, straight out of the table
+    // rather than out of a literal: `?? null` has to see a real null here,
+    // not an empty string or a 0.
+    await insertCoin({ CoinId: 'abc', Denomination: '100 Soles', DenominationId: null });
+
+    const [row] = await queryRows("SELECT * FROM Coins WHERE CoinId = 'abc'");
+    expect(row['DenominationId']).toBeNull();
+    expect(rowToCoin(row)['denominationId']).toBeNull();
   });
 });

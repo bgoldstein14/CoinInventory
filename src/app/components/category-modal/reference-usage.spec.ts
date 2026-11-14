@@ -95,6 +95,23 @@ describe('usageCount', () => {
     expect(usageCount(EMPTY_REFERENCE_USAGE.coinSets, 'Morgan Set')).toBe(0);
     expect(usageCount(EMPTY_REFERENCE_USAGE.mintMarks, 1)).toBe(0);
     expect(usageCount(EMPTY_REFERENCE_USAGE.catalogs, 1)).toBe(0);
+    expect(usageCount(EMPTY_REFERENCE_USAGE.metalContents, '90% Silver')).toBe(0);
+  });
+
+  it('has an index for every type the endpoint returns, and no more', () => {
+    /* A type added to ReferenceUsageCounts but forgotten here would be
+     * `undefined` on this object, and `usageCount` would answer 0 for it
+     * for ever — a pane whose badges all read "Not used by any coin" even
+     * when every entry is in use, which is the one wrong answer this
+     * screen must never give. */
+    expect(Object.keys(EMPTY_REFERENCE_USAGE).sort()).toEqual([
+      'catalogs',
+      'categories',
+      'coinSets',
+      'denominations',
+      'metalContents',
+      'mintMarks',
+    ]);
   });
 });
 

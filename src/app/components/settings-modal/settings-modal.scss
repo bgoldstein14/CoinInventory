@@ -11,9 +11,10 @@
 // focused-window treatment on top of it.
 
 // A darker overlay than the shared default (which is rgba(20, 14, 8, 0.5)).
-// The Settings dialog is the one modal that edits app-wide reference data
-// rather than a single coin, so pushing the page further back is warranted:
-// the contrast is what makes "you are somewhere else now" read at a glance.
+// This dialog holds app-wide preferences and a job that rewrites several
+// hundred coin records at once, rather than editing a single coin, so
+// pushing the page further back is warranted: the contrast is what makes
+// "you are somewhere else now" read at a glance.
 .modal-backdrop {
   background: rgba(20, 14, 8, 0.62);
 }
@@ -60,19 +61,12 @@
   gap: 8px;
 }
 
-.settings-list-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 12px;
-}
-
-.settings-list-grid label {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 0.8rem;
-  color: #3b2a14;
-}
+// The grid of reference lists that used to sit here, and the chip rules
+// that went with it (.settings-list-grid, .settings-inline-add,
+// .settings-chip-list, .chip-button), were deleted along with the lists
+// themselves — they are maintained on the Reference Data screen now, which
+// has its own styles. Dead selectors kept "just in case" are how a deleted
+// feature quietly grows back.
 
 .checkbox-label {
   display: flex;
@@ -81,85 +75,14 @@
   color: #3b2a14;
 }
 
-// ---- The "add one" row ----
-// Input and Add button side by side, the input taking whatever is left.
-.settings-inline-add {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-
-  input {
-    flex: 1;
-    min-width: 0;        // lets the input shrink inside the grid track
-    font-size: 0.78rem;
-    padding: 3px 7px;
-    border: 1px solid #d9c7a5;
-    border-radius: 7px;
-  }
-}
-
-// ---- The removable value chips ----
-//
-// A small font, tight padding and `flex-wrap`, so the values flow across the
-// available width instead of stacking one full-width button per value.
-.settings-chip-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-
-  // Caps a long list so one of them cannot push the Save button off the
-  // bottom of the dialog.
-  max-height: 132px;
-  overflow-y: auto;
-}
-
-.chip-button {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 7px;
-  font-size: 0.72rem;
-  font-family: inherit;
-  line-height: 1.5;
-  color: #3b2a14;
-  background: #f0e8dc;
-  border: 1px solid #d9c7a5;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-
-  // The × is a removal affordance, so it stays quiet until the chip is
-  // hovered rather than competing with the value itself.
-  span {
-    color: #8a7a63;
-    font-size: 0.8em;
-    transition: color 0.12s ease;
-  }
-
-  // Clicking a chip DELETES it, so hover shifts to the warning palette used
-  // elsewhere in the app. Without this the chip looks like a filter toggle and
-  // the removal comes as a surprise.
-  &:hover {
-    background: #fbe9e7;
-    border-color: #e0b4ac;
-    color: #8a2c22;
-
-    span { color: #8a2c22; }
-  }
-
-  &:focus-visible {
-    outline: 2px solid #8e5b2d;
-    outline-offset: 1px;
-  }
-}
-
 // ---- Maintenance section ----
 //
-// The one block in this dialog that changes COIN RECORDS rather than the
-// reference lists the dropdowns are built from. It is set apart on purpose:
-// a rule-off above it and a tinted, inset panel around the action itself, so
-// that "backfill several hundred coins" cannot be mistaken for one more chip
-// list. Everything here reuses the dialog's existing palette (#3b2a14 text,
+// The one block in this dialog that changes COIN RECORDS. It is set apart
+// on purpose: a rule-off above it and a tinted, inset panel around the
+// action itself, so that "backfill several hundred coins" cannot be
+// mistaken for one more thing to click past — originally for the chip
+// lists above it, and now for the signpost to Reference Data that replaced
+// them. Everything here reuses the dialog's existing palette (#3b2a14 text,
 // #d9c7a5 borders, the #8e5b2d accent) so it reads as part of the same card.
 
 .settings-maintenance {
@@ -268,8 +191,8 @@
   p { margin: 0; }
 }
 
-// Failures use the same warning palette as the chip hover state, so "something
-// went wrong" reads the same way everywhere in this dialog.
+// Failures use the app's warning palette, so "something went wrong" reads
+// the same way everywhere.
 .maintenance-failed {
   color: #8a2c22;
   font-weight: 600;

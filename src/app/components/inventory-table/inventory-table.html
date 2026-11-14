@@ -23,7 +23,12 @@
   }
 
   <div class="inventory-table-wrap">
-    <table class="inventory-table">
+    <!-- role="grid" rather than the implicit role="table": the rows are
+         focusable and are operated with the arrow keys, Enter and Space,
+         which is exactly what the grid role tells a screen reader to expect.
+         A plain table announces none of that, and the keyboard support would
+         arrive unannounced. See features/inventory/grid-keyboard.ts. -->
+    <table class="inventory-table" role="grid">
       <thead>
         <tr>
           <th class="check-column">
@@ -52,7 +57,38 @@
           <!-- `is-draft` marks a row that exists on screen only: it has not
                reached the database yet because it still needs 2 of
                Year / Coin Type / Denomination. See InventoryService.isDraftCoin. -->
-          <tr [class.selected]="inv.selectedCoinId() === coin.id" [class.multi-selected]="selection().isCoinSelected(coin.id)" [class.is-draft]="inv.isDraftCoin(coin.id)" (click)="coinSelected.emit(coin.id)">
+          <!-- THE ROW IS THE CONTROL.
+               Clicking it opens the Details panel for that coin; so does
+               Enter or Space once it has focus. It used to only highlight,
+               with a per-row "Details" button doing the opening, so a click
+               on a row did nothing a user could see.
+
+               It is NOT a toggle: clicking the row you are already reading
+               must not make the panel vanish. Close is the way out.
+
+               `tabindex` is a ROVING tabindex — exactly one row is in the
+               tab order and the arrows move which one. Putting 0 on all 105
+               rows would mean 105 presses of Tab to get past the table.
+
+               `data-coin-row` is how the component finds the element to
+               focus after an arrow key; see focusRowElement().
+
+               ANYTHING IN HERE THAT MUST NOT OPEN THE PANEL NEEDS
+               `$event.stopPropagation()`. The checkbox cell and the Images
+               button already have it; before this change it only suppressed
+               a harmless highlight, and now it is what stops ticking a box
+               throwing the sidebar open. -->
+          <tr
+            [class.selected]="inv.selectedCoinId() === coin.id"
+            [class.multi-selected]="selection().isCoinSelected(coin.id)"
+            [class.is-draft]="inv.isDraftCoin(coin.id)"
+            [attr.data-coin-row]="coin.id"
+            [attr.aria-selected]="inv.selectedCoinId() === coin.id"
+            [tabindex]="rowTabIndex(coin.id)"
+            (click)="activateRow(coin.id)"
+            (keydown)="onRowKeydown($event, coin.id)"
+            (focusin)="onRowFocused(coin.id)"
+          >
             <td class="check-column" (click)="$event.stopPropagation()">
               <input type="checkbox" [checked]="selection().isCoinSelected(coin.id)" (click)="selection().toggleCoinSelection(coin.id, $event)" />
             </td>
@@ -75,19 +111,42 @@
                    near the viewport, and caches each one, so scrolling back
                    up costs a 304. Deleting that attribute re-opens the
                    problem quietly, and a test asserts it is still here.
+
+                4. The gate is `showsThumbnail(coin)`, NOT `hasPhoto(coin)`.
+                   An unsaved row's photographs live only in this browser, so
+                   asking the server for one is a guaranteed 404 — that is
+                   the "No thumbnail available for coin ..." line one minute
+                   after a refused create in the owner's log. The placeholder
+                   says "Unsaved" for that case rather than claiming there is
+                   no photo.
               -->
-              @if (hasPhoto(coin)) {
+              @if (showsThumbnail(coin)) {
                 <img [src]="thumbnailUrl(coin)" alt="" class="row-thumb" loading="lazy" decoding="async" />
               } @else {
-                <div class="row-thumb row-thumb--placeholder" aria-hidden="true">No photo</div>
+                <div class="row-thumb row-thumb--placeholder" aria-hidden="true">{{ thumbnailPlaceholder(coin) }}</div>
               }
             </td>
             @for (column of columns().visibleInventoryColumns(); track column; let firstColumn = $first) {
               <td class="column-{{ column }}">
                 <!-- The "Unsaved" chip rides in the first visible column so it
-                     reads as part of the row rather than as an extra column. -->
+                     reads as part of the row rather than as an extra column.
+
+                     THE PHRASE BESIDE IT IS NOT DECORATION. The chip's whole
+                     message used to live in its `title`, and a tooltip is a
+                     footnote: it needs a mouse, a pause, and the guess that
+                     hovering would say anything. A row the user is still
+                     typing is an expected state, not an error, so it gets a
+                     quiet visible line saying what to type next — never a
+                     red toast. See services/inventory/draft-row-status.ts.
+
+                     The word "Unsaved" stays, because the Photo cell's
+                     placeholder uses the same word for the same row and the
+                     two must read as one fact, not two problems. -->
                 @if (firstColumn && inv.isDraftCoin(coin.id)) {
-                  <span class="badge badge--draft" [title]="inv.draftHint(coin)">Unsaved</span>
+                  <span class="badge badge--draft" [title]="draftStatus(coin).summary">Unsaved</span>
+                  @if (draftStatus(coin).chip; as draftChip) {
+                    <span class="draft-need" [class.draft-need--failed]="draftStatus(coin).failed">{{ draftChip }}</span>
+                  }
                 }
                 @if (column === 'grade') {
                   <span [class]="gradeBadgeClass(coin.grade)">{{ formatInventoryCell(coin, column) }}</span>
@@ -151,9 +210,11 @@
                 >
                   {{ hasPhoto(coin) ? 'Images' : 'Add images' }}
                 </button>
-                <button type="button" class="secondary small-button" (click)="$event.stopPropagation(); detailRequested.emit(coin.id)">
-                  Details
-                </button>
+                <!-- There is no "Details" button here any more: the ROW opens
+                     the panel now, by click or by Enter/Space, so a button
+                     doing the same job in the same row was redundant and
+                     cost the actions column its width. The panel's own
+                     Close button is still the way out. -->
               </div>
             </td>
           </tr>

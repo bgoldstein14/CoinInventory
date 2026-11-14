@@ -3,8 +3,10 @@ import { CoinRecord } from '../../types/coin.model';
 import { ApiService, describeHttpError } from '../api.service';
 import { LoggingService } from '../logging.service';
 import { NotificationService } from '../notification.service';
+import { coinPhotoCount } from '../coin-photos';
 import { CoinChangeTracker, valuesEqual } from './coin-change-tracker';
 import { CoinDraftRegistry } from './coin-draft-registry';
+import { coinThumbnailRevisions, writeTouchesImages } from './coin-thumbnail-revision';
 import { imageSourcePaths } from '../image-source-paths';
 import { firstValueFrom } from 'rxjs';
 
@@ -329,6 +331,14 @@ export class CoinEditor {
     // clearing the draft flag so no edit can slip through in between.
     this.tracker.seedConfirmed(record);
     this.drafts.clear(coinId);
+
+    // The row only starts rendering an <img> now that it is server-backed,
+    // and the POST carried the photographs, so the first request will
+    // succeed. The bump is here anyway so that a coin which somehow picked
+    // up a cached 404 while it was still a draft gets a fresh URL rather
+    // than a permanent broken thumbnail.
+    if (coinPhotoCount(record) > 0) coinThumbnailRevisions.bump(coinId);
+
     this.logger.info(`Created coin ${coinId} in database`);
 
     const liveCoin = this.inventory().find(c => c.id === coinId);
@@ -372,6 +382,12 @@ export class CoinEditor {
     // nag about a row that is gone.
     if (!this.inventory().some(c => c.id === coinId)) return;
 
+    // Record the reason BEFORE going back to 'draft'. The toast below is
+    // shown once and then gone; the row itself has to keep saying that it is
+    // not in the database and why, because "the row looked saved" is the
+    // whole of the bug this guards. Recording first also means the state
+    // change that follows is what re-renders the chip's tooltip.
+    this.drafts.recordCreateFailure(coinId, message);
     this.drafts.markDraft(coinId);
 
     // One toast per coin until it saves successfully.
@@ -482,6 +498,15 @@ export class CoinEditor {
   /** The server accepted the change: promote it into the confirmed snapshot. */
   private onCoinUpdateSaved(coinId: string, payload: Partial<CoinRecord>): void {
     this.tracker.markSaved(coinId, payload);
+
+    // THE GRID THUMBNAIL. This line, and not the optimistic paint above, is
+    // the moment the server actually has the new photographs — so it is the
+    // only correct moment to change the thumbnail URL. Bumping at paint time
+    // would hand the browser a new URL a second before there is anything
+    // behind it, which is the bug in a different costume. See
+    // coin-thumbnail-revision.ts.
+    if (writeTouchesImages(payload)) coinThumbnailRevisions.bump(coinId);
+
     this.logger.info(`Updated coin ${coinId} in database (${Object.keys(payload).join(', ')})`);
   }
 

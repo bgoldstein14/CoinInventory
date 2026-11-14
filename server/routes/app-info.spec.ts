@@ -10,24 +10,21 @@
  * angular.json" — rather than asserting a hardcoded path, which would only
  * prove the test and the code agree about one layout.
  *
- * `mssql` is mocked for the usual reason: importing server.ts pulls in the whole
- * database layer. The route under test never goes near it, and one of the tests
- * below exists specifically to prove that.
+ * The SQLite test harness is imported for the usual reason: importing
+ * server.ts pulls in the whole database layer, and importing the harness is
+ * what points that layer at `:memory:` instead of the owner's real
+ * collection. The route under test never goes near the database, and one of
+ * the tests below exists specifically to prove that.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
 import fs from 'node:fs';
 import path from 'node:path';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
+import { executedSql } from '../test-support/sqlite-test-db';
 import { app } from '../server';
 import { resolveAppFolder, normaliseWindowsPath } from './app-info';
-import { mockRequest, resetMssqlMock } from '../test-support/mssql-mock';
 
 /**
  * The environment variable is process-global, so every test that touches it
@@ -37,7 +34,6 @@ import { mockRequest, resetMssqlMock } from '../test-support/mssql-mock';
 const ORIGINAL_OVERRIDE = process.env['APP_BASE_FOLDER'];
 
 beforeEach(() => {
-  resetMssqlMock();
   delete process.env['APP_BASE_FOLDER'];
 });
 
@@ -175,11 +171,14 @@ describe('GET /api/app-info', () => {
   });
 
   it('never touches the database', async () => {
-    // The import screen has to open even when SQL Server is down, and a
+    // The import screen has to open even when the database is down, and a
     // cosmetic default is never worth failing a page load over. If this route
     // ever grows a withDb() call, this assertion is the one that catches it.
+    //
+    // executedSql() is the harness's recorder: every statement the data layer
+    // runs lands in it, so an empty list means the route issued none.
     await request(app).get('/api/app-info');
 
-    expect(mockRequest.query).not.toHaveBeenCalled();
+    expect(executedSql()).toEqual([]);
   });
 });

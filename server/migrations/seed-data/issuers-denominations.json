@@ -433,6 +433,15 @@
       "sortOrder": 1140
     },
     {
+      "key": "palestine-mandate",
+      "name": "British Mandate for Palestine",
+      "isoCode": null,
+      "kind": "historical",
+      "validFrom": 1927,
+      "validTo": 1948,
+      "sortOrder": 1150
+    },
+    {
       "key": "roman-republic",
       "name": "Roman Republic",
       "isoCode": null,
@@ -548,6 +557,78 @@
       "validFrom": -550,
       "validTo": -330,
       "sortOrder": 2120
+    },
+    {
+      "key": "lydia",
+      "name": "Kingdom of Lydia",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -650,
+      "validTo": -546,
+      "sortOrder": 3000
+    },
+    {
+      "key": "aegina",
+      "name": "Aegina",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -700,
+      "validTo": -340,
+      "sortOrder": 3010
+    },
+    {
+      "key": "athens",
+      "name": "Athens",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -545,
+      "validTo": -322,
+      "sortOrder": 3020
+    },
+    {
+      "key": "corinth",
+      "name": "Corinth",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -627,
+      "validTo": -146,
+      "sortOrder": 3030
+    },
+    {
+      "key": "syracuse",
+      "name": "Syracuse",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -600,
+      "validTo": -212,
+      "sortOrder": 3040
+    },
+    {
+      "key": "carthage",
+      "name": "Carthage",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -410,
+      "validTo": -146,
+      "sortOrder": 3050
+    },
+    {
+      "key": "greco-bactrian-kingdom",
+      "name": "Greco-Bactrian Kingdom",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -256,
+      "validTo": -120,
+      "sortOrder": 3060
+    },
+    {
+      "key": "hasmonean-kingdom",
+      "name": "Hasmonean Kingdom",
+      "isoCode": null,
+      "kind": "ancient",
+      "validFrom": -164,
+      "validTo": -37,
+      "sortOrder": 3070
     }
   ],
   "denominations": [
@@ -6636,6 +6717,48 @@
       "sortOrder": 20
     },
     {
+      "issuer": "palestine-mandate",
+      "label": "1 Mil",
+      "faceValue": 0.001,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "2 Mils",
+      "faceValue": 0.002,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "5 Mils",
+      "faceValue": 0.005,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "10 Mils",
+      "faceValue": 0.01,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "20 Mils",
+      "faceValue": 0.02,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "50 Mils",
+      "faceValue": 0.05,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "palestine-mandate",
+      "label": "100 Mils",
+      "faceValue": 0.1,
+      "sortOrder": 70
+    },
+    {
       "issuer": "roman-republic",
       "label": "Quartuncia",
       "faceValue": null,
@@ -7534,6 +7657,222 @@
       "label": "Daric",
       "faceValue": null,
       "sortOrder": 20
+    },
+    {
+      "issuer": "lydia",
+      "label": "1/96 Stater",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "lydia",
+      "label": "1/48 Stater",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "lydia",
+      "label": "1/24 Stater",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "lydia",
+      "label": "Hekte",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "lydia",
+      "label": "Trite",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "lydia",
+      "label": "Silver Stater",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "lydia",
+      "label": "Gold Stater",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "aegina",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "aegina",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "athens",
+      "label": "Tetartemorion",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "athens",
+      "label": "Hemiobol",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "athens",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "athens",
+      "label": "Trihemiobol",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "athens",
+      "label": "Diobol",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "athens",
+      "label": "Triobol",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "athens",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 70
+    },
+    {
+      "issuer": "athens",
+      "label": "Didrachm",
+      "faceValue": null,
+      "sortOrder": 80
+    },
+    {
+      "issuer": "athens",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 90
+    },
+    {
+      "issuer": "corinth",
+      "label": "Obol",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "corinth",
+      "label": "Drachm",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "corinth",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "syracuse",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "syracuse",
+      "label": "Dekadrachm",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "carthage",
+      "label": "Tenth Shekel",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "carthage",
+      "label": "Fifth Shekel",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "carthage",
+      "label": "Quarter Shekel",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "carthage",
+      "label": "Half Shekel",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "carthage",
+      "label": "Shekel",
+      "faceValue": null,
+      "sortOrder": 50
+    },
+    {
+      "issuer": "carthage",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 60
+    },
+    {
+      "issuer": "greco-bactrian-kingdom",
+      "label": "Tetradrachm",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "greco-bactrian-kingdom",
+      "label": "Pentadrachm",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "greco-bactrian-kingdom",
+      "label": "Stater",
+      "faceValue": null,
+      "sortOrder": 30
+    },
+    {
+      "issuer": "greco-bactrian-kingdom",
+      "label": "20 Stater",
+      "faceValue": null,
+      "sortOrder": 40
+    },
+    {
+      "issuer": "hasmonean-kingdom",
+      "label": "Lepton",
+      "faceValue": null,
+      "sortOrder": 10
+    },
+    {
+      "issuer": "hasmonean-kingdom",
+      "label": "Half Prutah",
+      "faceValue": null,
+      "sortOrder": 20
+    },
+    {
+      "issuer": "hasmonean-kingdom",
+      "label": "Prutah",
+      "faceValue": null,
+      "sortOrder": 30
     }
   ]
 }

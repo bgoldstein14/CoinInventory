@@ -43,10 +43,9 @@
  */
 
 import { Router, Request, Response } from 'express';
-import sql from 'mssql';
 import crypto from 'crypto';
 import { logInfo, logWarn } from '../../logger';
-import { withDb, COIN_FIELDS, DB_BINDINGS, normalizeCoinValue } from '../../db';
+import { withDb, COIN_FIELDS, DB_BINDINGS, normalizeCoinValue, DbRequest, DbTransaction } from '../../db';
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { safeRollback, insertImages, replaceImages } from './write-helpers';
@@ -70,7 +69,7 @@ router.post('/', async (req: Request, res: Response) => {
     logInfo(`Creating new coin ${id}`);
 
     await withDb(async (db) => {
-      const transaction = new sql.Transaction(db);
+      const transaction = new DbTransaction(db);
 
       // `began` tracks whether begin() actually succeeded, so we never try to
       // roll back a transaction that was never started.
@@ -82,7 +81,7 @@ router.post('/', async (req: Request, res: Response) => {
 
         // Build the INSERT from the shared COIN_FIELDS map so it can never
         // drift away from the UPDATE in PUT /:id or from setup-database.sql.
-        const insertRequest = new sql.Request(transaction)
+        const insertRequest = new DbRequest(transaction)
           .input('id', DB_BINDINGS.coinId, id);
 
         const columnNames: string[] = ['CoinId'];
@@ -139,7 +138,7 @@ router.put('/:id', async (req: Request, res: Response) => {
       // error classifier below.
       if (existing.recordset.length === 0) return false;
 
-      const transaction = new sql.Transaction(db);
+      const transaction = new DbTransaction(db);
       let began = false;
 
       try {
@@ -156,7 +155,7 @@ router.put('/:id', async (req: Request, res: Response) => {
           .map(([key, binding]) => ({ key, ...binding }));
 
         if (updateEntries.length > 0) {
-          const updateRequest = new sql.Request(transaction)
+          const updateRequest = new DbRequest(transaction)
             .input('id', DB_BINDINGS.coinId, id);
 
           for (const entry of updateEntries) {

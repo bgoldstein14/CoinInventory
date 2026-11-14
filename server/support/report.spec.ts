@@ -38,7 +38,6 @@ function snapshot(overrides: Partial<SupportSnapshot> = {}): SupportSnapshot {
     clientErrors: [],
     logLines: [],
     logFiles: [],
-    attachments: [],
     ...overrides
   };
 }
@@ -180,6 +179,78 @@ describe('the log tail', () => {
   });
 });
 
+/**
+ * "INCLUDE THE LOG" HAS TO MEAN ALL OF IT.
+ *
+ * The checkbox's visible effect is the second file, but the body tail is the
+ * part that can quietly betray the choice: a user who unticks the box because
+ * they do not want log lines in a public issue would otherwise publish 150 of
+ * them in the report itself and never know. That would make the unticked
+ * state a half-truth, which is worse than not offering the choice.
+ */
+describe('the log tail when the reporter did not ask for the log', () => {
+  const LINES = [
+    'Connecting to SQL Server at MYSERVER\\SQLEXPRESS/CoinInventory',
+    '[INFO] rendered C:/Users/devuser/Pictures/coin.jpg'
+  ];
+
+  it('carries no log lines at all', () => {
+    const { markdown } = buildSupportReport(
+      snapshot({ logLines: LINES, includeLog: false }),
+      IDENTITY
+    );
+
+    expect(markdown).not.toContain('SQLEXPRESS');
+    expect(markdown).not.toContain('Pictures');
+    expect(markdown).not.toContain('rendered');
+  });
+
+  /**
+   * "Not included" and "none was available" are different facts, and only one
+   * of them is true. Reporting the wrong one sends the owner hunting a
+   * logging bug that does not exist instead of asking for the log.
+   */
+  it('says the reporter left it out, not that there was nothing to show', () => {
+    const { markdown } = buildSupportReport(
+      snapshot({ logLines: LINES, includeLog: false }),
+      IDENTITY
+    );
+
+    expect(markdown).toMatch(/Not included/i);
+    expect(markdown).toMatch(/Include recent log/);
+    expect(markdown).not.toMatch(/No log lines were available/i);
+  });
+
+  it('says no log file was written beside the report either', () => {
+    const { markdown } = buildSupportReport(snapshot({ includeLog: false }), IDENTITY);
+    expect(markdown).toMatch(/no log file was written/i);
+  });
+
+  /**
+   * Names and sizes are not log CONTENT, and they answer a question worth
+   * answering — "is it even logging?" — so they stay. The dialog's summary
+   * says so in the same breath, rather than leaving them under a sentence
+   * that implies nothing log-related is sent.
+   */
+  it('still lists the names and sizes of the log files', () => {
+    const { markdown } = buildSupportReport(
+      snapshot({
+        includeLog: false,
+        logFiles: [{ name: 'app-2026-11-08.log', bytes: 123456 }]
+      }),
+      IDENTITY
+    );
+
+    expect(markdown).toContain('app-2026-11-08.log');
+  });
+
+  /** Omitted means ticked: the checkbox's default, and every older caller. */
+  it('treats an absent flag as "include", matching the checkbox default', () => {
+    const { markdown } = buildSupportReport(snapshot({ logLines: LINES }), IDENTITY);
+    expect(markdown).toContain('SQLEXPRESS');
+  });
+});
+
 describe('the log file inventory', () => {
   it('lists names and sizes, not contents', () => {
     const { markdown } = buildSupportReport(
@@ -192,29 +263,25 @@ describe('the log file inventory', () => {
   });
 });
 
+/**
+ * The in-app picker is gone, so the report no longer lists attachments — it
+ * cannot: the app never sees them. What it must still do is SAY so, in the
+ * document itself, because the report is read on a GitHub issue that may well
+ * have files dragged onto it, and a reader has to be able to tell which of
+ * them the app put there. The answer is none.
+ */
 describe('attachments', () => {
-  it('names them, with a reminder that the user chose them', () => {
-    const { markdown } = buildSupportReport(
-      snapshot({ attachments: [{ name: 'GoldCoins.QIF', bytes: 2048 }] }),
-      IDENTITY
-    );
-
-    expect(markdown).toContain('GoldCoins.QIF');
-    expect(markdown).toMatch(/chose|attached/i);
-  });
-
-  it('says nothing was attached when nothing was', () => {
+  it('states that the app attached and uploaded nothing', () => {
     const { markdown } = buildSupportReport(snapshot(), IDENTITY);
-    expect(markdown).toMatch(/no files/i);
+
+    expect(markdown).toMatch(/attached nothing and uploaded nothing/i);
   });
 
-  it('redacts a file NAME that carries the user name', () => {
-    const { markdown } = buildSupportReport(
-      snapshot({ attachments: [{ name: 'devuser-holdings.qif', bytes: 10 }] }),
-      IDENTITY
-    );
-    expect(markdown).not.toContain('devuser-holdings');
-    expect(markdown).toContain('<USER>-holdings.qif');
+  it('does not claim to have collected any file', () => {
+    const { markdown } = buildSupportReport(snapshot(), IDENTITY);
+
+    expect(markdown).not.toMatch(/in the zip/i);
+    expect(markdown).not.toMatch(/files you chose to attach/i);
   });
 });
 
@@ -295,7 +362,11 @@ describe('canary: a marker seeded into every channel does not reach the report',
       clientErrors: [
         { timestamp: '2026-11-08T17:00:00.000Z', message: `failed for user${CANARY}` }
       ],
-      attachments: [{ name: `user${CANARY}-holdings.qif`, bytes: 4096 }],
+      // The marker used to ride in on an attachment NAME. The in-app picker
+      // is gone, so it rides in on the user's own description instead —
+      // the same string, through a carrier that still exists, so the canary
+      // keeps exactly the reach it had.
+      userDescription: `I was exporting user${CANARY}-holdings.qif when it crashed`,
       logFiles: [{ name: 'app-2026-11-08.log', bytes: 10 }]
     }),
     identity

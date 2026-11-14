@@ -25,7 +25,7 @@
  * the row. Counting in the same place the UPDATE runs makes that class of
  * disagreement impossible rather than unlikely.
  *
- * The other four reference types follow the same source rather than splitting
+ * The other five reference types follow the same source rather than splitting
  * one screen across two sources with different staleness. One endpoint
  * (GET /api/reference-usage), one round trip, one moment.
  *
@@ -49,9 +49,9 @@ export type { ReferenceUsageCounts, UsageIndex };
 /**
  * What the screen shows before the counts have arrived.
  *
- * A real object with five empty indexes rather than null, so every template
- * read is `usageCount(...)` returning 0 instead of a null check the next
- * pane will forget.
+ * A real object with one empty index per type rather than null, so every
+ * template read is `usageCount(...)` returning 0 instead of a null check the
+ * next pane will forget.
  */
 export const EMPTY_REFERENCE_USAGE: ReferenceUsageCounts = {
   categories: {},
@@ -59,6 +59,7 @@ export const EMPTY_REFERENCE_USAGE: ReferenceUsageCounts = {
   denominations: {},
   mintMarks: {},
   catalogs: {},
+  metalContents: {},
 };
 
 /** One `SELECT key, COUNT(*)` row, as loosely typed as JSON leaves it. */

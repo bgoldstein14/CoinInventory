@@ -10,6 +10,14 @@
  *     ValidFrom  INT NULL
  *     ValidTo    INT NULL
  *
+ * ...except Kind, WHICH THIS FORM NO LONGER ASKS FOR. It drives no
+ * behaviour anywhere — it is stored and rendered as a tag — and the year
+ * span already says it, so it is derived on save. The rule, the measurement
+ * behind it and the one issuer it does not reproduce are in issuer-kind.ts.
+ * `previewIssuerKind` below is only so the form can SHOW what will be
+ * stored; the server recomputes it and the server's answer is the one that
+ * lands in the column.
+ *
  * THE THREE RULES THAT ARE NOT OBVIOUS
  *
  * 1. THE ISO CODE MUST BE EXACTLY TWO LETTERS OR NOTHING AT ALL.
@@ -38,20 +46,31 @@ import {
   IssuerKind,
   NewIssuer,
 } from '../../types/reference-data.model';
+import { resolveIssuerKind } from './issuer-kind';
 
 // Re-exported because they are this form's rules as much as the column's,
 // and a caller that has imported the validator should not need a second
-// import to render the picker it validates against.
+// import to render what it validates against.
 export { ISSUER_KINDS, ISSUER_NAME_MAX_LENGTH };
 export type { NewIssuer };
 
-/** The form's raw state: every field a string, as every <input> gives it. */
+/**
+ * The form's raw state: every field a string, as every <input> gives it.
+ *
+ * NO `kind`. There is no control for it any more — see the header.
+ *
+ * `lookUpOnline` is NOT about the issuer at all; it is the user's standing
+ * answer to "may this app ask an outside service what denominations this
+ * issuer struck". It lives on the draft because it is a field of the form,
+ * and it is a boolean rather than a string because no <input> writes it as
+ * text: a checkbox gives a boolean.
+ */
 export interface IssuerDraft {
   name: string;
   isoCode: string;
-  kind: string;
   validFrom: string;
   validTo: string;
+  lookUpOnline: boolean;
 }
 
 export type IssuerDraftResult =
@@ -61,14 +80,24 @@ export type IssuerDraftResult =
 /**
  * An empty form.
  *
- * `kind` starts at 'modern' rather than '' so the picker always has a
- * selection: an unset <select> shows a blank first row that looks like a
- * missing option, and the user then has to notice and fix something the form
- * could simply have decided. 'modern' is right far more often than not.
+ * @param lookUpOnline the user's last answer to the online-lookup checkbox,
+ *   carried across so that clearing the form after a save does not quietly
+ *   re-tick a box they turned off. Defaults to ON, because the lookup is a
+ *   feature that was asked for; a user who turns it off once means it, which
+ *   is why the caller passes the previous value back in.
  */
-export function blankIssuerDraft(): IssuerDraft {
-  return { name: '', isoCode: '', kind: 'modern', validFrom: '', validTo: '' };
+export function blankIssuerDraft(lookUpOnline = DEFAULT_LOOK_UP_ONLINE): IssuerDraft {
+  return { name: '', isoCode: '', validFrom: '', validTo: '', lookUpOnline };
 }
+
+/**
+ * The checkbox's value on a machine that has never answered it.
+ *
+ * ON. The owner asked for the lookup, so refusing by default would ship a
+ * feature switched off. It is one click to turn off and the choice is
+ * remembered from then on.
+ */
+export const DEFAULT_LOOK_UP_ONLINE = true;
 
 /** Blank means "not stated", which is a legal value for every year column. */
 function parseYear(raw: string, field: string): { ok: true; year: number | null } | { ok: false; error: string } {
@@ -84,8 +113,21 @@ function parseYear(raw: string, field: string): { ok: true; year: number | null 
   return { ok: true, year: Number.parseInt(text, 10) };
 }
 
-function isIssuerKind(value: string): value is IssuerKind {
-  return (ISSUER_KINDS as readonly string[]).includes(value);
+/**
+ * The kind this draft would be stored as, for the tag beside the year boxes.
+ *
+ * DISPLAY ONLY. The server derives the same value from the same rule and its
+ * answer is what reaches the column; this is here so the user can see the
+ * consequence of typing a year before they press Add, which is the whole
+ * reason dropping the picker is not just hiding a field.
+ *
+ * A year that does not parse is treated as absent rather than refused: the
+ * user is mid-keystroke, and `validateIssuerDraft` is what refuses on save.
+ */
+export function previewIssuerKind(draft: IssuerDraft): IssuerKind {
+  const from = parseYear(draft.validFrom, '');
+  const to = parseYear(draft.validTo, '');
+  return resolveIssuerKind(from.ok ? from.year : null, to.ok ? to.year : null);
 }
 
 /**
@@ -126,11 +168,6 @@ export function validateIssuerDraft(
     };
   }
 
-  const kind = draft.kind.trim();
-  if (!isIssuerKind(kind)) {
-    return { ok: false, error: `"${kind}" is not a kind of issuer. Choose modern, historical or ancient.` };
-  }
-
   const from = parseYear(draft.validFrom, 'The first year');
   if (!from.ok) return { ok: false, error: from.error };
 
@@ -143,10 +180,11 @@ export function validateIssuerDraft(
 
   return {
     ok: true,
+    // No `kind`. The server derives it from these two years; see the
+    // header and issuer-kind.ts.
     issuer: {
       name,
       isoCode: isoText.length > 0 ? isoText.toUpperCase() : null,
-      kind,
       validFrom: from.year,
       validTo: to.year,
     },

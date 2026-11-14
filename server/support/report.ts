@@ -1,6 +1,6 @@
 /**
  * support/report.ts — turns a snapshot of "what is going on" into the text
- * the user will read, edit, and then publish.
+ * the user can read, and will publish.
  *
  * THE SHAPE OF THE PROMISE
  * This text is going to end up in a PUBLIC issue tracker. Everything in it
@@ -67,10 +67,26 @@ export interface SupportSnapshot {
   countsError?: string;
   /** Oldest first, as the frontend's ring buffer stores them. */
   clientErrors: ClientError[];
-  /** Oldest first, as readRecentLogLines returns them. */
+  /**
+   * Oldest first, as readRecentLogLines returns them. Ignored entirely when
+   * `includeLog` is false — see that field.
+   */
   logLines: string[];
   logFiles: FileSummary[];
-  attachments: FileSummary[];
+  /**
+   * Did the reporter tick "Include recent log"?
+   *
+   * FALSE MEANS NO LOG CONTENT ANYWHERE, not "no separate log file". The tail
+   * that used to be embedded in this body goes too. "Include the log" has to
+   * mean all of it: leaving 150 lines behind while the dialog says the log is
+   * not included would make the unticked state a half-truth, and a user who
+   * turned it off precisely because they did not want log lines published
+   * would have published 150 of them.
+   *
+   * Optional, defaulting to true, so every existing caller and the report's
+   * own unit tests keep their meaning.
+   */
+  includeLog?: boolean;
   /** The user's own description of the problem, if they typed one first. */
   userDescription?: string;
 }
@@ -80,8 +96,10 @@ export interface SupportSnapshot {
  *
  * `maxLogLines` is the one worth arguing about. 150 lines is roughly the last
  * two or three minutes of a busy session, which is where the cause of a
- * just-reported bug almost always is — and the full day's log is in the zip
- * anyway, so nothing is actually lost by keeping the readable summary short.
+ * just-reported bug almost always is. The report says out loud how many
+ * earlier lines it dropped, and a reporter who ticks "Include recent log"
+ * gets 2,000 redacted lines in a second file beside this one — so the body
+ * stays readable in an issue without the longer tail being lost.
  *
  * `maxLineChars` exists because a single base64 image payload or a serialised
  * HttpErrorResponse can be tens of kilobytes on one line, which would blow
@@ -91,7 +109,6 @@ export const REPORT_LIMITS = {
   maxLogLines: 150,
   maxClientErrors: 20,
   maxLogFilesListed: 30,
-  maxAttachmentsListed: 20,
   maxLineChars: 500,
   maxUserDescriptionChars: 4000,
   /** Final backstop. Nothing should reach it; if it does, the report says so. */
@@ -182,15 +199,30 @@ function renderBody(snapshot: SupportSnapshot): string {
   out.push('');
 
   // ---- Log tail ----------------------------------------------------------
+  //
+  // Unticked means NO LOG CONTENT, and the report says which it is. "No log
+  // lines were available" and "the reporter chose not to include them" are
+  // different facts: the first sends the owner looking for a logging bug that
+  // does not exist, the second tells them to go back and ask.
+  const includeLog = snapshot.includeLog !== false;
+
   out.push('### Recent log lines');
   out.push('');
-  if (snapshot.logLines.length === 0) {
+  if (!includeLog) {
+    out.push(
+      '*Not included. The reporter did not tick “Include recent log”, so no log ' +
+      'lines are in this report and no log file was written beside it.*'
+    );
+  } else if (snapshot.logLines.length === 0) {
     out.push('No log lines were available.');
   } else {
     const shown = snapshot.logLines.slice(-REPORT_LIMITS.maxLogLines);
     const dropped = snapshot.logLines.length - shown.length;
     if (dropped > 0) {
-      out.push(`*${dropped} earlier line${dropped === 1 ? '' : 's'} omitted. The full log is in the attached zip.*`);
+      out.push(
+        `*${dropped} earlier line${dropped === 1 ? '' : 's'} omitted. ` +
+        'The full log file is still on the machine that produced it.*'
+      );
       out.push('');
     }
     out.push('```');
@@ -213,18 +245,17 @@ function renderBody(snapshot: SupportSnapshot): string {
   out.push('');
 
   // ---- Attachments -------------------------------------------------------
-  out.push('### Files you chose to attach');
+  //
+  // There is no list of them because the app cannot attach anything. It
+  // writes this report to the Desktop and nothing else; whatever else reaches
+  // the issue, the user dragged in there themselves, after this text was
+  // written. Listing files the app never saw would be a claim it cannot make.
+  out.push('### Files attached to this issue');
   out.push('');
-  if (snapshot.attachments.length === 0) {
-    out.push('No files were attached.');
-  } else {
-    out.push('*These are in the zip because you chose them, file by file. Nothing is attached automatically.*');
-    out.push('');
-    const shown = snapshot.attachments.slice(0, REPORT_LIMITS.maxAttachmentsListed);
-    for (const file of shown) out.push(`- \`${file.name}\` — ${formatBytes(file.bytes)}`);
-    const dropped = snapshot.attachments.length - shown.length;
-    if (dropped > 0) out.push(`- …and ${dropped} more`);
-  }
+  out.push(
+    '*The app attached nothing and uploaded nothing. Anything else on this issue ' +
+    'was dragged in by hand after this report was written.*'
+  );
   out.push('');
 
   return out.join('\n');

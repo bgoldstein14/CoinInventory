@@ -1,32 +1,60 @@
 /**
  * routes/support/index.ts — "Help → Report a problem", server side.
  *
- * TWO ENDPOINTS, AND THE LINE BETWEEN THEM IS CONSENT
- *   POST /api/support/preview   builds the report and returns it. Touches
- *                               no disk. The user has agreed to nothing yet,
- *                               so nothing exists yet.
+ * THREE ENDPOINTS, AND THE LINE BETWEEN THEM IS CONSENT
+ *   GET  /api/support/config    where issues are filed and where the report
+ *                               will be written. Reads nothing, writes
+ *                               nothing. The dialog needs this on the FIRST
+ *                               screen so it can offer the repository as a
+ *                               real clickable link before anything is built.
  *
- *   POST /api/support/bundle    takes the text the user APPROVED (and
- *                               possibly edited) plus the files they
- *                               explicitly chose, and writes one zip.
+ *   POST /api/support/preview   builds the report and returns it. Touches no
+ *                               disk. The user has agreed to nothing yet, so
+ *                               nothing exists yet.
  *
- * Splitting them is the whole design: a single call that generated and wrote
- * in one step would mean the artefact exists before the user has seen it. The
- * rule is preview, with the ability to remove anything, and never upload
- * automatically.
+ *   POST /api/support/report    takes that text and writes a plain `.md`
+ *                               file to the Desktop — plus, if the reporter
+ *                               asked for it, a plain `.txt` of the recent
+ *                               log beside it.
+ *
+ * Splitting preview from write is the whole design: a single call that
+ * generated and wrote in one step would mean the artefact exists the moment
+ * the dialog wants to display anything. The dialog builds the report to show
+ * the user what is in it — in summary always, in full on request — and only
+ * writes when they press the button.
+ *
+ * NO ZIP, AND NO ATTACHMENTS
+ * The write endpoint produces plain files, not an archive. Zipping a report
+ * that is already text gains nothing, and zipping a JPG actively hides it:
+ * GitHub renders a dragged-in image inline, where the same image inside a zip
+ * is invisible until someone extracts it. Two draggable files is still not an
+ * archive; it is two draggable files.
+ *
+ * `includeLog` IS A SAFETY FEATURE, NOT A CONVENIENCE
+ * Removing the zip removed the only REDACTED log a user could share, leaving
+ * the raw `app.log` — account name, machine name, photo paths — as the only
+ * thing to hand for a PUBLIC issue. Ticking the box writes a redacted 2,000
+ * line `.txt` beside the report instead. Unticking it means NO LOG CONTENT AT
+ * ALL: no second file, and no log tail in the report body either, because
+ * leaving 150 lines behind would make the unticked state a half-truth.
+ *
+ * Both files go through ONE `Redactor` instance (`prepareSupportFiles`). Two
+ * independent passes would assign different placeholders to the same path and
+ * the pair would mislead a reader about how many accounts were involved.
+ *
+ * The in-app file picker went with the zip. The app cannot upload to GitHub —
+ * there is no official attachment API, only undocumented routes that disagree
+ * about whether a token even works — so with no archive there was nowhere for
+ * a staged file to go. Collecting files and then dropping them is worse than
+ * not offering. The user attaches their own files by dragging them into the
+ * issue, and the dialog says so with a clickable link.
+ *
+ * Consequently there are NO SIZE CAPS here. They bounded an archive that is
+ * no longer built; GitHub enforces its own 25 MB on what the user drags in.
  *
  * NOTHING HERE TALKS TO GITHUB
  * No token is shipped, no request is made. The frontend opens a pre-filled
- * issue URL in the user's own browser and the user drags the zip in. GitHub
- * has no API for issue attachments anyway, and a credential in a public
- * desktop application can be extracted and abused.
- *
- * ATTACHMENTS ARRIVE AS CONTENT, NEVER AS PATHS
- * `{ name, contentBase64 }`, and a request that supplies a path instead is
- * rejected outright. Accepting a path would make this an arbitrary-file
- * reader reachable from any local process — the same class of problem as
- * /api/images/file — and would let a bug attach a file the user never picked.
- * The browser already has the bytes from the file input.
+ * issue URL in the user's own browser and the user presses Submit there.
  *
  * IT MUST WORK WHEN EVERYTHING ELSE DOES NOT
  * The collection counts come from the database, and the database being
@@ -44,18 +72,16 @@ import path from 'node:path';
 import { withDb } from '../../db';
 import { listLogFiles, logError, logInfo, readRecentLogLines } from '../../logger';
 import {
-  ATTACHMENT_LIMITS,
-  BUNDLE_LOG_LINES,
-  ChosenFile,
-  buildBundleZip,
+  prepareSupportFiles,
+  redactReportPath,
+  reportFileName,
   resolveDesktopDirectory,
-  validateAttachments,
-  writeBundleToDesktop
-} from '../../support/bundle';
+  writeSupportFile
+} from '../../support/report-file';
+import { LOG_FILE_LIMITS, logFileName, renderLogFile } from '../../support/log-file';
 import { identityFromEnvironment } from '../../support/redaction';
 import {
   ClientError,
-  FileSummary,
   REPORT_LIMITS,
   SupportCounts,
   buildSupportReport
@@ -64,7 +90,7 @@ import {
 const router = Router();
 
 /**
- * Overrides where the zip is written.
+ * Overrides where the report is written.
  *
  * Exists for the tests — no test may write to the developer's real Desktop —
  * and for the packaged build, which puts user-writable files under
@@ -75,7 +101,7 @@ const OUTPUT_DIR_ENV_VAR = 'COIN_SUPPORT_OUTPUT_DIR';
 /**
  * Where issues are filed. The default below is a PLACEHOLDER and the response
  * says so explicitly via `repositoryConfigured`, because the one thing worse
- * than no support button is one that opens a 404 and leaves the user
+ * than no support button is one that links to a 404 and leaves the user
  * believing they have been heard.
  */
 const REPO_URL_ENV_VAR = 'SUPPORT_REPO_URL';
@@ -86,7 +112,7 @@ function repositoryUrl(): string {
   return configured.length > 0 ? configured : PLACEHOLDER_REPO_URL;
 }
 
-/** Where the zip goes: the override, else the real Desktop, else home. */
+/** Where the file goes: the override, else the real Desktop, else home. */
 function outputDirectory(): string {
   const override = (process.env[OUTPUT_DIR_ENV_VAR] ?? '').trim();
   if (override.length > 0) return path.resolve(override);
@@ -157,6 +183,21 @@ function currentIdentity() {
   return identityFromEnvironment(process.env, os.hostname(), os.homedir());
 }
 
+/**
+ * Did the caller ask for the log?
+ *
+ * DEFAULTS TO TRUE, matching the checkbox's own default, because one named
+ * field that means different things on two endpoints of the same feature is a
+ * worse trap than either default. The dialog always sends the value
+ * explicitly, so the unticked state can never be lost in transit — and the
+ * write endpoint reports back what it ACTUALLY wrote, so even a caller that
+ * got this wrong cannot leave the user misinformed about what is on their
+ * Desktop.
+ */
+function wantsLog(body: Record<string, unknown>): boolean {
+  return body['includeLog'] !== false;
+}
+
 /** Defensive coercion — this body comes from the renderer, so it is input. */
 function asClientErrors(value: unknown): ClientError[] {
   if (!Array.isArray(value)) return [];
@@ -170,15 +211,29 @@ function asClientErrors(value: unknown): ClientError[] {
     .filter(entry => entry.message.length > 0);
 }
 
-function asFileSummaries(value: unknown): FileSummary[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .filter((entry): entry is Record<string, unknown> => typeof entry === 'object' && entry !== null)
-    .map(entry => ({
-      name: String(entry['name'] ?? 'file'),
-      bytes: Number(entry['bytes'] ?? 0) || 0
-    }));
-}
+// GET /api/support/config
+
+/**
+ * Everything the dialog needs before it has built anything.
+ *
+ * THE CLICKABLE LINK IS WHY THIS EXISTS. The repository URL has to be on the
+ * FIRST screen — the user is told there that attaching is a GitHub-side
+ * action, and telling them that without handing them the link is telling them
+ * to go and find it. Getting the URL out of the preview response instead
+ * would mean building the whole report (which reads the log and queries the
+ * database) just to render a hyperlink.
+ *
+ * `repositoryConfigured` is load-bearing: while the URL is still the shipped
+ * placeholder the dialog must say the repository is not configured rather
+ * than render a link to a 404.
+ */
+router.get('/support/config', (_req: Request, res: Response) => {
+  res.json({
+    repositoryUrl: repositoryUrl(),
+    repositoryConfigured: repositoryUrl() !== PLACEHOLDER_REPO_URL,
+    outputDirectory: outputDirectory()
+  });
+});
 
 // POST /api/support/preview
 
@@ -186,6 +241,7 @@ router.post('/support/preview', async (req: Request, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const { counts, error } = await readCounts();
+    const includeLog = wantsLog(body);
 
     const { markdown, receipt } = buildSupportReport(
       {
@@ -199,27 +255,19 @@ router.post('/support/preview', async (req: Request, res: Response) => {
         counts,
         countsError: error,
         clientErrors: asClientErrors(body['clientErrors']),
-        logLines: readRecentLogLines(REPORT_LIMITS.maxLogLines),
+        // Not even READ when the box is unticked. The renderer would drop
+        // them, but there is no reason to lift a user's unredacted log lines
+        // into memory to decide not to use them.
+        logLines: includeLog ? readRecentLogLines(REPORT_LIMITS.maxLogLines) : [],
         logFiles: listLogFiles(),
-        attachments: asFileSummaries(body['attachments']),
+        includeLog,
         userDescription:
           typeof body['userDescription'] === 'string' ? body['userDescription'] : undefined
       },
       currentIdentity()
     );
 
-    res.json({
-      markdown,
-      receipt,
-      outputDirectory: outputDirectory(),
-      repositoryUrl: repositoryUrl(),
-      repositoryConfigured: repositoryUrl() !== PLACEHOLDER_REPO_URL,
-      limits: {
-        maxFiles: ATTACHMENT_LIMITS.maxFiles,
-        maxFileBytes: ATTACHMENT_LIMITS.maxFileBytes,
-        maxTotalBytes: ATTACHMENT_LIMITS.maxTotalBytes
-      }
-    });
+    res.json({ markdown, receipt });
   } catch (err) {
     // A failure here must not be silent: the user pressed a button and is
     // waiting. Log it and say so plainly rather than hanging the dialog.
@@ -228,47 +276,9 @@ router.post('/support/preview', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/support/bundle
+// POST /api/support/report
 
-/**
- * Turn the request's attachment list into buffers, or explain why not.
- *
- * Rejecting a `path` property outright — rather than ignoring it — is
- * deliberate. Silently accepting the request minus the attachment would
- * leave a caller believing a file went in when it did not, and a loud 400 is
- * how a mistake in the renderer gets noticed during development instead of
- * in a user's published issue.
- */
-function decodeAttachments(value: unknown): { files: ChosenFile[] } | { error: string } {
-  if (value === undefined || value === null) return { files: [] };
-  if (!Array.isArray(value)) return { error: 'attachments must be a list' };
-
-  const files: ChosenFile[] = [];
-
-  for (const raw of value) {
-    if (typeof raw !== 'object' || raw === null) return { error: 'each attachment must be an object' };
-    const entry = raw as Record<string, unknown>;
-
-    if ('path' in entry) {
-      return {
-        error:
-          'attachments must be sent as content, not as a path — the server never reads files on its own'
-      };
-    }
-
-    const name = typeof entry['name'] === 'string' && entry['name'].length > 0
-      ? entry['name']
-      : 'attachment';
-    const encoded = entry['contentBase64'];
-    if (typeof encoded !== 'string') return { error: `attachment "${name}" has no content` };
-
-    files.push({ name, content: Buffer.from(encoded, 'base64') });
-  }
-
-  return { files };
-}
-
-router.post('/support/bundle', (req: Request, res: Response) => {
+router.post('/support/report', (req: Request, res: Response) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
 
@@ -278,38 +288,70 @@ router.post('/support/bundle', (req: Request, res: Response) => {
       return;
     }
 
-    const decoded = decodeAttachments(body['attachments']);
-    if ('error' in decoded) {
-      res.status(400).json({ error: decoded.error });
-      return;
+    const identity = currentIdentity();
+    const directory = outputDirectory();
+    const includeLog = wantsLog(body);
+
+    // ONE instant for both files, so the pair is obviously a pair on a
+    // Desktop that may already hold three of them.
+    const when = new Date();
+    const reportName = reportFileName(when);
+
+    // Read the log HERE, not from the request. The 2,000 lines never go near
+    // the renderer: they are raw and unredacted until the pass below, and
+    // round-tripping them through the browser would create exactly the
+    // unredacted artefact this feature exists to avoid.
+    const rawLog = includeLog
+      ? renderLogFile(readRecentLogLines(LOG_FILE_LIMITS.maxLines), {
+          generatedAt: when,
+          reportFileName: reportName
+        })
+      : null;
+
+    // ONE redactor for both. See prepareSupportFiles: separate passes would
+    // give the same path different placeholders in the two files.
+    const prepared = prepareSupportFiles(markdown, rawLog, identity);
+
+    const written = writeSupportFile(directory, reportName, prepared.reportText);
+    const writtenLog =
+      prepared.logText === null
+        ? null
+        : writeSupportFile(directory, logFileName(when), prepared.logText);
+
+    // THE FULL PATH, not the bare file name. The server can be running on a
+    // different machine from the person looking for the file, and "Support
+    // report written: coin-inventory-problem-report-….md" cannot answer the
+    // only question anybody asks of this line, which is where it went.
+    logInfo(`Support report written: ${written.path} (${written.bytes} bytes)`);
+    if (writtenLog) {
+      logInfo(`Support log written: ${writtenLog.path} (${writtenLog.bytes} bytes)`);
     }
-
-    const { accepted, rejected } = validateAttachments(decoded.files);
-
-    const { zip, entries, receipt } = buildBundleZip({
-      markdown,
-      logTail: readRecentLogLines(BUNDLE_LOG_LINES),
-      attachments: accepted,
-      identity: currentIdentity()
-    });
-
-    const written = writeBundleToDesktop(outputDirectory(), zip);
-
-    // Worth a log line: when a user says "I sent you a report" and no issue
-    // exists, this is how to tell whether the file was ever made.
-    logInfo(`Support bundle written: ${written.fileName} (${written.bytes} bytes)`);
 
     res.json({
       path: written.path,
+      // For the issue body, which is public. See redactReportPath.
+      redactedPath: redactReportPath(written.path, identity),
       fileName: written.fileName,
       directory: written.directory,
       bytes: written.bytes,
-      entries,
-      receipt,
-      rejected
+      /**
+       * null when no log was asked for. WHAT WAS ACTUALLY WRITTEN, never what
+       * was requested: the dialog builds its "a log file was written and here
+       * it is" note and the issue body from this, so the user is told the
+       * truth about their own Desktop even if the flag were ever mishandled.
+       */
+      log: writtenLog
+        ? {
+            path: writtenLog.path,
+            redactedPath: redactReportPath(writtenLog.path, identity),
+            fileName: writtenLog.fileName,
+            bytes: writtenLog.bytes
+          }
+        : null,
+      receipt: prepared.receipt
     });
   } catch (err) {
-    logError('Support bundle failed', err);
+    logError('Support report write failed', err);
     res.status(500).json({ error: 'Could not write the problem report file.' });
   }
 });

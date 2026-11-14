@@ -900,6 +900,34 @@ describe('App', () => {
     expect(app['showCategoryModal']()).toBe(false);
   });
 
+  it('takes the user from Settings to Reference Data, closing Settings', () => {
+    /* The reference lists used to be edited inside Settings. This is the
+     * one route left to where they live now, so it has to actually ARRIVE:
+     * emitting and leaving Settings on screen would dim the page twice and
+     * put this dialog's Cancel button under the one the user has moved on
+     * to. */
+    const app = createApp();
+    app['openSettingsModal']();
+
+    app['openReferenceDataFromSettings']();
+
+    expect(app['showCategoryModal']()).toBe(true);
+    expect(app['showSettingsModal']()).toBe(false);
+  });
+
+  it('lands on the default Reference Data pane, even after the unlinked banner', () => {
+    // Same trap `openCategoryModal` already guards: using the banner once
+    // would otherwise make the Settings route open the unlinked-coins pane
+    // from then on.
+    const app = createApp();
+    app['openUnlinkedCoins']();
+    app['closeCategoryModal']();
+
+    app['openReferenceDataFromSettings']();
+
+    expect(app['categoryModalSection']()).toBe('categories');
+  });
+
   it('opens and closes the CSV import modal', () => {
     const app = createApp();
     app['openCsvImportModal']();
@@ -946,17 +974,121 @@ describe('App', () => {
     expect(app['filters'].showAdvancedFilters()).toBe(true);
   });
 
-  it('keeps the detail sidebar closed until a details button is clicked', () => {
+  /*
+   * OPENING THE DETAILS PANEL
+   *
+   * This block replaces 'keeps the detail sidebar closed until a details
+   * button is clicked'. There is no Details button any more — the row itself
+   * opens the panel — and `addTestCoin` goes through Add Coin, which now
+   * opens it too, so the old test's opening premise is no longer reachable.
+   * What was worth keeping from it is the distinction it was really making:
+   * merely SELECTING a coin is not the same gesture as asking to see it.
+   */
+
+  it('selecting a coin does not, on its own, open the detail sidebar', () => {
+    // Still true, and still worth saying: `selectCoin` is called by the
+    // filter bar and by start-up hydration, neither of which should throw a
+    // sidebar open at the user.
     const app = createApp();
     const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
+    app['closeDetailPanel']();
 
     app['selectCoin'](coin.id);
     expect(app['showDetailPanel']()).toBe(false);
     expect(app.selectedCoin?.id).toBe(coin.id);
+  });
+
+  it('activating a row opens the sidebar on that coin', () => {
+    const app = createApp();
+    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
+    app['closeDetailPanel']();
 
     app['openCoinDetail'](coin.id);
     expect(app['showDetailPanel']()).toBe(true);
     expect(app.selectedCoin?.id).toBe(coin.id);
+  });
+
+  it('does NOT close the sidebar when the same row is activated again', () => {
+    // The gesture this serves is a ROW CLICK, not a button press. Clicking
+    // the row you are currently reading must not make the information
+    // vanish; the panel's own Close button is the way out. The old per-row
+    // Details button toggled, which was right for a button and is wrong
+    // here.
+    const app = createApp();
+    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
+
+    app['openCoinDetail'](coin.id);
+    app['openCoinDetail'](coin.id);
+    app['openCoinDetail'](coin.id);
+
+    expect(app['showDetailPanel']()).toBe(true);
+    expect(app.selectedCoin?.id).toBe(coin.id);
+  });
+
+  it('moves the sidebar to another row rather than closing it', () => {
+    const app = createApp();
+    const morgan = addTestCoin(app, { denomination: 'Dollar', coinType: 'Morgan' });
+    const peace = addTestCoin(app, { denomination: 'Dollar', coinType: 'Peace' });
+
+    app['openCoinDetail'](morgan.id);
+    app['openCoinDetail'](peace.id);
+
+    expect(app['showDetailPanel']()).toBe(true);
+    expect(app.selectedCoin?.id).toBe(peace.id);
+  });
+
+  it('Add Coin opens the sidebar on the new row and asks for the caret', () => {
+    // Add Coin used to create a draft row and stop there, so the user got an
+    // empty row with no visible place to type. It is the same gesture as a
+    // row click — a new coin is a row you immediately want to look at — so
+    // it goes through the same code path, and additionally asks the panel
+    // for focus.
+    const app = createApp();
+    const before = app['detailFieldFocusRequest']();
+
+    app['addBlankCoin']();
+
+    const coin = app['inv'].inventory().at(-1)!;
+    expect(app['showDetailPanel']()).toBe(true);
+    expect(app.selectedCoin?.id).toBe(coin.id);
+    expect(app['detailFieldFocusRequest']()).toBe(before + 1);
+  });
+
+  it('asks for the caret again on a second Add Coin', () => {
+    // A counter, not a flag: a boolean already set to `true` would make the
+    // second press change nothing, so the panel would never be told.
+    const app = createApp();
+
+    app['addBlankCoin']();
+    const first = app['detailFieldFocusRequest']();
+    app['addBlankCoin']();
+
+    expect(app['detailFieldFocusRequest']()).toBe(first + 1);
+  });
+
+  it('cancels an outstanding caret request when the panel is closed', () => {
+    // The panel is destroyed when it closes, so the next one is a fresh
+    // instance that has never acted on the request. If the next thing the
+    // user does is click a grid row, a left-over request would throw focus
+    // out of the grid and the arrow keys would stop working.
+    const app = createApp();
+    app['addBlankCoin']();
+    expect(app['detailFieldFocusRequest']()).toBeGreaterThan(0);
+
+    app['closeDetailPanel']();
+    expect(app['detailFieldFocusRequest']()).toBe(0);
+  });
+
+  it('does not ask for the caret when a row is activated', () => {
+    // Opening the panel from the grid must leave focus in the grid, or the
+    // arrow keys stop working the instant the panel appears.
+    const app = createApp();
+    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
+    const before = app['detailFieldFocusRequest']();
+
+    app['openCoinDetail'](coin.id);
+
+    expect(app['detailFieldFocusRequest']()).toBe(before);
   });
 
   it('still offers the image action for a coin with no images, and opens it closed', () => {

@@ -9,8 +9,10 @@
  * beforeAll and deleted in afterAll, so nothing is left behind and no path
  * inside the project is written to.
  *
- * `mssql` is still mocked, only because importing server.ts pulls in the whole
- * database layer. Neither endpoint under test goes anywhere near it.
+ * The SQLite test harness is imported purely for its side effect: importing
+ * server.ts pulls in the whole database layer, and the harness is what points
+ * that layer at an in-memory database instead of the owner's real collection.
+ * Neither endpoint under test goes anywhere near it.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
@@ -19,11 +21,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
+import '../../test-support/sqlite-test-db';
 import { app } from '../../server';
 import { MAX_PATHS_PER_REQUEST } from './exists';
 

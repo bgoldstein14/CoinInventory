@@ -6,7 +6,7 @@
  * at /api:
  *
  *   GET /settings/:key  -> { key, value }, 404 if the key was never saved
- *   PUT /settings/:key  -> upsert (MERGE), always 200
+ *   PUT /settings/:key  -> upsert (ON CONFLICT ... DO UPDATE), always 200
  *
  * SettingValue is NVARCHAR(MAX) text. Anything that is not already a string is
  * stored as JSON on the way in, and we try to JSON.parse on the way out —
@@ -67,12 +67,13 @@ router.put('/settings/:key', async (req: Request, res: Response) => {
       await db.request()
         .input('key', DB_BINDINGS.settingKey, key)
         .input('value', DB_BINDINGS.settingValue, serialized)
+        // Upsert. `excluded` is SQLite's name for the row the INSERT was
+        // trying to add, so the UPDATE branch writes the same value the
+        // INSERT branch would have — one place to change it, not two.
         .query(`
-          MERGE AppSettings AS target
-          USING (SELECT @key AS SettingKey) AS source
-          ON target.SettingKey = source.SettingKey
-          WHEN MATCHED THEN UPDATE SET SettingValue = @value
-          WHEN NOT MATCHED THEN INSERT (SettingKey, SettingValue) VALUES (@key, @value);
+          INSERT INTO AppSettings (SettingKey, SettingValue)
+          VALUES (@key, @value)
+          ON CONFLICT (SettingKey) DO UPDATE SET SettingValue = excluded.SettingValue
         `);
     });
 

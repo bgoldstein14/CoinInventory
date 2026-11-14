@@ -1,28 +1,47 @@
 /**
  * db/coin-fields.ts — the Coins table, column by column: the single source of
- * truth for the mssql parameter types used by both INSERT and UPDATE.
+ * truth for the parameter types used by both INSERT and UPDATE.
  *
- * Every `.input(name, type, value)` type must match setup-database.sql exactly:
+ * Every `.input(name, type, value)` type must match db/schema.sql exactly.
+ * *** WHAT "MUST MATCH" NOW MEANS IS DIFFERENT FROM WHAT IT USED TO MEAN,
+ * AND THE DIFFERENCE IS THE POINT OF THIS FILE. ***
  *
- *   - A parameter SHORTER than the column silently truncates the user's data
- *     (mssql trims the value to the declared length before it ever reaches SQL
- *     Server — no error, just missing characters).
- *   - A parameter LONGER than the column makes SQL Server raise error
- *     8152 / 2628 "String or binary data would be truncated", which aborts the
- *     whole transaction.
+ *   THEN (mssql + SQL Server). A parameter declared SHORTER than its column
+ *   silently TRUNCATED the user's data — mssql trimmed the value before it
+ *   ever reached the server, so there was no error, just missing characters.
+ *   A parameter declared LONGER made SQL Server raise 8152 / 2628 "String or
+ *   binary data would be truncated" and abort the transaction.
  *
- * db/coin-fields.spec.ts parses setup-database.sql and fails the build if the
- * two ever disagree.
+ *   NOW (SQLite). SQLite enforces nothing at all: it will put four thousand
+ *   characters in a column this file calls NVarChar(50) and say nothing.
+ *   The declared lengths here are therefore no longer a description of what
+ *   the database will do — THEY ARE THE ONLY THING THAT DOES IT.
+ *   db/bind-values.ts reads them and refuses an over-long value with the
+ *   8152 equivalent, which routes/db-error-response.ts turns into an HTTP
+ *   400. Silent truncation is gone in both directions: a value that is too
+ *   long is reported, not quietly shortened.
  *
- * CoinId: the schema declares it UNIQUEIDENTIFIER but we bind NVarChar(36) and
- * let SQL Server convert implicitly. Deliberate — sql.UniqueIdentifier would
- * make the driver reject any id that is not a well-formed GUID, and the Quicken
- * import path and some existing rows use free-form ids. Revisit only as a
- * dedicated change that migrates the data and every CoinId parameter at once.
- * (The CoinId binding itself lives in db/bindings.ts with the other tables.)
+ *   The same applies to the DECIMAL entries. SQL Server rounded a value to
+ *   the column's scale on the way in and refused one too large for its
+ *   precision; SQLite stores whatever double it is handed. Both behaviours
+ *   are reapplied from the precision and scale recorded here. The argument
+ *   for storing these as REAL at all is in the header of db/schema.sql and
+ *   it is the most consequential decision in the migration — read it before
+ *   changing a Decimal() on this page.
+ *
+ * db/coin-fields.spec.ts parses db/schema.sql and fails the build if the two
+ * ever disagree.
+ *
+ * CoinId: the column is TEXT and we bind NVarChar(36). It was
+ * UNIQUEIDENTIFIER under SQL Server and the binding was NVarChar(36) even
+ * then, deliberately — a GUID-typed parameter would reject any id that is not
+ * a well-formed GUID, and the Quicken import path and some existing rows use
+ * free-form ids. SQLite has no GUID type, so the schema now simply says what
+ * the application was always doing. (The CoinId binding itself lives in
+ * db/bindings.ts with the other tables.)
  */
 
-import sql from 'mssql';
+import { NVarChar, Int, Bit, Decimal, MAX, type DbType } from './column-types';
 import { normalizeNullable, normalizeTextDate } from './value-normalizers';
 import {
   DEFAULT_COLLECTION_STATUS,
@@ -30,12 +49,12 @@ import {
   normalizeCollectionStatus,
 } from './collection-status';
 
-/** Describes how one JSON field maps onto one SQL Server column. */
+/** Describes how one JSON field maps onto one Coins column. */
 export interface CoinColumnBinding {
-  /** SQL Server column name in the Coins table. */
+  /** Column name in the Coins table. */
   column: string;
-  /** mssql parameter type. MUST match setup-database.sql. */
-  sqlType: sql.ISqlType | (() => sql.ISqlType);
+  /** Parameter type. MUST match db/schema.sql. */
+  sqlType: DbType;
   /** Declared NVARCHAR length; undefined for non-text and NVARCHAR(MAX) columns. */
   maxLength?: number;
   /** Converts an incoming JSON value into the value we bind. */
@@ -49,7 +68,7 @@ export interface CoinColumnBinding {
  * Used by both POST /api/coins (INSERT) and PUT /api/coins/:id (UPDATE).
  */
 export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
-  denomination:  { column: 'Denomination',  sqlType: sql.NVarChar(100), maxLength: 100 },
+  denomination:  { column: 'Denomination',  sqlType: NVarChar(100), maxLength: 100 },
   /*
    * DenominationId INT NULL -> Denominations(DenominationId).
    *
@@ -78,44 +97,44 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    */
   denominationId: {
     column: 'DenominationId',
-    sqlType: sql.Int,
+    sqlType: Int,
     normalize: normalizeForeignKeyId,
   },
-  year:          { column: 'Year',          sqlType: sql.NVarChar(50),  maxLength: 50 },
-  coinType:      { column: 'CoinType',      sqlType: sql.NVarChar(100), maxLength: 100 },
-  category:      { column: 'Category',      sqlType: sql.NVarChar(100), maxLength: 100 },
-  country:       { column: 'Country',       sqlType: sql.NVarChar(100), maxLength: 100 },
-  grade:         { column: 'Grade',         sqlType: sql.NVarChar(50),  maxLength: 50 },
-  certCompany:   { column: 'CertCompany',   sqlType: sql.NVarChar(100), maxLength: 100 },
-  certNumber:    { column: 'CertNumber',    sqlType: sql.NVarChar(100), maxLength: 100 },
-  variety:       { column: 'Variety',       sqlType: sql.NVarChar(100), maxLength: 100 },
-  mintMark:      { column: 'MintMark',      sqlType: sql.NVarChar(20),  maxLength: 20 },
-  composition:   { column: 'Composition',   sqlType: sql.NVarChar(100), maxLength: 100 },
-  purchaseDate:  { column: 'PurchaseDate',  sqlType: sql.NVarChar(30),  maxLength: 30, normalize: normalizeTextDate },
-  purchasePrice: { column: 'PurchasePrice', sqlType: sql.Decimal(12, 2) },
-  currentValue:  { column: 'CurrentValue',  sqlType: sql.Decimal(12, 2) },
-  notes:         { column: 'Notes',         sqlType: sql.NVarChar(sql.MAX) },
-  source:        { column: 'Source',        sqlType: sql.NVarChar(50),  maxLength: 50, insertDefault: 'manual' },
+  year:          { column: 'Year',          sqlType: NVarChar(50),  maxLength: 50 },
+  coinType:      { column: 'CoinType',      sqlType: NVarChar(100), maxLength: 100 },
+  category:      { column: 'Category',      sqlType: NVarChar(100), maxLength: 100 },
+  country:       { column: 'Country',       sqlType: NVarChar(100), maxLength: 100 },
+  grade:         { column: 'Grade',         sqlType: NVarChar(50),  maxLength: 50 },
+  certCompany:   { column: 'CertCompany',   sqlType: NVarChar(100), maxLength: 100 },
+  certNumber:    { column: 'CertNumber',    sqlType: NVarChar(100), maxLength: 100 },
+  variety:       { column: 'Variety',       sqlType: NVarChar(100), maxLength: 100 },
+  mintMark:      { column: 'MintMark',      sqlType: NVarChar(20),  maxLength: 20 },
+  composition:   { column: 'Composition',   sqlType: NVarChar(100), maxLength: 100 },
+  purchaseDate:  { column: 'PurchaseDate',  sqlType: NVarChar(30),  maxLength: 30, normalize: normalizeTextDate },
+  purchasePrice: { column: 'PurchasePrice', sqlType: Decimal(12, 2) },
+  currentValue:  { column: 'CurrentValue',  sqlType: Decimal(12, 2) },
+  notes:         { column: 'Notes',         sqlType: NVarChar(MAX) },
+  source:        { column: 'Source',        sqlType: NVarChar(50),  maxLength: 50, insertDefault: 'manual' },
   hasCacSticker: {
     column: 'HasCacSticker',
-    sqlType: sql.Bit,
+    sqlType: Bit,
     // HasCacSticker is BIT NOT NULL DEFAULT 0 — never bind null to it.
     normalize: (value) => (value ? 1 : 0),
     insertDefault: 0,
   },
-  soldPrice:     { column: 'SoldPrice',     sqlType: sql.Decimal(12, 2) },
-  soldDate:      { column: 'SoldDate',      sqlType: sql.NVarChar(30),  maxLength: 30, normalize: normalizeTextDate },
+  soldPrice:     { column: 'SoldPrice',     sqlType: Decimal(12, 2) },
+  soldDate:      { column: 'SoldDate',      sqlType: NVarChar(30),  maxLength: 30, normalize: normalizeTextDate },
   // The coin's GROSS weight, in GRAMS. Stored values were troy ounces until
   // migration 008 multiplied them by 31.1034768; the column type did not
   // change, only the unit. DECIMAL(12,5) matches the five decimals the editor
   // shows — a parameter narrower than its column rounds the user's value away
   // without any error.
-  weight:        { column: 'Weight',        sqlType: sql.Decimal(12, 5) },
-  metalContent:  { column: 'MetalContent',  sqlType: sql.NVarChar(50),  maxLength: 50 },
+  weight:        { column: 'Weight',        sqlType: Decimal(12, 5) },
+  metalContent:  { column: 'MetalContent',  sqlType: NVarChar(50),  maxLength: 50 },
   // DECIMAL(12,5) for the same reason as `weight` above.
-  pmWeightGrams: { column: 'PmWeightGrams', sqlType: sql.Decimal(12, 5) },
-  pmPercent:     { column: 'PmPercent',     sqlType: sql.Decimal(5, 2) },
-  coinSet:       { column: 'CoinSet',       sqlType: sql.NVarChar(100), maxLength: 100 },
+  pmWeightGrams: { column: 'PmWeightGrams', sqlType: Decimal(12, 5) },
+  pmPercent:     { column: 'PmPercent',     sqlType: Decimal(5, 2) },
+  coinSet:       { column: 'CoinSet',       sqlType: NVarChar(100), maxLength: 100 },
   /*
    * CollectionStatus NVARCHAR(20) NOT NULL DEFAULT 'owned'.
    *
@@ -135,7 +154,7 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    */
   collectionStatus: {
     column: 'CollectionStatus',
-    sqlType: sql.NVarChar(MAX_COLLECTION_STATUS_LENGTH),
+    sqlType: NVarChar(MAX_COLLECTION_STATUS_LENGTH),
     maxLength: MAX_COLLECTION_STATUS_LENGTH,
     normalize: normalizeCollectionStatus,
     insertDefault: DEFAULT_COLLECTION_STATUS,
@@ -149,7 +168,7 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    * title-casing it — would be wrong for somebody. If a future change gives
    * this field a normalizer, write the reason here.
    */
-  storageLocation: { column: 'StorageLocation', sqlType: sql.NVarChar(200), maxLength: 200 },
+  storageLocation: { column: 'StorageLocation', sqlType: NVarChar(200), maxLength: 200 },
   /*
    * CatalogId INT NULL -> Catalogs(CatalogId).
    *
@@ -176,7 +195,7 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    */
   catalogId: {
     column: 'CatalogId',
-    sqlType: sql.Int,
+    sqlType: Int,
     normalize: normalizeForeignKeyId,
   },
   /*
@@ -190,7 +209,7 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    * 50 characters, matching the column and CATALOG_NUMBER_MAX_LENGTH in
    * src/app/types/catalog-reference.ts, which caps the editor input.
    */
-  catalogNumber: { column: 'CatalogNumber', sqlType: sql.NVarChar(50), maxLength: 50 },
+  catalogNumber: { column: 'CatalogNumber', sqlType: NVarChar(50), maxLength: 50 },
 };
 
 /**

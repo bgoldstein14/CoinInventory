@@ -1,8 +1,11 @@
 // Styles for the "Report a problem" dialog.
 //
 // Deliberately plain. This dialog is read, not admired: the one thing that
-// has to stand out is the attachment warning, because it is the only thing
-// between a user and publishing their financial position.
+// has to stand out is the warning about attaching files, because it is the
+// only thing between a user and publishing their financial position onto a
+// public issue. It kept that prominence when the in-app picker was removed —
+// the user does the attaching now, which changes who acts on it, not whether
+// they need to read it.
 @use '../../styles/controls' as *;
 @use '../../styles/modal' as *;
 
@@ -57,14 +60,69 @@
   }
 }
 
-// The report preview is read as text, so it gets a monospace face: a log
-// line that wraps mid-path in a proportional font is much harder to check.
+// "Include recent log". The only choice on this screen, so it sits between
+// the description box and the summary it changes — a control whose effect is
+// described three inches below it is a control nobody connects to the words.
+// The box is top-aligned because the explanation wraps to several lines.
+.support-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  font-size: 0.86rem;
+
+  input {
+    margin: 0.15rem 0 0;
+    flex: none;
+  }
+
+  > span {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+  }
+}
+
+// The plain-words list of what goes in. This is the consent disclosure now
+// that there is no mandatory markdown step, so it is normal body text and
+// not a footnote: .support-note is for asides, and this is not an aside.
+.support-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+
+  h3 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+}
+
+.support-summary-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+  line-height: 1.45;
+
+  li + li {
+    margin-top: 0.2rem;
+  }
+}
+
+// The exact report text, inside the optional disclosure. Read as text, so it
+// gets a monospace face: a log line that wraps mid-path in a proportional
+// font is much harder to check. Capped in height because the whole dialog
+// already scrolls and a 150-line log tail would bury the submit button.
 .support-report {
   font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
   font-size: 0.78rem;
   line-height: 1.35;
   white-space: pre;
-  overflow-x: auto;
+  overflow: auto;
+  max-height: 18rem;
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.03);
 }
 
 .support-attach {
@@ -93,25 +151,22 @@
   line-height: 1.45;
 }
 
-.support-file-list {
-  list-style: none;
+// The clickable address of the repository, offered on both steps.
+//
+// It is shown IN FULL rather than behind friendly link text. The owner's
+// requirement was that the user never has to hunt for or retype it, and a
+// link reading "GitHub" cannot be copied into another browser, read out over
+// the phone, or checked against where it actually goes.
+//
+// break-all because a repository URL is long and this dialog is narrow; a
+// link that overflows its container is a link half the users cannot see.
+.support-link {
   margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.3rem;
+  font-size: 0.84rem;
 
-  li {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    font-size: 0.84rem;
+  a {
+    word-break: break-all;
   }
-}
-
-.support-file-size {
-  opacity: 0.7;
-  margin-left: auto;
 }
 
 .support-receipt {

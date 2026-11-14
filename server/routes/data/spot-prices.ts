@@ -34,7 +34,7 @@ router.get('/spot-prices/latest', async (_req: Request, res: Response) => {
 
     const prices = await withDb(async (db) => {
       const result = await db.request()
-        .query('SELECT TOP 1 * FROM SpotPrices ORDER BY FetchedAt DESC');
+        .query('SELECT * FROM SpotPrices ORDER BY FetchedAt DESC LIMIT 1');
 
       if (result.recordset.length === 0) return null;
 
@@ -159,8 +159,8 @@ router.post('/spot-prices', async (req: Request, res: Response) => {
         .input('source', DB_BINDINGS.spotSource, source ?? null)
         .query(`
           INSERT INTO SpotPrices (Gold, Silver, Platinum, Copper, Source)
-          OUTPUT INSERTED.SpotPriceId, INSERTED.FetchedAt
           VALUES (@gold, @silver, @platinum, @copper, @source)
+          RETURNING SpotPriceId, FetchedAt
         `);
 
       // The OUTPUT clause should always give exactly one row, but a trigger or

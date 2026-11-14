@@ -2,18 +2,28 @@
   <div class="toolbar-actions compact-actions">
     <button type="button" class="secondary small-button" (click)="addCoinRequested.emit()">Add Coin</button>
 
+    <!-- THE MAIN BUTTON'S DEFAULT IS THE FIRST MENU ENTRY, and that is the
+         whole reason it is 'csv'. It used to be 'qif', so pressing Import
+         without opening the menu ran the importer fewest users want —
+         Quicken files. The default and the top of the list are kept the
+         same thing deliberately: a split button whose face does something
+         other than its first entry is a trap you only spring once. -->
     <div class="split-button" [class.open]="importMenuOpen()">
-      <button type="button" class="small-button" (click)="handleImportSelection('qif')">Import</button>
+      <button type="button" class="small-button" (click)="handleImportSelection('csv')">Import</button>
       <button type="button" class="small-button split-button__toggle" (click)="toggleImportMenu()" aria-label="Choose import type">▾</button>
       @if (importMenuOpen()) {
         <div class="split-menu">
-          <button type="button" class="menu-item" (click)="handleImportSelection('qif')">QIF</button>
           <!-- One entry, both formats. The modal behind it takes an .xlsx
                workbook or a .csv and converges them onto the same mapping
                screen, so splitting this into two menu items would ask the
                user to classify their own file before opening it. -->
           <button type="button" class="menu-item" (click)="handleImportSelection('csv')">Excel or CSV</button>
           <button type="button" class="menu-item" (click)="handleImportSelection('json')">JSON</button>
+          <!-- QIF is third because it is the least likely import for
+               anyone but the owner, who moved this collection off Quicken
+               once and will not do it again. Commonest first is the whole
+               ordering rule here. -->
+          <button type="button" class="menu-item" (click)="handleImportSelection('qif')">QIF</button>
           <!-- Photos, not coin records. Listed last and separated, because
                the three above read a file of coins while this one reads a
                folder of images and matches them to coins already in the

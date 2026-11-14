@@ -4,12 +4,26 @@
  * WIRING, that the routes actually reach it, by driving a real Express app
  * through supertest.
  *
+ * *** THIS FILE IS NOT ABOUT THE DATABASE, AND THAT IS THE POINT. *** The
+ * rows below are real rows out of the real in-memory SQLite database; the
+ * failure happens AFTERWARDS, inside `res.json()`, with the data already in
+ * hand. The distinction is structural (`sendJson()` wraps only the send) and
+ * the engine has nothing to do with it.
+ *
  * HOW THE FAILURE IS REPRODUCED
- * A coin row carries a `Notes` value whose `toJSON()` throws
- * `RangeError: Invalid string length` — the same error V8 raises, from the
- * same place (inside JSON.stringify, inside res.json). Building an actual
- * half-gigabyte string in a unit test is not an option; this reproduces the
- * throw faithfully and in milliseconds.
+ * `JSON.stringify` is made to throw for the one payload under test — the
+ * same error V8 raises (`RangeError: Invalid string length`), from the same
+ * place (inside JSON.stringify, inside res.json). Building an actual
+ * half-gigabyte response is not an option; this reproduces the throw
+ * faithfully and in milliseconds.
+ *
+ * The previous version did it by giving a canned row a `Notes` value whose
+ * `toJSON()` threw. That is no longer possible and should not be faked: a
+ * TEXT column hands back a string, so no object with a `toJSON()` can ever
+ * come out of the database. Intercepting JSON.stringify keeps the throw in
+ * the place the real one happens instead of moving it into the data, and the
+ * interception is scoped to the payload being tested so that the route's own
+ * error response still serialises.
  *
  * WHAT MUST BE TRUE AFTERWARDS
  *   - the response does NOT say the database failed
@@ -20,48 +34,76 @@
  *     another.
   */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import request from 'supertest';
+import os from 'node:os';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
-import { mockRequest, resetMssqlMock } from '../test-support/mssql-mock';
+import {
+  insertCoin,
+  rebuildTestDatabase,
+  withTestDb,
+} from '../test-support/sqlite-test-db';
 import { app } from '../server';
-import { resetPool } from '../db';
+import { DB_PATH_ENV_VAR, resetPool } from '../db';
 
-/** A value JSON.stringify cannot turn into text. */
-function unserialisableNotes(): unknown {
-  return {
-    toJSON() {
-      throw new RangeError('Invalid string length');
-    },
-  };
+/** Captured before anything can replace it. */
+const realStringify = JSON.stringify;
+
+/** Does this payload contain the record we are failing the send for? */
+function payloadNames(value: unknown, id: string): boolean {
+  const rows = Array.isArray(value) ? value : [value];
+  return rows.some(
+    (row) => typeof row === 'object' && row !== null && (row as Record<string, unknown>)['id'] === id
+  );
 }
 
-beforeEach(() => {
-  resetMssqlMock();
-});
+/**
+ * Makes `res.json()` throw — and ONLY for the response carrying `id`.
+ *
+ * Scoping it that way matters: the error response the route then builds goes
+ * through the same JSON.stringify, and a blanket throw would fail that too
+ * and hide the very body these tests read.
+ */
+function breakTheSend(id: string, makeError: () => Error): void {
+  vi.spyOn(JSON, 'stringify').mockImplementation(((
+    value: unknown,
+    replacer?: unknown,
+    space?: unknown
+  ) => {
+    if (payloadNames(value, id)) throw makeError();
+    return (realStringify as (v: unknown, r?: unknown, s?: unknown) => string)(
+      value,
+      replacer,
+      space
+    );
+  }) as unknown as typeof JSON.stringify);
+}
+
+/** A value JSON.stringify cannot turn into text. */
+function invalidStringLength(): RangeError {
+  return new RangeError('Invalid string length');
+}
+
+/** Set by a test that broke the database on purpose. */
+let databaseNeedsRebuilding = false;
 
 afterEach(async () => {
-  await resetPool();
+  vi.restoreAllMocks();
+  if (databaseNeedsRebuilding) {
+    databaseNeedsRebuilding = false;
+    await rebuildTestDatabase();
+  }
 });
 
 describe('GET /api/coins when the rows arrive but the response cannot be built', () => {
-  /** Queue: 1. the coins, 2. the image COUNT(*) aggregate. */
-  function queueUnserialisableCoinList(): void {
-    mockRequest.query
-      .mockResolvedValueOnce({
-        recordset: [{ CoinId: 'coin-1', Denomination: 'Quarter', Notes: unserialisableNotes() }],
-        rowsAffected: [1],
-      })
-      .mockResolvedValueOnce({ recordset: [], rowsAffected: [0] });
+  /** One real coin, and a send that will fail once the list is in hand. */
+  async function unsendableCoinList(makeError: () => Error = invalidStringLength): Promise<void> {
+    await insertCoin({ CoinId: 'coin-1', Denomination: 'Quarter', Notes: 'a note' });
+    breakTheSend('coin-1', makeError);
   }
 
   it('does not tell the user the database failed', async () => {
-    queueUnserialisableCoinList();
+    await unsendableCoinList();
 
     const res = await request(app).get('/api/coins');
 
@@ -72,7 +114,7 @@ describe('GET /api/coins when the rows arrive but the response cannot be built',
   });
 
   it('says plainly what failed and that the data is safe', async () => {
-    queueUnserialisableCoinList();
+    await unsendableCoinList();
 
     const res = await request(app).get('/api/coins');
 
@@ -83,7 +125,7 @@ describe('GET /api/coins when the rows arrive but the response cannot be built',
   });
 
   it('carries the technical detail without shouting it', async () => {
-    queueUnserialisableCoinList();
+    await unsendableCoinList();
 
     const res = await request(app).get('/api/coins');
 
@@ -103,30 +145,16 @@ describe('GET /api/coins when the rows arrive but the response cannot be built',
    *
    * The split is still the load-bearing part — the backstop only knows the
    * handful of messages it has been taught — so the test has to use a send
-   * failure the sniffer CANNOT recognise. A `toJSON()` that throws a plain
-   * Error with an unremarkable message is exactly that: nothing about it says
-   * "serialisation", and only the fact that it was thrown from inside
-   * sendJson() proves the rows had already been read.
+   * failure the sniffer CANNOT recognise. A plain Error with an unremarkable
+   * message is exactly that: nothing about it says "serialisation", and only
+   * the fact that it was thrown from inside sendJson() proves the rows had
+   * already been read.
    *
    * Delete the sendJson() call in routes/coins/reads.ts and this test fails
    * with 'Failed to retrieve coins' — the original lie, verbatim.
     */
   it('still says delivery when the send failure is one no sniffer could recognise', async () => {
-    mockRequest.query
-      .mockResolvedValueOnce({
-        recordset: [
-          {
-            CoinId: 'coin-1',
-            Notes: {
-              toJSON() {
-                throw new Error('a custom serialiser blew up');
-              },
-            },
-          },
-        ],
-        rowsAffected: [1],
-      })
-      .mockResolvedValueOnce({ recordset: [], rowsAffected: [0] });
+    await unsendableCoinList(() => new Error('a custom serialiser blew up'));
 
     const res = await request(app).get('/api/coins');
 
@@ -138,12 +166,8 @@ describe('GET /api/coins when the rows arrive but the response cannot be built',
 
 describe('the other read routes report delivery failures the same way', () => {
   it('GET /api/coins/:id names the coin, not the database', async () => {
-    mockRequest.query
-      .mockResolvedValueOnce({
-        recordset: [{ CoinId: 'coin-1', Notes: unserialisableNotes() }],
-        rowsAffected: [1],
-      })
-      .mockResolvedValueOnce({ recordset: [], rowsAffected: [0] });
+    await insertCoin({ CoinId: 'coin-1', Denomination: 'Quarter' });
+    breakTheSend('coin-1', invalidStringLength);
 
     const res = await request(app).get('/api/coins/coin-1');
 
@@ -153,10 +177,16 @@ describe('the other read routes report delivery failures the same way', () => {
   });
 
   it('GET /api/transactions names the transaction list', async () => {
-    mockRequest.query.mockResolvedValueOnce({
-      recordset: [{ TransactionId: 1, TransactionDate: '2026-01-01', Notes: unserialisableNotes() }],
-      rowsAffected: [1],
+    await insertCoin({ CoinId: 'coin-1', Denomination: 'Quarter' });
+    await withTestDb((database) => {
+      database
+        .prepare(
+          `INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount)
+           VALUES (?, ?, 'purchase', '2026-01-01', 10)`
+        )
+        .run('tx-1', 'coin-1');
     });
+    breakTheSend('tx-1', invalidStringLength);
 
     const res = await request(app).get('/api/transactions');
 
@@ -168,9 +198,12 @@ describe('the other read routes report delivery failures the same way', () => {
 
 describe('a genuinely broken connection is still reported as one', () => {
   it('GET /api/coins says unreachable, and promises nothing about the data', async () => {
-    mockRequest.query.mockRejectedValue(
-      Object.assign(new Error('Connection is closed.'), { code: 'ECONNCLOSED' })
-    );
+    // A database that will not open, for real: the path is a directory, so
+    // SQLite answers SQLITE_CANTOPEN. (The old `{ code: 'ECONNCLOSED' }` was
+    // an mssql socket code and cannot occur — there is no socket now.)
+    await resetPool();
+    process.env[DB_PATH_ENV_VAR] = os.tmpdir();
+    databaseNeedsRebuilding = true;
 
     const res = await request(app).get('/api/coins');
 
@@ -182,7 +215,10 @@ describe('a genuinely broken connection is still reported as one', () => {
   });
 
   it('an ordinary query error is a database failure, not a delivery one', async () => {
-    mockRequest.query.mockRejectedValue(new Error('Invalid column name Wibble'));
+    // A real "no such table", which is what the invented
+    // 'Invalid column name Wibble' stood in for.
+    await withTestDb((database) => database.exec('DROP TABLE Categories'));
+    databaseNeedsRebuilding = true;
 
     const res = await request(app).get('/api/categories');
 

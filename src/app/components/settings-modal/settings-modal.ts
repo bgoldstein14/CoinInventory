@@ -1,5 +1,4 @@
 import { Component, inject, input, output, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { AppSettings } from '../../features/app-settings';
 import { InventoryService } from '../../services/inventory.service';
 import { StorageKeys, StorageService } from '../../services/storage.service';
@@ -10,23 +9,37 @@ import {
 } from '../../services/pm-backfill';
 
 /**
- * SettingsModal — the Settings dialog: one display preference plus four
- * editable reference lists (categories, mint marks, metals and sets/albums).
+ * SettingsModal — the Settings dialog: settings, and nothing else.
  *
- * ONE EDITING STYLE: THE CHIPS, AND NOTHING ELSE.
- * A chip adds or removes ONE entry at a time through InventoryService, which
- * persists the change and leaves every other field of the record alone. Do
- * not reintroduce a bulk, newline-separated text editor for these lists: a
- * reference record is not just its label, and rebuilding one from a line of
- * text discards its id, its country and anything else the row carries.
+ * *** NO REFERENCE LIST IS EDITED HERE, AND NONE MAY COME BACK. ***
+ * This dialog used to carry chip editors for categories, mint marks, metal
+ * content and sets/albums. Three of those were a SECOND editor for a list
+ * the Reference Data screen (components/category-modal) already owned, and
+ * two editors for one list is how the two drift: the chips removed an entry
+ * on one click with no in-use count and no question, while the pane two
+ * clicks away named the number of coins affected and asked first. The weaker
+ * editor silently won whenever somebody happened to open this dialog.
+ *
+ * Metal content was the one list with no pane over there, so it was MOVED
+ * (see the Metal Content section of category-modal.ts), not dropped. What is
+ * left here is a button that opens that screen, because a user who learned
+ * these lists lived in Settings has to be taken to the new place rather than
+ * left to search for it.
+ *
+ * WHAT IS LEFT, AND WHY EACH ONE BELONGS
+ *   - "Show transactions section in details": a display preference. It
+ *     changes what this application shows, not what the collection contains.
+ *   - Maintenance > backfill precious-metal data: a one-off, app-wide
+ *     housekeeping job over the coin records. See the note above the
+ *     backfill methods for why it is not in the coin editor.
  *
  * WHAT "SAVE" DOES
- * Only the display preference. Every list edit has already been applied and
- * persisted by the time you press it — which is why Cancel does not undo them.
+ * Only the display preference — it is now the only thing this dialog holds
+ * that is not applied the moment it is pressed.
  */
 @Component({
   selector: 'app-settings-modal',
-  imports: [FormsModule],
+  imports: [],
   templateUrl: './settings-modal.html',
   styleUrl: './settings-modal.scss'
 })
@@ -43,19 +56,23 @@ export class SettingsModal {
 
   readonly closed = output<void>();
 
-  // --- "Add one item" inputs, one per list ---
-  protected readonly categoryDraft = signal('');
-  protected readonly mintMarkDraft = signal('');
-  protected readonly metalContentDraft = signal('');
-  protected readonly coinSetDraft = signal('');
+  /**
+   * "Open Reference Data" — the single route to the lists that used to be
+   * edited here.
+   *
+   * An OUTPUT rather than a modal opened from inside this component,
+   * because the App shell owns which dialog is on screen; it closes this
+   * one as it opens the other, so the two overlays can never stack.
+   */
+  readonly referenceDataRequested = output<void>();
 
   // ===================== Save =====================
 
   /**
    * Persists the display preference and closes.
    *
-   * The reference lists are deliberately absent: the chips apply and persist
-   * each change as it is made, so there is nothing left here to commit.
+   * The display preference is the only thing there is to commit: the
+   * reference lists are no longer edited here at all.
    */
   protected saveSettings(): void {
     // MERGE, don't replace. StorageKeys.AppSettings is a single shared object
@@ -78,91 +95,6 @@ export class SettingsModal {
     await this.storageService.set(StorageKeys.AppSettings, settings);
   }
 
-  // ===================== Categories =====================
-
-  protected addCategory(): void {
-    const draft = this.categoryDraft().trim();
-    if (!draft) return;
-    this.inv.mergeCategoryOptions([draft]);
-    this.categoryDraft.set('');
-  }
-
-  protected removeCategory(category: string): void {
-    this.inv.removeCategoryOption(category);
-  }
-
-  /*
-   * DENOMINATIONS ARE DELIBERATELY NOT EDITED HERE, and a chip list for them
-   * must not come back.
-   *
-   * A denomination is not a bare string: it belongs to an ISSUER, it carries
-   * a country the coin editor groups its dropdown by, and there are over a
-   * thousand of them. A chip list cannot ask for an issuer, cannot scale, and
-   * would file every new row under "No issuer yet". The Reference Data screen
-   * (components/category-modal) groups by issuer, searches, requires an
-   * issuer and shows an in-use count before offering to delete anything. A
-   * second, worse editor for the same rows is not a convenience; it is a way
-   * to enter data the good one would have refused. The count and a pointer
-   * are left in the template so the list has not silently vanished.
-   *
-   * THE OTHER FOUR LISTS STAY. A category, a set, a mint mark and a metal are
-   * each a single string with no foreign key and no scale problem.
-   */
-
-  // ===================== Mint marks =====================
-
-  protected addMintMark(): void {
-    const label = this.mintMarkDraft().trim();
-    if (!label) return;
-
-    void this.inv.addMintMark({
-      label,
-      description: label,
-      isActive: true
-    });
-
-    this.mintMarkDraft.set('');
-  }
-
-  protected removeMintMarkEntry(id: number): void {
-    void this.inv.removeMintMark(id);
-  }
-
-  // ===================== Metal content =====================
-
-  protected addMetalContent(): void {
-    const value = this.metalContentDraft().trim();
-    if (!value) return;
-
-    const next = [...new Set([...this.inv.metalContents(), value])].sort((left, right) => left.localeCompare(right));
-    this.inv.metalContents.set(next);
-    this.metalContentDraft.set('');
-  }
-
-  protected removeMetalContent(value: string): void {
-    this.inv.metalContents.set(this.inv.metalContents().filter(item => item !== value));
-  }
-
-  // ===================== Sets / Albums =====================
-  //
-  // These are the values offered by the "Set / Album" picker in the coin
-  // detail panel. Add and remove go through InventoryService (and therefore
-  // LookupManager), which updates the signal AND persists to `/api/coin-sets`.
-  // Setting the signal directly would change the list in memory only, and it
-  // would revert on the next reload.
-
-  protected addCoinSet(): void {
-    const name = this.coinSetDraft().trim();
-    if (!name) return;
-
-    this.inv.addCoinSet(name);
-    this.coinSetDraft.set('');
-  }
-
-  protected removeCoinSet(name: string): void {
-    this.inv.removeCoinSet(name);
-  }
-
   /*
    * MAINTENANCE — backfill precious-metal data.
    *
@@ -170,7 +102,9 @@ export class SettingsModal {
    * not a per-coin edit. The coin detail panel would have been wrong: it
    * edits ONE coin, and a button there that quietly touched several hundred
    * others would be a trap. It sits in its own bordered section, below the
-   * reference lists, so it cannot be mistaken for one of them.
+   * signpost to Reference Data, so it cannot be mistaken for a list to type
+   * into — which was the original reason for the rule-off border, back when
+   * the chip editors were above it.
    *
    * PREVIEW, THEN CONFIRM, THEN REPORT. Three states, in order, with a button
    * press between each:

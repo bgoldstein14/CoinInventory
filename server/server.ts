@@ -18,7 +18,8 @@
  *
  * Database helpers live in the db/ folder (getPool, withDb, rowToCoin,
  * formatDate, COIN_FIELDS, DB_BINDINGS...). Start with db/index.ts — its
- * header explains the production crash that shaped the whole database layer.
+ * header explains why the layer is shaped the way it is, and db/driver.ts
+ * explains why exactly one file is allowed to name the SQLite package.
  */
 
 import 'dotenv/config';
@@ -26,6 +27,7 @@ import express, { Request, Response } from 'express';
 import cors from 'cors';
 import path from 'path';
 import { logInfo } from './logger';
+import { buildDbConfig } from './db';
 import { installProcessSafetyNet } from './process-safety';
 
 import healthRouter from './routes/health';
@@ -102,6 +104,10 @@ const isMainModule = require.main === module || process.argv[1]?.endsWith('serve
 if (isMainModule) {
   app.listen(PORT, () => {
     logInfo(`Coin Inventory server listening on http://localhost:${PORT}`);
-    logInfo(`Database: ${process.env['DB_SERVER'] ?? 'MYSERVER\\SQLEXPRESS'} / ${process.env['DB_NAME'] ?? 'CoinInventory'}`);
+    // The SQLite file, not a server and a database name. It lives under
+    // %LOCALAPPDATA% rather than the install directory (design §4.10a), so
+    // logging the resolved path is the quickest answer both to "where is my
+    // collection?" and to "why is this one empty?".
+    logInfo(`Database file: ${buildDbConfig().file}`);
   });
 }

@@ -28,6 +28,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ISSUE_URL_MAX_CHARS,
   buildIssueUrl,
+  issuePageUrl,
   normaliseRepositoryUrl,
   planIssueSubmission
 } from './issue-url';
@@ -49,6 +50,32 @@ describe('normaliseRepositoryUrl', () => {
 
   it('strips an /issues suffix, which is what people paste from the browser', () => {
     expect(normaliseRepositoryUrl(`${REPO}/issues`)).toBe(REPO);
+  });
+});
+
+/**
+ * The address the dialog shows as a CLICKABLE LINK before anything has been
+ * built. Attaching a file is a GitHub-side action — the app has no way to
+ * upload one — so telling the user that without handing them the link is
+ * telling them to go and find it.
+ */
+describe('issuePageUrl', () => {
+  it('points at the new-issue page', () => {
+    expect(issuePageUrl(REPO)).toBe('https://github.com/owner/coin-inventory/issues/new');
+  });
+
+  /**
+   * No query string. There is no title or body to encode at this point, and
+   * a link ending `?title=&body=` reads as broken to anyone who looks at it.
+   */
+  it('carries no empty query string', () => {
+    expect(issuePageUrl(REPO)).not.toContain('?');
+  });
+
+  it('tidies the three things people paste when asked for a repository URL', () => {
+    expect(issuePageUrl(`${REPO}/`)).toBe(`${REPO}/issues/new`);
+    expect(issuePageUrl(`${REPO}.git`)).toBe(`${REPO}/issues/new`);
+    expect(issuePageUrl(`${REPO}/issues`)).toBe(`${REPO}/issues/new`);
   });
 });
 

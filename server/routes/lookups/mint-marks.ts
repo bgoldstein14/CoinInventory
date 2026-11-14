@@ -66,8 +66,8 @@ router.post('/mintmarks', async (req: Request, res: Response) => {
         .input('description', DB_BINDINGS.mintMarkDescription, description ?? null)
         .query(`
           INSERT INTO MintMarks (Label, Description, IsActive)
-          OUTPUT INSERTED.MintMarkId
           VALUES (@label, @description, 1)
+          RETURNING MintMarkId
         `);
 
       const row = result.recordset[0];

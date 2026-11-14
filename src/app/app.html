@@ -98,7 +98,6 @@
       [filters]="filters"
       [columns]="columns"
       [selection]="selection"
-      (coinSelected)="selectCoin($event)"
       (detailRequested)="openCoinDetail($event)"
       (imagesRequested)="showCoinImages($event)"
     />
@@ -108,6 +107,7 @@
         [coin]="coin"
         [images]="images"
         [showTransactions]="showTransactionsInDetails()"
+        [focusFirstFieldRequest]="detailFieldFocusRequest()"
         (closeRequested)="closeDetailPanel()"
         (deleteRequested)="deleteSelectedCoin()"
       />
@@ -138,9 +138,14 @@
   <input id="inventory-json-import-input" type="file" accept="application/json" hidden (change)="io.handleInventoryImportFile($event)" />
 
   @if (showSettingsModal()) {
+    <!-- `referenceDataRequested` is the single route out of Settings to the
+         reference lists, which used to be edited inside it. The shell owns
+         which dialog is on screen, so the handler closes this one as it
+         opens the other rather than stacking two overlays. -->
     <app-settings-modal
       [showTransactionsInDetails]="showTransactionsInDetails()"
       (showTransactionsInDetailsChange)="showTransactionsInDetails.set($event)"
+      (referenceDataRequested)="openReferenceDataFromSettings()"
       (closed)="closeSettingsModal()"
     />
   }

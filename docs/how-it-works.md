@@ -220,6 +220,8 @@ So the write path was the only half missing. The user would add a set, watch it 
 
 ### Settings dialog
 
+> **Superseded (2026-11-13).** The Settings dialog no longer owns any reference list. Everything described in this section as living in Settings — the categories, mint marks, metal content and sets/albums chip editors, and the denominations pointer — has moved to the **Reference Data** screen; Settings keeps the "Show transactions section in details" toggle, the Maintenance block, and a single **Open Reference Data** button. See "Reference lists all moved to Reference Data" below. The rest of this section is kept because the reasoning it records — why the bulk textareas went, why a reference record is not a string — still governs the editors in their new home.
+
 The Settings dialog now owns the reference lists, and three things changed about it today.
 
 **It added a Sets / Albums list**, the same type-and-Add shape as the four lists already there, with clickable chips to remove. These are the values offered by the "Set / Album" picker in the coin detail panel. They were previously only editable from the Categories & Sets dialog, and changes there did not survive a reload — see the coin-set persistence note above. Both halves of that are now fixed.
@@ -231,6 +233,20 @@ A secondary benefit: the textareas were the subject of a long-standing accessibi
 **The dialog now imports the shared modal styles and has a distinct focus border.** It has always used the `.modal-backdrop` / `.modal` / `.modal-header` class names, but nothing ever supplied their styles: the markup originally lived in `app.html`, and `app.scss` never imported `styles/_modal.scss`. When the dialog was extracted into a component the omission was carried across intentionally so the refactor would change nothing visually, and a comment recorded that as a deliberate choice.
 
 The consequence was not cosmetic. With no `.modal-backdrop` rule the dialog had no fixed positioning, no dimmed overlay and no card chrome at all — it rendered inline in the page, so nothing told the user they had moved into a separate window. That is what the owner reported. `settings-modal.scss` now has the `@use`, plus a deliberately emphatic focused-window treatment on top of it: a darker-than-default overlay (this is the one modal that edits app-wide reference data rather than a single coin, so pushing the page further back is warranted), and a solid 2px edge in the app's primary accent brown. The chips were restyled more compactly at the same time.
+
+### Reference lists all moved to Reference Data
+
+**The complaint, in the owner's words:** *"The Settings dialog should move all the reference lists to the Reference Data maintenance as a couple of them are already there and duplicated in Settings."*
+
+That is exactly what was wrong. **Categories, mint marks and sets/albums had two editors each** — a chip list in Settings and a pane on the Reference Data screen — and the two were not equivalent. The Reference Data pane shows how many coins use an entry and names that number in a confirmation before removing it; the Settings chip deleted on a single click with no number and no question. Whichever dialog you happened to open decided how much you were told, and the lists drifted because two editors for one list always do.
+
+**Metal content was the exception and is the reason this was a move rather than a deletion.** It was the only list with no pane on the Reference Data screen, so deleting the Settings chips would have deleted the capability. It now has its own pane, added the way `reference-sections.ts` says to add one — a single entry in `REFERENCE_SECTIONS` plus a single `@case` in the template, with the navigation, the highlighting and the ARIA wiring coming for free. The move also *gained* it the two things the Settings version never had: an in-use count beside every entry, and a confirmation quoting that count. `GET /api/reference-usage` grew a sixth index (`metalContents`, keyed by text, counted from `Coins.MetalContent`) to supply it.
+
+Because `Coins.MetalContent` is an `NVARCHAR` column rather than a foreign key, removing a metal takes it out of the editor's dropdown and changes no coin — so the pane uses `planReferenceRemoval`'s general wording ("they keep the text already recorded") and not the denomination one, which promises a re-link that does not apply here.
+
+**One limitation was carried across unchanged and is worth knowing about.** `/api/metalcontents` is read-only — the list is seeded by `setup-database.sql` and there is no `POST`/`DELETE` — so adding or removing a metal writes the in-memory signal and nothing else, and the edit does not survive a reload. That is precisely what the Settings chips did, so nothing regressed in the move, but it is the one list on the Reference Data screen that does not persist, and that difference is invisible from the UI. Giving `MetalContents` the same `POST`/`DELETE` the other lookup tables have is the fix; `DB_BINDINGS.metalContentName` already exists for it.
+
+**What is left in Settings** is the "Show transactions section in details" toggle, the Maintenance block (the precious-metal backfill), and one **Open Reference Data** button. The button is a button rather than a sentence on purpose: a user who learned that categories live in Settings has to be *taken* to the new screen, not told where to look. It closes Settings as it opens Reference Data, so two backdrop modals can never stack.
 
 ### Transactions
 
@@ -452,7 +468,9 @@ Each of those rows carries all three main details, so both import. A row with on
 
 **How to reach it: Import ▾ → Images from folder.**
 
-It sits at the bottom of the Import menu, below QIF / CSV / JSON and separated by a rule, because it is a different kind of import: the three above read a *file of coin records*, while this one reads a *folder of photographs* and matches them against coins that already exist.
+It sits at the bottom of the Import menu, below Excel or CSV / JSON / QIF and separated by a rule, because it is a different kind of import: the three above read a *file of coin records*, while this one reads a *folder of photographs* and matches them against coins that already exist.
+
+**The three file importers are listed commonest-first, which is why QIF is third.** It used to be first, and — worse — it was also the split button's default action, so pressing "Import" without opening the menu ran the Quicken importer: the one import almost nobody wants, on the one click people make without looking. Both now point at **Excel or CSV**. The rule, kept for both split buttons on the toolbar, is that *the default action is the first menu entry*; a split button whose face does something other than its top entry is a trap you only spring once. `app-toolbar.spec.ts` pins the order and the default together, reading them out of one sequence so they cannot drift apart.
 
 That menu entry was missing for a while, and the way it went missing is worth recording. The modal, its `showImageImportModal` signal and both `openImageImportModal()` / `closeImageImportModal()` methods all existed and all worked — but nothing ever called the open method, so there was no route into the feature from the running app. It survived unnoticed because the test for it called `openImageImportModal()` directly: the test proved the modal opens, never that anything opens it. The regression guard is now in `app.spec.ts` and goes through `handleImportSelection()`, the method the toolbar actually emits into, with one case per menu entry so a future addition that is wired into `ImportKind` but forgotten in the handler fails loudly.
 

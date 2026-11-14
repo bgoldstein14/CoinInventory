@@ -16,99 +16,40 @@
         </label>
       </div>
 
+      <!-- THE REFERENCE LISTS ARE NOT EDITED HERE ANY MORE.
+
+           Settings used to carry chip editors for categories, mint marks,
+           metal content and sets/albums, plus a pointer for denominations.
+           Three of those four were SECOND editors for lists the Reference
+           Data screen already owned, which is how the two drifted; metal
+           content was the only one with no pane there, so it moved rather
+           than being deleted.
+
+           What is left is this one signpost, deliberately a real button
+           and not a sentence: somebody who learned where these lists lived
+           has to be taken there, not merely told. It opens Reference Data
+           and closes this dialog, so the two never stack up. -->
       <div class="settings-group">
-        <h3>Reference lists</h3>
-        <div class="settings-list-grid">
-          <label>
-            <span>Categories</span>
-            <div class="settings-inline-add">
-              <input type="text" [ngModel]="categoryDraft()" (ngModelChange)="categoryDraft.set($event)" placeholder="Add category" />
-              <button type="button" class="secondary small-button" (click)="addCategory()">Add</button>
-            </div>
-            <div class="settings-chip-list">
-              @for (category of inv.categoryOptions(); track category) {
-                <button type="button" class="chip-button" (click)="removeCategory(category)">
-                  {{ category }} <span aria-hidden="true">×</span>
-                </button>
-              }
-            </div>
-          </label>
-          <!--
-            DENOMINATIONS ARE DELIBERATELY NOT EDITABLE HERE. A denomination
-            belongs to an issuer, a single text box cannot name one, and
-            there are over a thousand of them. See settings-modal.ts.
-          -->
-          <label>
-            <span>Denominations</span>
-            <p class="hint-text">
-              {{ inv.denominations().length }} loaded. Add, edit and remove them under
-              <strong>Reference Data</strong>, which groups them by issuer and searches them
-              &mdash; a denomination has to belong to an issuer, and a flat list of this many
-              is unusable.
-            </p>
-          </label>
-          <label>
-            <span>Mint marks</span>
-            <div class="settings-inline-add">
-              <input type="text" [ngModel]="mintMarkDraft()" (ngModelChange)="mintMarkDraft.set($event)" placeholder="Add mint mark" />
-              <button type="button" class="secondary small-button" (click)="addMintMark()">Add</button>
-            </div>
-            <div class="settings-chip-list">
-              @for (mintMark of inv.mintMarks(); track mintMark.mintMarkId) {
-                <button type="button" class="chip-button" (click)="removeMintMarkEntry(mintMark.mintMarkId)">
-                  {{ mintMark.label }} <span aria-hidden="true">×</span>
-                </button>
-              }
-            </div>
-          </label>
-          <label>
-            <span>Metal content</span>
-            <div class="settings-inline-add">
-              <input type="text" [ngModel]="metalContentDraft()" (ngModelChange)="metalContentDraft.set($event)" placeholder="Add metal" />
-              <button type="button" class="secondary small-button" (click)="addMetalContent()">Add</button>
-            </div>
-            <div class="settings-chip-list">
-              @for (metal of inv.metalContents(); track metal) {
-                <button type="button" class="chip-button" (click)="removeMetalContent(metal)">
-                  {{ metal }} <span aria-hidden="true">×</span>
-                </button>
-              }
-            </div>
-          </label>
-          <!-- Sets / Albums. Same shape as the lists above: type-and-Add,
-               plus clickable chips to remove. These are the values offered by
-               the "Set / Album" picker in the coin detail panel. -->
-          <label>
-            <span>Sets / Albums</span>
-            <div class="settings-inline-add">
-              <input
-                type="text"
-                [ngModel]="coinSetDraft()"
-                (ngModelChange)="coinSetDraft.set($event)"
-                (keydown.enter)="addCoinSet()"
-                placeholder="Add set or album"
-                aria-label="Add set or album"
-              />
-              <button type="button" class="secondary small-button" (click)="addCoinSet()">Add</button>
-            </div>
-            <div class="settings-chip-list">
-              @for (coinSet of inv.coinSets(); track coinSet) {
-                <button type="button" class="chip-button" (click)="removeCoinSet(coinSet)" [title]="'Remove ' + coinSet">
-                  {{ coinSet }} <span aria-hidden="true">×</span>
-                </button>
-              }
-            </div>
-          </label>
-        </div>
+        <h3>Reference data</h3>
+        <p class="hint-text">
+          Categories, collection sets, issuers, denominations, mint marks, metal content and
+          catalogues are all maintained in one place, with a count of the coins using each
+          entry before you remove it.
+        </p>
+        <button type="button" class="secondary small-button" (click)="referenceDataRequested.emit()">
+          Open Reference Data
+        </button>
       </div>
 
       <!-- MAINTENANCE
 
-           Deliberately set apart from the reference lists above by its own
-           rule-off border, because it is a different KIND of thing: the lists
-           change what the dropdowns offer, this changes the coin records
-           themselves. Burying it among the chips would make a several-hundred
-           row rewrite look like one more thing to type into. -->
+           Deliberately set apart by its own rule-off border, because it is
+           a different KIND of thing from everything above it: the reference
+           lists change what the dropdowns offer, this changes the coin
+           records themselves. The border was drawn when the chip editors
+           were above it and is kept now that a signpost is, for the same
+           reason — a several-hundred row rewrite must not read as one more
+           thing to click past. -->
       <div class="settings-group settings-maintenance">
         <h3>Maintenance</h3>
 

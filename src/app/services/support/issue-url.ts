@@ -14,8 +14,11 @@
  * has the side benefit that the user sees the whole submission in GitHub's
  * own editor before anything is published.
  *
- * GitHub also has no API for issue ATTACHMENTS, so even a token would not
- * get the zip up there. Dragging the file in is the only route that exists.
+ * GitHub also has no official API for issue ATTACHMENTS — only undocumented
+ * routes that disagree about whether a token even works — so even a token
+ * would not get a file up there. Dragging it in is the only route that
+ * exists, which is why the dialog hands the user this link rather than a
+ * file picker it could not honour.
  *
  * ---- THE CLIPBOARD FALLBACK IS LOAD-BEARING ----
  * URLs have a practical ceiling — browsers and servers both start refusing
@@ -47,8 +50,9 @@ const MAX_TITLE_CHARS = 200;
 /** What the fallback URL says when the real body went to the clipboard. */
 const CLIPBOARD_FALLBACK_BODY =
   'The problem report was too large to fit in a link, so it has been copied ' +
-  'to your clipboard. Please paste it here (Ctrl+V), then drag in the .zip ' +
-  'file that was saved to your Desktop.';
+  'to your clipboard. Please paste it here (Ctrl+V). You can also drag in ' +
+  'the report file that was saved to your Desktop, along with any ' +
+  'screenshots or exports you want to include — images display inline.';
 
 const TOO_LARGE_REASON =
   'The report was too large to fit in a browser link, so it was copied to your clipboard instead.';
@@ -93,6 +97,20 @@ export function normaliseRepositoryUrl(repoUrl: string): string {
   }
 
   return url;
+}
+
+/**
+ * The plain new-issue page, with nothing filled in.
+ *
+ * WHY THIS IS SEPARATE FROM buildIssueUrl. The dialog shows the user a
+ * CLICKABLE LINK on the describe step, before any report exists — that is
+ * the owner's explicit requirement, because attaching files is a GitHub-side
+ * action and telling someone to go to GitHub without giving them the address
+ * is telling them to go and find it. There is no title or body to encode at
+ * that point, and a link with `?title=&body=` in it looks broken.
+ */
+export function issuePageUrl(repoUrl: string): string {
+  return `${normaliseRepositoryUrl(repoUrl)}/issues/new`;
 }
 
 /**

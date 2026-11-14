@@ -28,7 +28,17 @@ export const StorageKeys = {
   SpotPrices: 'coin-inventory-spot-prices',
   AppSettings: 'coin-inventory-app-settings',
   /** Which grid column the inventory is sorted by, and which way. */
-  SortState: 'coin-inventory-sort-state'
+  SortState: 'coin-inventory-sort-state',
+  /**
+   * Whether the issuer form may ask an outside service what denominations
+   * an issuer struck.
+   *
+   * Remembered because it is the app's only unsolicited outbound request
+   * and a user who turns it off once means it. Its own key rather than a
+   * field of AppSettings so that a failure to read the settings blob
+   * cannot silently re-enable it.
+   */
+  IssuerLookupOnline: 'coin-inventory-issuer-lookup-online'
 } as const;
 
 export type StorageKey = (typeof StorageKeys)[keyof typeof StorageKeys];

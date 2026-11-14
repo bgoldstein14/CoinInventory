@@ -25,30 +25,45 @@
  * The round-trip test matters for a plainer reason: a field the API accepts
  * but does not return is a field that silently empties itself the next time
  * the grid reloads.
+ *
+ * *** WHAT THE MOVE TO SQLITE CHANGED HERE. ***
+ *
+ * 1. The schema is read out of db/schema.sql now, not setup-database.sql,
+ *    and through test-support/schema-columns.ts rather than a regex local to
+ *    this file. SQLite cannot be told `NVARCHAR(50)` — the declared width
+ *    lives in a trailing `-- NVARCHAR(50)` comment, which is what that module
+ *    parses.
+ *
+ * 2. *** THE DECLARED LENGTH IN COIN_FIELDS IS NOW THE ONLY THING ENFORCING
+ *    THE WIDTH. *** SQLite will store four thousand characters in a column
+ *    this file calls NVARCHAR(50) without a murmur; db/bind-values.ts refuses
+ *    it, using exactly the maxLength asserted below. A drift between the
+ *    binding and db/schema.sql is therefore no longer a disagreement that the
+ *    engine settles — it is a hole, and this spec is the only thing standing
+ *    in it.
+ *
+ * 3. The last describe block is new and is the point of the whole migration:
+ *    it PUTs the two fields at the real Express app, backed by a real
+ *    in-memory database, and then SELECTs the row back to prove the values
+ *    landed. The mssql mock could only ever show that some SQL was generated.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import fs from 'fs';
-import path from 'path';
+import { describe, it, expect } from 'vitest';
+import request from 'supertest';
 
-vi.mock('mssql', async () => {
-  const { createMssqlMock } = await import('../test-support/mssql-mock');
-  return createMssqlMock();
-});
-
-import { resetMssqlMock } from '../test-support/mssql-mock';
+import { findQuery, insertCoin, queryRows } from '../test-support/sqlite-test-db';
+import { parseTable } from '../test-support/schema-columns';
 import { COIN_FIELDS, normalizeCoinValue, rowToCoin } from './index';
+import { app } from '../server';
 
-beforeEach(() => {
-  resetMssqlMock();
-});
-
-const schemaSql = fs.readFileSync(path.join(__dirname, '..', 'setup-database.sql'), 'utf8');
-const coinsDdl = schemaSql.match(/CREATE TABLE Coins \(([\s\S]*?)\n\);/)?.[1] ?? '';
+const schemaColumns = parseTable('Coins');
 
 describe('COIN_FIELDS knows both catalogue columns', () => {
   it('parsed the Coins DDL, so the assertions below are not vacuous', () => {
-    expect(coinsDdl).toMatch(/CoinId/);
+    // parseTable() throws rather than returning an empty map, so this is a
+    // belt-and-braces check that it found a real table and not one column.
+    expect(schemaColumns.size).toBeGreaterThan(20);
+    expect(schemaColumns.has('CoinId')).toBe(true);
   });
 
   it('binds CatalogId to the CatalogId column', () => {
@@ -56,16 +71,33 @@ describe('COIN_FIELDS knows both catalogue columns', () => {
     // INT, so no maxLength — db/coin-fields.spec.ts only length-checks
     // NVARCHAR bindings, and declaring one here would be meaningless.
     expect(COIN_FIELDS['catalogId'].maxLength).toBeUndefined();
-    expect(coinsDdl).toMatch(/CatalogId\s+INT\s+NULL/);
+    expect(COIN_FIELDS['catalogId'].sqlType).toMatchObject({ storage: 'int', declared: 'INT' });
+    // SQLite stores it as INTEGER; the `-- INT` comment is the declared type.
+    expect(schemaColumns.get('CatalogId')).toMatchObject({
+      storage: 'INTEGER',
+      declared: 'INT',
+      notNull: false,
+    });
   });
 
   it('binds CatalogNumber at exactly NVARCHAR(50)', () => {
-    // Shorter than the column silently truncates the user's reference;
-    // longer makes SQL Server raise 8152 and abort the whole save.
+    // Shorter than the column silently truncates the user's reference.
+    // Longer is no longer a disagreement the engine settles: SQLite enforces
+    // nothing, so this number IS the limit — db/bind-values.ts raises the
+    // 8152 equivalent (HTTP 400) at exactly the width declared here.
     expect(COIN_FIELDS['catalogNumber'].column).toBe('CatalogNumber');
     expect(COIN_FIELDS['catalogNumber'].maxLength).toBe(50);
-    expect(COIN_FIELDS['catalogNumber'].sqlType).toMatchObject({ type: 'nvarchar', length: 50 });
-    expect(coinsDdl).toMatch(/CatalogNumber\s+NVARCHAR\(50\)\s+NULL/);
+    expect(COIN_FIELDS['catalogNumber'].sqlType).toMatchObject({
+      storage: 'text',
+      maxLength: 50,
+      declared: 'NVARCHAR(50)',
+    });
+    expect(schemaColumns.get('CatalogNumber')).toMatchObject({
+      storage: 'TEXT',
+      declared: 'NVARCHAR(50)',
+      maxLength: 50,
+      notNull: false,
+    });
   });
 
   it('gives neither column an insert default', () => {
@@ -168,5 +200,143 @@ describe('reading both columns back out', () => {
     const coin = rowToCoin({ CoinId: 'abc' });
     expect(coin['catalogId']).toBeUndefined();
     expect(coin['catalogNumber']).toBeUndefined();
+  });
+});
+
+/**
+ * *** THE BLOCK THE MOCK COULD NOT WRITE. ***
+ *
+ * `PUT /api/coins/:id` generates its UPDATE from the keys present in the
+ * request body INTERSECTED WITH COIN_FIELDS. A column missing from that map
+ * yields a statement that never names it, a 200 response, and a value that is
+ * gone on the next reload — no error anywhere in that sequence. The old spec
+ * could only check the generated SQL text. Now the row itself can be read
+ * back, which is the assertion that actually matches the bug.
+ *
+ * Both are kept: the SQL text says the statement NAMES the column, the SELECT
+ * says the value LANDED. The first fails more legibly, the second cannot be
+ * satisfied by a statement that happens to compile.
+ */
+describe('the catalogue columns over HTTP, written and read back', () => {
+  it('PUT /api/coins/:id names both columns and the values land in the row', async () => {
+    await insertCoin({ CoinId: 'abc-123', Denomination: 'Tetradrachm' });
+
+    const res = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ catalogId: 3, catalogNumber: 'RRC 44/5' });
+
+    expect(res.status).toBe(200);
+
+    const update = findQuery(/^UPDATE Coins SET/);
+    expect(update?.sql).toContain('CatalogId = @catalogId');
+    expect(update?.sql).toContain('CatalogNumber = @catalogNumber');
+
+    const [row] = await queryRows('SELECT CatalogId, CatalogNumber FROM Coins WHERE CoinId = @id', {
+      id: 'abc-123',
+    });
+    expect(row['CatalogId']).toBe(3);
+    expect(row['CatalogNumber']).toBe('RRC 44/5');
+  });
+
+  it('stores a CSV-round-tripped string id as a real INTEGER, not as text', async () => {
+    // The normalizer unit test above proves the conversion; this proves the
+    // converted value is what SQLite ends up holding. SQLite is dynamically
+    // typed, so a string that slipped through would be stored AS A STRING in
+    // an INTEGER column and would then fail to match `WHERE CatalogId = 3`.
+    await insertCoin({ CoinId: 'abc-123', Denomination: 'Tetradrachm' });
+
+    await request(app).put('/api/coins/abc-123').send({ catalogId: '3' });
+
+    const [row] = await queryRows(
+      "SELECT CatalogId, typeof(CatalogId) AS StoredType FROM Coins WHERE CoinId = 'abc-123'"
+    );
+    expect(row['CatalogId']).toBe(3);
+    expect(row['StoredType']).toBe('integer');
+  });
+
+  it('clears the attribution rather than losing the coin when a NAME arrives', async () => {
+    // The import-mapping accident, end to end. The link goes to NULL and the
+    // save still succeeds; the user sees an unattributed coin and fixes it in
+    // one click, instead of losing the record to a failed statement.
+    await insertCoin({ CoinId: 'abc-123', Denomination: 'Tetradrachm', CatalogId: 3 });
+
+    const res = await request(app).put('/api/coins/abc-123').send({ catalogId: 'Sear' });
+
+    expect(res.status).toBe(200);
+    const [row] = await queryRows("SELECT CatalogId FROM Coins WHERE CoinId = 'abc-123'");
+    expect(row['CatalogId']).toBeNull();
+  });
+
+  it('refuses a catalogue number past the declared width instead of truncating it', async () => {
+    // *** NOTHING BUT COIN_FIELDS STOPS THIS NOW. *** SQL Server raised 8152
+    // on a 51st character; SQLite would have stored all 4,000 of them. The
+    // declared NVARCHAR(50) asserted at the top of this file is what
+    // db/bind-values.ts enforces, and this is the proof it is enforced rather
+    // than merely written down. 50 is accepted untouched, 51 is a 400 — a
+    // refused value can be retyped, a truncated one cannot be recovered.
+    await insertCoin({ CoinId: 'abc-123', Denomination: 'Tetradrachm' });
+
+    const atLimit = 'N'.repeat(50);
+    const overLimit = 'N'.repeat(51);
+
+    const accepted = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ catalogNumber: atLimit });
+    expect(accepted.status).toBe(200);
+
+    const [stored] = await queryRows("SELECT CatalogNumber FROM Coins WHERE CoinId = 'abc-123'");
+    expect(stored['CatalogNumber']).toBe(atLimit);
+
+    const refused = await request(app)
+      .put('/api/coins/abc-123')
+      .send({ catalogNumber: overLimit });
+    expect(refused.status).toBe(400);
+
+    // And the refusal left the previous value alone rather than half-writing.
+    const [after] = await queryRows("SELECT CatalogNumber FROM Coins WHERE CoinId = 'abc-123'");
+    expect(after['CatalogNumber']).toBe(atLimit);
+  });
+
+  it('refuses a catalogue id that names no catalogue — the foreign key is real', async () => {
+    // FK_Coins_Catalog exists in db/schema.sql and PRAGMA foreign_keys is on
+    // for every connection (db/driver.ts), so an id that passes the
+    // normalizer but matches no row is rejected by the database itself. The
+    // mssql mock had no constraints at all and would have reported success.
+    await insertCoin({ CoinId: 'abc-123', Denomination: 'Tetradrachm' });
+
+    const res = await request(app).put('/api/coins/abc-123').send({ catalogId: 999999 });
+
+    expect(res.status).toBe(409);
+    const [row] = await queryRows("SELECT CatalogId FROM Coins WHERE CoinId = 'abc-123'");
+    expect(row['CatalogId']).toBeNull();
+  });
+
+  it('hands both columns back out of GET /api/coins/:id', async () => {
+    // The reload the header warns about: a field the API accepts but does not
+    // return empties itself the next time the grid loads. Proved here against
+    // a row that really went through the database, rather than against a
+    // hand-built object handed to rowToCoin().
+    await insertCoin({
+      CoinId: 'abc-123',
+      Denomination: 'Tetradrachm',
+      CatalogId: 1,
+      CatalogNumber: '6819',
+    });
+
+    const res = await request(app).get('/api/coins/abc-123');
+
+    expect(res.status).toBe(200);
+    expect(res.body.catalogId).toBe(1);
+    expect(res.body.catalogNumber).toBe('6819');
+  });
+
+  it('seeds the catalogue the attributions point at', async () => {
+    // Guards the tests above from passing vacuously: an attribution to
+    // catalogue 3 would also "work" against an empty Catalogs table if the
+    // foreign key were not enforced, and the 409 above would then be the
+    // only thing distinguishing the two situations.
+    const catalogs = await queryRows('SELECT Name FROM Catalogs ORDER BY CatalogId');
+    expect(catalogs.length).toBeGreaterThanOrEqual(15);
+    expect(catalogs[0]['Name']).toBe('Sear');
   });
 });

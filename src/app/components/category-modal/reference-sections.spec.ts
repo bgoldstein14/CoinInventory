@@ -31,8 +31,20 @@ describe('REFERENCE_SECTIONS — the panes the screen offers', () => {
       'denominations',
       'unlinked',
       'mint-marks',
+      'metal-content',
       'catalogues',
     ]);
+  });
+
+  it('maintains metal content here, and not in Settings', () => {
+    /* The Settings dialog used to carry its own chip editor for metals.
+     * It was the ONE list with no pane here, so it could not simply be
+     * deleted with the duplicated ones — it had to be moved. A pane
+     * missing from this list is a list the user can no longer edit at
+     * all, which is why this is pinned by id rather than only by the
+     * order assertion above. */
+    const ids: string[] = REFERENCE_SECTIONS.map((section) => section.id);
+    expect(ids).toContain('metal-content');
   });
 
   it('puts the unlinked-coins pane immediately after denominations', () => {

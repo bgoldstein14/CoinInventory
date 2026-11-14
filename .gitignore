@@ -78,3 +78,5 @@ server/logs/
 # search the history for. Its job is done -- the repo was cleaned on
 # 2026-11-08 -- so it is kept locally, outside version control, or not at all.
 docs/going-public-checklist.md
+Forced run.txt
+docs/superpowers/plans/2026-11-13-sqlite-migration.md

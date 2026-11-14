@@ -3,29 +3,38 @@
  *
  * The Coins table has its own richer description in db/coin-fields.ts (it needs
  * per-column defaults and normalizers because INSERT and UPDATE are generated
- * from it). Everything else just needs "which mssql type do I bind this
- * parameter as", which is what this file provides.
+ * from it). Everything else just needs "which type do I bind this parameter
+ * as", which is what this file provides.
  *
- * The same rule from db/coin-fields.ts applies here and is worth repeating:
- * a parameter declared SHORTER than its column silently truncates the user's
- * data, and one declared LONGER makes SQL Server raise error 8152 and abort the
- * statement. Keep these in step with setup-database.sql.
+ * *** WHY THIS TABLE SURVIVED THE MOVE TO SQLITE, WHICH IS DYNAMICALLY
+ * TYPED. *** It is the only machine-readable record of what each column is
+ * FOR — how wide it is, how many decimals it keeps. db/bind-values.ts
+ * enforces it on the way in, so a value SQL Server would have refused is
+ * still refused with an HTTP 400 instead of being stored and discovered
+ * later. The full argument is in the header of db/column-types.ts.
+ *
+ * The rule to keep in mind has changed slightly and is worth stating plainly:
+ * a length declared SHORTER than the real column now REJECTS a legitimate
+ * value (where mssql silently truncated it), and one declared LONGER lets an
+ * over-long value through. Both are wrong; keep these in step with
+ * db/schema.sql, whose trailing `-- NVARCHAR(n)` comments the parity specs
+ * compare against.
  */
 
-import sql from 'mssql';
+import { NVarChar, Char, Int, Bit, Decimal, MAX } from './column-types';
 
 /**
- * Parameter types for the non-Coins tables, again mirroring setup-database.sql.
+ * Parameter types for the non-Coins tables, again mirroring db/schema.sql.
  * Grouped by table so a schema change has one obvious place to land.
  */
 export const DB_BINDINGS = {
   /** Coins.CoinId / CoinImages.CoinId / Transactions.CoinId */
-  coinId: sql.NVarChar(36),
+  coinId: NVarChar(36),
 
   // ----- CoinImages ---------------------------------------------------
-  imageData: sql.NVarChar(sql.MAX),   // CoinImages.ImageData  NVARCHAR(MAX)
-  imageId: sql.Int,                   // CoinImages.ImageId    INT IDENTITY
-  sortOrder: sql.Int,                 // CoinImages.SortOrder  INT
+  imageData: NVarChar(MAX),   // CoinImages.ImageData  NVARCHAR(MAX)
+  imageId: Int,                   // CoinImages.ImageId    INT IDENTITY
+  sortOrder: Int,                 // CoinImages.SortOrder  INT
 
   /**
    * CoinImages.SourcePath  NVARCHAR(400) NULL
@@ -41,48 +50,57 @@ export const DB_BINDINGS = {
    * error 8152. A path longer than 400 therefore surfaces as an HTTP 400 via
    * classifyDbError() rather than being quietly cut in half.
    */
-  imageSourcePath: sql.NVarChar(400),
+  imageSourcePath: NVarChar(400),
 
   // ----- Transactions -------------------------------------------------
-  transactionId: sql.NVarChar(36),    // TransactionId         UNIQUEIDENTIFIER (bound as text)
-  transactionType: sql.NVarChar(50),  // TransactionType       NVARCHAR(50)
-  transactionDate: sql.NVarChar(30),  // TransactionDate       NVARCHAR(30)  <- text, not DATE
-  transactionAmount: sql.Decimal(12, 2),
-  transactionDealer: sql.NVarChar(200), // Dealer              NVARCHAR(200)
-  transactionNotes: sql.NVarChar(sql.MAX),
+  transactionId: NVarChar(36),    // TransactionId         UNIQUEIDENTIFIER (bound as text)
+  transactionType: NVarChar(50),  // TransactionType       NVARCHAR(50)
+  transactionDate: NVarChar(30),  // TransactionDate       NVARCHAR(30)  <- text, not DATE
+  transactionAmount: Decimal(12, 2),
+  transactionDealer: NVarChar(200), // Dealer              NVARCHAR(200)
+  transactionNotes: NVarChar(MAX),
 
   // ----- SpotPrices ---------------------------------------------------
-  spotPrice: sql.Decimal(10, 2),      // Gold/Silver/Platinum  DECIMAL(10,2)
-  spotCopper: sql.Decimal(10, 4),     // Copper                DECIMAL(10,4)
-  spotSource: sql.NVarChar(200),      // Source                NVARCHAR(200)
+  spotPrice: Decimal(10, 2),      // Gold/Silver/Platinum  DECIMAL(10,2)
+  spotCopper: Decimal(10, 4),     // Copper                DECIMAL(10,4)
+  spotSource: NVarChar(200),      // Source                NVARCHAR(200)
 
   // ----- AppSettings --------------------------------------------------
-  settingKey: sql.NVarChar(100),      // SettingKey            NVARCHAR(100)
-  settingValue: sql.NVarChar(sql.MAX),
+  settingKey: NVarChar(100),      // SettingKey            NVARCHAR(100)
+  settingValue: NVarChar(MAX),
 
   // ----- Categories / CoinSets / MetalContents ------------------------
-  categoryName: sql.NVarChar(100),    // Categories.CategoryName   NVARCHAR(100)
-  setName: sql.NVarChar(100),         // CoinSets.SetName          NVARCHAR(100)
-  metalContentName: sql.NVarChar(50), // MetalContents.Name        NVARCHAR(50)
+  categoryName: NVarChar(100),    // Categories.CategoryName   NVARCHAR(100)
+  setName: NVarChar(100),         // CoinSets.SetName          NVARCHAR(100)
+  metalContentName: NVarChar(50), // MetalContents.Name        NVARCHAR(50)
 
   // ----- Issuers (migration 011) --------------------------------------
   // Who struck the coin. "Issuer" rather than "Country" because the Roman
   // Empire, the Papal States and the German states are not countries.
-  issuerId: sql.Int,
-  issuerName: sql.NVarChar(100),          // Issuers.Name     NVARCHAR(100)
+  issuerId: Int,
+  issuerName: NVarChar(100),          // Issuers.Name     NVARCHAR(100)
   /**
    * Issuers.IsoCode  CHAR(2) NULL
    *
-   * *** THE ONLY FIXED-WIDTH COLUMN IN THIS SCHEMA, AND IT BITES BOTH WAYS. ***
-   * Bound as Char(2), not NVarChar(2), because the column is CHAR(2): SQL
-   * Server TRUNCATES 'MMR' to 'MM' and PADS 'M' to 'M ', both silently. The
-   * padded one is the worse of the two — it then compares unequal to 'M'
-   * everywhere, so the issuer quietly stops matching anything. The route
-   * refuses anything that is not exactly two letters before it gets here;
-   * this binding is the second line of that defence.
+   * *** THE ONLY FIXED-WIDTH COLUMN IN THIS SCHEMA. IT USED TO BITE BOTH
+   * WAYS; NOW IT BITES ONE. *** Under SQL Server a CHAR(2) silently
+   * TRUNCATED 'MMR' to 'MM' and silently PADDED 'M' to 'M '. The padding was
+   * the worse of the two: the value then compared unequal to 'M' everywhere,
+   * so the issuer quietly stopped matching anything.
+   *
+   * SQLite's TEXT stores exactly the characters it is given, so NOTHING PADS
+   * and that failure mode is gone. Declaring it Char(2) rather than
+   * NVarChar(2) is kept anyway, for two reasons: it still records that the
+   * column is two characters wide (db/bind-values.ts rejects a third rather
+   * than truncating to it), and it is the only surviving note that the
+   * source column was fixed-width, which Stage 2's import needs to know
+   * because the rows it reads out of SQL Server ARE padded and must be
+   * trimmed on the way in. The route refuses anything that is not exactly
+   * two letters before it gets here; this binding is the second line of that
+   * defence.
    */
-  issuerIsoCode: sql.Char(2),
-  issuerKind: sql.NVarChar(20),           // Issuers.Kind     NVARCHAR(20)
+  issuerIsoCode: Char(2),
+  issuerKind: NVarChar(20),           // Issuers.Kind     NVARCHAR(20)
   /**
    * Issuers.ValidFrom / ValidTo  INT NULL
    *
@@ -90,21 +108,21 @@ export const DB_BINDINGS = {
    * A year column that rejected negatives would exclude exactly the issuers
    * the design calls first-class.
    */
-  issuerYear: sql.Int,
-  issuerSortOrder: sql.Int,
+  issuerYear: Int,
+  issuerSortOrder: Int,
 
   // ----- Denominations ------------------------------------------------
-  denominationId: sql.Int,
-  denominationLabel: sql.NVarChar(100),   // Label     NVARCHAR(100)
-  denominationCountry: sql.NVarChar(100), // Country   NVARCHAR(100)
-  denominationSortOrder: sql.Int,
+  denominationId: Int,
+  denominationLabel: NVarChar(100),   // Label     NVARCHAR(100)
+  denominationCountry: NVarChar(100), // Country   NVARCHAR(100)
+  denominationSortOrder: Int,
   /** Denominations.IssuerId INT NULL — FK to Issuers (migration 011). */
-  denominationIssuerId: sql.Int,
+  denominationIssuerId: Int,
 
   // ----- MintMarks ----------------------------------------------------
-  mintMarkId: sql.Int,
-  mintMarkLabel: sql.NVarChar(20),        // Label        NVARCHAR(20)
-  mintMarkDescription: sql.NVarChar(200), // Description  NVARCHAR(200)
+  mintMarkId: Int,
+  mintMarkLabel: NVarChar(20),        // Label        NVARCHAR(20)
+  mintMarkDescription: NVarChar(200), // Description  NVARCHAR(200)
 
   // ----- Catalogs (migration 012) -------------------------------------
   // The reference catalogues a coin can be attributed to: Sear, RIC,
@@ -113,6 +131,6 @@ export const DB_BINDINGS = {
   // different binding, in db/coin-fields.ts, where it also gets the
   // normalizer that keeps a CSV-round-tripped string out of an INT
   // parameter.
-  catalogId: sql.Int,
-  catalogName: sql.NVarChar(60),          // Catalogs.Name  NVARCHAR(60)
+  catalogId: Int,
+  catalogName: NVarChar(60),          // Catalogs.Name  NVARCHAR(60)
 } as const;

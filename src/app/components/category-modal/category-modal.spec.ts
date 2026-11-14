@@ -15,15 +15,19 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
 import { ApiService } from '../../services/api.service';
 import { InventoryService } from '../../services/inventory.service';
 import { NotificationService } from '../../services/notification.service';
+import { StorageKeys, StorageService } from '../../services/storage.service';
 import { CoinRecord, Denomination } from '../../types/coin.model';
-import { IssuerRecord } from '../../types/reference-data.model';
+import { DenominationLookupResult, IssuerRecord } from '../../types/reference-data.model';
 import { CategoryModal } from './category-modal';
+import { blankIssuerDraft } from './issuer-draft';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
 const MEXICO: IssuerRecord = {
@@ -69,7 +73,9 @@ async function flush(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function createModal(options: { issuers?: IssuerRecord[] } = {}) {
+async function createModal(
+  options: { issuers?: IssuerRecord[]; lookup?: DenominationLookupResult } = {}
+) {
   const { inv, mockApiService, mockNotification, injector: invInjector } = createTestInventoryService();
   void invInjector;
 
@@ -82,12 +88,19 @@ async function createModal(options: { issuers?: IssuerRecord[] } = {}) {
       denominations: { '103': 3 },
       mintMarks: { D: 11 },
       catalogs: { '4': 6 },
+      metalContents: { '90% Silver': 7 },
     })
   );
   api['createIssuer'] = vi.fn((issuer: Record<string, unknown>) =>
     of({ ...BURMA, ...issuer, issuerId: 99, denominationCount: 0, coinCount: 0 })
   );
   api['updateIssuer'] = vi.fn(() => of(MEXICO));
+  // Stubbed by default, and stubbed to the COMMONEST REAL OUTCOME. Leaving
+  // it unstubbed would make the suite depend on Wikidata being reachable
+  // while it runs, which is the thing this feature is not allowed to do.
+  api['lookUpDenominations'] = vi.fn(() =>
+    of(options.lookup ?? { outcome: 'none', source: 'Wikidata', proposals: [], reason: null })
+  );
   api['deleteIssuer'] = vi.fn(() => of(undefined));
 
   const injector = Injector.create({
@@ -95,12 +108,37 @@ async function createModal(options: { issuers?: IssuerRecord[] } = {}) {
       { provide: InventoryService, useValue: inv },
       { provide: ApiService, useValue: mockApiService },
       { provide: NotificationService, useValue: mockNotification },
+      // A real one, over fake-indexeddb (installed in beforeEach). The
+      // screen remembers the online-lookup checkbox through it, and a
+      // stub would make that test prove nothing.
+      { provide: StorageService, useValue: new StorageService() },
     ],
   });
 
   const modal = runInInjectionContext(injector, () => new CategoryModal());
   await flush();
   return { modal, inv, api, notification: mockNotification as unknown as Record<string, ReturnType<typeof vi.fn>> };
+}
+
+/**
+ * The template with its comments removed.
+ *
+ * *** REQUIRED, NOT TIDINESS. *** This template explains at length why
+ * the kind picker was dropped and why the lookup banner sits where it
+ * does, and those explanations NAME the things the assertions look for.
+ * Asserting against the raw text would match the prose and pass with the
+ * markup gone.
+ *
+ * *** THE CHARACTER CLASS IS [\s\S] AND IT MATTERS. *** It was once
+ * `[sS]` — the backslashes lost in transit — which matches a literal 's'
+ * or 'S' and therefore strips only comments made entirely of those
+ * letters, i.e. none of them. Every "comments are stripped first" test
+ * below was running against the raw template, and the protection they
+ * describe was not there. `strips every comment, not just the ones made
+ * of s` pins it.
+ */
+function stripTemplateComments(template: string): string {
+  return template.replace(/<!--[\s\S]*?-->/g, '');
 }
 
 /** Force confirm() to a known answer. Node has no window.confirm at all. */
@@ -124,6 +162,31 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (globalThis as unknown as { confirm?: unknown }).confirm;
+});
+
+/* ----- The helper the template assertions depend on ----- */
+
+describe('stripTemplateComments', () => {
+  it('strips every comment, not just the ones made of s', () => {
+    /* *** THIS GUARDS THE GUARD. *** The regex was `[sS]` for a while —
+     * the backslashes of `[\s\S]` lost somewhere in transit — which
+     * matches the LETTERS s and S. `<!-- sss -->` was stripped and every
+     * real comment survived, so the four "comments are stripped first"
+     * assertions below were quietly running against the raw template and
+     * could have been satisfied by the prose they were written to ignore. */
+    const stripped = stripTemplateComments(
+      '<p>keep</p><!-- NO KIND PICKER: issuerKinds, reference-input--kind -->\n' +
+        '<!-- a\nmulti-line\ncomment -->after'
+    );
+
+    expect(stripped).toBe('<p>keep</p>\nafter');
+    expect(stripped).not.toContain('issuerKinds');
+  });
+
+  it('leaves everything that is not a comment exactly as it was', () => {
+    const markup = '<button (click)="removeMetalContent(metal)">Remove</button>';
+    expect(stripTemplateComments(markup)).toBe(markup);
+  });
 });
 
 /* ----- The pane structure ----- */
@@ -171,6 +234,7 @@ describe('CategoryModal — panes', () => {
         { provide: InventoryService, useValue: inv },
         { provide: ApiService, useValue: mockApiService },
         { provide: NotificationService, useValue: mockNotification },
+        { provide: StorageService, useValue: new StorageService() },
       ],
     });
 
@@ -197,6 +261,7 @@ describe('CategoryModal — panes', () => {
         { provide: InventoryService, useValue: inv },
         { provide: ApiService, useValue: mockApiService },
         { provide: NotificationService, useValue: mockNotification },
+        { provide: StorageService, useValue: new StorageService() },
       ],
     });
 
@@ -219,6 +284,7 @@ describe('CategoryModal — in-use counts', () => {
     expect(modal.denominationUsage(103)).toBe(3);
     expect(modal.mintMarkUsage('D')).toBe(11);
     expect(modal.catalogUsage(4)).toBe(6);
+    expect(modal.metalContentUsage('90% Silver')).toBe(7);
   });
 
   it('answers zero for anything nobody is using', async () => {
@@ -235,15 +301,21 @@ describe('CategoryModal — denominations', () => {
     const { modal, inv } = await createModal();
     inv.denominations.set(DENOMINATIONS);
 
+    // Headings are A-Z, so Burma leads even though Mexico arrived first
+    // and holds the lower SortOrder.
     const groups = modal['denominationGroups']();
-    expect(groups.map((group) => group.heading)).toEqual(['Mexico', 'Burma']);
-    expect(groups[0].denominations.map((d) => d.label)).toEqual(['8 Reales', '1 Peso']);
+    expect(groups.map((group) => group.heading)).toEqual(['Burma', 'Mexico']);
+    expect(groups[1].denominations.map((d) => d.label)).toEqual(['8 Reales', '1 Peso']);
   });
 
   it('feeds the in-use counts into the grouping, so the heading total is real', async () => {
     const { modal, inv } = await createModal();
     inv.denominations.set(DENOMINATIONS);
-    expect(modal['denominationGroups']()[0].inUseTotal).toBe(3);
+    // Looked up by heading rather than by index: the count belongs to
+    // Mexico, and an index would silently start asserting about whichever
+    // issuer happens to sort first.
+    const mexico = modal['denominationGroups']().find((group) => group.heading === 'Mexico');
+    expect(mexico?.inUseTotal).toBe(3);
   });
 
   it('filters as the search box changes', async () => {
@@ -412,13 +484,111 @@ describe('CategoryModal — categories and sets', () => {
   });
 });
 
+/* ----- Metal content -----
+ *
+ * MOVED HERE FROM settings-modal.spec.ts, which tested the chip editor the
+ * Settings dialog used to carry. Those two tests ("applies a metal content
+ * edit straight to the live list" and the blank-draft half of "ignores
+ * blank drafts") are deleted there and their coverage is below, plus the
+ * two things the Settings version could not do: count the coins using the
+ * metal, and ask before removing it. */
+
+describe('CategoryModal — metal content', () => {
+  it('adds and removes a metal, once confirmed', async () => {
+    const { modal, inv } = await createModal();
+    answerConfirm(true);
+
+    modal['newMetalContent'].set('Electrum');
+    modal.addMetalContentFromDraft();
+    expect(inv.metalContents()).toContain('Electrum');
+
+    modal.removeMetalContent('Electrum');
+    expect(inv.metalContents()).not.toContain('Electrum');
+  });
+
+  it('clears the box after adding, so the next metal starts empty', async () => {
+    const { modal } = await createModal();
+
+    modal['newMetalContent'].set('Electrum');
+    modal.addMetalContentFromDraft();
+    expect(modal['newMetalContent']()).toBe('');
+  });
+
+  it('ignores a blank draft', async () => {
+    const { modal, inv } = await createModal();
+    const before = inv.metalContents().length;
+
+    modal['newMetalContent'].set('   ');
+    modal.addMetalContentFromDraft();
+    expect(inv.metalContents()).toHaveLength(before);
+  });
+
+  it('keeps the list sorted and free of duplicates', async () => {
+    // The coin editor renders this list straight into its Metal dropdown,
+    // where a second 'Gold' is a choice the user cannot tell apart from the
+    // first one.
+    const { modal, inv } = await createModal();
+    inv.metalContents.set(['Gold', 'Silver']);
+
+    modal['newMetalContent'].set('Bronze');
+    modal.addMetalContentFromDraft();
+    modal['newMetalContent'].set('Gold');
+    modal.addMetalContentFromDraft();
+
+    expect(inv.metalContents()).toEqual(['Bronze', 'Gold', 'Silver']);
+  });
+
+  it('names the metal and the coin count before removing it', async () => {
+    /* THE CAPABILITY THE SETTINGS CHIPS DID NOT HAVE. A chip removed on
+     * one click, with no number and no question, from the list that feeds
+     * the melt-value calculation. */
+    const { modal, inv } = await createModal();
+    inv.metalContents.set(['90% Silver']);
+    const { prompts } = captureConfirm(false);
+
+    modal.removeMetalContent('90% Silver');
+
+    expect(prompts[0]).toContain('90% Silver');
+    expect(prompts[0]).toContain('7 coins');
+    // ...and declining really declines.
+    expect(inv.metalContents()).toEqual(['90% Silver']);
+  });
+
+  it('promises the coins keep the metal already recorded on them', async () => {
+    // Coins.MetalContent is TEXT, not a foreign key, so nothing is unlinked
+    // and nothing needs re-linking. Borrowing the denomination wording here
+    // would offer a recovery step that does not exist.
+    const { modal, inv } = await createModal();
+    inv.metalContents.set(['90% Silver']);
+    const { prompts } = captureConfirm(false);
+
+    modal.removeMetalContent('90% Silver');
+
+    expect(prompts[0]).toContain('They keep the text already recorded');
+    expect(prompts[0]).not.toContain('re-select');
+  });
+
+  it('has a pane for metal content in the template', async () => {
+    // Comments are stripped first: the @case below is introduced by a
+    // comment that names the pane, and the component file explains the move
+    // at length. Without the strip this assertion passes on prose.
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain("@case ('metal-content')");
+    expect(template).toContain('addMetalContentFromDraft()');
+    expect(template).toContain('removeMetalContent(metal)');
+    // The badge, which is the half the Settings chips never had.
+    expect(template).toContain('metalContentUsage(metal)');
+  });
+});
+
 /* ----- Issuers: the manual add path ----- */
 
 describe('CategoryModal — issuers', () => {
   it('reports what is wrong with a draft instead of posting it', async () => {
     const { modal, api } = await createModal();
 
-    modal['issuerDraft'].set({ name: '', isoCode: '', kind: 'modern', validFrom: '', validTo: '' });
+    modal['issuerDraft'].set({ name: '', isoCode: '', validFrom: '', validTo: '', lookUpOnline: false });
     await modal.addIssuerFromDraft();
 
     expect(api['createIssuer']).not.toHaveBeenCalled();
@@ -428,7 +598,7 @@ describe('CategoryModal — issuers', () => {
   it('catches a duplicate name before the unique constraint does', async () => {
     const { modal, api } = await createModal();
 
-    modal['issuerDraft'].set({ name: ' mexico ', isoCode: '', kind: 'modern', validFrom: '', validTo: '' });
+    modal['issuerDraft'].set({ name: ' mexico ', isoCode: '', validFrom: '', validTo: '', lookUpOnline: false });
     await modal.addIssuerFromDraft();
 
     expect(api['createIssuer']).not.toHaveBeenCalled();
@@ -441,16 +611,18 @@ describe('CategoryModal — issuers', () => {
     modal['issuerDraft'].set({
       name: 'Parthia',
       isoCode: '',
-      kind: 'ancient',
       validFrom: '-247',
       validTo: '224',
+      lookUpOnline: false,
     });
     await modal.addIssuerFromDraft();
 
+    // NO `kind` IN THE PAYLOAD. The server derives it from these two
+    // years and returns the derived value; sending one would be the
+    // client asserting a classification the server recomputes anyway.
     expect(api['createIssuer']).toHaveBeenCalledWith({
       name: 'Parthia',
       isoCode: null,
-      kind: 'ancient',
       validFrom: -247,
       validTo: 224,
     });
@@ -460,7 +632,7 @@ describe('CategoryModal — issuers', () => {
 
   it('empties the form after a successful add', async () => {
     const { modal } = await createModal();
-    modal['issuerDraft'].set({ name: 'Parthia', isoCode: '', kind: 'ancient', validFrom: '', validTo: '' });
+    modal['issuerDraft'].set({ name: 'Parthia', isoCode: '', validFrom: '', validTo: '', lookUpOnline: false });
     await modal.addIssuerFromDraft();
     expect(modal['issuerDraft']().name).toBe('');
   });
@@ -471,7 +643,7 @@ describe('CategoryModal — issuers', () => {
     const { modal, api } = await createModal();
     api['createIssuer'] = vi.fn(() => throwError(() => new Error('409')));
 
-    modal['issuerDraft'].set({ name: 'Parthia', isoCode: '', kind: 'ancient', validFrom: '', validTo: '' });
+    modal['issuerDraft'].set({ name: 'Parthia', isoCode: '', validFrom: '', validTo: '', lookUpOnline: false });
     await modal.addIssuerFromDraft();
 
     expect(modal['issuerError']().length).toBeGreaterThan(0);
@@ -548,6 +720,77 @@ const REALES: Denomination[] = [
   { denominationId: 203, label: '8 Reales', country: 'ES', issuerId: 2, sortOrder: 2, isActive: true },
   { denominationId: 303, label: 'Quarter', country: 'US', issuerId: 3, sortOrder: 3, isActive: true },
 ];
+
+/* ----- The owner's request: issuers A-Z on both screens ----- */
+
+describe('CategoryModal — the issuer lists are alphabetical', () => {
+  /**
+   * `sortedIssuers` is what BOTH issuer-shaped controls render: the Issuers
+   * pane's list, and the Denominations pane's "which issuer" <select>.
+   * The template reads it in all three places; `issuers()` stays the raw
+   * server list and is what the write paths edit.
+   */
+  it('sorts the server list A-Z rather than showing it as it arrived', async () => {
+    // Arrival order is SortOrder order, which is what the old endpoint
+    // sent and what the seed's bands produce: Mexico (10) before Burma
+    // (20). An implementation that just passed the array through would
+    // give ['Mexico', 'Burma'] here.
+    const { modal } = await createModal({ issuers: [MEXICO, BURMA] });
+
+    expect(modal['issuers']().map((issuer) => issuer.name)).toEqual(['Mexico', 'Burma']);
+    expect(modal['sortedIssuers']().map((issuer) => issuer.name)).toEqual(['Burma', 'Mexico']);
+  });
+
+  it('slots an issuer added during this session into place, not onto the end', async () => {
+    // `addIssuerFromDraft` appends the created row rather than re-fetching,
+    // so without a sort on read the user's brand-new issuer appears at the
+    // bottom of 62 rows — in the exact list they are looking at to check
+    // the add worked.
+    const { modal } = await createModal({ issuers: [MEXICO, BURMA] });
+
+    modal['issuerDraft'].set({ name: 'Austria', isoCode: '', validFrom: '', validTo: '', lookUpOnline: false });
+    await modal.addIssuerFromDraft();
+
+    expect(modal['issuers']().map((issuer) => issuer.name).at(-1)).toBe('Austria');
+    expect(modal['sortedIssuers']().map((issuer) => issuer.name)).toEqual(['Austria', 'Burma', 'Mexico']);
+  });
+
+  it('does not reorder the signal the write paths read', async () => {
+    // `.sort()` mutates. The array here is signal state that `removeIssuer`
+    // filters and `denominationGroups` reads, so sorting it in place would
+    // reorder what every other reader sees, intermittently.
+    const { modal } = await createModal({ issuers: [MEXICO, BURMA] });
+
+    modal['sortedIssuers']();
+
+    expect(modal['issuers']().map((issuer) => issuer.issuerId)).toEqual([1, 2]);
+  });
+
+  it('renders the sorted list, and never the raw one, in the template', async () => {
+    // There is no jsdom here, so a template that went back to `issuers()`
+    // would pass every other test in this file while showing the user the
+    // unsorted list. The template text is therefore asserted directly,
+    // the way inventory-table-thumbnails.spec.ts asserts loading="lazy":
+    // it is load-bearing, not cosmetic.
+    const template = readFileSync(join(__dirname, 'category-modal.html'), 'utf8');
+
+    expect(template).toContain('@for (issuer of sortedIssuers(); track issuer.issuerId)');
+    // Both of them: the Issuers pane's list and the Denominations pane's
+    // "which issuer" <select>.
+    expect(template.split('sortedIssuers()').length - 1).toBeGreaterThanOrEqual(3);
+    expect(template).not.toMatch(/[^d]issuers\(\)/);
+  });
+
+  it('orders the denomination pane headings A-Z too', async () => {
+    const { modal, inv } = await createModal({ issuers: [MEXICO, BURMA] });
+    inv.denominations.set([
+      ...DENOMINATIONS,
+      { denominationId: 201, label: '1 Kyat', country: 'MM', issuerId: 2, sortOrder: 1, isActive: true },
+    ]);
+
+    expect(modal['denominationGroups']().map((group) => group.heading)).toEqual(['Burma', 'Mexico']);
+  });
+});
 
 describe('CategoryModal — unlinked coins', () => {
   async function withUnlinked() {
@@ -734,5 +977,245 @@ describe('CategoryModal — unlinked coins', () => {
 
     expect(modal['unlinkedChoiceId']()).toBeNull();
     expect(modal['unlinkedSetCountry']()).toBe(false);
+  });
+});
+
+/* ----- Issuers: deriving the kind, and the online denomination lookup ----- */
+
+describe('CategoryModal — the derived issuer kind', () => {
+  it('shows the kind the typed years imply, live', async () => {
+    // The picker is gone. This is what replaced it, and it is why that is
+    // not the same as hiding a field.
+    const { modal } = await createModal();
+
+    modal['issuerDraft'].set({ ...blankIssuerDraft(false), name: 'Miletos', validFrom: '-600' });
+    expect(modal['derivedIssuerKind']()).toBe('ancient');
+
+    modal['issuerDraft'].set({ ...blankIssuerDraft(false), name: 'Siam', validFrom: '1948', validTo: '1989' });
+    expect(modal['derivedIssuerKind']()).toBe('historical');
+
+    modal['issuerDraft'].set({ ...blankIssuerDraft(false), name: 'Namibia', validFrom: '1990' });
+    expect(modal['derivedIssuerKind']()).toBe('modern');
+  });
+
+  it('has no kind control left in the template', async () => {
+    // *** COMMENTS ARE STRIPPED FIRST. *** The template still TALKS about
+    // the picker, at length, in the comment explaining why it went. An
+    // assertion against the raw text would match that prose and pass
+    // while the <select> was still on screen.
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).not.toContain('issuerKinds');
+    expect(template).not.toContain('reference-input--kind');
+    expect(template).not.toContain("setIssuerField('kind'");
+    // And the derived tag IS there, so this is not passing because the
+    // whole block was deleted.
+    expect(template).toContain('derivedIssuerKind()');
+  });
+});
+
+describe('CategoryModal — the online denomination lookup', () => {
+  const PROPOSED = {
+    outcome: 'results' as const,
+    source: 'Wikidata',
+    proposals: ['kyat', 'pya', 'Burmese rupee'],
+    reason: null,
+  };
+
+  async function addSiam(modal: CategoryModal, lookUpOnline: boolean): Promise<void> {
+    modal['issuerDraft'].set({
+      name: 'Siam',
+      isoCode: 'MM',
+      validFrom: '1948',
+      validTo: '1989',
+      lookUpOnline,
+    });
+    await modal.addIssuerFromDraft();
+  }
+
+  it('does not make the request at all when the box is unticked', async () => {
+    // *** THE WHOLE POINT OF THE CHECKBOX. *** "Unchecked must skip the
+    // request entirely rather than making it and discarding the answer."
+    // Nothing downstream can un-send a packet, so this asserts the call
+    // was never made — not that its answer was ignored.
+    const { modal, api } = await createModal({ lookup: PROPOSED });
+
+    await addSiam(modal, false);
+
+    expect(api['lookUpDenominations']).not.toHaveBeenCalled();
+    expect(modal['lookupProposals']()).toEqual([]);
+  });
+
+  it('says that nothing was sent, and drops the user into adding them by hand', async () => {
+    const { modal, api } = await createModal({ lookup: PROPOSED });
+
+    await addSiam(modal, false);
+
+    expect(modal['lookupMessage']()).toContain('nothing left this machine');
+    // Preselected and on the right pane: an issuer that noisily has no
+    // denominations but leaves the user hunting for the dropdown is most
+    // of the original bug.
+    expect(modal['newDenominationIssuerId']()).toBe(99);
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(api['createIssuer']).toHaveBeenCalledTimes(1);
+  });
+
+  it('asks when the box is ticked, sending only the name', async () => {
+    const { modal, api } = await createModal({ lookup: PROPOSED });
+
+    await addSiam(modal, true);
+
+    expect(api['lookUpDenominations']).toHaveBeenCalledWith('Siam');
+  });
+
+  it('PROPOSES the results and writes none of them', async () => {
+    // Denominations are reference data that coins link to BY ID. A wrong
+    // row is a wrong foreign key that outlives the mistake, so the answer
+    // to a lookup is a tick-list and not an INSERT.
+    const { modal, inv } = await createModal({ lookup: PROPOSED });
+    const write = vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+
+    await addSiam(modal, true);
+
+    expect(modal['lookupPhase']()).toBe('proposing');
+    expect(modal['lookupProposals']().map((proposal) => proposal.label)).toEqual([
+      'kyat',
+      'pya',
+      'Burmese rupee',
+    ]);
+    // The assertion that matters: the write path was never entered.
+    expect(write).not.toHaveBeenCalled();
+  });
+
+  it('writes exactly the ticked ones when the user confirms', async () => {
+    const { modal, inv } = await createModal({ lookup: PROPOSED });
+    const write = vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+    await addSiam(modal, true);
+
+    modal['toggleProposal']('pya');
+    expect(modal['chosenProposalCount']()).toBe(2);
+
+    await modal.acceptProposals();
+
+    const added = write.mock.calls.map((call) => call[0]);
+    expect(added.map((row) => row.label)).toEqual(['kyat', 'Burmese rupee']);
+    expect(added.every((row) => row.issuerId === 99)).toBe(true);
+    // Country kept in step with the issuer, like the manual add path: the
+    // editor's dropdown still groups by it.
+    expect(added.every((row) => row.country === 'MM')).toBe(true);
+  });
+
+  it('states how many were added and by what route', async () => {
+    const { modal, notification } = await createModal({ lookup: PROPOSED });
+    await addSiam(modal, true);
+    await modal.acceptProposals();
+
+    const said = (notification['showInfo'] as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[0])
+    );
+    expect(said.some((message) => message.includes('3 denominations') && message.includes('Wikidata'))).toBe(
+      true
+    );
+  });
+
+  it('writes nothing, and still says so, when the user unticks everything', async () => {
+    const { modal, inv } = await createModal({ lookup: PROPOSED });
+    const write = vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+    await addSiam(modal, true);
+
+    modal['setAllProposals'](false);
+    await modal.acceptProposals();
+
+    expect(write).not.toHaveBeenCalled();
+    expect(modal['lookupMessage']()).toContain('no denominations');
+  });
+
+  it('writes nothing when the user takes none of them', async () => {
+    const { modal, inv } = await createModal({ lookup: PROPOSED });
+    const write = vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+    await addSiam(modal, true);
+
+    modal.dismissProposals();
+
+    expect(write).not.toHaveBeenCalled();
+    expect(modal['lookupProposals']()).toEqual([]);
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(modal['newDenominationIssuerId']()).toBe(99);
+  });
+
+  it('treats an empty answer as a normal outcome, not an error', async () => {
+    // Measured against the live endpoint: Athens returns nothing.
+    const { modal, notification } = await createModal({
+      lookup: { outcome: 'none', source: 'Wikidata', proposals: [], reason: null },
+    });
+
+    await addSiam(modal, true);
+
+    expect(modal['lookupPhase']()).toBe('settled');
+    expect(modal['lookupMessage']()).toContain('had nothing for Siam');
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(notification['showError']).not.toHaveBeenCalled();
+  });
+
+  it('survives the lookup failing outright, and keeps the issuer', async () => {
+    // Our OWN server unreachable — a different failure from the one the
+    // route reports, and it must read the same to the user. The issuer is
+    // already created by this point and must not be lost.
+    const { modal, api, notification } = await createModal();
+    api['lookUpDenominations'] = vi.fn(() => throwError(() => new Error('offline')));
+
+    await addSiam(modal, true);
+
+    expect(modal['issuers']().some((issuer) => issuer.issuerId === 99)).toBe(true);
+    expect(modal['lookupMessage']()).toContain('Could not reach');
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(notification['showError']).not.toHaveBeenCalled();
+  });
+
+  it('remembers a refusal, so the next issuer does not re-tick the box', async () => {
+    const { modal } = await createModal();
+    expect(modal['issuerDraft']().lookUpOnline).toBe(true);
+
+    modal['setLookUpOnline'](false);
+    await addSiam(modal, false);
+
+    // The form is blanked after a successful add; the standing preference
+    // is not part of what gets blanked.
+    expect(modal['issuerDraft']().lookUpOnline).toBe(false);
+  });
+
+  it('reads the remembered refusal back on the next open', async () => {
+    // Through a real StorageService over fake-indexeddb, so this proves
+    // the value survives the dialog rather than a signal being reused.
+    const first = await createModal();
+    first.modal['setLookUpOnline'](false);
+    await flush();
+
+    const second = await createModal();
+    await flush();
+    expect(second.modal['issuerDraft']().lookUpOnline).toBe(false);
+  });
+
+  it('keeps the explanation on screen after it moves the user to another pane', async () => {
+    // The banner lives OUTSIDE the @switch for this reason. Comments are
+    // stripped first, because the template explains the arrangement in
+    // prose that would otherwise match.
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    const bannerAt = template.indexOf("lookupPhase() !== 'idle'");
+    const switchAt = template.indexOf('@switch (activeSection())');
+    expect(bannerAt).toBeGreaterThan(-1);
+    expect(switchAt).toBeGreaterThan(-1);
+    expect(bannerAt).toBeLessThan(switchAt);
+  });
+
+  it('puts the count of what will be written on the button that writes it', async () => {
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain('chosenProposalCount()');
+    expect(template).toContain('acceptProposals()');
+    // And the consent checkbox is on the form, not hidden in Settings.
+    expect(template).toContain('setLookUpOnline(');
+    expect(template).toContain('lookupConsentLabel');
   });
 });

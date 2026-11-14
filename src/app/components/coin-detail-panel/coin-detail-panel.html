@@ -26,6 +26,23 @@
     </div>
   </div>
 
+  <!-- WHAT THIS COIN STILL NEEDS, said where the user is typing.
+       A half-typed coin is an expected state, so this is a quiet line, not
+       an error box and never a toast: "Needs a Denomination before it can be
+       saved" says what to do next. role="status" (polite) for the same
+       reason — nothing is wrong.
+
+       It DOES turn into an alert for the one case that genuinely is an
+       error: a save that was attempted and refused by the server. See
+       services/inventory/draft-row-status.ts. -->
+  @if (draftStatus(); as draft) {
+    <p
+      class="detail-draft-note"
+      [class.detail-draft-note--failed]="draft.failed"
+      [attr.role]="draft.failed ? 'alert' : 'status'"
+    >{{ draft.summary }}</p>
+  }
+
   <app-coin-editor-form [coin]="coin()" />
 
   <!-- ORIGINAL IMAGE FILES

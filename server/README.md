@@ -1,47 +1,89 @@
 # Coin Inventory Server
 
-SQL Server-backed API layer for the Coin Inventory Angular application.
+SQLite-backed API layer for the Coin Inventory Angular application.
 
 ## Prerequisites
 
-- Node.js 22+
-- SQL Server Express or a reachable local SQL Server instance
-- Windows authentication is the default development path
+- Node.js 22+. The driver is `node:sqlite`, which is core from Node 22, so there is no native module, nothing for a rebuild step to do, and `npm install` needs no C++ toolchain — which is the reason it was chosen on a machine where native builds are blocked by group policy. See `db/driver.ts`.
+- Nothing else. There is no database server to install, no Windows service, and nothing running in the background.
 
-## Database setup
+## The database
 
-Use the project SQL setup script to create the database and seed the canonical reference data:
+**There is no setup step.** `db/pool.ts` opens the file the first time something asks for it, applies `db/schema.sql` — every statement is `CREATE ... IF NOT EXISTS`, so opening an existing database is a no-op and opening a new one builds it — and then runs `db/seed.ts`. A fresh install creates its own database; an existing one is left alone. Read `db/index.ts` first: it is the written-up story of the whole layer.
 
-```powershell
-sqlcmd -S localhost -d master -E -i .\setup-database.sql
+The seed runs on **every** open, so it has to be safe a thousand times. Every insert is guarded on the row not already being there, and nothing is ever UPDATEd or DELETEd. That is what keeps the three states a user can create: a row he edited keeps the edit rather than being reset to the seed, a row he soft-deleted (`IsActive = 0`) stays deleted rather than being resurrected on next launch — the bug a naive `INSERT OR REPLACE` would introduce — and a row he added himself is never touched.
+
+### Where the data file lives, and why it is not in the install directory
+
+```
+Program Files\Coin Inventory\     the application. Chosen at install.
+%LOCALAPPDATA%\CoinInventory\     the database. Not chosen, not asked.
 ```
 
-This script creates the database, tables, categories, denominations, mint marks, metal contents, and related seed data. It is the authoritative source for database initialization; the app no longer relies on runtime seeding logic.
+Design §4.10a. The first reason is a Windows constraint rather than a preference: **`Program Files` is not writable by a standard user account without elevation**, so a SQLite file there would fail to open for writing on an ordinary run — and it would fail *intermittently*, because an admin install followed by a standard-user launch is exactly the common case. The second is that §4.7's rule "uninstall must not remove the collection silently" becomes structurally true when the uninstaller's target directory simply does not contain the data.
 
-> **`setup-database.sql` drops every table before it creates them.** It is only for building an empty database. To change the schema of a database that already holds coins, add an idempotent script under `migrations/` instead — see `migrations/003-multiple-images-per-coin.sql` for the pattern.
+`db/config.ts` is the only file that answers the question, and it reads two variables:
 
-`setup-database.sql` is also the reference the code is checked against: `db/coin-fields.ts` and `db/bindings.ts` declare an mssql parameter type per column, and `db/coin-fields.spec.ts` asserts they match this script. **If you change a column here, change the binding too.** A parameter declared shorter than its column silently truncates the user's data; one declared longer makes SQL Server raise error 8152 and abort the statement. Both bugs were live before the refactor — `Year` was bound `NVarChar(10)` against an `NVARCHAR(50)` column, the coin-level `Dealer` at 255 against a 200-char column, and `PurchaseDate`/`SoldDate` as `sql.Date` against `NVARCHAR(30)` text columns. **The `Dealer` one is history only — that column no longer exists.** It is kept here because it is the clearest illustration of the mismatch, not because there is anything left to fix; `Coins.Dealer` and its binding are both gone (migration `006`). `Transactions.Dealer` is a *different* column, still present and still bound, as `transactionDealer` in `db/bindings.ts`.
+| Variable | Effect |
+| --- | --- |
+| `COIN_INVENTORY_DB_PATH` | Absolute path to the database file, or `:memory:`. Read **first**, before any platform logic, so it overrides everything |
+| `COIN_INVENTORY_DATA_DIR` | Directory to put the default `coin-inventory.db` in, for "two collections side by side" without having to know the file name |
 
-The current shape of `Coins` reflects three recent removals/changes, so do not be surprised by what is absent: there is **no `Coins.Dealer`**, there is **no `CoinTags` table** (the tags feature is gone end to end), and `Weight` and `PmWeightGrams` are **`DECIMAL(12,5)`**, bound as `sql.Decimal(12, 5)` to match.
+`COIN_INVENTORY_DB_PATH` is not a convenience. `test-support/sqlite-test-db.ts` sets it to `:memory:` as that module loads, before `db/config.ts` is ever asked where the file is, because **every spec now runs against a real database** and a suite that resolved the production path would truncate the owner's collection on every `npm test`.
 
-### Migrations — you must run these on an existing database
+The resolved path is logged at startup. That line is the quickest answer both to "where is my collection?" and to "why is this one empty?".
 
-> **Current status: `002` through `008` have all been applied. `009` has NOT been run yet.**
->
-> `009` is the only outstanding one and is the most actionable item in this
-> file. Nothing is broken while it is pending — it adds two lookup rows and
-> changes no schema — but until it is applied there is **no `$25` or `$50` US
-> denomination row**, so a half-ounce or one-ounce American Gold Eagle cannot
-> be filed under its own face value. The image matcher already understands
-> both values, which is the mismatch: the application can recognise a coin the
-> inventory has nowhere to put.
->
-> The ordering constraint that mattered among the earlier scripts (`004`
-> before `007`, and `008` after `007`) is history now that all three are
-> applied, but it is kept in the per-migration notes below because it governs
-> any rebuild from scratch.
+### How numbers are stored (`DECIMAL` became `REAL`)
 
-If your `CoinInventory` database already has coins in it, **running `setup-database.sql` is not the upgrade path — it would delete them.** The schema changes live in `server/migrations/` and have to be applied by hand:
+SQLite has no fixed-point type. The six quantity columns on `Coins`, plus `Transactions.Amount`, the four `SpotPrices` columns and `Denominations.FaceValue`, are **`REAL`** — IEEE-754 binary64. **The full argument, including why scaled `INTEGER` and `TEXT` were rejected, is in the header of `db/schema.sql`; read it before changing anything numeric.** The short version is that `tedious` handed a `DECIMAL` column to JavaScript as a `number`, so every value this application has ever read or written was already a double, and `REAL` stores a double bit-for-bit.
+
+What `REAL` does not reproduce on its own is SQL Server's behaviour at the parameter boundary: it **rounded** a value to the column's scale on the way in, and **refused** one too large for its precision. Both are reapplied by `db/bind-values.ts`, driven by the precision and scale recorded in `db/column-types.ts` — which is why the type table was re-expressed rather than deleted when SQL Server went away. Without it the identical HTTP request would store a different number than it used to.
+
+`db/numeric-storage.spec.ts` is the test, and it exists instead of a comment because **a wrong weight is indistinguishable from a right one.** Both 0.7734 and 24.05582 are plausible for a Morgan dollar, so neither the UI, nor the melt-value calculation, nor the owner looking at the screen can detect that a number went through a lossy step. There is no symptom; the only defence is comparing the number out against the number in.
+
+### Text comparison is case-insensitive on purpose
+
+SQL Server's collation on this database was case-**in**sensitive. SQLite's default is `BINARY`, which is case-**sensitive**, so translating the schema without saying anything would have changed the meaning of every text comparison and every `ORDER BY` in the application, quietly: `DELETE FROM Categories WHERE CategoryName = 'gold'` would stop deleting the row called `Gold`, a coin filed under `morgan set` would stop matching the set called `Morgan Set` and the usage count on the maintenance screen would read 0 as "safe to delete".
+
+So every text column that is compared, grouped or ordered against another text value carries `COLLATE NOCASE`, and the ones that are pure payload do not — `Notes`, `CertNumber`, `CatalogNumber`, `StorageLocation`, `ImageData`, `SourcePath` and the two id columns. **`CatalogNumber` in particular must stay `BINARY`:** it is a key into a printed book, and `Ia` is not `1A`. The full list of what would otherwise have broken, and the one thing `NOCASE` does *not* do (it folds A–Z only, not accents), is in `db/schema.sql`'s header.
+
+### `db/schema.sql` is the reference the bindings are checked against
+
+`db/coin-fields.ts` and `db/bindings.ts` declare a parameter type per column, and the parity specs — `db/coin-fields.spec.ts`, `db/catalog-columns.spec.ts`, `db/coin-status-columns.spec.ts`, `db/denomination-column.spec.ts`, `db/schema.spec.ts` — read `db/schema.sql` off disk and fail the build when the two disagree. **If you change a column there, change the binding too.**
+
+**That check got more important when the engine became SQLite, not less.** Under SQL Server the declared widths were a second opinion: the column enforced them, and a binding that disagreed produced either silent truncation (bound shorter) or error 8152 (bound longer). Either way the database had the last word. SQLite has no opinion at all — a column `COIN_FIELDS` calls `NVarChar(50)` will hold four thousand characters without complaint. The binding table is now the only thing enforcing a width, through `db/bind-values.ts`, so a drift is not a disagreement any more, it is a hole.
+
+Writing `NVARCHAR(50)` as a SQLite column type would parse and enforce nothing, which is worse than useless because the next reader would believe it. The declared width therefore lives in `db/schema.sql` as a trailing comment, which is honest about what SQLite stores while keeping the intent machine-readable:
+
+```sql
+Grade               TEXT        NULL     COLLATE NOCASE,   -- NVARCHAR(50)
+Weight              REAL        NULL,                      -- DECIMAL(12,5)
+```
+
+`test-support/schema-columns.ts` is the single parser for that format, so a change to the convention breaks in one place rather than five. **Keep the comment format.**
+
+One behaviour deliberately changed in the move. `mssql` trimmed an over-long value to the declared length before sending it and told nobody; `db/bind-values.ts` raises the 8152 equivalent instead, which `routes/db-error-response.ts` already turns into an HTTP 400. Silently storing three quarters of a user's note is worse than refusing it — a refused value can be retyped, a truncated one cannot be recovered.
+
+The current shape of `Coins` reflects some removals, so do not be surprised by what is absent: there is **no `Coins.Dealer`** (migration `006` — `Transactions.Dealer` is a *different* column, still present and still bound as `transactionDealer` in `db/bindings.ts`), and there is **no `CoinTags` table**, the tags feature having gone end to end. `Weight` and `PmWeightGrams` are **grams**, declared `DECIMAL(12,5)` and stored as `REAL`.
+
+## `migrations/` and `setup-database.sql` are SQL SERVER history
+
+> **Nothing here is replayed against SQLite and nothing here runs at install
+> time.** `server/migrations/*.sql` and `server/setup-database.sql` describe
+> the owner's SQL Server database, which still holds his collection. They are
+> kept in the tree for two reasons: they are the only surviving description of
+> the schema **Stage 2's one-time import has to read**, and `db/schema.sql`
+> refers back to `setup-database.sql` for *why* each column exists rather than
+> repeating it. `setup-database.sql` carries the same warning at the top of the
+> file itself.
+
+`db/schema.sql` is their **destination**, not their replacement: it is the twelve tables with migrations 002 through 014 already applied, written as SQLite DDL. **Do not edit `setup-database.sql` or add a migration to match a schema change** — a new column goes in `db/schema.sql`.
+
+`db/schema.ts` applies that file and is deliberately **not** a migration runner. A SQLite database will need its own migrations eventually, when a release changes the schema under a user who already has a collection; the right shape is `PRAGMA user_version` plus numbered steps, and the right time to build it is when there is a first one to write — not speculatively, against a schema no user has yet.
+
+The scripts are summarised below because several of them record decisions that are still load-bearing, and because the Stage 2 author has to understand what each one did to the source data. `010` through `014` are not tabulated: they add `Coins.CollectionStatus` and `StorageLocation` (`010`), the `Issuers` table with `Denominations.IssuerId` / `FaceValue` and `Coins.DenominationId` (`011`), the `Catalogs` table with `Coins.CatalogId` / `CatalogNumber` (`012`), the 70 issuers and 1,207 denominations of the seed (`013`), and the resolved coin-to-denomination links (`014`). The schema changes are already in `db/schema.sql`; `013`'s rows are produced by `db/seed.ts` from the same JSON; `014` was a one-off data fix against rows that already existed and has no counterpart here.
+
+**One consequence of re-seeding that Stage 2 must handle, recorded here so it is not discovered:** because the reference data is regenerated rather than migrated, `DenominationId` and `CatalogId` on this side are **not the same numbers** as on the owner's SQL Server. His `Coins.DenominationId` has to be re-resolved by (issuer name, label) during the import; copying the integer across would attach his Morgan dollars to whatever happens to occupy that id here. `db/seed.ts`'s header says the same thing at the one place that could cause it.
 
 | File | What it does |
 | --- | --- |
@@ -54,29 +96,11 @@ If your `CoinInventory` database already has coins in it, **running `setup-datab
 | `008-weight-to-grams.sql` | **Reinterprets `Coins.Weight` from troy ounces to grams**, multiplying every stored value by 31.1034768, then derives any still-blank gross weight as `PmWeightGrams / (PmPercent / 100)`. **Must run after `007`**, which is what populates those two inputs. **Not idempotent, and not self-describing:** the column type is identical before and after and no stored value can reveal which unit it is in, so unlike every other script here it cannot guard itself from the system catalog. It writes a marker row into `AppSettings` (`migration-008-weight-grams`) **in the same transaction as the conversion** and skips entirely if it finds one — running it twice would otherwise multiply twice. It snapshots the whole column into `Coins_Weight_TroyOz_Backup` (every row, `NULL`s included) first; the file's header gives the restore statements |
 | `009-add-bullion-denominations.sql` | Adds the US `$25` and `$50` denomination rows. The seed stopped at `$20`, the top of the classic gold series, so a **half-ounce or one-ounce American Gold Eagle could not be recorded at all** — the matcher understood a coin the inventory had no room for. A pure data migration: two lookup rows, no schema change. Lets the identity column assign the ids (specifying them would collide with whatever a live database has already issued) and sets `SortOrder` 17/18 so they land after `$20` in the dropdown. Guarded per row on the label not already existing for `US`, so re-running is harmless |
 
-Apply them in order:
+There are no `sqlcmd` instructions here any more, because nothing in this application applies these scripts. Every step of every one of them is guarded by an existence check, and each file's own header documents its guard, its backup table and its undo — read that before running one by hand against the owner's remaining SQL Server database.
 
-```powershell
-cd server
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\002-add-image-source-path.sql   # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\003-multiple-images-per-coin.sql # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\004-widen-weight-precision.sql   # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\005-drop-coin-tags.sql           # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\006-drop-coin-dealer.sql         # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\007-infer-coin-metal-data.sql    # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\008-weight-to-grams.sql          # already applied
-sqlcmd -S localhost -d CoinInventory -E -i .\migrations\009-add-bullion-denominations.sql # OUTSTANDING
-```
+**The one row in that table Stage 2 must check rather than assume is `008`.** It rewrote values rather than schema, and *no stored value can reveal which unit it is in*: the column type is identical before and after, and both `0.7734` and `24.05582` are plausible coin weights. The `AppSettings` marker row it writes (`migration-008-weight-grams`) is the only thing that can tell troy ounces from grams, so **do not delete that row**, and have the import confirm it is present before it trusts a single weight. Design §4.1 makes the same point, and records that `004` through `008` have all been run against the owner's database — which is why the import is a straight copy rather than a conversion.
 
-Re-running `002` and `003` is harmless if you prefer to just paste the whole block — every step is guarded — but only the last five have anything left to do.
-
-**`008` is the one exception to "running it twice is harmless", and it protects itself rather than relying on you.** It rewrites values rather than schema, and multiplying a weight by 31.1034768 twice produces a number that still looks like a weight. Its `AppSettings` marker is the only thing that can tell the two states apart, so **do not delete that row** unless you have genuinely restored the originals from `Coins_Weight_TroyOz_Backup`. Read the file's header before running it.
-
-(Use your real instance name if it is not the default — e.g. `-S "MYSERVER\SQLEXPRESS"`. You can also just open each file in SSMS or Azure Data Studio with `CoinInventory` selected and press Execute.)
-
-Every step of every migration is guarded by an existence check, so running one twice is harmless — the second run prints "nothing to do" for each step and changes nothing. In this particular case `003` also adds `002`'s column if it is missing, so running `003` alone is sufficient — but keep the habit of applying them in sequence. **Restart the API server afterwards** so it is not holding a cached query plan built against the old index.
-
-Until `003` is applied you will see two symptoms: the image gallery can return a coin's photos in a different order on each page load, and no photo has a source-file link. The API itself keeps working either way (see the `sourcePath` note under [Coin images](#coin-images-many-photos-per-coin-coinimages)).
+A fresh SQLite install needs none of this: `db/schema.sql` has the `DECIMAL(12,5)` weight columns `004` produced, the seed already contains the `$25` and `$50` denominations `009` added, and a database built from that file has never held troy ounces.
 
 ### How `007` knows what a coin is made of
 
@@ -102,43 +126,26 @@ A few consequences worth knowing:
 
 ## Configuration
 
-Create or update your `.env` file in the `server` folder with:
+**There is nothing to configure.** Every variable below is optional, and all of them absent is the correct state for a normal install — which is the whole point of the SQLite move: no server, no instance name, no credentials. `server/.env.example` is the annotated list; copy it to `.env` only if you need one of these.
 
-```env
-# SQL Server connection
-DB_SERVER=localhost
-DB_PORT=
-DB_NAME=CoinInventory
+| Variable | Read by | Absent means |
+| --- | --- | --- |
+| `COIN_INVENTORY_DB_PATH` | `db/config.ts` | `%LOCALAPPDATA%\CoinInventory\coin-inventory.db`. Set to an absolute file path, or `:memory:` |
+| `COIN_INVENTORY_DATA_DIR` | `db/config.ts` | `%LOCALAPPDATA%\CoinInventory` |
+| `PORT` | `server.ts` | 3000 |
+| `SPOT_PRICE_BASE_URL` | `routes/data/spot-price-source.ts` | The live Yahoo chart endpoint |
+| `APP_BASE_FOLDER` | `routes/app-info.ts` | The folder found by walking up to `angular.json` |
+| `SUPPORT_REPO_URL` | `routes/support/index.ts` | A placeholder repository, and the response says so |
+| `COIN_LOG_DIR` | `logger.ts` | `server/logs` |
+| `COIN_SUPPORT_OUTPUT_DIR` | `routes/support/index.ts` | The user's Desktop, else their home folder |
 
-# Leave DB_USER blank for Windows / Integrated authentication
-DB_USER=
-DB_PASSWORD=
+**The `DB_SERVER` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` block that used to be here is gone.** Nothing reads any of them. If they are still in your `.env` they do nothing at all; delete them rather than leaving something that looks like configuration.
 
-# Port the API listens on
-PORT=3000
-```
+**Omit a variable rather than setting it empty.** The two are not the same thing everywhere: `db/config.ts` trims and treats blank as absent, but `PORT=` parses to `NaN` rather than 3000, and `SPOT_PRICE_BASE_URL=` would send every price request to an empty URL rather than falling back to the default.
 
-For named instances, use the full server name, such as:
+`APP_BASE_FOLDER` is an escape hatch and is normally absent. `GET /api/app-info` works out where the app is installed by walking up from its own module until it finds `angular.json`, which is correct both under `tsx` and from a compiled `dist/`. Set this variable only if that answer is wrong for an unusual deployment — the app unpacked somewhere odd, reached through a symlink, or started as a service — in which case give it the absolute path of the folder the app lives in, e.g. `APP_BASE_FOLDER=D:\CoinInventory`. Forward slashes and a trailing separator are tolerated; the value is normalised before it is returned.
 
-```env
-DB_SERVER=MYSERVER\SQLEXPRESS
-```
-
-`DB_PORT` is optional and normally left empty. A named instance is resolved by SQL Browser, so `db/config.ts` omits `port` from the config entirely when it is not set. It also accepts the SSMS-style `DB_SERVER=localhost,1433` form and splits the port out of it, because some environments persist a comma-suffixed server value.
-
-There are two further, entirely optional variables:
-
-```env
-# Override the spot-price provider's base URL (see "Spot prices" below)
-SPOT_PRICE_BASE_URL=
-
-# Override the folder GET /api/app-info reports (see "App info" below)
-APP_BASE_FOLDER=
-```
-
-`APP_BASE_FOLDER` is an escape hatch and is normally left blank. `GET /api/app-info` works out where the app is installed by walking up from its own module until it finds `angular.json`, which is correct both under `tsx` and from a compiled `dist/`. Set this variable only if that answer is wrong for an unusual deployment — the app unpacked somewhere odd, reached through a symlink, or started as a service — in which case give it the absolute path of the folder the app lives in, e.g. `APP_BASE_FOLDER=D:\CoinInventory`. Forward slashes and a trailing separator are tolerated; the value is normalised before it is returned.
-
-`db/config.ts` reads all the `DB_*` variables and is the only place that builds the `sql.config`. It is not, however, the only file that touches `process.env`: `server.ts` reads `PORT` (and `DB_SERVER` / `DB_NAME` again, purely to print them at startup), `routes/data/spot-price-source.ts` reads `SPOT_PRICE_BASE_URL`, and `routes/app-info.ts` reads `APP_BASE_FOLDER`. Nothing else does.
+The table above is the complete list — those eight variables and the files named beside them are every `process.env` read in the backend, plus `LOCALAPPDATA` itself, which `db/config.ts` reads from the environment rather than deriving because that is where Windows publishes it and a redirected profile has a different answer from the one `os.homedir()` would guess.
 
 ## Running
 
@@ -166,7 +173,7 @@ Scripts:
 
 `build` uses `tsconfig.build.json` rather than `tsconfig.json`, because that config excludes `**/*.spec.ts` and `test-support/`. `tsconfig.json` includes everything on purpose so `typecheck` covers the tests, but compiled tests must never land in `dist/`: Vitest discovers them and fails with "Vitest cannot be imported in a CommonJS module using require()".
 
-**A stale `dist/` is dangerous.** `npm start` runs `node dist/server.js`, so a `dist/` built before the connection-pool fix will silently run the old crashing code. If the old symptoms come back, delete `dist/` and rebuild.
+**A stale `dist/` is dangerous.** `npm start` runs `node dist/server.js`, so a `dist/` built before the SQLite move will silently run the old `mssql` code and try to reach a SQL Server that is no longer part of this application. If you see a connection error naming a server or an instance, delete `dist/` and rebuild before investigating anything else.
 
 ## Layout
 
@@ -174,9 +181,16 @@ Scripts:
 
 | Path | Contents |
 | --- | --- |
-| `db/index.ts` | Barrel, and the written-up story of the crash. **Read this first.** |
+| `db/index.ts` | Barrel, and the written-up story of why the layer looks the way it does. **Read this first.** |
+| `db/driver.ts` | **The only file that may name a SQLite package.** Structural interfaces over `node:sqlite`, and `openSqliteDatabase()` |
 | `db/pool.ts` | `getPool` / `resetPool` / `withDb`. The most important file in the backend. |
-| `db/config.ts` | Builds the `sql.config` from `.env` |
+| `db/config.ts` | Where the database file lives, and the two overrides. Opens nothing |
+| `db/schema.sql` | The live schema — twelve tables as SQLite DDL, with every translation decision argued in the header |
+| `db/schema.ts` | Applies `schema.sql`; enables WAL. **Not** a migration runner |
+| `db/seed.ts` | The reference data, re-seeded idempotently on every open |
+| `db/sql-api.ts` | The `.input(...).query(...)` adapter over SQLite — the API the routes already spoke |
+| `db/column-types.ts` | The parameter type vocabulary (`NVarChar`, `Char`, `Int`, `Bit`, `Decimal`) |
+| `db/bind-values.ts` | JSON value to bound value, and the width / range / rounding rules SQLite does not enforce |
 | `db/errors.ts` | `isConnectionError` / `sqlErrorNumber` |
 | `db/coin-fields.ts` | `COIN_FIELDS` — the Coins column map (types, max lengths, normalizers) |
 | `db/bindings.ts` | `DB_BINDINGS` — parameter types for every other table |
@@ -191,36 +205,56 @@ Scripts:
 | `routes/db-error-response.ts` | SQL error to HTTP status translation |
 | `routes/error-handler.ts` | The app-wide Express error handler (honours `err.status`, so a 413 stays a 413) |
 | `routes/param-utils.ts` | Shared request-parameter helpers |
-| `migrations/` | Idempotent schema changes for a database that already has data in it |
+| `migrations/` | SQL SERVER history, not replayed here. Kept for Stage 2's import — see above. `migrations/seed-data/` holds the JSON `db/seed.ts` reads |
 | `process-safety.ts` | `unhandledRejection` / `uncaughtException` handlers |
 | `logger.ts` | Appends timestamped lines to a rotated daily log in `logs/` |
 | `log-rotation.ts` | Daily log naming, the per-file size cap, and retention |
 | `support/` | The problem-report bundle: redaction, report text, zip writer |
-| `test-support/mssql-mock.ts` | The shared mssql mock used by every spec |
+| `test-support/sqlite-test-db.ts` | The real in-memory database every spec runs against, and the statement recorder |
+| `test-support/schema-columns.ts` | Reads `db/schema.sql` as data, for the parity specs |
+| `setup-database.sql` | LEGACY. The SQL Server schema, frozen. Nothing runs it |
 
-## The connection pool (read before changing `db/pool.ts`)
+## The connection lifecycle (read before changing `db/pool.ts`)
+
+There is no pool any more, and this section is mostly history. Read it anyway, because the history is the only thing that explains why `db/pool.ts` is as careful as it is about a file handle.
+
+### The crash this layer was built around, and why its mechanism is gone
 
 The backend used to die, roughly once per session, in a way that looked like a database problem. It was not.
 
 1. `mssql`'s `ConnectionPool` is a Node `EventEmitter`.
-2. When SQL Server drops or errors an idle pooled connection, mssql calls `pool.emit('error', err)`.
+2. When SQL Server dropped or errored an idle pooled connection, mssql called `pool.emit('error', err)`.
 3. An `EventEmitter` with **zero** `'error'` listeners *throws* when you emit `'error'` on it. That throw happened inside a tedious socket callback, so nothing caught it — uncaught exception, process gone.
 
-The old `db.ts` never attached that listener. The visible symptom was: pause for a while, edit a coin, get "Failed to update coin", refresh the browser and it still fails because the *server* is gone, restart the app and everything works. Nothing appeared in `app.log` because the process died before any logging ran.
+The old `db.ts` never attached that listener. The visible symptom was: pause for a while, edit a coin, get "Failed to update coin", refresh the browser and it still fails because the *server* is gone, restart the app and everything works. Nothing appeared in `app.log` because the process died before any logging ran. The fix was one `pool.on('error', ...)` listener attached before `connect()`.
 
-The fix is the `pool.on('error', ...)` listener in `createPooledConnection()` in `db/pool.ts`, attached **before** `connect()` is called so there is never a window with no listener. Everything else in the layer exists to make recovery cheap and safe:
+**Every noun in that paragraph is gone.** There is no pool, because SQLite is a file and a second handle on the same file buys contention rather than throughput. There is no socket, so there is nothing to drop. There is no `EventEmitter` anywhere in `db/`, so there is no emit-with-no-listener rule to violate. The listener was therefore **deleted, not re-created in a fake form** — a guard against a mechanism that is absent is a comment pretending to be code.
 
-- **Single-flight connect** — the Angular app fires about seven API calls in parallel on load. Without the guard each one saw "no pool" and opened a competing one.
-- **Generation counter** — every pool gets an increasing id and callers remember theirs, so a request failing at 10:00:05 cannot destroy a healthy pool created at 10:00:04.
-- **No per-request `SELECT 1`** — the old health check halved throughput and could close the pool mid-query for other requests.
-- **`withDb()` retries once, and only for connection-class errors.**
+The regression test went with it, and `db/connection.spec.ts`'s header records the deletion at length rather than leaving the next reader to wonder where it went. Keeping a version of it would have meant giving `DbConnection` an `EventEmitter` it does not otherwise need purely so a test could emit on it — a test that exercises scaffolding built for the test, and one that would read as evidence that a real hazard is covered.
 
-Two rules follow from this:
+### What was kept, because the reasons outlive the engine
 
-- Nothing outside `db/pool.ts` may construct a `ConnectionPool`.
-- **No route handler may call `resetPool()`.** The old `routes/coins.ts` called it in every `catch`, so an ordinary validation error tore down the shared pool and broke every other in-flight request. Route code uses `withDb()` and lets ordinary query errors propagate.
+- **Single-flight open** — the Angular app fires about seven API calls in parallel on load. Without the guard each one would see "no handle", and each would open the file, apply the schema and run the seed — seven times, concurrently, against one file.
+- **Generation counter** — every handle gets an increasing id and callers remember theirs, so a request failing at 10:00:05 cannot close a healthy handle opened at 10:00:04.
+- **No per-request health check** — the old `SELECT 1` halved throughput and could close the connection mid-query for other requests. It would be even more pointless here, where the "connection" is a file descriptor.
+- **`withDb()` retries once, and only for connection-class errors.** A locked or momentarily unavailable file is worth one retry. A constraint violation is not: retrying it would run the caller's function, including its writes, a second time.
 
-`db/connection.spec.ts` carries the regression test: it emits `'error'` on the pool and asserts the process survives.
+All four are tested in `db/connection.spec.ts`.
+
+### Two rules that did not change
+
+- Nothing outside `db/pool.ts` may open a database, and **nothing outside `db/driver.ts` may name a SQLite package.** `db/driver-isolation.spec.ts` enforces the second one by walking every `.ts` file under `server/`.
+- **No route handler may call `resetPool()`.** The old `routes/coins.ts` called it in every `catch`, so an ordinary validation error tore down the shared connection and broke every other in-flight request. Route code uses `withDb()` and lets ordinary query errors propagate.
+
+### One thing SQLite added: access is serialised
+
+`mssql` handed each `sql.Transaction` its own pooled connection. There is one SQLite handle and SQLite has no nested transactions, so without a lock two concurrent POSTs would interleave `BEGIN`/`COMMIT` on the same handle and one request would commit the other's half-finished work. `DbTransaction` in `db/sql-api.ts` takes the connection lock for the duration.
+
+`db/sql-api.ts` also **refuses a multi-statement query**, because `node:sqlite`'s `prepare()` compiles the first statement of a string and discards the rest silently — a batch reading `UPDATE a; UPDATE b;` would run half of itself and report success. Use an explicit transaction instead. It likewise **refuses a statement naming a parameter nobody bound**, which SQLite would otherwise bind to `NULL`, turning a typo in `WHERE CoinId = @coinid` into "no rows" rather than an error. The reverse is allowed: an `.input()` the statement does not mention is ignored, which `routes/coins/writes.ts` relies on.
+
+### `mssql` and `msnodesqlv8` are still in `package.json`, on purpose
+
+Nothing imports them. They stay installed because Stage 2's one-time migration script needs them to read the owner's live SQL Server, and they are removed only once he has confirmed his collection has moved. `db/driver-isolation.spec.ts` enforces **both halves**: no file under `server/` may import either package, *and* both must still be declared in `package.json`. Removing them early would strand the only route the owner's data has out of SQL Server, which is exactly the kind of tidying-up that looks harmless in a diff.
 
 ## Health endpoint
 
@@ -255,7 +289,7 @@ Resolution order, most explicit first:
 2. The project root, found by walking up from the module until a directory contains `angular.json` — `source: "module"`. **This is why the marker search exists rather than a fixed `../..`:** the file runs from `server/routes` under `tsx` and from `server/dist/routes` when compiled, so any fixed number of levels is wrong in one of the two. `angular.json` is the marker because it exists at the root and *not* in `server/`, unlike `package.json`.
 3. `process.cwd()` — `source: "cwd"`. Last resort, and weaker than it looks: the launcher starts the backend from `server/`, so this answers one folder too deep. It also writes a warning to `app.log`.
 
-Like `/api/images`, this route **never touches the database**, so it keeps answering when SQL Server does not. The import screen must open in a half-broken state, and a cosmetic default is not worth failing a page load over. On the frontend side `ApiService.getAppFolder()` maps every failure to `''`, which simply leaves the box empty and its existing warning showing.
+Like `/api/images`, this route **never touches the database**, so it keeps answering when the database does not. The import screen must open in a half-broken state, and a cosmetic default is not worth failing a page load over. On the frontend side `ApiService.getAppFolder()` maps every failure to `''`, which simply leaves the box empty and its existing warning showing.
 
 ## Logging
 
@@ -278,13 +312,42 @@ cd server
 npm test
 ```
 
-154 tests across 16 files (verified by running `npx vitest run` in `server/` — it takes about two seconds). Specs sit next to the code they cover, and all sixteen are listed here:
+### They run against a real database now, and that is the biggest improvement in the SQLite change
+
+`test-support/mssql-mock.ts` **has been deleted.** It was a 164-line hand-written fake whose behaviour was whatever its author imagined SQL Server did, and twenty-five spec files drove it by queueing canned recordsets. What those specs proved was that a route called the mock in the expected order — **not** that the SQL was valid, not that the schema had the column, not that the constraint fired, and not that the row came back looking the way the route assumed.
+
+SQLite runs in memory, so the suite now uses the **real `db/schema.sql`, the real seed, the real parameter binding and the real constraint enforcement**. A passing spec means something it did not mean before. This came free with the engine change rather than being extra work.
+
+`test-support/sqlite-test-db.ts` is the harness:
+
+- `resetTestDatabase()` in `beforeEach` clears the tables a test can write to and restarts the statement recorder. It keeps the handle, and therefore the seeded reference data, so a 40-case file pays for one schema build rather than forty. A full build (schema plus 1,274 seeded rows) is around 10 ms.
+- `rebuildTestDatabase()` throws the whole database away. Needed by any test that modifies a **seeded** table — `Issuers`, `Denominations`, `Catalogs`, `MintMarks`, `Categories`, `CoinSets`, `MetalContents` — which `resetTestDatabase()` deliberately leaves alone.
+- `withTestDb()` / `queryRows()` read the raw handle. **Prefer them:** reading the row a route wrote proves more than inspecting the SQL that wrote it.
+- `executedQueries` / `capturedInputs()` still record statements and bindings, but grouped per statement. The mock's flat `capturedInputs` could not tell you which statement a binding belonged to, so a spec asserting "the UPDATE bound `@weight`" was really asserting "something, somewhere, bound `@weight`".
+
+**The production database is never touched.** Importing that module sets `COIN_INVENTORY_DB_PATH` to `:memory:` at module scope, before `db/config.ts` is ever asked where the file is — which is why specs that only want the recorder still import it for the side effect. A suite that resolved the real path would truncate the owner's collection on every `npm test`.
+
+`routes/images/images.spec.ts` is still the one exception to "no file I/O": it writes fixtures into an OS temp directory, because whether a file is on disk is exactly what it tests.
+
+### The specs the migration added
+
+| Spec | Covers |
+| --- | --- |
+| `db/driver-isolation.spec.ts` | That only `db/driver.ts` names a SQLite package, that it really does, that no file imports `mssql` or `msnodesqlv8`, and that both are **still declared** in `package.json` |
+| `db/numeric-storage.spec.ts` | `DECIMAL` to `REAL`: a value read back is the identical double, is rounded to the column's scale as SQL Server rounded it, and is refused when it overflows the declared precision |
+| `db/bind-values.spec.ts` | Null and undefined, text width, the one `CHAR(2)` column, integers, `BIT`, and the types the driver cannot bind at all |
+| `db/sql-api.spec.ts` | The adapter: statement inspection, the multi-statement refusal, the unbound-parameter refusal, the SQL Server error numbers, `rowsAffected`, and that transactions serialise access to the one handle |
+| `db/schema.spec.ts` | The twelve tables; that foreign keys are **enforced and not decorative**; that `COLLATE NOCASE` really does fold case; that `AUTOINCREMENT` does not reuse an id a bare `INTEGER` key would; and what SQLite does *not* enforce, recorded so nobody assumes it does |
+| `db/seed.spec.ts` | The first seed, that re-seeding is idempotent, that it runs in one transaction, and what Stage 2 must know about the seeded ids |
+| `db/catalog-columns.spec.ts`, `db/coin-status-columns.spec.ts`, `db/denomination-column.spec.ts` | The columns migrations `010`–`012` added: binding against schema, normalisation on the way in, and a round trip over HTTP against a real row |
+
+### The longer-standing specs
 
 | Spec | Covers |
 | --- | --- |
 | `server.spec.ts` | App wiring and the health endpoint |
-| `db/connection.spec.ts` | Config, pool lifecycle, the crash regression, `withDb` |
-| `db/coin-fields.spec.ts` | `COIN_FIELDS` against `setup-database.sql` |
+| `db/connection.spec.ts` | Config, the connection lifecycle, `withDb`. **Its header records the crash regression that was deleted and why** |
+| `db/coin-fields.spec.ts` | `COIN_FIELDS` against `db/schema.sql` |
 | `routes/app-info.spec.ts` | `GET /api/app-info` — `normaliseWindowsPath`, the `APP_BASE_FOLDER` override, that the marker walk finds the project root from either depth, and that the route never touches the database |
 | `routes/coins/reads.spec.ts` | `GET /api/coins` |
 | `routes/coins/list-query.spec.ts` | `imageCount`, the `includeImages=false` switch, and `shouldIncludeImages()` |
@@ -299,11 +362,11 @@ npm test
 | `routes/db-error-response.spec.ts` | SQL error to HTTP status translation |
 | `routes/error-handler.spec.ts` | Oversized uploads report 413, not 500 |
 
-They all mock `mssql` through `test-support/mssql-mock.ts`, so no database is needed to run them. `routes/images/images.spec.ts` is the one exception to "no I/O": it writes fixture files into an OS temp directory (created in `beforeAll`, removed in `afterAll`), because whether a file is on disk is exactly what it tests.
+**Neither table is exhaustive** — there are 45 spec files under `server/`, and the rest sit next to the code they cover: the lookup routes, the support bundle, the log rotation, and the three SQL Server migration specs that still guard `migrations/`.
 
 ## Coin images: many photos per coin (`CoinImages`)
 
-This is the part of the schema most worth understanding before you touch anything image-related, so it is written up here as well as in the comment block above `CREATE TABLE CoinImages` in `setup-database.sql`.
+This is the part of the schema most worth understanding before you touch anything image-related, so it is written up here as well as in the comment block above `CREATE TABLE CoinImages` in `db/schema.sql`.
 
 **One ROW per photo, not one column per photo.** `CoinImages` has been a child table since the baseline schema: each photo gets its own `ImageId` identity and points back at its coin through `CoinId`. A coin with ten photos is ten rows sharing one `CoinId`. There is deliberately **no limit** on how many a coin may have, and nothing about the design changes between one photo and twenty — there is no single-image column to widen and no one-image-per-coin constraint to remove. "Multiple pictures per coin" was never a feature to add; it is just what a child table does.
 
@@ -311,7 +374,7 @@ In practice the photo library holds 8-10 files for a typical coin: obverse and r
 
 | Column | Purpose |
 | --- | --- |
-| `ImageId` | `IDENTITY` primary key. This is what `DELETE /api/coins/:id/images/:imageId` takes. |
+| `ImageId` | `INTEGER PRIMARY KEY AUTOINCREMENT`. This is what `DELETE /api/coins/:id/images/:imageId` takes. **`AUTOINCREMENT` is not noise:** a bare `INTEGER PRIMARY KEY` is SQLite's rowid and picks `max(rowid) + 1`, so deleting the highest row and inserting another *reuses* the id. `IDENTITY` never reused one, and nor does this. |
 | `CoinId` | Owning coin. `ON DELETE CASCADE`, so deleting a coin deletes its photos rather than orphaning them. |
 | `ImageData` | A **downscaled** base64 data URL, sized for display. |
 | `SortOrder` | Zero-based position within *this coin's* photos. |
@@ -321,24 +384,17 @@ In practice the photo library holds 8-10 files for a typical coin: obverse and r
 
 The app always reads images as `WHERE CoinId = @id ORDER BY SortOrder`, so that column is the entire ordering mechanism. New inserts assign `MAX(SortOrder) + 1` (see `routes/coins/images.ts`), which is read *inside* the transaction so a concurrent insert cannot invalidate it.
 
-**The latent bug migration 003 fixes.** Nothing ever stopped two photos of the same coin sharing a `SortOrder`. The column defaults to 0 and older insert paths did not always assign one, so a coin can easily hold several rows all claiming position 0. `ORDER BY SortOrder` then leaves their relative order entirely up to the query plan. With one or two photos per coin this was invisible. With eight it is not: the gallery is free to show Reverse first today and Obverse first tomorrow, and the user sees photos that "move around by themselves".
+**Nothing in the schema stops two photos of the same coin sharing a `SortOrder`**, and the column defaults to 0. Where several rows claim position 0, `ORDER BY SortOrder` leaves their relative order entirely up to the query plan: with one or two photos per coin that is invisible, with eight it is not — the gallery is free to show Reverse first today and Obverse first tomorrow, and the user sees photos that "move around by themselves". The insert path assigning `MAX(SortOrder) + 1` is what prevents it; a new write path that forgets to is how it comes back.
 
-`003` renumbers each coin's photos 0, 1, 2, … using `ROW_NUMBER() OVER (PARTITION BY CoinId ORDER BY SortOrder, ImageId) - 1`. The two-part sort is the important detail:
+That was a live bug on the owner's SQL Server database, and migration `003` renumbered his rows with `ROW_NUMBER() OVER (PARTITION BY CoinId ORDER BY SortOrder, ImageId) - 1`. The two-part sort is worth knowing because Stage 2 inherits its result: `SortOrder` first preserved every ordering choice that was already unambiguous, and `ImageId` second broke ties among rows that had collided, resolving them to *insertion order* — the photo added first stays first, which is both the least surprising outcome and a stable one.
 
-- **`SortOrder` first** preserves every ordering choice that was already unambiguous — photos deliberately placed at 0, 1, 2 keep those positions and are not rewritten at all.
-- **`ImageId` second** only breaks ties among rows that already collided, and because it is an ascending identity it resolves them to *insertion order*: the photo added first stays first. That is both the least surprising outcome and a stable one, so a second run produces identical numbering.
+### The index is `(CoinId, SortOrder)`, not `(CoinId)`
 
-The `UPDATE` is filtered by `WHERE SortOrder <> NewOrder`, so on an already-correct database zero rows are written. The script prints how many rows it renumbered, which is genuinely useful: 0 means ordering was already sound, and a large number explains any shuffling you had noticed.
-
-### The index changed
-
-`IX_CoinImages_CoinId` became **`IX_CoinImages_CoinId_SortOrder`**. The old index got the engine to the right rows but said nothing about their order, so the plan had to sort them after fetching. With `(CoinId, SortOrder)` the rows come off the index already in display order and the sort step disappears from the plan entirely. Barely measurable at two rows per coin; worth having at ten across a few thousand coins.
-
-The new index is created *before* the old one is dropped, so there is never a moment when `CoinId` lookups have no index. Dropping the old one is safe because `CoinId` is the leading column of the replacement — anything the narrow index could answer, the wider one answers too — and keeping both would only add write cost on every photo inserted or deleted.
+`IX_CoinImages_CoinId_SortOrder` is the only index on the table. A `CoinId`-only index would get the engine to the right rows but say nothing about their order, so the plan would have to sort them after fetching; with the composite, rows come off the index already in display order and the sort step disappears. Barely measurable at two rows per coin, worth having at ten across a few thousand. There is no separate `CoinId` index because `CoinId` is the leading column of this one — anything a narrow index could answer, this answers too — and a second one would only add write cost on every photo inserted or deleted.
 
 ### Why there is no unique index on `(CoinId, SourcePath)`
 
-It is tempting: it would stop the same file being attached to one coin twice. It was considered and deliberately rejected, and the reasoning is written into `003` itself so it does not get "fixed" later.
+It is tempting: it would stop the same file being attached to one coin twice. It was considered and deliberately rejected, and the reasoning is recorded both here and in migration `003` so it does not get "fixed" later.
 
 A `UNIQUE` constraint turns any duplicate that slips through into a hard SQL error. Because the image insert runs as **one transaction**, a single duplicate would abort the entire batch — a 200-photo import failing at file 150 and rolling all of it back. Silently re-attaching one photo is a far smaller problem than that. The import already de-duplicates on the client; if server-side de-duplication is wanted, it belongs in the **insert logic**, where a duplicate can be skipped without killing the batch.
 
@@ -350,7 +406,7 @@ A `UNIQUE` constraint turns any duplicate that slips through into a hard SQL err
 sourcePath: (row['SourcePath'] as string | null | undefined) ?? null,
 ```
 
-That normalisation covers two separate cases — SQL `NULL`, and a driver that omits the column entirely (which is what happens against a database where migration 002/003 has not been run yet) — and collapses both to JSON `null`. **Do not "simplify" this to an empty string or to omitting the key.** The frontend distinguishes three states and needs them kept apart:
+That normalisation covers two separate cases — SQL `NULL`, and a driver that omits the column entirely — and collapses both to JSON `null`. **Do not "simplify" this to an empty string or to omitting the key.** The frontend distinguishes three states and needs them kept apart:
 
 1. **no path recorded** — `sourcePath` is `null`; there is nothing to link to.
 2. **path recorded but the file is missing** — a path came back, but `POST /api/images/exists` said `false`; the link is shown greyed out.
@@ -432,5 +488,5 @@ One further quirk worth knowing: the request sends an explicit `User-Agent` head
 
 ## Notes
 
-- Categories, denominations, mint marks, and metal contents are loaded from SQL and kept in sync with the app.
+- Categories, denominations, mint marks, catalogues and metal contents are reference data: seeded by `db/seed.ts` on every open, read from the database by the app, and never overwritten once a user has edited or soft-deleted one.
 - Start the frontend and backend through the project launcher when possible — `start-coin-inventory.ps1` in the project root, or double-click `launch-coin-inventory.cmd` next to it, which just forwards to that script. Use the direct `tsx` command for troubleshooting or manual startup.

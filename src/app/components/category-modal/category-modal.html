@@ -46,6 +46,58 @@
           <p class="hint-text">{{ activeSectionHint() }}</p>
         </header>
 
+        <!-- WHAT HAPPENED TO THE NEW ISSUER'S DENOMINATIONS.
+             OUTSIDE the @switch on purpose: when the lookup finds nothing
+             the screen moves the user to the Denominations pane with the
+             issuer preselected, and the sentence explaining why has to
+             survive that move. Putting it inside the issuers @case would
+             hide the explanation at the exact moment it is needed. -->
+        @if (lookupPhase() !== 'idle') {
+          <section class="lookup-result" role="status" aria-live="polite">
+            <p class="lookup-result__message">{{ lookupMessage() }}</p>
+
+            @if (lookupPhase() === 'proposing') {
+              <!-- PROPOSALS. Nothing here is in the database. A
+                   denomination is reference data that coins link to BY ID,
+                   so a wrong row is a wrong foreign key that outlives the
+                   mistake; the user ticks, and the button carries the
+                   number they are agreeing to. -->
+              <div class="lookup-result__actions">
+                <button type="button" class="link-button" (click)="setAllProposals(true)">Tick all</button>
+                <button type="button" class="link-button" (click)="setAllProposals(false)">Untick all</button>
+              </div>
+
+              <ul class="lookup-result__list">
+                @for (proposal of lookupProposals(); track proposal.label) {
+                  <li>
+                    <label class="lookup-result__item">
+                      <input type="checkbox"
+                        [checked]="proposal.chosen"
+                        (change)="toggleProposal(proposal.label)" />
+                      <span>{{ proposal.label }}</span>
+                    </label>
+                  </li>
+                }
+              </ul>
+
+              <div class="lookup-result__actions">
+                <button type="button" class="secondary"
+                  [disabled]="lookupBusy() || chosenProposalCount() === 0"
+                  (click)="acceptProposals()">
+                  Add {{ chosenProposalCount() }} denomination(s)
+                </button>
+                <button type="button" class="secondary small-button"
+                  [disabled]="lookupBusy()"
+                  (click)="dismissProposals()">Add none of them</button>
+              </div>
+            }
+
+            @if (lookupPhase() === 'settled') {
+              <button type="button" class="link-button" (click)="clearLookup()">Dismiss</button>
+            }
+          </section>
+        }
+
         @switch (activeSection()) {
 
           <!-- Categories -->
@@ -107,13 +159,11 @@
                 maxlength="2"
                 [ngModel]="issuerDraft().isoCode" (ngModelChange)="setIssuerField('isoCode', $event)"
                 aria-label="Two-letter ISO code, if there is one" />
-              <select class="reference-input reference-input--kind"
-                [ngModel]="issuerDraft().kind" (ngModelChange)="setIssuerField('kind', $event)"
-                aria-label="Kind of issuer">
-                @for (kind of issuerKinds; track kind) {
-                  <option [value]="kind">{{ kind }}</option>
-                }
-              </select>
+              <!-- NO KIND PICKER. It drives no behaviour and the year span
+                   already says it, so it is derived on save and merely
+                   SHOWN here. See issuer-kind.ts for the rule and for the
+                   one issuer (British Colonial, no dates at all) that the
+                   rule cannot reproduce. -->
               <!-- Years are text inputs, not number inputs. A number input
                    fights with a leading minus in several browsers, and -509
                    (the Roman Republic) must be typeable. -->
@@ -123,16 +173,32 @@
               <input type="text" class="reference-input reference-input--year" placeholder="To"
                 [ngModel]="issuerDraft().validTo" (ngModelChange)="setIssuerField('validTo', $event)"
                 aria-label="Last year, blank if it still issues" />
+              <span class="reference-row__tag reference-row__tag--derived"
+                aria-live="polite">{{ derivedIssuerKind() }}</span>
               <button type="button" class="secondary" (click)="addIssuerFromDraft()">Add issuer</button>
             </div>
+
+            <!-- THE CHECKBOX THAT REFUSES THE LOOKUP.
+                 On the form rather than in Settings, because it governs the
+                 only request this application ever makes off this machine
+                 and nobody should have to go looking for it. Its label says
+                 the request LEAVES THE MACHINE in those words; "look up
+                 denominations" would describe the benefit and hide the
+                 cost. Default ON, and the answer is remembered. -->
+            <label class="reference-consent">
+              <input type="checkbox"
+                [checked]="issuerDraft().lookUpOnline"
+                (change)="setLookUpOnline($any($event.target).checked)" />
+              <span>{{ lookupConsentLabel }}</span>
+            </label>
 
             @if (issuerError()) {
               <p class="reference-error" role="alert">{{ issuerError() }}</p>
             }
 
-            @if (issuers().length > 0) {
+            @if (sortedIssuers().length > 0) {
               <ul class="reference-list">
-                @for (issuer of issuers(); track issuer.issuerId) {
+                @for (issuer of sortedIssuers(); track issuer.issuerId) {
                   <li class="reference-row">
                     <span class="reference-row__name">
                       {{ issuer.name }}
@@ -175,7 +241,7 @@
                 (ngModelChange)="newDenominationIssuerId.set($event)"
                 aria-label="Issuer for the new denomination">
                 <option [ngValue]="null">Choose an issuer&hellip;</option>
-                @for (issuer of issuers(); track issuer.issuerId) {
+                @for (issuer of sortedIssuers(); track issuer.issuerId) {
                   <option [ngValue]="issuer.issuerId">{{ issuer.name }}</option>
                 }
               </select>
@@ -391,6 +457,37 @@
               </ul>
             } @else {
               <p class="empty-state">No mint marks yet.</p>
+            }
+          }
+
+          <!-- Metal content
+
+               Moved here from the Settings dialog, which no longer edits
+               any reference list. Same shape as the three plain-string
+               panes above it, including the in-use badge and the
+               confirmation that quotes it - the Settings chips had
+               neither, so the move added the warning rather than only
+               changing the address. -->
+          @case ('metal-content') {
+            <div class="reference-form">
+              <input type="text" class="reference-input" placeholder="New metal, e.g. 90% Silver&hellip;"
+                [ngModel]="newMetalContent()" (ngModelChange)="newMetalContent.set($event)"
+                (keydown.enter)="addMetalContentFromDraft()" aria-label="New metal content" />
+              <button type="button" class="secondary" (click)="addMetalContentFromDraft()">Add</button>
+            </div>
+            @if (inv.metalContents().length > 0) {
+              <ul class="reference-list">
+                @for (metal of inv.metalContents(); track metal) {
+                  <li class="reference-row">
+                    <span class="reference-row__name">{{ metal }}</span>
+                    <span class="reference-row__usage">{{ usageLabel(metalContentUsage(metal)) }}</span>
+                    <button type="button" class="secondary small-button"
+                      (click)="removeMetalContent(metal)">Remove</button>
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="empty-state">No metal content values yet.</p>
             }
           }
 

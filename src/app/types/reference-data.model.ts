@@ -26,7 +26,15 @@
  */
 export type IssuerKind = 'modern' | 'historical' | 'ancient';
 
-/** The three kinds, in the order the form offers them. */
+/**
+ * The three kinds.
+ *
+ * NO LONGER THE ORDER A PICKER OFFERS THEM IN — there is no picker. The form
+ * asks for the year span and DERIVES the kind from it
+ * (components/category-modal/issuer-kind.ts), because `kind` drives no
+ * behaviour and the span already carries it. This array is still the
+ * column's domain, which is what validation and the parity spec need.
+ */
 export const ISSUER_KINDS: readonly IssuerKind[] = ['modern', 'historical', 'ancient'] as const;
 
 /** `Issuers.Name NVARCHAR(100)`. The input caps itself at the same number. */
@@ -56,13 +64,51 @@ export interface IssuerRecord {
   isActive: boolean;
 }
 
-/** An issuer on its way to `POST /api/issuers` — no id yet, no counts yet. */
+/**
+ * An issuer on its way to `POST /api/issuers` — no id yet, no counts yet.
+ *
+ * NO `kind`. The server derives it from the year span on write (see
+ * server/routes/lookups/issuer-kind.ts) and returns the derived value in the
+ * `IssuerRecord` it answers with. Sending one would be the client asserting
+ * a classification the server is about to recompute anyway.
+ */
 export interface NewIssuer {
   name: string;
   isoCode: string | null;
-  kind: IssuerKind;
   validFrom: number | null;
   validTo: number | null;
+}
+
+/**
+ * What `GET /api/denomination-lookup` said happened.
+ *
+ *   results      candidates came back
+ *   none         the source answered and had nothing. THE COMMON CASE for
+ *                ancient and small issuers, and not an error
+ *   unavailable  no network, a timeout, or the endpoint refused
+ *
+ * `none` and `unavailable` are kept apart even though the screen sends the
+ * user down the same manual path for both, because "they had nothing" and
+ * "we could not ask" are different facts and the user can act on the
+ * second one.
+ */
+export type DenominationLookupOutcome = 'results' | 'none' | 'unavailable';
+
+/**
+ * One lookup's answer.
+ *
+ * It is declared HERE and not beside the screen that renders it for the
+ * reason at the top of this file: ApiService fetches it, so a type living
+ * in a component folder would make the HTTP layer import from a component.
+ */
+export interface DenominationLookupResult {
+  outcome: DenominationLookupOutcome;
+  /** What to call the source on screen, e.g. 'Wikidata'. */
+  source: string;
+  /** Candidate labels. PROPOSALS — nothing is written from these. */
+  proposals: string[];
+  /** Why it was unavailable, for the one-line message. Never an error. */
+  reason: string | null;
 }
 
 /**
@@ -78,10 +124,11 @@ export type UsageIndex = Record<string, number>;
 /**
  * Everything `GET /api/reference-usage` returns: one index per type.
  *
- * Categories, sets and mint marks are keyed by their TEXT, because that is
- * what the coin stores (`Coins.Category`, `Coins.CoinSet`, `Coins.MintMark`
- * — the mint mark's LABEL, not its id). Denominations and catalogues are
- * keyed by id, because those are real foreign keys.
+ * Categories, sets, mint marks and metal contents are keyed by their TEXT,
+ * because that is what the coin stores (`Coins.Category`, `Coins.CoinSet`,
+ * `Coins.MintMark` — the mint mark's LABEL, not its id —  and
+ * `Coins.MetalContent`). Denominations and catalogues are keyed by id,
+ * because those are real foreign keys.
  */
 export interface ReferenceUsageCounts {
   categories: UsageIndex;
@@ -89,4 +136,10 @@ export interface ReferenceUsageCounts {
   denominations: UsageIndex;
   mintMarks: UsageIndex;
   catalogs: UsageIndex;
+  /**
+   * Keyed by the metal name as the coin spells it. `Coins.MetalContent` is
+   * an NVARCHAR column and not a foreign key, so a metal removed from the
+   * reference list leaves every coin's own text exactly where it was.
+   */
+  metalContents: UsageIndex;
 }

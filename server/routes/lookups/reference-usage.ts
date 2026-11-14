@@ -22,17 +22,17 @@
  * UPDATE runs makes that disagreement impossible rather than unlikely, and
  * being trusted about the number is this screen's whole job.
  *
- * Having settled that for denominations, the other four follow it rather
+ * Having settled that for denominations, the other five follow it rather
  * than splitting one screen across two sources with different staleness.
  *
- * WHY FIVE QUERIES AND NOT ONE BATCH
- * A single batch returning five recordsets is one round trip instead of
- * five, and `recordsets[3]` is a positional dependency that no longer type-
+ * WHY SIX QUERIES AND NOT ONE BATCH
+ * A single batch returning six recordsets is one round trip instead of
+ * six, and `recordsets[3]` is a positional dependency that no longer type-
  * checks and no longer reads. This endpoint is hit once, when the user opens
- * a dialog they open rarely, against a local SQL Server. Legibility wins;
+ * a dialog they open rarely, against a local database. Legibility wins;
  * if that ever stops being true the batch is a contained change.
  *
- * WHY TWO OF THESE ARE KEYED BY ID AND THREE BY TEXT
+ * WHY TWO OF THESE ARE KEYED BY ID AND FOUR BY TEXT
  * Because that is how a coin references them, and the count must be keyed
  * the way the screen will look it up:
  *
@@ -42,6 +42,8 @@
  *     Coins.CoinSet         text  -> keyed by text
  *     Coins.MintMark        text  -> keyed by text   (NOT by MintMarkId —
  *                                    the coin stores the LABEL)
+ *     Coins.MetalContent    text  -> keyed by text   (NOT by MetalContentId;
+ *                                    there is no such column on Coins)
  *
  * Keying either group the other way produces an index that matches nothing
  * and therefore reports zero everywhere, which on this screen reads as "it
@@ -104,13 +106,14 @@ router.get('/reference-usage', async (_req: Request, res: Response) => {
 
     const usage = await withDb(async (db) => {
       // Sequential and in this fixed order, because the specs drive the mock
-      // one `mockResolvedValueOnce` at a time. Five small GROUP BYs over a
+      // one `mockResolvedValueOnce` at a time. Six small GROUP BYs over a
       // table of a few hundred rows; the order costs nothing real.
       const categories = await db.request().query(textUsageQuery('Category'));
       const coinSets = await db.request().query(textUsageQuery('CoinSet'));
       const denominations = await db.request().query(idUsageQuery('DenominationId'));
       const mintMarks = await db.request().query(textUsageQuery('MintMark'));
       const catalogs = await db.request().query(idUsageQuery('CatalogId'));
+      const metalContents = await db.request().query(textUsageQuery('MetalContent'));
 
       return {
         categories: toIndex(categories.recordset),
@@ -118,6 +121,7 @@ router.get('/reference-usage', async (_req: Request, res: Response) => {
         denominations: toIndex(denominations.recordset),
         mintMarks: toIndex(mintMarks.recordset),
         catalogs: toIndex(catalogs.recordset),
+        metalContents: toIndex(metalContents.recordset),
       };
     });
 

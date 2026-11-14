@@ -13,7 +13,12 @@ import {
   LogEntry
 } from '../types/coin.model';
 import { CatalogOption } from '../types/catalog-reference';
-import { IssuerRecord, NewIssuer, ReferenceUsageCounts } from '../types/reference-data.model';
+import {
+  DenominationLookupResult,
+  IssuerRecord,
+  NewIssuer,
+  ReferenceUsageCounts,
+} from '../types/reference-data.model';
 import { CoinImageRecord } from '../types/coin-image.model';
 import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
 
@@ -165,10 +170,35 @@ export class ApiService {
    * The id is URL-encoded: coin ids are free text and a `/` or `?` in one
    * would otherwise change which endpoint is being addressed.
    *
+   * *** WHY THERE IS A REVISION PARAMETER ***
+   *
+   * Because the id alone was not enough, and a broken thumbnail was the
+   * result. Attaching a photo repaints the row immediately but PUTs it a
+   * second later, so the browser asked for this URL while the server still
+   * had no image and got a 404. When the save landed, nothing re-requested:
+   * same element, byte-identical URL, and a browser never retries a failed
+   * image load. The picture stayed broken until the grid was reloaded.
+   *
+   * `revision` is the count of SERVER-CONFIRMED changes to that coin's image
+   * set this session (services/inventory/coin-thumbnail-revision.ts). A
+   * confirmed save therefore produces a URL the browser has never failed on,
+   * and it fetches the photograph.
+   *
+   * REVISION 0 MUST STAY THE BARE URL. A coin whose photographs have not
+   * changed keeps one stable URL for the whole session, which is what lets
+   * scrolling the grid cost a 304 against the endpoint's ETag instead of
+   * re-downloading every visible photograph. Do not "simplify" this by always
+   * appending a token, and do not fix caching problems here by turning
+   * caching off — see server/routes/coins/thumbnail.ts.
+   *
+   * @param coinId - the coin whose main photograph is wanted
+   * @param revision - confirmed image-write count; 0 (the default) means
+   *                   "unchanged since load" and yields the plain URL
    * @returns An absolute, same-origin URL safe to put in `src`
    */
-  coinThumbnailUrl(coinId: string): string {
-    return `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/thumbnail`;
+  coinThumbnailUrl(coinId: string, revision = 0): string {
+    const url = `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/thumbnail`;
+    return revision > 0 ? `${url}?v=${revision}` : url;
   }
 
   /**
@@ -325,6 +355,27 @@ export class ApiService {
    */
   deleteIssuer(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/issuers/${id}`);
+  }
+
+  /**
+   * Ask what denominations an issuer struck. THE APP'S ONLY OUTBOUND
+   * REQUEST, and it only goes as far as our own server, which forwards the
+   * NAME and nothing else to Wikidata.
+   *
+   * *** CALLING THIS AT ALL IS THE DECISION. *** The checkbox on the issuer
+   * form must gate the CALL, not the handling of the answer: "unchecked
+   * must skip the request entirely rather than making it and discarding
+   * the answer". There is nothing this method or the route behind it can do
+   * about a packet that has already left.
+   *
+   * It does not fail. No network, no results and a timeout all come back as
+   * a 200 with an `outcome` saying which — see
+   * server/routes/lookups/denomination-lookup.ts for why a 500 would be
+   * wrong for the commonest case.
+   */
+  lookUpDenominations(issuerName: string): Observable<DenominationLookupResult> {
+    const name = encodeURIComponent(issuerName);
+    return this.http.get<DenominationLookupResult>(`${this.baseUrl}/api/denomination-lookup?name=${name}`);
   }
 
   /**

@@ -15,7 +15,7 @@
  * everything when one photograph changes.
  *
  * WHAT KEEPS IT SMALL
- * `SELECT TOP 1 ... ORDER BY SortOrder` — one row, and specifically the row
+ * `ORDER BY SortOrder LIMIT 1` — one row, and specifically the row
  * the rest of the app calls the main photo (array position 0 IS SortOrder 0;
  * see CoinImagesStore.setMainImage). A coin with twenty photographs costs the
  * same as a coin with one.
@@ -144,7 +144,7 @@ router.get('/:id/thumbnail', async (req: Request, res: Response) => {
       // that honest.
       const result = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
-        .query('SELECT TOP 1 ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
+        .query('SELECT ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder LIMIT 1');
 
       const row = result.recordset[0] as Record<string, unknown> | undefined;
       return row ? decodeStoredImage(row['ImageData']) : null;

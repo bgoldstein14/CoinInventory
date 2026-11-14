@@ -18,7 +18,7 @@ The UI is organized around the principle that the inventory table *is* the appli
 3. **Filter bar** — search, category filter, and a collapsible advanced panel for grade, value range, source, country, coin set
 4. **Main content grid** — inventory table (full width) + detail sidebar (shown when a coin is selected)
 5. **Bulk edit bar** — fixed bottom bar when coins are multi-selected
-6. **Modal dialogs** — Quicken (QIF) import, CSV import, image import (Import ▾ → Images from folder), category management, reports, spot prices, settings
+6. **Modal dialogs** — Excel/CSV import, JSON import, Quicken (QIF) import, image import (Import ▾ → Images from folder), Reference Data maintenance, reports, spot prices, settings
 7. **Status bar** — the last row of the shell's flex column, showing the database connection state with a Retry button
 
 That last point used to read "fixed to the bottom of the window", and that was the bug. The status bar was `position: fixed; bottom: 0`, which took it out of the document flow — nothing reserved space for it, so it sat on top of the bottom of the inventory table and hid the last row, and the shell's `calc(100vh - 24px)` was an attempt to compensate that never quite lined up. It is now an ordinary flex item that occupies its own height, and the shell simply gets whatever is left.

@@ -5,16 +5,29 @@
  * SQL cannot import a TypeScript module:
  *
  *   1. CATALOG_SEED in types/catalog-reference.ts  — what the app believes
- *   2. server/setup-database.sql                   — what a FRESH database gets
- *   3. server/migrations/012-add-catalog-references.sql
- *                                                  — what an EXISTING one gets
+ *   2. CATALOG_SEED in server/db/seed.ts            — what a fresh SQLITE
+ *                                                     database gets, which is
+ *                                                     every new install
+ *   3. server/setup-database.sql                   — what a fresh SQL SERVER
+ *                                                     database got. LEGACY,
+ *                                                     kept until the owner's
+ *                                                     own data has moved
+ *   4. server/migrations/012-add-catalog-references.sql
+ *                                                  — what an EXISTING SQL
+ *                                                     Server database gets
  *
- * Three hand-maintained copies of the same list is exactly the arrangement
- * that produces one wrong spelling nobody notices. The consequences are not
- * cosmetic: a name that differs between (2) and (3) means a fresh install and
- * a migrated install end up with DIFFERENT catalogues, so the same export
- * imports differently on two machines. A name that differs from (1) breaks
- * nothing visibly but makes the application's own documentation wrong.
+ * FOUR hand-maintained copies of the same list, and the SQLite one (2) is
+ * now the one that matters for every user. Four copies is exactly the
+ * arrangement that produces one wrong spelling nobody notices. The
+ * consequences are not cosmetic: a name that differs between (2) and (4)
+ * means a fresh install and a migrated install end up with DIFFERENT
+ * catalogues, so the same export imports differently on two machines. A name
+ * that differs from (1) breaks nothing visibly but makes the application's
+ * own documentation wrong.
+ *
+ * Why four and not one: SQL cannot import a TypeScript module, the server
+ * package cannot import from src/, and the two SQL Server files stay in the
+ * tree until Stage 2 of the SQLite migration has been run for real.
  *
  * So this reads all three off disk and compares them. It is the same
  * technique, for the same reason, as sql-pm-reference-parity.spec.ts, which
@@ -38,6 +51,7 @@ import { CATALOG_SEED } from './catalog-reference';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATION_PATH = resolve(HERE, '../../../server/migrations/012-add-catalog-references.sql');
 const SCHEMA_PATH = resolve(HERE, '../../../server/setup-database.sql');
+const SQLITE_SEED_PATH = resolve(HERE, '../../../server/db/seed.ts');
 
 /**
  * The catalogue names a `FROM (VALUES ...) AS Seed(Name, SortOrder)` block
@@ -58,15 +72,44 @@ function seededRows(sql: string, label: string): Array<{ name: string; sortOrder
   }));
 }
 
+/**
+ * The names in server/db/seed.ts's `CATALOG_SEED` array literal, in file
+ * order. That file cannot be imported from here — it is CommonJS in the
+ * server package, and importing it would drag `node:sqlite` into the Angular
+ * test run — so it is read as text, by the same crude-tripwire principle as
+ * the SQL above. The `expect` is what stops a reformatted array turning this
+ * into a silent pass.
+ *
+ * SortOrder is not in that literal: db/seed.ts numbers the catalogues by
+ * their position (index + 1), so the order of the array IS the SortOrder and
+ * the two cannot drift apart.
+ */
+function sqliteSeedRows(source: string): string[] {
+  const block = source.match(
+    /export const CATALOG_SEED: readonly string\[\] = \[([\s\S]*?)\];/
+  )?.[1];
+  expect(block, 'no CATALOG_SEED array found in server/db/seed.ts').toBeTruthy();
+
+  return [...(block ?? '').matchAll(/'((?:[^']|\\')*)'/g)].map(match => match[1]);
+}
+
 const migrationRows = seededRows(readFileSync(MIGRATION_PATH, 'utf8'), 'migration 012');
 const schemaRows = seededRows(readFileSync(SCHEMA_PATH, 'utf8'), 'setup-database.sql');
+const sqliteRows = sqliteSeedRows(readFileSync(SQLITE_SEED_PATH, 'utf8'));
 
-describe('the catalogue seed is the same in all three files', () => {
-  it('found a non-empty list in each SQL file', () => {
-    // Guards against the parser above quietly matching nothing, which would
+describe('the catalogue seed is the same in all four files', () => {
+  it('found a non-empty list in each file', () => {
+    // Guards against the parsers above quietly matching nothing, which would
     // make every comparison below trivially true.
     expect(migrationRows.length).toBe(CATALOG_SEED.length);
     expect(schemaRows.length).toBe(CATALOG_SEED.length);
+    expect(sqliteRows.length).toBe(CATALOG_SEED.length);
+  });
+
+  it('server/db/seed.ts seeds exactly CATALOG_SEED, in order', () => {
+    // THE ONE THAT MATTERS FOR EVERY NEW INSTALL. The two SQL files below
+    // only affect databases that already exist on SQL Server.
+    expect(sqliteRows).toEqual([...CATALOG_SEED]);
   });
 
   it('migration 012 seeds exactly CATALOG_SEED, in order', () => {

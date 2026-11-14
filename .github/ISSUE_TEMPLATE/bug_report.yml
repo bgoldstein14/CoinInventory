@@ -14,8 +14,13 @@ body:
         The quickest way to fill this in is **Help → Report a problem** inside
         the app. It gathers the versions, the recent errors and a log tail for
         you, replaces your user name, computer name and folder paths with
-        placeholders, shows you the result, and saves a zip to your Desktop
-        that you can drag in below.
+        placeholders, shows you the result, and saves it as a plain `.md` file
+        on your Desktop.
+
+        The app never uploads anything. If you want to send a file —
+        that report, a screenshot, a QIF — drag it into this issue yourself.
+        Images display inline, so there is no need to zip anything; if you
+        have a lot to send, make your own zip.
 
   - type: textarea
     id: what-happened
@@ -57,8 +62,8 @@ body:
     attributes:
       label: Problem report
       description: >
-        Paste the report from Help → Report a problem, and drag the .zip from
-        your Desktop into this box if you have one.
+        Paste the report from Help → Report a problem, or drag the saved
+        .md file from your Desktop into this box.
       render: text
 
   - type: checkboxes
