@@ -40,8 +40,37 @@ import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { safeRollback } from './write-helpers';
 import { normalizeImageEntries, type NormalizedImage } from './image-payload';
+import { originFromRequest, referenceUrlFor } from '../images/reference-url';
 
 const router = Router();
+
+/**
+ * What one row's `imageData` should be on the wire.
+ *
+ * STORED      the base64 data URL, exactly as it is in the database.
+ * REFERENCED  ImageData is NULL and SourcePath is where the picture lives,
+ *             so the client is handed the URL that streams that file.
+ * NEITHER     null. A row with no picture and no path holds no photograph;
+ *             saying so plainly is better than inventing a broken URL.
+ *
+ * Exported for direct unit testing — it is the whole of the read side of the
+ * referenced storage mode.
+ */
+export function resolveImageData(
+  storedImageData: unknown,
+  sourcePath: unknown,
+  origin: string
+): string | null {
+  if (typeof storedImageData === 'string' && storedImageData.length > 0) {
+    return storedImageData;
+  }
+
+  if (typeof sourcePath === 'string' && sourcePath.trim().length > 0) {
+    return referenceUrlFor(sourcePath.trim(), origin);
+  }
+
+  return null;
+}
 
 // GET /api/coins/:id/images — full images for ONE coin, in display order
 //
@@ -103,9 +132,19 @@ router.get('/:id/images', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT ImageId, ImageData, SortOrder, SourcePath FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder');
 
+      const origin = originFromRequest(req);
+
       return result.recordset.map((row: Record<string, unknown>) => ({
         imageId: row['ImageId'],
-        imageData: row['ImageData'],
+        /* REFERENCED PHOTOGRAPHS: ImageData is NULL because the user chose to
+         * keep the picture on disk rather than in the database. The client
+         * still needs something an `<img src>` can load, so the row is
+         * rendered as the URL of this server's own file-streaming route.
+         * That URL is a transport form only — image-payload.ts turns it back
+         * into "path, no picture" when the coin is saved again, so a round
+         * trip cannot quietly convert a referenced photo into a stored one.
+         * See routes/images/reference-url.ts. */
+        imageData: resolveImageData(row['ImageData'], row['SourcePath'], origin),
         sortOrder: row['SortOrder'],
         // Normalise SQL NULL (and a driver that omits the column entirely, as
         // happens against a database where migration 002 has not been run yet)
@@ -195,6 +234,11 @@ router.post('/:id/images', async (req: Request, res: Response) => {
         for (const image of images) {
           const result = await new DbRequest(transaction)
             .input('coinId', DB_BINDINGS.coinId, id)
+            // NULL here is the REFERENCED storage mode, not a missing value:
+            // the row records where the picture is and the database does not
+            // carry it. normalizeImageEntries() has already refused any entry
+            // that has neither a picture nor a path, so a NULL ImageData row
+            // always has a SourcePath. See image-payload.ts.
             .input('imageData', DB_BINDINGS.imageData, image.imageData)
             .input('sortOrder', DB_BINDINGS.sortOrder, nextOrder++)
             .input('sourcePath', DB_BINDINGS.imageSourcePath, image.sourcePath)

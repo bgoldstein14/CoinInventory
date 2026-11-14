@@ -26,7 +26,6 @@ export function createMockDependencies() {
     getCoins: vi.fn(() => of([])),
     getCategories: vi.fn(() => of([])),
     getCoinSets: vi.fn(() => of([])),
-    getTransactions: vi.fn(() => of([])),
     getDenominations: vi.fn(() => of([])),
     getMintMarks: vi.fn(() => of([])),
     // Catalogues. An empty list is a perfectly workable state -- the
@@ -81,8 +80,6 @@ export function createMockDependencies() {
     deleteCategory: vi.fn(() => of({})),
     createCoinSet: vi.fn(() => of({})),
     deleteCoinSet: vi.fn(() => of({})),
-    createTransaction: vi.fn(() => of({})),
-    deleteTransaction: vi.fn(() => of({})),
     fetchSpotPrices: vi.fn(() => of({
       prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
       source: '', timestamp: ''

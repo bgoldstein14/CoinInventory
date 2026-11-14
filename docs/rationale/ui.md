@@ -40,10 +40,12 @@ None of them are bugs:
 
 - **`tags`** — was plumbed end to end except for any way to enter one, so
   every coin carried an empty array and the column could only render a dash.
-- **coin-level `dealer`** — superseded by the dealer on each transaction row,
-  which survives a coin being bought from one dealer and sold to another.
-  **`TransactionRecord.dealer` is a different field and it stays**; if you are
-  grepping for `dealer`, check which of the two you have found.
+- **`dealer`, in every form** — the coin-level field went first, superseded by
+  the dealer on each transaction row. The transaction rows went too (the
+  `Transactions` table was dropped), and the argument that killed the coin
+  field — one string cannot describe a coin bought from one dealer and sold to
+  another — is answered by **two** fields on the coin instead:
+  `purchasedFrom` and `soldTo`. There is no `dealer` anywhere now.
 - **a "Certified By" grid column** — showed the grading company alone, which
   `certBadgeLabel()` already leads with, so with both switched on the grid read
   "NGC" beside "NGC #2599001". The *report* field label "Certified By" is a

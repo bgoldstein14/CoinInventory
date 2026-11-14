@@ -173,18 +173,42 @@ describe('GET /api/denomination-lookup', () => {
     const stub = stubFetch(() => okResponse([]));
     restore = stub.restore;
 
+    // A genuinely repeated parameter still arrives as an ARRAY, and still
+    // collapses to the first value.
     await request(app).get('/api/denomination-lookup?name=Burma&name=Siam').expect(200);
     expect(decodeURIComponent(stub.calls[0].url)).toContain('"Burma"');
 
-    // `?name[0]=x` gives Express an ARRAY, which collapses the same way.
-    await request(app).get('/api/denomination-lookup?name[0]=Siam').expect(200);
-    expect(decodeURIComponent(stub.calls[1].url)).toContain('"Siam"');
+    /*
+     * `?name[0]=x` USED to arrive as an array under `name`, because Express 4
+     * parsed query strings with `qs` ("extended"). Express 5 defaults to the
+     * plain `querystring` parser, so the key is the literal string
+     * `name[0]` and there is no `name` parameter at all — hence 400, the
+     * same answer as omitting it.
+     *
+     * This is stricter, and better: the route never wanted a nested
+     * structure, and nothing in this server does (five `req.query` reads,
+     * every one a plain scalar). Asserted here so the change is recorded
+     * rather than rediscovered, and so that restoring
+     * `app.set('query parser', 'extended')` to make something else work
+     * fails this test and gets argued about first.
+     */
+    await request(app).get('/api/denomination-lookup?name[0]=Siam').expect(400);
+    expect(stub.calls).toHaveLength(1);
 
-    // `?name[key]=x` gives Express an OBJECT. Calling .trim() on it would
-    // be a TypeError inside the handler and a 500 for the caller; it is
-    // treated as absent instead.
+    /*
+     * `?name[key]=x` was an OBJECT under Express 4's `qs` parser, and
+     * calling `.trim()` on it would have been a TypeError inside the handler
+     * and a 500 for the caller — which is why the defensive collapse in
+     * `toSingleValue` exists.
+     *
+     * Under Express 5 it is simply the literal key `name[key]`, so there is
+     * no `name` and the answer is 400 for the ordinary reason. Same status,
+     * reached a safer way. The defence stays because a genuinely repeated
+     * parameter still produces an array (asserted above) and because the
+     * parser is a setting someone could change back.
+     */
     await request(app).get('/api/denomination-lookup?name[key]=Burma').expect(400);
-    expect(stub.calls).toHaveLength(2);
+    expect(stub.calls).toHaveLength(1);
   });
 
   it('writes nothing to the database, whatever comes back', async () => {

@@ -6,7 +6,6 @@ import {
   CoinRecord,
   Denomination,
   MintMarkOption,
-  TransactionRecord,
   SpotPrices,
   SpotPriceResult,
   LatestSpotPrices,
@@ -15,11 +14,20 @@ import {
 import { CatalogOption } from '../types/catalog-reference';
 import {
   DenominationLookupResult,
+  IssuerCreationResult,
   IssuerRecord,
+  IssuerRemovalResult,
   NewIssuer,
   ReferenceUsageCounts,
 } from '../types/reference-data.model';
 import { CoinImageRecord } from '../types/coin-image.model';
+import {
+  BackupDirectoryListing,
+  BackupInspection,
+  BackupJobStatus,
+  BackupSuggestion,
+  RestoreResult
+} from './backup/backup-messages';
 import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
 
 // Shared HTTP helpers live in ./http-utils so that a service needing only a
@@ -326,14 +334,20 @@ export class ApiService {
   }
 
   /**
-   * Create an issuer the seed missed.
+   * Create an issuer the seed missed — OR BRING A REMOVED ONE BACK.
    *
-   * The server answers 409 for a duplicate name rather than letting
-   * UQ_Issuers_Name turn into a 500, and 400 for an ISO code that is not
-   * exactly two letters. Both are expected answers, not faults.
+   * Removal is a SOFT delete, so a removed issuer still holds its name and
+   * cannot be re-created alongside itself. Posting that name revives the
+   * existing row, keeping its id and its denominations, and the answer
+   * carries `revived` and `denominationsRestored` so the caller can say
+   * which of the two happened. See `IssuerCreationResult`.
+   *
+   * The server answers 409 for a name an ACTIVE issuer already holds rather
+   * than letting UQ_Issuers_Name turn into a 500, and 400 for an ISO code
+   * that is not exactly two letters. Both are expected answers, not faults.
    */
-  createIssuer(issuer: NewIssuer): Observable<IssuerRecord> {
-    return this.http.post<IssuerRecord>(`${this.baseUrl}/api/issuers`, issuer);
+  createIssuer(issuer: NewIssuer): Observable<IssuerCreationResult> {
+    return this.http.post<IssuerCreationResult>(`${this.baseUrl}/api/issuers`, issuer);
   }
 
   /**
@@ -348,13 +362,23 @@ export class ApiService {
   }
 
   /**
-   * Remove an issuer. Soft on the server, and REFUSED with a 409 while
-   * denominations still point at it — see the long note on the handler in
-   * server/routes/lookups/issuers.ts for why that one case refuses instead
-   * of warning.
+   * Remove an issuer, CASCADING to its denominations and their coins.
+   *
+   * Soft on the server, and atomic: the issuer, its denominations and the
+   * `DenominationId` on every coin using them all go in one transaction, so
+   * there is no state in which the issuer is gone and live denominations are
+   * still filed under it. `Coins.Denomination` — the recorded text — is not
+   * touched, which is what lets the caller promise that no coin is lost.
+   *
+   * It USED TO REFUSE with a 409 while any denomination remained. See the
+   * handler in server/routes/lookups/issuers.ts for why that refusal was
+   * the bug rather than the safeguard it looked like.
+   *
+   * The response says what actually happened, so the caller can report that
+   * rather than what it predicted in the confirmation.
    */
-  deleteIssuer(id: number): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/issuers/${id}`);
+  deleteIssuer(id: number): Observable<IssuerRemovalResult> {
+    return this.http.delete<IssuerRemovalResult>(`${this.baseUrl}/api/issuers/${id}`);
   }
 
   /**
@@ -485,25 +509,14 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/coin-sets/${name}`);
   }
 
-  // ---- Transaction Operations ----
-
-  /** Fetch transactions, optionally filtered by coin ID. */
-  getTransactions(coinId?: string): Observable<TransactionRecord[]> {
-    const url = coinId
-      ? `${this.baseUrl}/api/transactions?coinId=${coinId}`
-      : `${this.baseUrl}/api/transactions`;
-    return this.http.get<TransactionRecord[]>(url);
-  }
-
-  /** Create a new transaction record. */
-  createTransaction(t: Partial<TransactionRecord>): Observable<void> {
-    return this.http.post<void>(`${this.baseUrl}/api/transactions`, t);
-  }
-
-  /** Delete a transaction. */
-  deleteTransaction(id: string): Observable<void> {
-    return this.http.delete<void>(`${this.baseUrl}/api/transactions/${id}`);
-  }
+  // ---- Transaction Operations: REMOVED ----
+  //
+  // getTransactions / createTransaction / deleteTransaction called
+  // /api/transactions, which no longer exists. The buy and the sale are
+  // ordinary fields on the coin now — purchasedFrom, soldTo,
+  // transactionNotes, plus the money and dates that were always there — so
+  // they are saved by updateCoin() along with every other field. Do not add
+  // a second write path back.
 
   // ---- Spot Price Operations ----
 
@@ -636,6 +649,88 @@ export class ApiService {
       map(info => (typeof info?.appFolder === 'string' ? info.appFolder : '')),
       catchError(() => of(''))
     );
+  }
+
+  /* ===================== Backup and restore (§16) =====================
+   *
+   * *** EVERY ONE OF THESE PROPAGATES ITS ERRORS. ***
+   *
+   * That is the opposite of `getAppFolder()` and `healthCheck()` just
+   * above, and the difference is deliberate. Those two answer cosmetic
+   * questions, so swallowing a failure and returning a blank is the right
+   * trade — a screen that refused to open because a prefill could not be
+   * fetched would be worse than one with an empty box.
+   *
+   * Nothing here is cosmetic. A backup that silently resolves to "fine"
+   * when the server said no is a user who believes they have a copy of
+   * their collection and does not. A restore that swallows a 400 is a
+   * refusal the user never sees. So these are also NOT wrapped in
+   * `retryTransientFailures()`: retrying a restore would mean replacing
+   * the collection twice.
+   */
+
+  /** Where to put a backup and what to call it. Never cached. */
+  getBackupSuggestion(): Observable<BackupSuggestion> {
+    return this.http.get<BackupSuggestion>(`${this.baseUrl}/api/backup/suggestion`);
+  }
+
+  /**
+   * The `*.db` files the SERVER can see in a folder the user named.
+   *
+   * *** THIS IS HOW THE RESTORE BOX OFFERS A CHOICE AT ALL. *** A browser
+   * will not read a folder for a web page, so without this endpoint the
+   * only way to name the file that is about to replace an entire
+   * collection is to type its path exactly. The server can simply look.
+   *
+   * Read-only on the server's side (see server/backup/list-db-files.ts
+   * for what it will and will not report), but its errors still
+   * propagate like the rest of §16: a folder that silently resolves to
+   * "no backups here" when the real answer was "that folder does not
+   * exist" is how a user concludes their backups are gone.
+   */
+  listBackupFiles(directory: string): Observable<BackupDirectoryListing> {
+    return this.http.get<BackupDirectoryListing>(`${this.baseUrl}/api/backup/files`, {
+      params: { directory }
+    });
+  }
+
+  /** Starts a backup. Resolves with the job's opening status (HTTP 202). */
+  startBackup(directory: string, fileName: string): Observable<BackupJobStatus> {
+    return this.http.post<BackupJobStatus>(`${this.baseUrl}/api/backup/jobs`, {
+      directory,
+      fileName
+    });
+  }
+
+  /** How far the backup has got. Polled by BackupRunner. */
+  getBackupJob(id: string): Observable<BackupJobStatus> {
+    return this.http.get<BackupJobStatus>(
+      `${this.baseUrl}/api/backup/jobs/${encodeURIComponent(id)}`
+    );
+  }
+
+  /** Asks a running backup to stop. It stops on its next batch. */
+  cancelBackup(id: string): Observable<{ accepted: boolean }> {
+    return this.http.post<{ accepted: boolean }>(
+      `${this.baseUrl}/api/backup/jobs/${encodeURIComponent(id)}/cancel`,
+      {}
+    );
+  }
+
+  /**
+   * Looks at a file WITHOUT changing anything, and reports what it is.
+   *
+   * Answers 200 even for a file that will be refused — the inspection
+   * succeeded and its answer is "no" — so the caller reads
+   * `decision.acceptable`, not the status code.
+   */
+  inspectBackup(path: string): Observable<BackupInspection> {
+    return this.http.post<BackupInspection>(`${this.baseUrl}/api/restore/inspect`, { path });
+  }
+
+  /** *** REPLACES THE COLLECTION. *** The server validates again first. */
+  restoreBackup(path: string): Observable<RestoreResult> {
+    return this.http.post<RestoreResult>(`${this.baseUrl}/api/restore`, { path });
   }
 }
 

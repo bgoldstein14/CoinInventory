@@ -1,7 +1,7 @@
 -- ============================================================
 -- Coin Inventory — SQLite schema
 -- ============================================================
--- The twelve tables at their CURRENT shape, i.e. with migrations 002 through
+-- The eleven tables at their CURRENT shape, i.e. with migrations 002 through
 -- 014 already applied. This is a DESTINATION, not a replay: the migrations in
 -- server/migrations/ are the history of a SQL Server database and are kept
 -- for the record and for Stage 2's one-time import. Nothing runs them here.
@@ -37,16 +37,15 @@
 --
 -- UNIQUEIDENTIFIER         -> TEXT
 --
---   CoinId and TransactionId were UNIQUEIDENTIFIER with DEFAULT NEWID(), but
---   every parameter that ever bound them was already NVARCHAR(36) — see the
---   header of db/coin-fields.ts, which explains that free-form ids from the
---   Quicken import path are deliberately allowed. TEXT is therefore what the
+--   CoinId was UNIQUEIDENTIFIER with DEFAULT NEWID(), but every parameter
+--   that ever bound it was already NVARCHAR(36) — see the header of
+--   db/coin-fields.ts, which explains that free-form ids from the Quicken
+--   import path are deliberately allowed. TEXT is therefore what the
 --   application was really using.
 --
---   NO DEFAULT. The DEFAULT NEWID() never fired: routes/coins/writes.ts and
---   routes/data/transactions.ts both do `body.id || crypto.randomUUID()`, so
---   a value is always supplied. A default that is never reached is a claim
---   nobody checks.
+--   NO DEFAULT. The DEFAULT NEWID() never fired: routes/coins/writes.ts does
+--   `body.id || crypto.randomUUID()`, so a value is always supplied. A
+--   default that is never reached is a claim nobody checks.
 --
 -- NVARCHAR(n) / NVARCHAR(MAX)  -> TEXT
 --
@@ -144,7 +143,7 @@
 --     Coins.CurrentValue      DECIMAL(12,2)   money
 --     Coins.SoldPrice         DECIMAL(12,2)   money
 --
--- plus Transactions.Amount, the four SpotPrices columns and
+-- plus the four SpotPrices columns and
 -- Denominations.FaceValue. SQLite has no fixed-point type. The three
 -- candidates and the reasons the chosen one won:
 --
@@ -179,7 +178,7 @@
 --    hundred conversion sites is a bad trade when the consumer is a language
 --    with no decimal type.
 --
--- 3. TEXT. Exact, and rejected: `ORDER BY FetchedAt`, `SUM(Amount)`,
+-- 3. TEXT. Exact, and rejected: `ORDER BY FetchedAt`, `SUM(PurchasePrice)`,
 --    `MAX(SortOrder)` and the melt-value arithmetic would all need casts, and
 --    every cast lands back on a double. It is option 1 with a slower, more
 --    fragile route and an extra way to get it wrong.
@@ -310,6 +309,28 @@ CREATE TABLE IF NOT EXISTS Coins (
     StorageLocation     TEXT        NULL,                           -- NVARCHAR(200)
     CatalogId           INTEGER     NULL,                           -- INT
     CatalogNumber       TEXT        NULL,                           -- NVARCHAR(50)   stored EXACTLY as typed
+    -- ----- The acquisition / disposal record ------------------
+    -- *** THESE THREE REPLACED THE Transactions TABLE. *** It is gone: a
+    -- coin has ONE purchase and at most ONE sale, which is what the owner
+    -- actually records, and a separate table with its own ids, its own
+    -- routes and its own client service bought nothing for that.
+    --
+    -- The money and the dates were ALREADY HERE and are reused, not
+    -- duplicated: PurchaseDate, PurchasePrice (the UI calls it **Cost**),
+    -- SoldPrice and SoldDate are all declared further up this same table.
+    -- Only the counterparties and the note were missing.
+    --
+    -- *** TransactionNotes IS NOT Coins.Notes AND MUST NEVER BE MERGED WITH
+    -- IT. *** `Notes` is the COIN's own note — what it is, how it looks,
+    -- where it came from in the collector's own words — and it long predates
+    -- this. `TransactionNotes` is the note on the DEAL: "paid in two
+    -- instalments", "consigned through Heritage, 18% buyer's premium". They
+    -- are adjacent in the UI, so the names are deliberately un-confusable in
+    -- code: there is no bare `Notes` here and no `CoinNotes` there, and a
+    -- grep for TransactionNotes finds exactly one of them.
+    PurchasedFrom       TEXT        NULL,                           -- NVARCHAR(200)  who the coin was bought FROM
+    SoldTo              TEXT        NULL,                           -- NVARCHAR(200)  who the coin was sold TO
+    TransactionNotes    TEXT        NULL,                           -- NVARCHAR(MAX)  the DEAL's note, NOT the coin's
     CONSTRAINT FK_Coins_Denomination
         FOREIGN KEY (DenominationId) REFERENCES Denominations (DenominationId),
     CONSTRAINT FK_Coins_Catalog
@@ -339,21 +360,19 @@ CREATE TABLE IF NOT EXISTS CoinImages (
         FOREIGN KEY (CoinId) REFERENCES Coins (CoinId) ON DELETE CASCADE
 );
 
--- ----- Transactions ------------------------------------------
--- Historical purchase / sale / trade / appraisal log.
--- Dealer here is the TRANSACTION's counterparty. It is NOT the coin-level
--- Dealer column migration 006 removed from Coins.
-CREATE TABLE IF NOT EXISTS Transactions (
-    TransactionId       TEXT        NOT NULL PRIMARY KEY,           -- NVARCHAR(36)   was UNIQUEIDENTIFIER
-    CoinId              TEXT        NOT NULL,                       -- NVARCHAR(36)
-    TransactionType     TEXT        NOT NULL COLLATE NOCASE,        -- NVARCHAR(50)
-    TransactionDate     TEXT        NOT NULL,                       -- NVARCHAR(30)   text, not a date
-    Amount              REAL        NOT NULL,                       -- DECIMAL(12,2)
-    Dealer              TEXT        NULL,                           -- NVARCHAR(200)
-    Notes               TEXT        NULL,                           -- NVARCHAR(MAX)
-    CONSTRAINT FK_Transactions_Coin
-        FOREIGN KEY (CoinId) REFERENCES Coins (CoinId) ON DELETE CASCADE
-);
+-- ----- Transactions: DELETED, DO NOT BRING IT BACK -----------
+-- There was a Transactions table here (TransactionId, CoinId,
+-- TransactionType, TransactionDate, Amount, Dealer, Notes) holding a
+-- purchase / sale / trade / appraisal log, one row per event.
+--
+-- It is gone and its data lives on Coins: PurchaseDate + PurchasePrice +
+-- PurchasedFrom for the buy, SoldDate + SoldPrice + SoldTo for the sale,
+-- TransactionNotes for the note. See the block on those columns above.
+--
+-- The owner accepted a DATABASE RESET rather than a migration for this, so
+-- there is no migration runner step and none is wanted: db/schema.ts only
+-- applies this file with IF NOT EXISTS. Re-adding the table here would
+-- silently recreate it in every existing database on the next open.
 
 -- ----- Categories --------------------------------------------
 -- User-defined category names. Hard-deleted from the maintenance screen.
@@ -418,6 +437,5 @@ CREATE INDEX IF NOT EXISTS IX_Coins_Year            ON Coins (Year);
 CREATE INDEX IF NOT EXISTS IX_Coins_CoinSet         ON Coins (CoinSet);
 CREATE INDEX IF NOT EXISTS IX_Coins_MetalContent    ON Coins (MetalContent);
 CREATE INDEX IF NOT EXISTS IX_Coins_CoinType        ON Coins (CoinType);
-CREATE INDEX IF NOT EXISTS IX_Transactions_CoinId   ON Transactions (CoinId);
 CREATE INDEX IF NOT EXISTS IX_Denominations_IssuerId ON Denominations (IssuerId);
 CREATE INDEX IF NOT EXISTS IX_Coins_DenominationId  ON Coins (DenominationId);

@@ -21,7 +21,11 @@ import {
   denominationPickerBase,
   denominationPickerView,
 } from '../coin-editor-form/denomination-picker';
-import { IssuerRecord, ReferenceUsageCounts } from '../../types/reference-data.model';
+import {
+  IssuerCreationResult,
+  IssuerRecord,
+  ReferenceUsageCounts,
+} from '../../types/reference-data.model';
 
 import {
   DEFAULT_REFERENCE_SECTION,
@@ -35,6 +39,16 @@ import {
   groupDenominations,
 } from './denomination-grouping';
 import {
+  ALL_GROUPS_EXPANDED,
+  GroupExpansion,
+  applyExpandAllControl,
+  describeExpandAllControl,
+  expandGroup,
+  focusGroup,
+  isGroupExpanded,
+  toggleGroup as toggleGroupExpansion,
+} from './denomination-expansion';
+import {
   EMPTY_REFERENCE_USAGE,
   describeUsage,
   planDenominationRemoval,
@@ -45,7 +59,12 @@ import {
   ISSUER_NAME_MAX_LENGTH,
   IssuerDraft,
   blankIssuerDraft,
+  describeDenominationCount,
   describeIssuerRemoval,
+  describeIssuerRemoved,
+  describeIssuerRevived,
+  describeLookupSkippedForRevival,
+  issuerDraftFrom,
   previewIssuerKind,
   validateIssuerDraft,
 } from './issuer-draft';
@@ -103,8 +122,20 @@ import { StorageKeys, StorageService } from '../../services/storage.service';
  * which is a question the APP raises about data the user typed; that is the
  * opposite situation in both respects, so it is the wrong helper here.
  *
- * The one exception is `removeIssuer`, which refuses rather than asks. See
- * `describeIssuerRemoval` in issuer-draft.ts for the argument.
+ * THERE IS NO LONGER AN EXCEPTION. `removeIssuer` used to refuse rather
+ * than ask, on the strength of a count that nothing kept up to date, so it
+ * refused permanently. It now asks like everything else — with a warning
+ * sized to the number of coins at stake — and cascades when told to. See
+ * `describeIssuerRemoval` in issuer-draft.ts.
+ *
+ * NO COUNT ON THIS SCREEN IS A STORED COPY OF ANOTHER ONE
+ * `IssuerRecord.denominationCount` arrives with the issuer list and is a
+ * snapshot. It is NOT read for any decision: `issuerDenominationCount`
+ * derives the figure from `inv.denominations()`, the same array the
+ * denominations pane renders, so the number beside an issuer and the rows
+ * under its heading cannot disagree. That identity is the fix for the bug
+ * the owner hit, and it is a property of where the number comes from rather
+ * than of how often something reloads.
  *
  * WHY THE ISSUER LIST IS LOCAL STATE AND NOT AN InventoryService SIGNAL
  * Every other reference list is a signal on InventoryService because the rest
@@ -187,24 +218,134 @@ export class CategoryModal {
    */
   protected readonly sortedIssuers = computed(() => [...this.issuers()].sort(compareIssuersByName));
 
+  /**
+   * How many ACTIVE denominations are filed under each issuer, RIGHT NOW.
+   *
+   * *** THE FIX FOR THE COUNT THAT WOULD NOT COME DOWN. ***
+   * `IssuerRecord.denominationCount` arrives with the issuer list and is a
+   * SNAPSHOT of a server-side GROUP BY taken when this dialog opened. It was
+   * then kept by hand: incremented when the online lookup wrote rows, and
+   * decremented by nothing at all. Removing a denomination left it saying
+   * the old number, and because `removeIssuer` consulted that number before
+   * deciding whether the issuer could go, Remove refused forever. "I tried
+   * removing the denominations first, but that didn't work" is that bug,
+   * end to end.
+   *
+   * The repair is not to reload the issuers after every edit — that only
+   * narrows the window in which the two copies disagree, and it costs a
+   * round trip on every keystroke-sized action. It is to STOP KEEPING A
+   * SECOND COPY. `inv.denominations()` is the list this screen is already
+   * rendering on the pane next door; `addDenomination` and
+   * `removeDenomination` both REPLACE that array, so a count derived from
+   * it cannot lag behind what the user can see. The number beside an issuer
+   * is now, by construction, the number of rows under its heading.
+   *
+   * Rows with no issuer are skipped rather than bucketed: "No issuer yet" is
+   * a heading on the denominations pane, not an issuer with a Remove button.
+   */
+  private readonly denominationCountByIssuer = computed(() => {
+    const counts = new Map<number, number>();
+    for (const denomination of this.inv.denominations()) {
+      const issuerId = denomination.issuerId;
+      if (issuerId === null || issuerId === undefined) continue;
+      counts.set(issuerId, (counts.get(issuerId) ?? 0) + 1);
+    }
+    return counts;
+  });
+
+  /** The live denomination count for one issuer. Never a cached number. */
+  issuerDenominationCount(issuerId: number): number {
+    return this.denominationCountByIssuer().get(issuerId) ?? 0;
+  }
+
+  /** The same figure, in words, for the badge on the row. */
+  issuerDenominationLabel(issuerId: number): string {
+    return describeDenominationCount(this.issuerDenominationCount(issuerId));
+  }
+
+  /**
+   * How many coins the cascade would touch if this issuer were removed.
+   *
+   * Derived the same way and for the same reason, from the two live
+   * sources: this issuer's denominations as they stand, and `usage`, which
+   * `refreshUsage` re-reads after anything that changes it. The usage index
+   * is counted by the server in the same place the UPDATE runs (see
+   * reference-usage.ts), so this is the number the delete will actually
+   * touch rather than a guess from the browser's coin snapshot.
+   *
+   * It is a SUM over the issuer's denominations, not a stored
+   * `coinCount`: that field is the same kind of open-loop snapshot
+   * `denominationCount` was, and the warning that quotes it is the one
+   * sentence on this screen that must not be out of date.
+   */
+  issuerCoinCount(issuerId: number): number {
+    let total = 0;
+    for (const denomination of this.inv.denominations()) {
+      if (denomination.issuerId !== issuerId) continue;
+      total += this.denominationUsage(denomination.denominationId);
+    }
+    return total;
+  }
+
   constructor() {
     void this.loadIssuers();
     void this.refreshUsage();
     void this.loadLookUpOnlinePreference();
   }
 
+  /**
+   * Set when the issuer fetch failed, and cleared when a retry succeeds.
+   *
+   * *** THIS IS THE ONE WAY THE DENOMINATIONS PANE CAN HONESTLY SHOW ONE
+   * ISSUER AND NO OTHERS. *** Nothing on that pane filters by issuer — the
+   * headings simply ARE `issuers()`, so an empty fetch means no headings,
+   * every one of the 1,207 rows falls into "No issuer yet", and the moment
+   * the user adds an issuer the list is exactly one long. That is the trap
+   * the owner described, and until now the only sign of it was a toast
+   * that had already faded by the time he reached the pane. A failure the
+   * user cannot see behaves exactly like a filter the user cannot see.
+   */
+  protected readonly issuerLoadFailed = signal(false);
+  protected readonly issuerLoadError = signal<string>('');
+
   private async loadIssuers(): Promise<void> {
     try {
       this.issuers.set(await firstValueFrom(this.api.getIssuers()));
+      this.issuerLoadFailed.set(false);
+      this.issuerLoadError.set('');
     } catch (error) {
       // An empty issuer list is a usable screen: every other pane works, and
       // the denominations pane shows its rows under "No issuer yet" rather
       // than nothing at all. Refusing to open would turn a failed fetch into
       // a locked door.
+      //
+      // The toast stays AND the state is recorded, because the two do
+      // different jobs: the toast says it happened, the banner says it is
+      // still true. See `issuerLoadFailed`.
       this.notifications.showError(`Could not load issuers: ${describeHttpError(error)}`);
       this.issuers.set([]);
+      this.issuerLoadFailed.set(true);
+      this.issuerLoadError.set(describeHttpError(error));
     }
   }
+
+  /** Try the fetch again, from the banner, without closing the dialog. */
+  protected async retryLoadIssuers(): Promise<void> {
+    await this.loadIssuers();
+  }
+
+  /**
+   * Show the banner only on the two panes the issuer list actually feeds.
+   *
+   * Categories and Catalogues do not care that the fetch failed, and a
+   * standing red bar on a pane the failure cannot affect is the kind of
+   * warning users learn to read past.
+   */
+  protected readonly issuerListUnavailable = computed(
+    () =>
+      this.issuerLoadFailed() &&
+      (this.activeSection() === 'issuers' || this.activeSection() === 'denominations')
+  );
 
   /**
    * Re-read the in-use counts.
@@ -340,13 +481,22 @@ export class CategoryModal {
   }
 
   /**
-   * Create an issuer the seed missed, then offer to fill it.
+   * Create an issuer the seed missed — OR BRING A REMOVED ONE BACK — then
+   * offer to fill it.
    *
    * THE TWO STEPS ARE SEPARATE AND THE SECOND CANNOT BREAK THE FIRST. The
    * issuer is created, pushed into the list and announced before anything
    * is asked of the network; the lookup then runs against a row that
    * already exists. A lookup that hangs, fails or returns nonsense cannot
    * cost the user the issuer they just typed.
+   *
+   * *** THE FORM'S OWN DUPLICATE CHECK CANNOT SEE A REMOVED ISSUER, AND
+   * THAT IS CORRECT. *** `validateIssuerDraft` compares against
+   * `this.issuers()`, which holds only the ACTIVE ones because that is all
+   * `GET /api/issuers` returns. A removed "Burma" is therefore not a clash
+   * here and the request goes out — which is what we want, since the
+   * server's answer to it is now a revival rather than a refusal. The
+   * client's job is only to SAY which of the two came back.
    */
   async addIssuerFromDraft(): Promise<void> {
     const draft = this.issuerDraft();
@@ -358,7 +508,7 @@ export class CategoryModal {
       return;
     }
 
-    let created: IssuerRecord;
+    let created: IssuerCreationResult;
     try {
       created = await firstValueFrom(this.api.createIssuer(validated.issuer));
     } catch (error) {
@@ -375,6 +525,40 @@ export class CategoryModal {
     this.issuerDraft.set(blankIssuerDraft(draft.lookUpOnline));
     this.issuerError.set('');
 
+    if (created.revived) {
+      // *** SAID OUT LOUD, ALWAYS. *** The user pressed Add and got their
+      // old issuer back, id and denominations included. Letting that pass
+      // without a word is the failure mode whichever way the data went:
+      // this is the moment they find out whether it came back.
+      this.notifications.showInfo(describeIssuerRevived(created.name, created.denominationsRestored ?? 0));
+    }
+
+    if (created.revived && (created.denominationsRestored ?? 0) > 0) {
+      // *** NO LOOKUP. *** The issuer already holds these labels, so the
+      // source would propose what it already has; accepting one would put
+      // two rows with the same label under one issuer, and a coin carrying
+      // that text then resolves as ambiguous — which resolves to NULL. The
+      // lookup would cost a denomination rather than add one.
+      //
+      // Inlined rather than routed through `settleOffline` because the
+      // banner and the notification carry DIFFERENT facts here: the banner
+      // explains why nothing was asked of the network, and the toast above
+      // reports what happened to the data. The toast is the one that must
+      // not be missed, so it is not overwritten with the banner's text.
+      this.lookupIssuer.set(created);
+      this.lookupProposals.set([]);
+      this.lookupPhase.set('settled');
+      this.lookupMessage.set(
+        describeLookupSkippedForRevival(created.name, created.denominationsRestored ?? 0)
+      );
+      this.landOnIssuer(created);
+      return;
+    }
+
+    // A revival that brought NOTHING back falls through to the ordinary
+    // path on purpose: the issuer really is empty, so the lookup is exactly
+    // as useful as it is for a brand-new one, and its own messages are
+    // about the denominations rather than about the row.
     await this.offerDenominations(created, draft.lookUpOnline);
   }
 
@@ -426,19 +610,39 @@ export class CategoryModal {
   }
 
   /**
-   * Nothing to offer: say so, and put the user where they can type.
+   * Land the user on the Denominations pane, on the issuer they just added.
    *
-   * The issuer is PRESELECTED in the denominations pane and the pane is
-   * opened. "An issuer that silently has none is the current bug", and an
-   * issuer that noisily has none but leaves the user to find the right
-   * dropdown is most of the same bug.
+   * *** FOCUS BY COLLAPSING, NEVER BY FILTERING. *** The new issuer's group
+   * is the only one left open, so it is what the user sees; every other
+   * issuer is still in the list, still counted in its heading, and one
+   * click from opening. There is deliberately no state anywhere in this
+   * component that can narrow the pane to a single issuer — see
+   * `focusGroup` in denomination-expansion.ts — because a view that shows
+   * one issuer and offers no route back to the rest is the bug this
+   * replaces, and a "show all" button on top of such a filter would only
+   * have made it survivable.
+   *
+   * The issuer is also PRESELECTED in the add form. "An issuer that
+   * silently has none is the current bug", and an issuer that noisily has
+   * none but leaves the user to find the right dropdown is most of the
+   * same bug.
+   */
+  private landOnIssuer(issuer: IssuerRecord): void {
+    this.newDenominationIssuerId.set(issuer.issuerId);
+    this.denominationError.set('');
+    // The heading IS the issuer's name (DenominationGroup.heading), which
+    // is what makes this a lookup the template can do without an id.
+    this.setGroupExpansion(focusGroup(issuer.name));
+    this.selectSection('denominations');
+  }
+
+  /**
+   * Nothing to offer: say so, and put the user where they can type.
    */
   private settleOffline(issuer: IssuerRecord, message: string): void {
     this.lookupPhase.set('settled');
     this.lookupMessage.set(message);
-    this.newDenominationIssuerId.set(issuer.issuerId);
-    this.denominationError.set('');
-    this.selectSection('denominations');
+    this.landOnIssuer(issuer);
     this.notifications.showInfo(message);
   }
 
@@ -481,13 +685,14 @@ export class CategoryModal {
         });
       }
 
-      this.issuers.set(
-        this.issuers().map((row) =>
-          row.issuerId === issuer.issuerId
-            ? { ...row, denominationCount: row.denominationCount + labels.length }
-            : row
-        )
-      );
+      // NOTHING PATCHES A COUNT HERE ANY MORE. This used to add
+      // `labels.length` to the issuer's cached `denominationCount`, which
+      // was half of the staleness bug: the increment existed and the
+      // matching decrement in `removeDenomination` never did, so the number
+      // could only ever climb. `inv.addDenomination` has already replaced
+      // the denominations array above, and `issuerDenominationCount` reads
+      // that array — so the count is already right, and adding to it here
+      // would now double-count.
     } finally {
       this.lookupBusy.set(false);
     }
@@ -499,9 +704,9 @@ export class CategoryModal {
     this.lookupProposals.set([]);
     this.lookupPhase.set('settled');
 
-    // Straight to the list the user now wants to check.
-    this.newDenominationIssuerId.set(issuer.issuerId);
-    this.selectSection('denominations');
+    // Straight to the list the user now wants to check, with their issuer
+    // open and the other 70 folded rather than hidden.
+    this.landOnIssuer(issuer);
     await this.refreshUsage();
   }
 
@@ -521,25 +726,169 @@ export class CategoryModal {
     this.lookupIssuer.set(null);
   }
 
-  /**
-   * Remove an issuer — refused outright while denominations point at it.
+  /*
+   * ===================== Editing an issuer =====================
    *
-   * The only refusal on this screen. `describeIssuerRemoval` carries the
-   * argument: the delete is SOFT, so FK_Denominations_Issuer never fires,
-   * and the denominations would silently reappear under "No issuer yet".
+   * *** THE FIX THE OWNER ACTUALLY NEEDED. *** He typed a name in lower
+   * case and the row offered him one button: Remove. `PUT /issuers/:id` had
+   * been on the server the whole time and nothing called it. Everything
+   * else that went wrong here — the stale count, the refusal that would not
+   * lift — is somebody working around the absence of this.
+   *
+   * It edits IN PLACE and keeps the id, which is not a detail: denominations
+   * reference an issuer BY ID, so the remove-and-re-add that the text-keyed
+   * lookups on this screen offer would orphan every denomination filed
+   * under it.
    */
-  async removeIssuer(issuer: IssuerRecord): Promise<void> {
-    const outcome = describeIssuerRemoval(issuer.name, issuer.denominationCount);
-    if (!outcome.allowed) {
-      this.issuerError.set(outcome.message);
+
+  /** Which row is open for editing, or null. One at a time. */
+  protected readonly editingIssuerId = signal<number | null>(null);
+  protected readonly issuerEditDraft = signal<IssuerDraft>(blankIssuerDraft(false));
+  protected readonly issuerEditError = signal<string>('');
+  protected readonly issuerEditBusy = signal(false);
+
+  /**
+   * The kind the EDIT form's years imply.
+   *
+   * *** NOT `previewIssuerKind(draft)`. *** The stored kind is passed as the
+   * fallback because that is exactly what the server does on PUT: for an
+   * issuer whose year span says nothing it keeps the value already in the
+   * column rather than resetting it. `British Colonial` — no dates, curated
+   * as 'historical' — is the row that depends on it. Drop the argument and
+   * this tag reads 'modern' beside a save that will leave it 'historical',
+   * which is the drift issuer-kind-parity.spec.ts exists to make loud.
+   */
+  protected readonly derivedIssuerEditKind = computed(() => {
+    const id = this.editingIssuerId();
+    const stored = this.issuers().find((row) => row.issuerId === id)?.kind ?? null;
+    return previewIssuerKind(this.issuerEditDraft(), stored);
+  });
+
+  protected isEditingIssuer(issuerId: number): boolean {
+    return this.editingIssuerId() === issuerId;
+  }
+
+  /** Open one row for editing, filled in with what it already says. */
+  protected beginIssuerEdit(issuer: IssuerRecord): void {
+    this.editingIssuerId.set(issuer.issuerId);
+    this.issuerEditDraft.set(issuerDraftFrom(issuer));
+    this.issuerEditError.set('');
+  }
+
+  protected setIssuerEditField(field: 'name' | 'isoCode' | 'validFrom' | 'validTo', value: string): void {
+    this.issuerEditDraft.set({ ...this.issuerEditDraft(), [field]: value });
+    this.issuerEditError.set('');
+  }
+
+  protected cancelIssuerEdit(): void {
+    this.editingIssuerId.set(null);
+    this.issuerEditError.set('');
+  }
+
+  /**
+   * Save the edit.
+   *
+   * NO `kind` IN THE PAYLOAD, exactly as the add path sends none: the server
+   * derives it from the years and falls back to the stored value when they
+   * say nothing. Sending the previewed kind would turn the tag the user
+   * happens to be looking at into an assertion, and `British Colonial`
+   * would be reclassified by anyone who opened it and pressed Save.
+   */
+  async saveIssuerEdit(): Promise<void> {
+    const id = this.editingIssuerId();
+    if (id === null || this.issuerEditBusy()) return;
+
+    const current = this.issuers().find((row) => row.issuerId === id);
+    if (!current) {
+      this.cancelIssuerEdit();
       return;
     }
-    if (!confirmAction(outcome.message)) return;
+
+    // EVERY OTHER issuer's name, not every name. Including this row's own
+    // would make "fix the capitalisation of mexico" fail against Mexico —
+    // the single edit this feature exists for.
+    const otherNames = this.issuers()
+      .filter((row) => row.issuerId !== id)
+      .map((row) => row.name);
+
+    const validated = validateIssuerDraft(this.issuerEditDraft(), otherNames);
+    if (!validated.ok) {
+      this.issuerEditError.set(validated.error);
+      return;
+    }
+
+    this.issuerEditBusy.set(true);
+    try {
+      const updated = await firstValueFrom(this.api.updateIssuer(id, validated.issuer));
+
+      // MERGED over the row, not swapped for it. PUT answers with the five
+      // columns it wrote and carries no sortOrder and no counts; a straight
+      // replacement would leave `undefined` where IssuerRecord promises a
+      // number. The id is pinned to the one we edited so a malformed
+      // response cannot silently re-key the row.
+      this.issuers.set(
+        this.issuers().map((row) => (row.issuerId === id ? { ...row, ...updated, issuerId: id } : row))
+      );
+      this.editingIssuerId.set(null);
+      this.issuerEditError.set('');
+      this.notifications.showInfo(
+        current.name === validated.issuer.name
+          ? `Saved "${validated.issuer.name}".`
+          : `Renamed "${current.name}" to "${validated.issuer.name}".`
+      );
+    } catch (error) {
+      // The row stays open. The user's typing is the only copy of it, and a
+      // 409 on a duplicate name is an answer they can act on in place.
+      this.issuerEditError.set(describeHttpError(error) || 'Could not save that issuer.');
+    } finally {
+      this.issuerEditBusy.set(false);
+    }
+  }
+
+  /**
+   * Remove an issuer, and its denominations with it, after a warning sized
+   * to the damage.
+   *
+   * THIS USED TO REFUSE. While `issuer.denominationCount` was above zero it
+   * set an error and never reached the server — and that cached count only
+   * ever went up, so the refusal was permanent. Both halves of that are
+   * gone: the counts below are derived from the live lists (see
+   * `issuerDenominationCount`), and the server cascades instead of
+   * answering 409.
+   *
+   * *** THE CONFIRMATION IS THE ONLY GATE LEFT, SO IT IS NOT OPTIONAL. ***
+   * `confirmAction` fails OPEN by design — see the class header — which is
+   * right for a button the user pressed on purpose, and it is why the
+   * sentence it carries has to be worth reading.
+   */
+  async removeIssuer(issuer: IssuerRecord): Promise<void> {
+    // LIVE, both of them. The snapshot that arrived with the issuer is
+    // exactly what made this button refuse forever.
+    const plan = describeIssuerRemoval(
+      issuer.name,
+      this.issuerDenominationCount(issuer.issuerId),
+      this.issuerCoinCount(issuer.issuerId)
+    );
+
+    if (!confirmAction(plan.message)) return;
 
     try {
-      await firstValueFrom(this.api.deleteIssuer(issuer.issuerId));
+      const outcome = await firstValueFrom(this.api.deleteIssuer(issuer.issuerId));
       this.issuers.set(this.issuers().filter((row) => row.issuerId !== issuer.issuerId));
+      if (this.editingIssuerId() === issuer.issuerId) this.cancelIssuerEdit();
       this.issuerError.set('');
+
+      // A CASCADE is the one action on this screen that changes rows the
+      // client did not name, so it is also the one that has to re-read
+      // them. The denominations list feeds the pane next door AND the coin
+      // editor's dropdown app-wide; leaving the removed rows in it would
+      // put them back under "No issuer yet", which is the precise mess the
+      // old refusal was invented to prevent. The usage index changed too,
+      // for every coin just unlinked.
+      await this.inv.loadDenominations();
+      await this.refreshUsage();
+
+      this.notifications.showInfo(describeIssuerRemoved(issuer.name, outcome));
     } catch (error) {
       this.issuerError.set(describeHttpError(error) || 'Could not remove that issuer.');
     }
@@ -552,8 +901,32 @@ export class CategoryModal {
   protected readonly newDenominationIssuerId = signal<number | null>(null);
   protected readonly denominationError = signal<string>('');
 
-  /** Issuer headings the user has folded away. Keyed by heading text. */
-  protected readonly collapsedGroups = signal<ReadonlySet<string>>(new Set());
+  /**
+   * Which issuer groups are open.
+   *
+   * A DEFAULT PLUS EXCEPTIONS rather than a set of folded headings, because
+   * "collapse all" has to cover groups that are not on screen — see
+   * denomination-expansion.ts, which carries the argument and all the logic.
+   *
+   * *** WHERE A FUTURE AGENT HOOKS THIS INTO PERSISTENCE. *** This is local
+   * UI state and deliberately stays local: the dialog opens with everything
+   * expanded, which is the behaviour it has always had. When the "remember
+   * the user's choices" work lands (plan item 7, `StorageKeys` in
+   * services/storage.service.ts), this signal is the ONLY thing to wire up:
+   * read a stored `GroupExpansion` in the constructor beside
+   * `loadLookUpOnlinePreference()` and write it in `setGroupExpansion()`
+   * below, which every mutation already funnels through. `GroupExpansion`
+   * is a plain `{ collapsedByDefault, exceptions }`, so it needs a Set/array
+   * conversion on the way in and out and nothing else. Nothing else in this
+   * component needs to change, and denomination-expansion.ts must not learn
+   * about storage.
+   */
+  protected readonly groupExpansion = signal<GroupExpansion>(ALL_GROUPS_EXPANDED);
+
+  /** The single write point for expansion state. See the note above. */
+  private setGroupExpansion(next: GroupExpansion): void {
+    this.groupExpansion.set(next);
+  }
 
   /**
    * The denominations, grouped under their issuers and filtered by the
@@ -582,19 +955,38 @@ export class CategoryModal {
     this.denominationGroups().reduce((sum, group) => sum + group.denominations.length, 0)
   );
 
+  /** The headings on screen right now — what "all" means to the control. */
+  protected readonly denominationHeadings = computed(() =>
+    this.denominationGroups().map((group) => group.heading)
+  );
+
+  /**
+   * The one collapse/expand control, and what it should say.
+   *
+   * Recomputed from the groups actually on screen, so pressing it is never
+   * a no-op: with anything open it offers to collapse, and only once
+   * everything is shut does it offer to expand.
+   */
+  protected readonly expandAllControl = computed(() =>
+    describeExpandAllControl(this.groupExpansion(), this.denominationHeadings())
+  );
+
+  /** Collapse or expand every group, whichever the control is offering. */
+  protected pressExpandAll(): void {
+    this.setGroupExpansion(applyExpandAllControl(this.expandAllControl().action));
+  }
+
   protected isCollapsed(heading: string): boolean {
     // While a search is running nothing is collapsed, whatever the user
     // folded away earlier. Hiding a result because its group happened to be
     // closed would make the search silently incomplete, which is worse than
     // ignoring a preference.
     if (this.denominationSearch().trim().length > 0) return false;
-    return this.collapsedGroups().has(heading);
+    return !isGroupExpanded(this.groupExpansion(), heading);
   }
 
   protected toggleGroup(heading: string): void {
-    const next = new Set(this.collapsedGroups());
-    if (!next.delete(heading)) next.add(heading);
-    this.collapsedGroups.set(next);
+    this.setGroupExpansion(toggleGroupExpansion(this.groupExpansion(), heading));
   }
 
   /**
@@ -633,6 +1025,15 @@ export class CategoryModal {
       sortOrder: maxSortOrder + 10,
       isActive: true
     });
+
+    // THE GROUP IT LANDED IN IS OPENED. Writing a row into a folded group
+    // and leaving it folded reads as the Add button having done nothing —
+    // and with collapse-all on this pane, folded is now a normal state to
+    // be adding from. Only that one group opens; the rest stay as the user
+    // left them.
+    if (issuerName) {
+      this.setGroupExpansion(expandGroup(this.groupExpansion(), issuerName.name));
+    }
 
     // The LABEL clears and the ISSUER does not. Filling in a new issuer is a
     // batch job — six denominations in a row — and re-picking the issuer

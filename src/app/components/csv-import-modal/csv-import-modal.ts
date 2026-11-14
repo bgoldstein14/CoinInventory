@@ -1,4 +1,4 @@
-import { Component, computed, inject, output, signal } from '@angular/core';
+import { Component, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CoinRecord } from '../../types/coin.model';
 import { InventoryService } from '../../services/inventory.service';
@@ -10,6 +10,10 @@ import { describeMissingCoinDetail, hasEnoughCoinDetail } from '../../services/c
 // `enrichWithInferredAlloy` below.
 import { pmFieldsToFill } from '../../services/pm-fill';
 import { type ImportSource, planImport } from '../../services/csv/import-plan';
+// "Has this record been sold?" and the one sentence that describes it, both
+// taken from the module the QIF import also uses, so the tick box on this
+// dialog cannot come to mean something different from the one on that.
+import { SOLD_RULE_SENTENCE } from '../../services/import-sold';
 // Value-aware auto-mapping. See services/csv/date-column-shape.ts: a column
 // headed `Date` is a coin year over `1881` and a purchase date over
 // `3/15/2024`, and only the cells can tell the two apart.
@@ -86,6 +90,41 @@ export class CsvImportModal {
   protected get inv() { return this.inventoryService; }
 
   readonly closed = output<void>();
+
+  /**
+   * Which of the two Import menu entries opened this dialog.
+   *
+   * *** IT CHANGES WHAT THE DIALOG SAYS, NOT WHAT IT CAN READ. ***
+   * The Import menu now offers "Excel" and "CSV" separately, because a user
+   * holding a spreadsheet should find the word Excel in a list rather than
+   * decode "Excel or CSV". Behind both is this one dialog, and it is the
+   * same one on purpose: the two formats converge on a single `headers` +
+   * `rows` shape and from the mapping grid down every rule is shared. Two
+   * modals would be two copies of the completeness rule, which is how the
+   * same under-specified row ends up accepted on one path and refused on
+   * the other.
+   *
+   * So the mode sets the heading, the button text and the file picker's
+   * SUGGESTED extensions — a hint to the file dialog, not a gate. A user who
+   * picks "CSV" and then chooses an `.xlsx` still gets his workbook read:
+   * `handleFileSelection` routes on the extension, and refusing a file this
+   * dialog can plainly read in order to be right about a menu click would be
+   * pedantry at the user's expense.
+   */
+  readonly mode = input<'excel' | 'csv'>('excel');
+
+  /** File-dialog suggestion only — see `mode`. Never used to reject a file. */
+  protected readonly acceptedExtensions = computed(() =>
+    this.mode() === 'csv' ? '.csv,.txt,.xlsx,.xlsm' : '.xlsx,.xlsm,.csv,.txt'
+  );
+
+  protected readonly heading = computed(() =>
+    this.mode() === 'csv' ? 'Import from a CSV file' : 'Import from an Excel workbook'
+  );
+
+  protected readonly filePickerLabel = computed(() =>
+    this.mode() === 'csv' ? 'Select CSV file' : 'Select Excel workbook'
+  );
 
   readonly csvMappableFields = CSV_MAPPABLE_FIELDS;
 
@@ -206,6 +245,47 @@ export class CsvImportModal {
    * the button promises has to be one the import can deliver, so both come
    * from this one call. See services/csv/import-plan.ts.
    */
+  /**
+   * "Import only coins I still own."
+   *
+   * *** THE SAME OPTION, AND THE SAME DEFAULT, AS THE QUICKEN IMPORT. ***
+   * It used to exist on the QIF dialog alone, which made "only unsold" a
+   * property of one file format rather than of the import. A record counts
+   * as sold when it has a sold date, a sold price or a buyer -- a rule a
+   * spreadsheet can satisfy by mapping any one of those three columns. See
+   * services/import-sold.ts.
+   *
+   * OFF BY DEFAULT: everything comes in, sold coins included, because a
+   * coin the owner no longer has is still a coin he had.
+   */
+  protected readonly onlyUnsoldCoins = signal(false);
+
+  /** The one sentence, shared with the Quicken dialog. */
+  protected readonly soldRuleSentence = SOLD_RULE_SENTENCE;
+
+  /**
+   * Which of the three sold columns this file actually maps.
+   *
+   * Used only to tell the user when the tick box can have no effect: a
+   * sheet with no sold column satisfies the rule nowhere, so ticking it
+   * excludes nothing. Saying so is better than a control that silently
+   * does nothing, and better than hiding the control, which would leave
+   * the user wondering where the option went.
+   */
+  protected readonly mappedSoldFields = computed(() => {
+    const mapped = new Set(Object.values(this.csvFieldMapping()));
+    return ['soldDate', 'soldPrice', 'soldTo'].filter(field => mapped.has(field));
+  });
+
+  /** True when nothing in this file can ever mark a row as sold. */
+  protected readonly hasNoSoldColumn = computed(() => this.mappedSoldFields().length === 0);
+
+  /** The tick box. Nothing to refresh by hand -- `importPlan` reads the
+   *  signal, so the preview and the button follow it. */
+  protected setOnlyUnsoldCoins(value: boolean): void {
+    this.onlyUnsoldCoins.set(value);
+  }
+
   protected readonly importPlan = computed(() => planImport(
     this.importSources(),
     this.csvFieldMapping(),
@@ -222,7 +302,11 @@ export class CsvImportModal {
      * the same call: `importCsv` imports `importPlan().accepted` rather than
      * re-mapping, so the two cannot disagree about which coins linked. */
     (row, headers, mapping) =>
-      this.csvService.mapRowToCoin(row, headers, mapping, this.inv.denominations())
+      this.csvService.mapRowToCoin(row, headers, mapping, this.inv.denominations()),
+    /* Read INSIDE the computed, like the denomination list above, so the
+     * preview, the count on the button and the import itself all come from
+     * one call and cannot disagree about which rows the tick box removed. */
+    { excludeSold: this.onlyUnsoldCoins() }
   ));
 
   protected readonly plannedImportCount = computed(() => this.importPlan().acceptedCount);
@@ -239,6 +323,8 @@ export class CsvImportModal {
    * field. See `ImportPlan.linkedDenominations`.
    */
   protected readonly plannedLinkedCount = computed(() => this.importPlan().linkedDenominations);
+  /** How many rows the sold filter held back. 0 while it is unticked. */
+  protected readonly plannedSoldExclusions = computed(() => this.importPlan().excludedAsSold);
   protected readonly plannedSkips = computed(() => this.importPlan().rejected);
   protected readonly plannedSkipCount = computed(() => this.importPlan().rejected.length);
 

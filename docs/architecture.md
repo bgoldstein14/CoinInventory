@@ -123,7 +123,7 @@ What is left under `src/app/styles/` is only the genuinely shared material:
 
 `styles/_field.scss` is unaffected by any of this and is still shared by two components.
 
-`_field.scss` is the newest of these and it exists for the usual reason: two components now render `.detail-field` — the coin editor form and the add-transaction row in the detail sidebar — and Angular's style scoping means a rule written in one cannot reach the other's template, so each has to `@use` it. The rule was promoted out of `coin-editor-form.scss` when the transaction row was given real labels; that row previously used `placeholder` text as its only label ("Amount", "Dealer", "Notes"), which disappears the moment you start typing and is skipped by some screen readers. Component-specific width and layout modifiers deliberately stay in the component that uses them — only the base look is shared.
+`_field.scss` is the newest of these and it exists for the usual reason: more than one component renders `.detail-field`, and Angular's style scoping means a rule written in one cannot reach another's template, so each has to `@use` it. The rule was promoted out of `coin-editor-form.scss` when the detail sidebar's add-transaction row was given real labels; that row has since gone with the `Transactions` table, but the rule stays shared, and the lesson with it — never use `placeholder` text as a field's only label, because it disappears the moment you type and is skipped by some screen readers. Component-specific width and layout modifiers deliberately stay in the component that uses them — only the base look is shared.
 
 ### Services
 
@@ -153,7 +153,7 @@ Three services were large enough to split into folders of focused helpers:
 
 | Folder | Files |
 | --- | --- |
-| `src/app/services/inventory/` | `coin-change-tracker`, `coin-editor`, `coin-collection`, `coin-draft-registry`, `lookup-manager`, `transaction-manager`, `connection-manager`, `coin-factory`, `inventory-metrics` |
+| `src/app/services/inventory/` | `coin-change-tracker`, `coin-editor`, `coin-collection`, `coin-draft-registry`, `lookup-manager`, `connection-manager`, `coin-factory`, `inventory-metrics` |
 | `src/app/services/image-matching/` | `coin-signature`, `filename-parser`, `filename-vocabulary`, `denomination-units`, `year-mint-parser`, `grade-parser`, `photo-markers`, `catalog-refs`, `non-coin-detector`, `match-scorer`, `match-decider`, `matching-thresholds`, `reference-tables`, `text-tokens` |
 | `src/app/services/image-import/` | `image-file-filter`, `batch-import-session`, `coin-lookup`, `row-decisions`, `selection-rules`, `thumbnail-cache`, `attach-runner`, `image-downscaler`, `photo-variant`, `source-path`, `base-folder-state`, `import-base-folder` |
 
@@ -179,7 +179,7 @@ Three services were large enough to split into folders of focused helpers:
 | `server/routes/coins/` | `index`, `reads`, `writes`, `write-helpers`, `images`, `image-payload`, `list-query` — mounted at `/api/coins` |
 | `server/routes/images/` | `index`, `file`, `exists`, `allowed-types` — mounted at `/api/images` |
 | `server/routes/lookups/` | `categories`, `coin-sets`, `denominations`, `metal-contents`, `mint-marks` — mounted at `/api` |
-| `server/routes/data/` | `transactions`, `spot-prices`, `spot-price-source`, `settings`, `frontend-log` — mounted at `/api` |
+| `server/routes/data/` | `spot-prices`, `spot-price-source`, `settings`, `frontend-log` — mounted at `/api` |
 | `server/routes/db-error-response.ts` | Translates SQL errors into HTTP status codes |
 | `server/routes/error-handler.ts` | The app-wide Express error handler, mounted last |
 | `server/routes/param-utils.ts` | Shared request-parameter helpers |

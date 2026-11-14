@@ -176,7 +176,8 @@ describe('POST /api/support/preview', () => {
     // Real rows, and three DIFFERENT counts on purpose: the report's three
     // COUNT(*) subqueries are easy to transpose, and a fixture where coins
     // and photos were both 2140 (as the mocked one was) could not have
-    // detected it.
+    // detected it. The third count was `transactions` until that table was
+    // dropped; it is `soldCoins` now and is still a bare COUNT(*).
     await insertCoin({ CoinId: 'c-1', Denomination: '$1' });
     await insertCoin({ CoinId: 'c-2', Denomination: '$1' });
     await insertCoin({ CoinId: 'c-3', Denomination: '$1' });
@@ -188,8 +189,7 @@ describe('POST /api/support/preview', () => {
       image.run('c-1', 'data:image/jpeg;base64,BBBB', 1);
       database
         .prepare(
-          `INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount)
-           VALUES ('t-1', 'c-1', 'purchase', '2026-01-01', 10)`
+          "UPDATE Coins SET SoldDate = '2026-01-01', SoldPrice = 10 WHERE CoinId = 'c-1'"
         )
         .run();
     });
@@ -198,7 +198,7 @@ describe('POST /api/support/preview', () => {
 
     expect(res.body.markdown).toContain('- coins: 3');
     expect(res.body.markdown).toContain('- photos: 2');
-    expect(res.body.markdown).toContain('- transactions: 1');
+    expect(res.body.markdown).toContain('- soldCoins: 1');
   });
 
   /**

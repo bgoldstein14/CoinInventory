@@ -10,6 +10,9 @@ import { AmbiguousReading, CoinRecord, QuickenImportRecord } from '../../types/c
 // The ONE resolver, shared with the editor's picker, the CSV/Excel importer
 // and (transcribed into T-SQL, with a parity spec over it) migration 014.
 import { resolveDenominationId } from '../../services/denominations/denomination-index';
+// The wording of the sold rule, taken from the module that implements it so
+// the dialog cannot describe a rule the code does not apply.
+import { SOLD_RULE_SENTENCE } from '../../services/import-sold';
 
 const unassignedQuickenAccount = 'Unassigned';
 
@@ -29,7 +32,40 @@ export class QuickenImportModal {
 
   protected readonly quickenText = signal<string>('');
   protected readonly importedRecords = signal<QuickenImportRecord[]>([]);
-  protected readonly skippedRecords = signal<QuickenImportRecord[]>([]); // Sold/transferred coins
+  /** Coins the "only coins not marked Sold" tick box is holding out. Empty
+   *  while it is unticked, which is its default. */
+  protected readonly skippedRecords = signal<QuickenImportRecord[]>([]);
+  /**
+   * The security names the QIF says are no longer held -- sold, or
+   * transferred out. Populated whether or not they are being imported.
+   */
+  protected readonly soldSecurityNames = signal<string[]>([]);
+  /**
+   * "Import only coins I still own."
+   *
+   * The same tick box, with the same meaning, now sits on the CSV and Excel
+   * import too: a record counts as sold when it has a sold date, a sold
+   * price or a buyer (services/import-sold.ts). A QIF has none of those as
+   * columns, so the parser detects the disposal from the net quantity and
+   * then writes the date and proceeds onto the record -- see
+   * `QuickenParseOptions.excludeSold`.
+   *
+   * *** OFF BY DEFAULT, AND THAT IS A REVERSAL. *** This importer used to
+   * drop every sold coin unconditionally and never even show the list; over
+   * the QIF corpus that is 379 of 484 coin records gone without a word. A
+   * coin the owner no longer has is still a coin he had: the cost, the
+   * grade and the photographs are the record of a transaction he wants to
+   * be able to report on. So the default is "bring everything in", and
+   * narrowing to the current holding is the deliberate act.
+   *
+   * The coins it would hide are not hidden silently -- `skippedRecords`
+   * lists them under the preview.
+   */
+  protected readonly onlyUnsoldCoins = signal(false);
+
+  /** The one sentence, shared with the CSV / Excel dialog so the two cannot
+   *  drift apart on what the tick box means. */
+  protected readonly soldRuleSentence = SOLD_RULE_SENTENCE;
   /**
    * Coins the parser refused to import because they carry fewer than 2 of the
    * 3 main details (Year / Coin Type / Denomination). Shown to the user as an
@@ -200,17 +236,43 @@ export class QuickenImportModal {
     const result = this.quickenImportService.parse(
       text,
       this.selectedAccounts(),
-      this.denominationChoices()
+      this.denominationChoices(),
+      { excludeSold: this.onlyUnsoldCoins() }
     );
     const filtered = this.applyQifFilters(result.importedRecords);
 
     this.importedRecords.set(filtered);
-    this.skippedRecords.set(result.skippedRecords); // Sold/transferred coins
+    this.skippedRecords.set(result.skippedRecords); // Held out by the tick box
+    this.soldSecurityNames.set(result.soldSecurityNames);
     this.rejectedRecords.set(result.rejectedRecords); // Not enough detail to import
     this.quickenWarnings.set(result.warnings);
 
     return filtered;
   }
+
+  /** The tick box. Re-previews immediately, because it changes the count on
+   *  the Import button and a button that lies is worse than no preview. */
+  protected setOnlyUnsoldCoins(value: boolean): void {
+    this.onlyUnsoldCoins.set(value);
+    this.refreshPreview();
+  }
+
+  /**
+   * Is this preview row a coin the owner has already parted with?
+   *
+   * Keyed on the security name for the same reason the user's denomination
+   * choices and cancellations are: `record.id` is a fresh UUID on every
+   * re-parse and the security name is the row's true identity.
+   */
+  protected isSold(record: QuickenImportRecord): boolean {
+    const key = record.securityName;
+    return key !== undefined && this.soldSecurityNames().includes(key);
+  }
+
+  /** How many rows about to be imported are coins no longer held. */
+  protected readonly soldImportCount = computed(
+    () => this.recordsToImport().filter(record => this.isSold(record)).length
+  );
 
   protected previewImport(): void {
     this.refreshPreview();
@@ -309,7 +371,42 @@ export class QuickenImportModal {
       purchaseDate: record.purchaseDate ?? '',
       purchasePrice: record.purchasePrice,
       currentValue: record.currentValue,
+      /* STRAIGHT FROM THE QUICKEN MEMO (`M`) COLUMN, OR BLANK.
+       * The parser writes nothing else into it and neither does this
+       * mapping -- see the `notes:` comment in quicken-import.service.ts. */
       notes: record.notes,
+      /* SOLD COINS COME IN MARKED SOLD.
+       *
+       * They import by default now (see `onlyUnsoldCoins`), and importing
+       * one as Owned would be worse than not importing it at all: the money
+       * totals and the insurance schedule count Owned coins, so a coin the
+       * owner sold in 2013 would be added to what his collection is worth
+       * and put in front of an insurer. The QIF already says which coins
+       * those are -- it is the net-quantity answer -- so the status follows
+       * from the file rather than from a guess.
+       *
+       * This is NOT the thing collection-status.ts forbids. That rule says
+       * nothing may derive `collectionStatus` from `soldDate` on an
+       * EXISTING record, because a sold date can outlive a sale that fell
+       * through and the owner's dropdown must stay the only thing that
+       * moves a coin out of his collection. This is a brand-new record
+       * being given its initial value from the source document. */
+      collectionStatus: this.isSold(record) ? 'sold' : 'owned',
+      /* WHEN, AND FOR HOW MUCH -- read off the Sell / SellX / ShrsOut block
+       * the parser found, not invented here.
+       *
+       * These are what make a QIF-imported sold coin satisfy the same rule
+       * a CSV row satisfies: "it has a sold date, a sold price or a buyer"
+       * (services/import-sold.ts). Without them the importer knew a coin
+       * was gone, said so in the status, and left the user with no date to
+       * report on and nothing for the next import's filter to key on.
+       *
+       * Both stay UNDEFINED on a coin still held, and `soldPrice` is also
+       * undefined for a transfer between Quicken accounts, which states no
+       * amount. Not 0 -- 0 would mean "given away", which is a different
+       * and perfectly real thing. */
+      soldDate: record.soldDate,
+      soldPrice: record.soldPrice,
       imagePaths: [],
       source: 'quicken',
       // Green CAC sticker, also parsed from the security name (e.g.

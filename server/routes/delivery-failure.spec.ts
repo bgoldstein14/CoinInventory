@@ -176,24 +176,12 @@ describe('the other read routes report delivery failures the same way', () => {
     expect(res.body.error).toMatch(/your data is safe/i);
   });
 
-  it('GET /api/transactions names the transaction list', async () => {
-    await insertCoin({ CoinId: 'coin-1', Denomination: 'Quarter' });
-    await withTestDb((database) => {
-      database
-        .prepare(
-          `INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount)
-           VALUES (?, ?, 'purchase', '2026-01-01', 10)`
-        )
-        .run('tx-1', 'coin-1');
-    });
-    breakTheSend('tx-1', invalidStringLength);
-
-    const res = await request(app).get('/api/transactions');
-
-    expect(res.body.stage).toBe('delivery');
-    expect(res.body.error).toContain('transaction list');
-    expect(res.body.error).toMatch(/your data is safe/i);
-  });
+  // A third case drove GET /api/transactions and checked the response named
+  // the 'transaction list'. The route is gone with the Transactions table.
+  // What it added over the two cases above was ONE thing — that the subject
+  // string the route passes reaches the message — and that is pinned
+  // directly, with no route involved, by "names whatever subject the route
+  // gave it" in failure-report.spec.ts.
 });
 
 describe('a genuinely broken connection is still reported as one', () => {

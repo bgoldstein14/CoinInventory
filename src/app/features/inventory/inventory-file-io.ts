@@ -2,8 +2,6 @@ import { CsvService } from '../../services/csv.service';
 import { InventoryService } from '../../services/inventory.service';
 import { heldCoins } from '../../types/collection-status';
 
-/** DOM id of the hidden <input type="file"> at the bottom of app.html. */
-const jsonImportInputId = 'inventory-json-import-input';
 
 /**
  * InventoryFileIo — reading and writing the whole collection as a file.
@@ -23,25 +21,20 @@ export class InventoryFileIo {
     private readonly csv: CsvService
   ) {}
 
-  /**
-   * There is no "open file" API, so JSON import works by programmatically
-   * clicking the hidden <input type="file"> that lives in app.html.
+  /*
+   * JSON IMPORT USED TO LIVE HERE. Removed 2026-11-14.
+   *
+   * `triggerJsonImport()` clicked a hidden <input type="file"> in app.html,
+   * and `handleInventoryImportFile()` read the file the user picked. Both
+   * were reachable only from Import > JSON, and that menu entry was removed
+   * the same day — so the pair, and the input, were unreachable code that
+   * no test covered.
+   *
+   * Export > JSON is unaffected (`downloadInventoryJson`, below).
+   * `CoinCollection.importInventoryData(json)` is also untouched and still
+   * tested: it is the actual capability, and a future JSON import would
+   * call it directly rather than resurrect the DOM plumbing.
    */
-  triggerJsonImport(): void {
-    const input = document.getElementById(jsonImportInputId) as HTMLInputElement | null;
-    input?.click();
-  }
-
-  /**
-   * Handles the file the user picked. The input's value is cleared afterwards
-   * so that picking the *same* file again still fires a change event.
-   */
-  handleInventoryImportFile(event: Event): void {
-    const input = event.target as HTMLInputElement;
-    const file = input.files?.[0];
-    if (!file) return;
-    file.text().then(text => { this.inv.importInventoryData(text); input.value = ''; });
-  }
 
   /**
    * Saves the whole inventory as a .json file via a throwaway download link.

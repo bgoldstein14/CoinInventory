@@ -30,7 +30,7 @@
  * surface this application actually uses.
  */
 
-import { DatabaseSync } from 'node:sqlite';
+import { DatabaseSync, backup } from 'node:sqlite';
 
 /**
  * Which package is behind the interfaces here.
@@ -110,10 +110,57 @@ export interface SqliteOpenOptions {
   readonly enableForeignKeyConstraints: boolean;
   /**
    * How long SQLite waits for a lock before giving up, in milliseconds.
-   * One desktop user means contention is rare, but the backup job (§4.7) and
+   * One desktop user means contention is rare, but the backup job (§16) and
    * the application can still overlap.
    */
   readonly busyTimeoutMs: number;
+  /**
+   * Open the file WITHOUT write access.
+   *
+   * Two callers, both in §16 and both for the same reason: a handle that
+   * CANNOT write is the cheapest possible guarantee that looking at a file
+   * does not change it.
+   *
+   *   backup/run-backup.ts   opens the live collection read-only as the
+   *                          backup SOURCE, so the job can never be the
+   *                          thing that damages what it is copying.
+   *   backup/inspect.ts      opens a file the user is merely CONSIDERING
+   *                          restoring. Opening a SQLite database
+   *                          read-write can rewrite its header and roll
+   *                          back a hot journal; doing that to somebody's
+   *                          only backup while they are still deciding
+   *                          would be indefensible.
+   *
+   * Defaults to false, which is every other caller.
+   */
+  readonly readOnly?: boolean;
+}
+
+/** How a backup is getting on. Handed to `onProgress` after each batch. */
+export interface SqliteBackupProgress {
+  /** Pages in the source database. Fixed for the life of one backup. */
+  readonly totalPages: number;
+  /** Pages still to copy. Counts DOWN to zero. */
+  readonly remainingPages: number;
+}
+
+export interface SqliteBackupOptions {
+  /**
+   * Pages copied per batch. SMALL ON PURPOSE — see run-backup.ts. The event
+   * loop runs between batches, so this is simultaneously the progress
+   * granularity, the cancellation granularity and how long the application
+   * can be made to wait behind one batch.
+   */
+  readonly rate: number;
+  /**
+   * Called after every batch.
+   *
+   * *** THROWING FROM HERE ABORTS THE BACKUP. *** That is not a side effect
+   * being exploited; it is the only cancellation `backup()` offers, and it
+   * is how run-backup.ts implements the Cancel button. The rejection carries
+   * whatever was thrown.
+   */
+  readonly onProgress: (progress: SqliteBackupProgress) => void;
 }
 
 /**
@@ -127,6 +174,7 @@ export interface SqliteOpenOptions {
 export function openSqliteDatabase(options: SqliteOpenOptions): SqliteDatabase {
   const database = new DatabaseSync(options.filename, {
     open: true,
+    readOnly: options.readOnly === true,
     enableForeignKeyConstraints: options.enableForeignKeyConstraints,
     timeout: options.busyTimeoutMs,
     readBigInts: false,
@@ -141,4 +189,51 @@ export function openSqliteDatabase(options: SqliteOpenOptions): SqliteDatabase {
   });
 
   return database as unknown as SqliteDatabase;
+}
+
+/**
+ * SQLite's ONLINE BACKUP, exposed to the one feature that needs it (§16).
+ *
+ * *** WHY THIS AND NOT A FILE COPY, AND NOT `VACUUM INTO`. ***
+ *
+ * A file copy of the `.db` is WRONG, not merely inelegant. The database runs
+ * in WAL mode (db/schema.ts), so the most recent transactions are in the
+ * `-wal` sibling until a checkpoint folds them back. `fs.copyFileSync` on
+ * the `.db` alone produces a database that opens cleanly, passes
+ * `integrity_check`, and is missing the user's last few coins — the worst
+ * failure shape there is. backup/backup.spec.ts measures it: 5,000 rows in,
+ * 4,976 rows back out of the copy. That is the whole reason the earlier plan
+ * had to tell users to close the application first, and the whole reason
+ * this function exists so that it does not.
+ *
+ * `VACUUM INTO` would be correct, and it is still the wrong choice here: it
+ * is one synchronous statement with no progress and no way to stop. The
+ * owner's database is ~600 MB today and §4.9a makes multi-gigabyte ordinary,
+ * so a frozen window for a minute or more is the expected case, not the
+ * pathological one.
+ *
+ * `backup()` is incremental. It copies `rate` pages, calls back, and yields
+ * to the event loop — which is what makes a progress bar and a Cancel button
+ * possible at all, and what lets the application keep answering requests
+ * while it runs.
+ *
+ * ABOUT WRITES DURING THE BACKUP. If the source database is written while
+ * the copy is in flight, SQLite restarts the copy rather than emitting a
+ * torn one. The result is always a snapshot of a single committed state; the
+ * only cost of a busy database is that the backup takes longer.
+ *
+ * @returns the number of pages copied.
+ */
+export async function backupSqliteDatabase(
+  source: SqliteDatabase,
+  destinationPath: string,
+  options: SqliteBackupOptions
+): Promise<number> {
+  // The structural interface above is a view of DatabaseSync; `backup()`
+  // wants the real thing. This cast is the mirror image of the one in
+  // openSqliteDatabase() and is confined to this file for the same reason.
+  return backup(source as unknown as DatabaseSync, destinationPath, {
+    rate: options.rate,
+    progress: options.onProgress,
+  });
 }

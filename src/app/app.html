@@ -40,7 +40,19 @@
   <header class="topbar">
     <div class="topbar-title">
       <p class="eyebrow">Numismatic portfolio</p>
-      <h1>Coin Inventory</h1>
+      <!-- The coin sits INSIDE the h1 so it inherits the title's font-size,
+           which is a clamp() and therefore fluid. Sized `height: 1em` in the
+           stylesheet, it tracks the text through the whole range instead of
+           being correct at one window width. `alt=""` because the title it
+           sits beside already says what this is. -->
+      <h1>
+        <img class="title-coin" src="coin-inventory-title.jpg" alt="" aria-hidden="true" />
+        Coin Inventory
+      </h1>
+      <!-- Tiny, under the title. It exists so a bug report can say which
+           build it came from, which is why it is also in the support
+           report — one constant feeds both (src/app/version.ts). -->
+      <p class="app-version">v{{ appVersion }}</p>
     </div>
 
     <app-toolbar
@@ -49,7 +61,7 @@
       (importSelected)="handleImportSelection($event)"
       (exportSelected)="handleExportSelection($event)"
       (settingsRequested)="openSettingsModal()"
-      (helpRequested)="openSupportModal()"
+      (helpRequested)="openHelpModal()"
     />
   </header>
 
@@ -102,15 +114,41 @@
       (imagesRequested)="showCoinImages($event)"
     />
 
-    @if (showDetailPanel() && selectedCoin; as coin) {
-      <app-coin-detail-panel
-        [coin]="coin"
-        [images]="images"
-        [showTransactions]="showTransactionsInDetails()"
-        [focusFirstFieldRequest]="detailFieldFocusRequest()"
-        (closeRequested)="closeDetailPanel()"
-        (deleteRequested)="deleteSelectedCoin()"
-      />
+    <!--
+      DEFERRED, AND THE ONLY ONE THAT IS PREFETCHED EAGERLY.
+
+      The detail sidebar carries the coin editor (the largest component in the
+      app), so it is worth moving out of the initial bundle — but it is also
+      the one lazy chunk on a hot path: a row click opens it, and that happens
+      constantly. Fetching it on the click would put a visible stutter on the
+      most common action in the app, which is a bad trade for kilobytes.
+
+      `prefetch on idle` resolves that: the chunk is fetched during the first
+      idle moment after start-up, off the critical path, so by the time anyone
+      clicks a row it is already in memory and the panel opens exactly as fast
+      as it did when it was part of main.
+
+      THE INNER @if IS NOT REDUNDANT. A @defer block never reverts once it has
+      been triggered, so `when` alone would open the panel and never let it
+      close again. The @if keeps the open/close behaviour; the @defer only
+      decides when the code arrives.
+    -->
+    @defer (when showDetailPanel(); prefetch on idle) {
+      @if (showDetailPanel() && selectedCoin; as coin) {
+        <app-coin-detail-panel
+          [coin]="coin"
+          [images]="images"
+          [showTransactions]="showTransactionsInDetails()"
+          [focusFirstFieldRequest]="detailFieldFocusRequest()"
+          (closeRequested)="closeDetailPanel()"
+          (deleteRequested)="deleteSelectedCoin()"
+        />
+      }
+    } @loading (after 100ms) {
+      <!-- `.has-detail` has already reserved this column, so fill it rather
+           than letting the table snap wide and back again. Prefetching means
+           this is very nearly unreachable; it is here for the cold case. -->
+      <div class="defer-loading defer-loading--panel" role="status">Loading…</div>
     }
   </div>
 
@@ -124,8 +162,16 @@
     CoinImagesStore.canOpenImageGallery.
   -->
   @if (selectedCoin; as coin) {
-    @if (images.showImageGallery()) {
-      <app-coin-image-gallery [coin]="coin" [images]="images" />
+    <!-- Prefetched, for the same reason as the detail panel: the photo button
+         on a row is routine, not occasional. The fetch only starts once a
+         coin is selected, which is the first moment it could ever be
+         wanted. -->
+    @defer (when images.showImageGallery(); prefetch on idle) {
+      @if (images.showImageGallery()) {
+        <app-coin-image-gallery [coin]="coin" [images]="images" />
+      }
+    } @loading (after 100ms) {
+      <div class="defer-loading" role="status">Loading…</div>
     }
   }
 
@@ -134,59 +180,133 @@
     <app-bulk-edit-bar [selection]="selection" />
   }
 
-  <!-- Hidden file input used by Import > JSON (see InventoryFileIo). -->
-  <input id="inventory-json-import-input" type="file" accept="application/json" hidden (change)="io.handleInventoryImportFile($event)" />
+  <!--
+    There was a hidden <input type="file"> here, clicked programmatically by
+    Import > JSON. That menu entry was removed on 2026-11-14 ("not something
+    I think that most people would ever care to use"), which left the input
+    and its two handlers unreachable — no menu reaches them and nothing else
+    calls them. Removed 2026-11-14 along with InventoryFileIo's
+    triggerJsonImport() and handleInventoryImportFile().
 
-  @if (showSettingsModal()) {
-    <!-- `referenceDataRequested` is the single route out of Settings to the
-         reference lists, which used to be edited inside it. The shell owns
-         which dialog is on screen, so the handler closes this one as it
-         opens the other rather than stacking two overlays. -->
-    <app-settings-modal
-      [showTransactionsInDetails]="showTransactionsInDetails()"
-      (showTransactionsInDetailsChange)="showTransactionsInDetails.set($event)"
-      (referenceDataRequested)="openReferenceDataFromSettings()"
-      (closed)="closeSettingsModal()"
-    />
+    Export > JSON is UNAFFECTED and still works; so does
+    CoinCollection.importInventoryData(), which is where a future JSON
+    import would hook back in without needing any of this DOM plumbing.
+  -->
+
+  <!--
+    EVERY DIALOG BELOW IS LOADED ON DEMAND AND NONE OF THEM IS PREFETCHED.
+
+    They are all opened deliberately, from a menu or a button, and none of
+    them is opened often. A dialog that takes a few extra milliseconds the
+    first time it is asked for is invisible; a start-up that downloads every
+    screen the user did not ask for is not. The hot-path components above are
+    the exception, and they say so individually.
+
+    Each one keeps its original @if INSIDE the @defer: the @defer decides when
+    the code is fetched, the @if still decides when the dialog is on screen.
+    Without it, closing would be impossible — a triggered @defer never reverts.
+
+    `@loading (after 100ms)` and no `@placeholder`: before the trigger these
+    render exactly nothing, as the bare @if did, and on a normal open the
+    chunk arrives well inside 100 ms so nothing is drawn at all. The loading
+    backdrop exists only for a slow first open, where a click with no visible
+    response reads as a broken button.
+  -->
+  @defer (when showSettingsModal()) {
+    @if (showSettingsModal()) {
+      <!-- Settings no longer routes anywhere: the "Open Reference Data" button
+           it used to carry was removed at the owner's request, because the
+           toolbar already has an obvious one. Do not re-add the binding. -->
+      <app-settings-modal
+        [showTransactionsInDetails]="showTransactionsInDetails()"
+        (showTransactionsInDetailsChange)="showTransactionsInDetails.set($event)"
+        (closed)="closeSettingsModal()"
+      />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
 
   <!-- Child component modals -->
-  @if (showQuickenModal()) {
-    <app-quicken-import-modal (closed)="closeQuickenModal()" (imported)="onQuickenImported($event)" />
+  @defer (when showQuickenModal()) {
+    @if (showQuickenModal()) {
+      <app-quicken-import-modal (closed)="closeQuickenModal()" (imported)="onQuickenImported($event)" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showCsvImportModal()) {
-    <app-csv-import-modal (closed)="closeCsvImportModal()" />
+  @defer (when showCsvImportModal()) {
+    @if (showCsvImportModal()) {
+      <app-csv-import-modal [mode]="csvImportMode()" (closed)="closeCsvImportModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showImageImportModal()) {
-    <app-image-import-modal (closed)="closeImageImportModal()" />
+  @defer (when showImageImportModal()) {
+    @if (showImageImportModal()) {
+      <app-image-import-modal (closed)="closeImageImportModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showCategoryModal()) {
-    <!-- `initialSection` exists for the unlinked-coins banner above, which
-         has to land the user on the pane that fixes them rather than on
-         Categories with a hunt ahead of them. Every other caller leaves it
-         at the default. -->
-    <app-category-modal [initialSection]="categoryModalSection()" (closed)="closeCategoryModal()" />
+  @defer (when showCategoryModal()) {
+    @if (showCategoryModal()) {
+      <!-- `initialSection` exists for the unlinked-coins banner above, which
+           has to land the user on the pane that fixes them rather than on
+           Categories with a hunt ahead of them. Every other caller leaves it
+           at the default. -->
+      <app-category-modal [initialSection]="categoryModalSection()" (closed)="closeCategoryModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showReportModal()) {
-    <!--
-      `filters` and `columns` are passed so the printed inventory listing can
-      honour the filter, the sort order and the visible columns the user is
-      actually looking at. Both are optional on the component; without them it
-      would print the whole collection through a default column set.
-    -->
-    <app-report-modal
-      [filters]="filters"
-      [columns]="columns"
-      (closed)="closeReportModal()"
-      (exportCsvRequested)="io.exportCsv()"
-      (exportInsuranceCsvRequested)="io.exportInsuranceCsv()"
-    />
+  @defer (when showReportModal()) {
+    @if (showReportModal()) {
+      <!--
+        `filters` and `columns` are passed so the printed inventory listing can
+        honour the filter, the sort order and the visible columns the user is
+        actually looking at. Both are optional on the component; without them it
+        would print the whole collection through a default column set.
+      -->
+      <app-report-modal
+        [filters]="filters"
+        [columns]="columns"
+        (closed)="closeReportModal()"
+        (exportCsvRequested)="io.exportCsv()"
+        (exportInsuranceCsvRequested)="io.exportInsuranceCsv()"
+      />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showStatisticsModal()) {
-    <app-statistics-modal (closed)="closeStatisticsModal()" />
+  @defer (when showStatisticsModal()) {
+    @if (showStatisticsModal()) {
+      <app-statistics-modal (closed)="closeStatisticsModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
-  @if (showSpotPriceModal()) {
-    <app-spot-price-modal (closed)="closeSpotPriceModal()" />
+  @defer (when showSpotPriceModal()) {
+    @if (showSpotPriceModal()) {
+      <app-spot-price-modal (closed)="closeSpotPriceModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
+  }
+  <!--
+    The Help screen — what the toolbar's help icon opens. Its first control
+    is "Report a problem", which raises the dialog below; the shell closes
+    this one on the way so the two are never stacked.
+  -->
+  @defer (when showHelpModal()) {
+    @if (showHelpModal()) {
+      <app-help-modal
+        (closed)="closeHelpModal()"
+        (reportProblemRequested)="openSupportModalFromHelp()"
+      />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
   <!--
     "Help > Report a problem". Takes no inputs on purpose: it reads the
@@ -194,8 +314,12 @@
     everything else, so the shell does not have to know what a problem
     report contains.
   -->
-  @if (showSupportModal()) {
-    <app-support-modal (closed)="closeSupportModal()" />
+  @defer (when showSupportModal()) {
+    @if (showSupportModal()) {
+      <app-support-modal (closed)="closeSupportModal()" />
+    }
+  } @loading (after 100ms) {
+    <div class="defer-loading" role="status">Loading…</div>
   }
 
   <!-- The resizable full-size photo window.
@@ -211,8 +335,17 @@
        would throw (see server/routes/coins/list-query.ts). `imageCount`
        answers the same question immediately and for free. -->
   @if (selectedCoin; as coin) {
-    @if (images.showPhotoViewer() && photoCount(coin) > 0) {
-      <app-coin-photo-viewer [coin]="coin" [images]="images" />
+    <!-- Prefetched with the gallery: the viewer is what a thumbnail click
+         opens, so it is one step further down the same hot path. The trigger
+         deliberately asks only `showPhotoViewer()` and leaves the photo-count
+         guard to the @if below — fetching the code for a coin with no photos
+         costs nothing, rendering the empty viewer would be the bug. -->
+    @defer (when images.showPhotoViewer(); prefetch on idle) {
+      @if (images.showPhotoViewer() && photoCount(coin) > 0) {
+        <app-coin-photo-viewer [coin]="coin" [images]="images" />
+      }
+    } @loading (after 100ms) {
+      <div class="defer-loading" role="status">Loading…</div>
     }
   }
 </main>

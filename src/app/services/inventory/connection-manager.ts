@@ -5,8 +5,7 @@ import {
   LatestSpotPrices,
   MintMarkOption,
   SpotPriceMeta,
-  SpotPrices,
-  TransactionRecord
+  SpotPrices
 } from '../../types/coin.model';
 import { CatalogOption } from '../../types/catalog-reference';
 import { ApiService, describeHttpError } from '../api.service';
@@ -60,7 +59,6 @@ export interface ConnectionTargets {
   loadFailure: WritableSignal<LoadFailure | null>;
   categoryOptions: WritableSignal<string[]>;
   coinSets: WritableSignal<string[]>;
-  transactions: WritableSignal<TransactionRecord[]>;
   denominations: WritableSignal<Denomination[]>;
   mintMarks: WritableSignal<MintMarkOption[]>;
   /** Reference catalogues (Sear, RIC, Hendin, Krause) — migration 012. */
@@ -90,8 +88,8 @@ export class ConnectionManager {
    * Two-phase on purpose:
    *   Phase 1 — the coins. If this fails we genuinely have no connection, so
    *             we mark the app disconnected and throw.
-   *   Phase 2 — the seven lookups (categories, coin sets, transactions,
-   *             denominations, mint marks, metal contents, spot prices).
+   *   Phase 2 — the six lookups (categories, coin sets, denominations,
+   *             mint marks, metal contents, spot prices).
    *             These are "nice to have". Previously a single failing lookup made the
    *             whole hydration report failure and flipped `connected` back to
    *             false even though the coins had loaded perfectly. Now we use
@@ -155,7 +153,6 @@ export class ConnectionManager {
 
     t.categoryOptions.set(resolveWithFallback(loaded.categories, coins, (c) => c.category));
     t.coinSets.set(resolveWithFallback(loaded.coinSets, coins, (c) => c.coinSet ?? ''));
-    if (Array.isArray(loaded.transactions)) t.transactions.set(loaded.transactions);
     t.denominations.set(Array.isArray(loaded.denominations) ? loaded.denominations : []);
     t.mintMarks.set(Array.isArray(loaded.mintMarks) ? loaded.mintMarks : []);
     // An empty list is a perfectly workable state: the editor's catalogue
@@ -284,7 +281,7 @@ export class ConnectionManager {
   }
 
   /**
-   * Phase 2 in detail: fetch all seven lookups at once and unwrap each
+   * Phase 2 in detail: fetch all six lookups at once and unwrap each
    * result on its own, so one bad table cannot sink the others.
    *
    * This never throws.
@@ -297,7 +294,6 @@ export class ConnectionManager {
     const settled = await Promise.allSettled([
       firstValueFrom(apiService.getCategories()),
       firstValueFrom(apiService.getCoinSets()),
-      firstValueFrom(apiService.getTransactions()),
       firstValueFrom(apiService.getDenominations()),
       firstValueFrom(apiService.getMintMarks()),
       firstValueFrom(apiService.getMetalContents()),
@@ -305,7 +301,7 @@ export class ConnectionManager {
       // no spot prices is perfectly usable (every melt cell just reads "—"),
       // so a dead price lookup must never stop the app from starting.
       // `allSettled` guarantees that: this entry can reject on its own and the
-      // other six still arrive.
+      // other five still arrive.
       firstValueFrom(apiService.getLatestSpotPrices()),
       // Catalogues (migration 012). APPENDED, not slotted in beside the
       // other lookups, on purpose: the results below are unwrapped by
@@ -328,14 +324,17 @@ export class ConnectionManager {
     return {
       categories: unwrap(settled[0], 'categories', [] as string[]),
       coinSets: unwrap(settled[1], 'coin sets', [] as string[]),
-      transactions: unwrap(settled[2], 'transactions', [] as TransactionRecord[]),
-      denominations: unwrap(settled[3], 'denominations', [] as Denomination[]),
-      mintMarks: unwrap(settled[4], 'mint marks', [] as MintMarkOption[]),
-      metalContents: unwrap(settled[5], 'metal contents', [] as string[]),
+      // RENUMBERED when the transactions lookup was removed from the array
+      // above. These are unwrapped BY POSITION, so every index below moved
+      // down by one; getting this wrong re-points metalContents at the mint
+      // marks and nothing fails.
+      denominations: unwrap(settled[2], 'denominations', [] as Denomination[]),
+      mintMarks: unwrap(settled[3], 'mint marks', [] as MintMarkOption[]),
+      metalContents: unwrap(settled[4], 'metal contents', [] as string[]),
       // Fallback is null, not a zeroed price set: null means "we were told
       // nothing", and applySpotPrices() reads that as "leave the defaults".
-      spotPrices: unwrap(settled[6], 'spot prices', null as LatestSpotPrices | null),
-      catalogs: unwrap(settled[7], 'catalogues', [] as CatalogOption[]),
+      spotPrices: unwrap(settled[5], 'spot prices', null as LatestSpotPrices | null),
+      catalogs: unwrap(settled[6], 'catalogues', [] as CatalogOption[]),
       failedLookups
     };
   }
@@ -358,7 +357,6 @@ function toPrice(value: unknown): number {
 interface LoadedLookups {
   categories: string[];
   coinSets: string[];
-  transactions: TransactionRecord[];
   denominations: Denomination[];
   mintMarks: MintMarkOption[];
   metalContents: string[];

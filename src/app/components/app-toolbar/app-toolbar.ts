@@ -3,10 +3,25 @@ import { Component, input, output, signal } from '@angular/core';
 /**
  * What the Import menu can bring in.
  *
- * DECLARED IN MENU ORDER, commonest first, and `csv` is first because it is
+ * DECLARED IN MENU ORDER, commonest first, and `excel` is first because it is
  * also the split button's default action. Nothing reads this order — the
  * menu is written out longhand in the template — so it is kept in step
  * purely so that the two cannot tell different stories to the next reader.
+ *
+ * 'excel' AND 'csv' ARE TWO DOORS INTO ONE ROOM, AND THAT IS THE POINT.
+ * They were a single "Excel or CSV" entry, on the reasoning that the modal
+ * behind it reads either and so the user should not have to classify his own
+ * file. The reasoning is sound about the MODAL and wrong about the MENU: a
+ * user holding a spreadsheet looks down the list for the word "Excel", and a
+ * compound label is something to decode before he can find out whether his
+ * case is covered. The mapping machinery stays shared — see
+ * csv-import-modal.ts, which still takes both — and the only thing that
+ * differs is which format the dialog opens expecting.
+ *
+ * JSON IS DELIBERATELY ABSENT. It used to sit between CSV and QIF, and it
+ * was the only entry that read a file this application had written. Export →
+ * JSON remains: a backup you cannot take is a different complaint from a
+ * backup you cannot restore from a menu.
  *
  * 'images' is the odd one out and deliberately so: the other three read a FILE
  * of coin records, while this one reads a FOLDER of photographs and matches
@@ -14,7 +29,7 @@ import { Component, input, output, signal } from '@angular/core';
  * because from the user's point of view "bring my photos in" is an import like
  * any other.
  */
-export type ImportKind = 'csv' | 'json' | 'qif' | 'images';
+export type ImportKind = 'excel' | 'csv' | 'qif' | 'images';
 
 /** The three shapes the inventory can be exported to. */
 export type ExportKind = 'csv' | 'json' | 'insurance';
@@ -31,10 +46,12 @@ export type ExportKind = 'csv' | 'json' | 'insurance';
  * alternatives; clicking the main button performs the default action.
  *
  * EACH SPLIT BUTTON'S DEFAULT IS ITS FIRST MENU ENTRY. Import defaults to
- * 'csv' and Export to 'csv', both matching the top of their own menus. The
+ * 'excel' and Export to 'csv', both matching the top of their own menus. The
  * Import default used to be 'qif', which meant the plain Import button ran
  * the least-wanted importer — the one case where pressing the obvious
- * button was the wrong answer.
+ * button was the wrong answer. It then became 'csv'; splitting that entry in
+ * two moved the top of the list to Excel, and the face of the button moved
+ * with it rather than staying behind on the second entry.
  */
 @Component({
   selector: 'app-toolbar',
@@ -52,12 +69,17 @@ export class AppToolbar {
   readonly settingsRequested = output<void>();
 
   /**
-   * "Help > Report a problem".
+   * The help icon — opens the Help screen (components/help-modal).
    *
-   * On the toolbar rather than buried in Settings because the moment it is
-   * needed is the moment something has just gone wrong, and a user who
-   * cannot find it will close the app instead — at which point the recent
-   * errors it would have carried are gone.
+   * It used to open the problem reporter directly, which made the control a
+   * small lie: a button called Help that could only do one thing. The
+   * reporter is now the first item on the screen this opens, so the old
+   * route costs one extra click and nothing else.
+   *
+   * On the toolbar rather than buried in Settings because the moment help is
+   * wanted is usually the moment something has just gone wrong, and a user
+   * who cannot find it will close the app instead — at which point the
+   * recent errors a report would have carried are gone.
    */
   readonly helpRequested = output<void>();
 

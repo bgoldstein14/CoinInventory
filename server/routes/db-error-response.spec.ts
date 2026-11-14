@@ -64,8 +64,8 @@ describe('route error classification', () => {
      * THE ROUTE THAT RAISES THIS CHANGED, AND THE OLD ONE CANNOT RAISE IT ANY
      * MORE. This test used to drive DELETE /api/coins/:id, on the premise
      * that deleting a coin with children fails. Against the real schema it
-     * does not: CoinImages and Transactions both declare
-     * ON DELETE CASCADE on CoinId, so that delete succeeds by design (see
+     * does not: CoinImages declares ON DELETE CASCADE on CoinId, so that
+     * delete succeeds by design (see
      * db/schema.sql, and the "deletes coin (images cascade)" comment in
      * routes/coins/writes.ts).
      *

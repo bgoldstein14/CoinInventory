@@ -48,6 +48,31 @@ h1 {
   font-size: clamp(1.8rem, 3.5vw, 2.8rem);
   letter-spacing: -0.03em;
   color: #2c1c0e;
+
+  // Flex so the coin and the words share a centre line. An inline <img>
+  // would sit on the text baseline and hang below it, which on a round
+  // image reads as a mistake rather than as a choice.
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+}
+
+// The coin beside the title.
+//
+// `height: 1em` is the whole point: the h1's font-size is a clamp() that
+// moves between roughly 29px and 45px with the window, and a fixed pixel
+// height would be right at exactly one width. 1em makes the coin a
+// property of the type size rather than a number someone has to maintain.
+//
+// The file is 90px square -- double the 45px maximum -- so it stays sharp
+// on a high-DPI screen. `width: auto` keeps it proportional if the source
+// is ever replaced with something that is not square.
+.title-coin {
+  height: 1em;
+  width: auto;
+  flex-shrink: 0;
+  border-radius: 50%;
+  object-fit: cover;
 }
 
 .summary-cards {
@@ -138,4 +163,17 @@ h1 {
   .main-content { min-height: 0; }
 
   .status-bar { display: none !important; }
+}
+
+// The build number under the title.
+//
+// Deliberately tiny and low-contrast: it is there so a bug report can name
+// the build it came from, not because anyone reading the screen cares. It
+// sits in the title block rather than the toolbar so it travels with the
+// name of the thing it versions.
+.app-version {
+  margin: 2px 0 0;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  color: #9a8a73;
 }

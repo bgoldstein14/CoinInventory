@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
@@ -6,6 +8,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { InventoryService } from '../../services/inventory.service';
 import { QuickenImportService } from '../../services/quicken-import.service';
 import { QuickenImportModal } from './quicken-import-modal';
+import { CoinRecord } from '../../types/coin.model';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
 function createModal() {
@@ -465,16 +468,166 @@ describe('QuickenImportModal', () => {
     });
   });
 
-  it('keeps net-quantity filtering working alongside the detail rule', () => {
-    const { modal } = createModal();
-    modal['quickenText'].set(
+  describe('coins the owner no longer has', () => {
+    /** Bought in January, sold in February. Net quantity zero. */
+    const boughtThenSold =
       `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\n^` +
-      `\n!Type:Invst\nD02/20/2024\nNSell\nY1964 Quarter\nT6\n^`
-    );
-    modal['previewImport']();
+      `\n!Type:Invst\nD02/20/2024\nNSell\nY1964 Quarter\nT6\n^`;
 
-    expect(modal['importedRecords']()).toHaveLength(0);
-    expect(modal['rejectedRecords']()).toHaveLength(0);
-    expect(modal['skippedRecords']()).toHaveLength(1);
+    it('imports them by default, because the tick box starts UNTICKED', () => {
+      /* THE REVERSAL, asserted at the dialog rather than at the parser.
+       * This modal used to drop every sold coin and never say so -- it did
+       * not even render `skippedRecords`. */
+      const { modal } = createModal();
+      modal['quickenText'].set(boughtThenSold);
+      modal['previewImport']();
+
+      expect(modal['onlyUnsoldCoins']()).toBe(false);
+      expect(modal['recordsToImport']()).toHaveLength(1);
+      expect(modal['skippedRecords']()).toHaveLength(0);
+      expect(modal['soldImportCount']()).toBe(1);
+    });
+
+    it('marks what it imports as Sold, so it is not counted as owned', () => {
+      /* A coin sold in 2013 arriving as Owned would be added to the
+       * collection's value and put on the insurance schedule. The QIF
+       * already knows which coins those are. */
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(boughtThenSold);
+      modal['importQuicken']();
+
+      expect(emitted).toHaveLength(1);
+      expect(emitted[0].collectionStatus).toBe('sold');
+    });
+
+    it('still marks a coin that is STILL HELD as owned', () => {
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(`!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\n^`);
+      modal['importQuicken']();
+
+      expect(emitted[0].collectionStatus).toBe('owned');
+    });
+
+    it('holds them out, and lists them, once the tick box is ticked', () => {
+      const { modal } = createModal();
+      modal['quickenText'].set(boughtThenSold);
+      modal['setOnlyUnsoldCoins'](true);
+
+      expect(modal['importedRecords']()).toHaveLength(0);
+      expect(modal['rejectedRecords']()).toHaveLength(0);
+      expect(modal['skippedRecords']()).toHaveLength(1);
+    });
+
+    it('IMPORTS THE SALE ITSELF, not just the status', () => {
+      /* The status says "gone". The date and the price say when and for
+       * how much, which is the part the owner reports on -- and the part
+       * that makes this coin satisfy the same "is it sold?" rule a CSV row
+       * satisfies, so the filter means one thing on both paths. */
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(boughtThenSold);
+      modal['importQuicken']();
+
+      expect(emitted[0].soldDate).toBe('2024-02-20');
+      expect(emitted[0].soldPrice).toBe(6);
+    });
+
+    it('leaves the sale fields alone on a coin still held', () => {
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(`!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\n^`);
+      modal['importQuicken']();
+
+      expect(emitted[0].soldDate).toBeUndefined();
+      expect(emitted[0].soldPrice).toBeUndefined();
+    });
+  });
+
+  describe('Quicken\'s own transfer memo', () => {
+    it('does not arrive in Notes', () => {
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(
+        `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\nMXfr From: Misc. Coins\n^`
+      );
+      modal['importQuicken']();
+
+      expect(emitted[0].notes).toBe('');
+    });
+
+    it('but a memo the owner wrote does', () => {
+      const { modal } = createModal();
+      let emitted: CoinRecord[] = [];
+      modal.imported.subscribe(coins => { emitted = coins; });
+
+      modal['quickenText'].set(
+        `!Type:Invst\nD01/15/2024\nNBuy\nY1964 Quarter\nT5\nMBought at the Baltimore show\n^`
+      );
+      modal['importQuicken']();
+
+      expect(emitted[0].notes).toBe('Bought at the Baltimore show');
+    });
+  });
+});
+
+/*
+ * The template is read off disk and the HTML comments are stripped FIRST.
+ * The comment added beside this paragraph explains the decision in prose
+ * that contains the very words these assertions look for ("Purchased From",
+ * "account name"), so without stripping, every test below would pass on the
+ * explanation rather than on the sentence the user reads.
+ *
+ * `[\s\S]`, not `[sS]` — that typo silently disabled four assertions
+ * elsewhere in this repo and was only found by accident.
+ */
+const QIF_TEMPLATE = readFileSync(
+  join(__dirname, 'quicken-import-modal.html'),
+  'utf8'
+).replace(/<!--[\s\S]*?-->/g, '');
+
+describe('what the dialog says a Quicken file can and cannot fill', () => {
+  it('names the transaction fields that DO come across', () => {
+    for (const field of ['Cost', 'Purchase Date', 'Sold Price', 'Sold Date']) {
+      expect(QIF_TEMPLATE).toContain(field);
+    }
+  });
+
+  /*
+   * Measured on the real corpus: purchase date and price arrive on 457 of
+   * 457 records, buyer and seller on none of them. The blank is deliberate,
+   * so the dialog has to say so.
+   */
+  it('says Purchased From and Sold To are left empty, and why', () => {
+    expect(QIF_TEMPLATE).toContain('Purchased From');
+    expect(QIF_TEMPLATE).toContain('Sold To');
+    expect(QIF_TEMPLATE).toMatch(/account name/i);
+  });
+
+  it('points at the import that CAN carry them, so the blank is not a dead end', () => {
+    expect(QIF_TEMPLATE).toMatch(/CSV or Excel/i);
+  });
+
+  /*
+   * "Purchased From is left blank" alone reads as a defect someone should
+   * fix. Saying what IS filled is what makes it read as a choice.
+   */
+  it('does not state the omission without stating what arrives', () => {
+    const omission = QIF_TEMPLATE.indexOf('Purchased From');
+    const filled = QIF_TEMPLATE.indexOf('Purchase Date');
+    expect(omission).toBeGreaterThan(-1);
+    expect(filled).toBeGreaterThan(-1);
+    expect(filled).toBeLessThan(omission);
   });
 });

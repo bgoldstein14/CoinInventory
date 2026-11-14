@@ -1,8 +1,8 @@
 /**
  * db/numeric-storage.spec.ts — THE DECISION THE WHOLE MIGRATION TURNS ON.
  *
- * SQLite has no decimal type. Six columns on Coins, plus Transactions.Amount,
- * the four SpotPrices columns and Denominations.FaceValue, were DECIMAL under
+ * SQLite has no decimal type. Six columns on Coins, plus the four SpotPrices
+ * columns and Denominations.FaceValue, were DECIMAL under
  * SQL Server. They are REAL — IEEE-754 binary64 — here, and the precision and
  * scale SQL Server used to enforce are reapplied at the parameter boundary by
  * db/bind-values.ts. The full argument is in the header of db/schema.sql.
@@ -249,17 +249,20 @@ describe('a value too large for its column is refused, not silently stored', () 
   });
 });
 
-describe('Transactions.Amount and Denominations.FaceValue', () => {
-  it('stores a transaction amount at two decimals', async () => {
-    await insertCoin({ CoinId: 'tc', Denomination: '$1' });
-
+describe('Denominations.FaceValue', () => {
+  // The case that used to live here posted 1234.567 to /api/transactions and
+  // checked Transactions.Amount came back 1234.57. The table is gone and the
+  // route with it; the SAME property is now carried by the coin's own money
+  // columns, in the DECIMAL(12,2) case above and in SoldPrice here, which
+  // became user-editable when the deal record moved onto the coin.
+  it('rounds a sale price to the two decimals DECIMAL(12,2) holds', async () => {
     const res = await request(app)
-      .post('/api/transactions')
-      .send({ coinId: 'tc', type: 'purchase', date: '2024-03-01', amount: 1234.567 });
+      .post('/api/coins')
+      .send({ id: 'sold', denomination: '$1', soldPrice: 1234.567, soldTo: 'Heritage' });
     expect(res.status).toBe(201);
 
-    const [row] = await queryRows('SELECT Amount FROM Transactions');
-    expect(row['Amount']).toBe(1234.57);
+    const [row] = await queryRows("SELECT SoldPrice AS s FROM Coins WHERE CoinId = 'sold'");
+    expect(row['s']).toBe(1234.57);
   });
 
   it('keeps the seeded sub-cent face values intact', async () => {

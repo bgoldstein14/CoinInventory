@@ -1,0 +1,119 @@
+@use '../../styles/modal' as *;
+
+.help-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.help-section {
+  h3 {
+    margin: 0 0 6px;
+    font-size: 0.95rem;
+    color: #3b2a14;
+  }
+
+  .hint-text { margin: 0 0 10px; }
+}
+
+.help-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.help-list {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #5a4a32;
+
+  dt {
+    font-weight: 700;
+    color: #3b2a14;
+    margin-top: 8px;
+  }
+
+  dt:first-child { margin-top: 0; }
+
+  dd {
+    margin: 2px 0 0;
+    line-height: 1.45;
+  }
+}
+
+// ---- The rule between the guide and the report section ----
+//
+// The owner reversed the ordering on this screen: help first, bug form
+// second, "maybe a line or dashes and then the report issue part". So this
+// is a visible rule with air on BOTH sides of it, not a hairline tucked
+// against the heading below.
+//
+// The body is a flex column with an 18px gap, which already separates every
+// child from the next. The margin and padding here are on top of that gap —
+// 28px above the rule and 30px below it — because "give some space below
+// the guide information" asked for more than the screen's ordinary rhythm.
+// A rule with only the default gap around it reads as a border on the next
+// section rather than as the end of the one before.
+//
+// It is lighter than the author block's #ede5d8 is dark, but a shade
+// stronger, because this one has to be seen from across the screen: it is
+// the thing that tells the reader the guide has finished.
+
+.help-separator {
+  border: 0;
+  border-top: 1px solid #e3d8c6;
+  margin: 10px 0 0;
+}
+
+.help-report {
+  padding-top: 12px;
+}
+
+// ---- The author block ----
+//
+// A hairline and a bit of air mark it as the end of the screen rather than
+// another section of it. Plain body type: factual attribution, not a byline.
+
+.help-about {
+  border-top: 1px solid #ede5d8;
+  padding-top: 14px;
+}
+
+.help-author {
+  margin: 0 0 2px;
+  font-size: 0.85rem;
+  color: #3b2a14;
+}
+
+// ---- The support footnote ----
+//
+// SMALL AND MUTED, AND THAT IS THE REQUIREMENT, not a stylistic preference.
+// It is a footnote the user finds after going looking for the Help screen,
+// so it must not read as something the app is asking of them. Deliberately:
+//
+//   * ordinary paragraph text, never a button or a link-coloured control;
+//   * 0.72rem — below the 0.82rem of the hint text above it, so it reads as
+//     smaller than the smallest explanatory copy on the screen;
+//   * #9a8a73, lighter than every other colour here, and nowhere near the
+//     #7a5b35 / #8e5b2d browns the app uses for things you can press. It
+//     must not compete with a control for attention.
+//
+// If a future change makes this bigger, bolder, coloured, or a button, it has
+// stopped being what was asked for. help-modal.spec.ts holds that.
+
+.help-support-note {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: #9a8a73;
+}
+
+// The handle is text, not a link: there is no URL here to go stale and
+// nowhere the user is sent without asking. `user-select: text` is spelled out
+// so that it survives any future blanket rule on the dialog — the one thing
+// this span has to be able to do is be selected and copied.
+.help-handle {
+  user-select: text;
+  white-space: nowrap;
+  font-weight: 600;
+  color: #8a7a63;
+}

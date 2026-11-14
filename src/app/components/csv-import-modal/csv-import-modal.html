@@ -1,7 +1,10 @@
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <h2>Import from a spreadsheet</h2>
+      <!-- Named after the menu entry the user pressed, not after the file
+           types this dialog can read: it reads both either way. See `mode`
+           in csv-import-modal.ts. -->
+      <h2>{{ heading() }}</h2>
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
@@ -54,9 +57,14 @@
 
       @if (!hasFile() && !showSheetPicker()) {
         <label class="file-picker">
-          <input type="file" accept=".xlsx,.xlsm,.csv,.txt"
+          <!-- `accept` leads with the format the menu entry named. It is a
+               SUGGESTION to the file dialog and nothing more — the other
+               format is still listed, and handleFileSelection() routes on
+               the extension, so a CSV chosen from the Excel door still
+               works. -->
+          <input type="file" [attr.accept]="acceptedExtensions()"
                  (change)="handleFileSelection($event)" [disabled]="parsing()" />
-          {{ parsing() ? 'Reading workbook…' : 'Select Excel or CSV file' }}
+          {{ parsing() ? 'Reading workbook…' : filePickerLabel() }}
         </label>
       }
 
@@ -202,6 +210,37 @@
              the same call, so the button cannot over-promise. -->
         <div class="import-plan">
           <h3>What will be imported</h3>
+
+          <!-- UNTICKED BY DEFAULT, exactly as on the Quicken dialog. The
+               option belongs to the IMPORT, not to one file format, so it
+               is offered here for CSV and Excel on the same terms: a coin
+               the owner no longer has is still a coin he had, and leaving
+               those out is the deliberate act. -->
+          <label class="csv-sold-toggle">
+            <input
+              type="checkbox"
+              [checked]="onlyUnsoldCoins()"
+              (change)="setOnlyUnsoldCoins($any($event.target).checked)"
+            />
+            <span>Import only coins I still own (leave out anything sold)</span>
+          </label>
+          <p class="hint-text">{{ soldRuleSentence }}</p>
+          @if (onlyUnsoldCoins() && hasNoSoldColumn()) {
+            <p class="hint-text">
+              Nothing in this file is mapped to <strong>Sold Date</strong>,
+              <strong>Sold Price</strong> or <strong>Sold To</strong>, so no row counts as
+              sold and nothing is being left out. Map one of those columns above if your
+              file records sales.
+            </p>
+          }
+          @if (plannedSoldExclusions() > 0) {
+            <p class="hint-text">
+              <strong>{{ plannedSoldExclusions() }}</strong>
+              {{ plannedSoldExclusions() === 1 ? 'row is' : 'rows are' }} being left out as
+              sold. Untick the box above to bring {{ plannedSoldExclusions() === 1 ? 'it' : 'them' }} in.
+            </p>
+          }
+
           <p class="import-plan-summary">
             <strong>{{ plannedImportCount() }}</strong>
             {{ plannedImportCount() === 1 ? 'coin' : 'coins' }} will be created.

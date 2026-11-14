@@ -1,6 +1,6 @@
 /**
  * routes/data/data.spec.ts — HTTP-level tests for the non-coin data routes:
- * transactions, spot prices and settings.
+ * spot prices and settings.
  *
  * *** NOTHING HERE IS CANNED ANY MORE. *** Rows are inserted into a real
  * in-memory SQLite database built from db/schema.sql and read back through
@@ -10,10 +10,7 @@
  * layer actually executed (executedSql) or on the rows that ended up in the
  * table (queryRows).
  *
- * TWO THINGS THE MOCK USED TO HIDE, both visible below:
- *   - Transactions.CoinId is a FOREIGN KEY to Coins with no cascade on
- *     insert, so a transaction cannot be created for a coin that does not
- *     exist. The mock accepted one happily.
+ * WHAT THE MOCK USED TO HIDE, still visible below:
  *   - SpotPrices.SpotPriceId is assigned by the database, not by the test, so
  *     the assertion is now "the id the route reported is the id of the row
  *     that exists" rather than a number the mock was told to return.
@@ -28,112 +25,60 @@ import request from 'supertest';
 
 import {
   executedSql,
-  insertCoin,
   queryRows,
   withTestDb,
 } from '../../test-support/sqlite-test-db';
 import { app } from '../../server';
 
-// Transactions API
+// Transactions API: REMOVED, AND PROVED REMOVED
+//
+// Five cases lived here and all five went with the Transactions table:
+//   GET  /api/transactions                returns all transactions
+//   GET  /api/transactions?coinId=        honours the filter
+//   POST /api/transactions                400s without coinId/type/date
+//   POST /api/transactions                creates a row
+//   POST /api/transactions                refuses an unknown coin (the FK)
+//   DELETE /api/transactions/:id          404s for an unknown id
+//
+// None of them has anywhere to move to: they tested a table, three routes
+// and a foreign key that no longer exist. What replaces them is the pair
+// below — the endpoints must be GONE, not merely unused — plus the coin
+// write tests in routes/coins/writes.spec.ts, which now cover
+// PurchasedFrom / SoldTo / TransactionNotes round-tripping through
+// PUT /api/coins/:id.
 
-describe('GET /api/transactions', () => {
-  it('returns all transactions', async () => {
-    // Server reads CamelCase column names: TransactionId, CoinId, TransactionType, TransactionDate, Amount, Dealer, Notes
-    await insertCoin({ CoinId: 'abc-123', Denomination: '$1' });
-    await withTestDb((database) => {
-      database
-        .prepare(
-          `INSERT INTO Transactions
-             (TransactionId, CoinId, TransactionType, TransactionDate, Amount, Dealer, Notes)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`
-        )
-        .run('tx-1', 'abc-123', 'purchase', '2024-03-01', 150.0, 'Heritage', 'Won auction');
-    });
-
-    const res = await request(app).get('/api/transactions');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].coinId).toBe('abc-123');
-    expect(res.body[0].type).toBe('purchase');
-  });
-
-  it('filters by coinId', async () => {
-    // Two coins, one transaction each: a filter that is ignored would return
-    // both, which the mock could never have shown.
-    await insertCoin({ CoinId: 'abc-123', Denomination: '$1' });
-    await insertCoin({ CoinId: 'other-9', Denomination: '25¢' });
-    await withTestDb((database) => {
-      const insert = database.prepare(
-        `INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount)
-         VALUES (?, ?, 'purchase', '2024-03-01', 10)`
-      );
-      insert.run('tx-mine', 'abc-123');
-      insert.run('tx-theirs', 'other-9');
-    });
-
-    const res = await request(app).get('/api/transactions?coinId=abc-123');
-    expect(res.status).toBe(200);
-    expect(res.body).toHaveLength(1);
-    expect(res.body[0].id).toBe('tx-mine');
-  });
-});
-
-describe('POST /api/transactions', () => {
-  it('returns 400 for missing required fields', async () => {
-    const res = await request(app)
-      .post('/api/transactions')
-      .send({ amount: 100 });
-    expect(res.status).toBe(400);
-  });
-
-  it('creates a transaction', async () => {
-    // The coin has to exist: Transactions.CoinId REFERENCES Coins (CoinId).
-    await insertCoin({ CoinId: 'abc-123', Denomination: '$1' });
-
-    const res = await request(app)
-      .post('/api/transactions')
-      .send({
-        id: 'tx-2',
-        coinId: 'abc-123',
-        type: 'sale',
-        date: '2024-06-15',
-        amount: 250.00,
-      });
-    expect(res.status).toBe(201);
-    expect(res.body.id).toBe('tx-2');
-
-    // The row really landed, with the values the request carried.
-    const rows = await queryRows('SELECT * FROM Transactions WHERE TransactionId = @id', {
-      id: 'tx-2',
-    });
-    expect(rows).toHaveLength(1);
-    expect(rows[0]['CoinId']).toBe('abc-123');
-    expect(rows[0]['TransactionType']).toBe('sale');
-    expect(rows[0]['TransactionDate']).toBe('2024-06-15');
-    expect(rows[0]['Amount']).toBe(250.0);
-  });
-
-  it('refuses a transaction for a coin that does not exist', async () => {
+describe('the transaction endpoints no longer exist', () => {
+  it('no longer answers GET /api/transactions with a transaction list', async () => {
     /*
-     * NEW, AND ONLY POSSIBLE AGAINST A REAL ENGINE. The mock accepted this
-     * INSERT and answered 201, so the suite's idea of this endpoint was
-     * "anything goes". The schema says otherwise — FK_Transactions_Coin —
-     * and the foreign key is enforced (db/driver.ts turns the pragma on), so
-     * the real answer is the 409 that routes/db-error-response.ts gives a
-     * constraint violation.
+     * NOT a 404, and the reason is worth knowing: server.ts ends with a
+     * `app.get('/*splat')` SPA fallback, so ANY unmatched GET is handled
+     * there rather than rejected.
+     *
+     * This test used to assert `content-type` is not application/json, and
+     * that was **environment-coupled**: with no `dist/` on disk the
+     * fallback's `sendFile` fails and Express answers with a JSON error
+     * body, so the test went red for a reason that had nothing to do with
+     * transactions. It depended, invisibly, on a build having run first.
+     *
+     * The property that actually matters is that no transaction route
+     * survives, and `executedSql()` proves it directly: a real route would
+     * have queried the database. The body check below is deliberately about
+     * SHAPE rather than content-type, so it holds whether the fallback
+     * serves index.html or errors.
      */
+    const res = await request(app).get('/api/transactions');
+
+    expect(executedSql()).toEqual([]);
+    expect(Array.isArray(res.body)).toBe(false);
+    expect(res.body).not.toHaveProperty('transactions');
+  });
+
+  it('404s on POST /api/transactions', async () => {
+    // A POST that still worked would be a second, unvalidated write path to
+    // the coin fields that replaced the table.
     const res = await request(app)
       .post('/api/transactions')
-      .send({ id: 'tx-orphan', coinId: 'no-such-coin', type: 'sale', date: '2024-06-15', amount: 1 });
-
-    expect(res.status).toBe(409);
-    expect(await queryRows('SELECT * FROM Transactions')).toEqual([]);
-  });
-});
-
-describe('DELETE /api/transactions/:id', () => {
-  it('returns 404 for non-existent transaction', async () => {
-    const res = await request(app).delete('/api/transactions/nonexistent');
+      .send({ coinId: 'abc-123', type: 'sale', date: '2024-06-15', amount: 10 });
     expect(res.status).toBe(404);
   });
 });

@@ -9,10 +9,13 @@
  *
  *   GET    /issuers      -> active issuers, with their denomination and coin
  *                           counts, A-Z by name
- *   POST   /issuers      -> create one (returns the new IssuerId)
+ *   POST   /issuers      -> create one (201), or REVIVE the soft-deleted row
+ *                           that already holds the name (200, same id, its
+ *                           denominations back with it)
  *   PUT    /issuers/:id  -> edit one IN PLACE, keeping its id
- *   DELETE /issuers/:id  -> soft-delete (IsActive = 0), refused while
- *                           denominations still point at it
+ *   DELETE /issuers/:id  -> soft-delete (IsActive = 0) and CASCADE: its
+ *                           denominations go with it and their coins are
+ *                           unlinked, all in one transaction
  *
  * The seed (migration 013) covers 70 issuers, chosen for accuracy over
  * coverage: a user adding a missing denomination is a normal action, while a
@@ -29,6 +32,16 @@
  *    must still come back, with two zeroes. `COUNT(DISTINCT d.DenominationId)`
  *    is needed because the second join multiplies a denomination row once per
  *    coin using it.
+ *
+ * 1a. REMOVAL IS A SOFT DELETE, SO THE NAME IS STILL TAKEN AFTERWARDS, and
+ *    POST is the half of that fact the user meets. Re-adding a removed
+ *    issuer used to answer "already an issuer" about a row that was not on
+ *    the screen. It now revives the row instead, keeping its id so anything
+ *    still pointing at it survives, and brings its denominations back with
+ *    it. The full argument — including why `AND IsActive = 1` on the
+ *    duplicate check is NOT the fix, and what happens to denominations the
+ *    user had deleted one by one — is on `findNameMatch` and `reviveIssuer`
+ *    below.
  *
  * 2. POST VALIDATES BEFORE IT TOUCHES THE DATABASE. Three of the five columns
  *    can be silently mangled rather than rejected:
@@ -57,8 +70,10 @@
  *    remove-and-re-add — all the text lookups offer — would orphan every
  *    denomination filed under it. Same argument as catalogs.ts.
  *
- * 4. DELETE REFUSES RATHER THAN WARNS, and it is the only route here that
- *    does. See the block above the handler.
+ * 4. DELETE CASCADES, ATOMICALLY. It used to refuse with a 409 while any
+ *    denomination was still filed under the issuer. That refusal is gone —
+ *    see the block above the handler for what replaced it and why a
+ *    half-removed issuer must be impossible rather than merely unlikely.
  *
  * Every database call runs inside `withDb()` and every parameter type comes
  * from DB_BINDINGS so it matches setup-database.sql.
@@ -66,9 +81,10 @@
 
 import { Router, Request, Response } from 'express';
 import { logInfo, logWarn } from '../../logger';
-import { withDb, DB_BINDINGS } from '../../db';
+import { withDb, DB_BINDINGS, DbRequest, DbTransaction } from '../../db';
 import { sendDbError, sendJson } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
+import { safeRollback } from '../coins/write-helpers';
 import { IssuerKind, isIssuerKind, resolveIssuerKind } from './issuer-kind';
 
 const router = Router();
@@ -173,31 +189,68 @@ async function storedKindOf(id: number): Promise<IssuerKind | null> {
   });
 }
 
+/** An issuer row that already owns the name somebody is trying to use. */
+interface IssuerNameMatch {
+  issuerId: number;
+  name: string;
+  /** FALSE means the row is soft-deleted — the whole reason this type exists. */
+  isActive: boolean;
+}
+
 /**
- * Is some OTHER issuer already called this?
+ * Which OTHER issuer row, if any, already owns this name — ACTIVE OR NOT.
+ *
+ * *** IT DELIBERATELY DOES NOT FILTER ON IsActive, AND IT MUST NOT. ***
+ * This used to return a bare name and the callers treated every hit as a
+ * refusal, which is the bug the owner met: he removed some issuers, tried to
+ * add them back, and was told they already existed. They did exist — as
+ * rows with `IsActive = 0`, invisible to GET and to the form's own duplicate
+ * check, still holding the name.
+ *
+ * *** AND `AND IsActive = 1` IS NOT THE FIX. *** Hiding the deactivated row
+ * from this query would let POST reach its INSERT, and schema.sql's
+ * `CONSTRAINT UQ_Issuers_Name UNIQUE (Name)` would then throw
+ * "UNIQUE constraint failed: Issuers.Name" — a 500 with SQL in it, for the
+ * same user action that previously got an explicable 409. Measured, not
+ * assumed. The constraint is also on a `COLLATE NOCASE` column, so it fires
+ * for 'mexico' against 'Mexico' too.
+ *
+ * So the answer carries WHICH row and WHETHER IT IS LIVE, and POST decides:
+ * a live row is still a refusal, a dead one is revived. See the block above
+ * the POST handler.
  *
  * `excludeId` is what lets PUT leave the name alone: without it, saving an
  * issuer whose name you did not change would fail against itself, which is
  * a maddening bug to meet when all you wanted was to add an end date.
  *
  * Compared with LOWER(LTRIM(RTRIM(...))) rather than by exact equality,
- * because 'mexico ' and 'Mexico' are the same issuer to a human and
- * UQ_Issuers_Name would let both in.
+ * because 'mexico ' and 'Mexico' are the same issuer to a human. That
+ * comparison is WIDER than UQ_Issuers_Name, which folds case but not
+ * whitespace — so 'Mexico ' and 'Mexico' really can both be rows, and both
+ * can match here. ORDER BY IsActive DESC is what makes the live one win:
+ * an active clash has to stay a refusal even when a deactivated near-miss
+ * sorts first by id.
  */
-async function findNameClash(name: string, excludeId: number | null): Promise<string | null> {
+async function findNameMatch(name: string, excludeId: number | null): Promise<IssuerNameMatch | null> {
   return withDb(async (db) => {
     const result = await db.request()
       .input('name', DB_BINDINGS.issuerName, name)
       .input('id', DB_BINDINGS.issuerId, excludeId ?? 0)
       .query(`
-        SELECT Name FROM Issuers
+        SELECT IssuerId, Name, IsActive FROM Issuers
         WHERE LOWER(LTRIM(RTRIM(Name))) = LOWER(LTRIM(RTRIM(@name)))
           AND IssuerId <> @id
+        ORDER BY IsActive DESC, IssuerId
         LIMIT 1
       `);
 
     const row = result.recordset[0];
-    return row ? String(row['Name']) : null;
+    if (!row) return null;
+    return {
+      issuerId: Number(row['IssuerId']),
+      name: String(row['Name']),
+      isActive: Number(row['IsActive']) === 1,
+    };
   });
 }
 
@@ -259,6 +312,152 @@ router.get('/issuers', async (_req: Request, res: Response) => {
   }
 });
 
+/**
+ * Bring a soft-deleted issuer back, with the fields the user just typed.
+ *
+ * *** IT REUSES THE ROW AND ITS ID, AND THAT IS THE POINT. ***
+ * Denominations reference an issuer BY ID. Inserting a second 'Burma' with
+ * a new id would leave every denomination that was ever filed under the old
+ * one pointing at a row GET no longer returns — the exact orphan state the
+ * cascade in DELETE exists to make impossible. Same argument as PUT editing
+ * in place; see note 3 in the header.
+ *
+ * *** THE DENOMINATIONS COME BACK WITH IT. THE DECISION, AND WHY. ***
+ * They were deactivated by the CASCADE, not chosen one by one: the user
+ * removed an issuer and was told its denominations went with it. The
+ * symmetric undo of "the issuer goes and takes them" is "the issuer comes
+ * back and brings them", and leaving them dead under a live issuer
+ * recreates the invisible-orphan state in mirror image — rows that exist,
+ * are filed under something the user can see, and are reachable from
+ * nothing. The user's next act would then be to type them again, or to
+ * accept them from the online lookup, producing a SECOND row with the same
+ * label under one issuer. That is the duplicate seed-sql.ts is written
+ * against: two rows sharing a label make every coin carrying that text
+ * resolve as ambiguous, and ambiguous resolves to NULL, so the duplicate
+ * costs a denomination rather than adding one.
+ *
+ * It also matters that the seeded denominations are OTHERWISE
+ * UNRECOVERABLE. Removing Mexico takes 31 curated rows with it and there is
+ * no screen anywhere that puts them back.
+ *
+ * *** THE OBJECTION IN denominations.ts DOES NOT APPLY HERE. *** That file
+ * records, correctly, that reactivating a denomination "would silently
+ * re-link coins the user had already decided to detach". It cannot happen
+ * on this path: the cascade set `Coins.DenominationId = NULL`, so the link
+ * is already gone and reviving the label does not restore it. The coins
+ * stay unlinked, keep their recorded text, and still read as Other until
+ * the user re-selects — exactly what the removal promised.
+ *
+ * *** THE ONE THING THIS OVER-RESTORES, STATED PLAINLY. *** A denomination
+ * the user deleted INDIVIDUALLY before removing the issuer is also
+ * deactivated, and nothing in the schema distinguishes it from one the
+ * cascade took — there is no deactivation timestamp and adding a column for
+ * this is not worth a migration. So it comes back too. That is the cheaper
+ * error of the two: a label that should not be there is one click to remove
+ * again, while 31 curated rows that did not come back cannot be got back at
+ * all. And it is not silent — the count is reported and the caller says it
+ * out loud.
+ *
+ * ONE TRANSACTION, for the reason DELETE is one: an issuer that came back
+ * without its denominations, or denominations reactivated under an issuer
+ * that did not, are both states the user cannot see and cannot repair.
+ */
+async function reviveIssuer(
+  issuerId: number,
+  issuer: ValidIssuerBody,
+  kind: IssuerKind
+): Promise<{ sortOrder: number; denominationsRestored: number; denominationCount: number; coinCount: number }> {
+  return withDb(async (db) => {
+    const transaction = new DbTransaction(db);
+    let began = false;
+
+    try {
+      await transaction.begin();
+      began = true;
+
+      // The row itself: alive again, carrying what the user just submitted
+      // rather than whatever it held when it was removed. They retyped it,
+      // so it is their current answer, and refusing to apply it would make
+      // "add Burma, 1948-1989" quietly store the old year span.
+      const revived = await new DbRequest(transaction)
+        .input('id', DB_BINDINGS.issuerId, issuerId)
+        .input('name', DB_BINDINGS.issuerName, issuer.name)
+        .input('isoCode', DB_BINDINGS.issuerIsoCode, issuer.isoCode)
+        .input('kind', DB_BINDINGS.issuerKind, kind)
+        .input('validFrom', DB_BINDINGS.issuerYear, issuer.validFrom)
+        .input('validTo', DB_BINDINGS.issuerYear, issuer.validTo)
+        // SortOrder is NOT rewritten. It is the row's own slot and it was
+        // never the problem; a revived issuer belongs where it already was.
+        .query(`
+          UPDATE Issuers
+          SET Name = @name, IsoCode = @isoCode, Kind = @kind,
+              ValidFrom = @validFrom, ValidTo = @validTo, IsActive = 1
+          WHERE IssuerId = @id
+          RETURNING SortOrder
+        `);
+
+      const denominations = await new DbRequest(transaction)
+        .input('id', DB_BINDINGS.issuerId, issuerId)
+        .query('UPDATE Denominations SET IsActive = 1 WHERE IssuerId = @id AND IsActive = 0');
+
+      // Counted from the database AFTER the revive rather than assumed to
+      // be the number just reactivated. The two are normally the same and
+      // the response is the screen's only source for the row's badge, so it
+      // should report the state rather than the delta. CoinCount is
+      // expected to be 0 — the cascade unlinked them — but it is measured,
+      // not asserted, for the same reason.
+      const counts = await new DbRequest(transaction)
+        .input('id', DB_BINDINGS.issuerId, issuerId)
+        .query(`
+          SELECT
+              COUNT(DISTINCT d.DenominationId) AS DenominationCount,
+              COUNT(c.CoinId)                  AS CoinCount
+          FROM Denominations d
+          LEFT JOIN Coins c ON c.DenominationId = d.DenominationId
+          WHERE d.IssuerId = @id AND d.IsActive = 1
+        `);
+
+      await transaction.commit();
+
+      const countRow = counts.recordset[0] ?? {};
+      return {
+        sortOrder: Number(revived.recordset[0]?.['SortOrder'] ?? 0),
+        denominationsRestored: denominations.rowsAffected[0] ?? 0,
+        denominationCount: Number(countRow['DenominationCount'] ?? 0),
+        coinCount: Number(countRow['CoinCount'] ?? 0),
+      };
+    } catch (innerErr) {
+      await safeRollback(began ? transaction : null, 'POST /api/issuers (revive)');
+      throw innerErr;
+    }
+  });
+}
+
+/*
+ * POST — create one, OR BRING A REMOVED ONE BACK.
+ *
+ * *** THE SECOND HALF IS A BUG FIX, REPORTED AFTER TESTING. ***
+ * "The Edit/Delete of Issuer looks like it worked, except when I tried to
+ * add them back in, I got an error saying the Issuer(s) already exist."
+ * Removal is a SOFT delete, the deactivated row kept the name, and the
+ * duplicate check counted it. The form's own check could not catch it
+ * either — it compares against the ACTIVE list, which is the only list the
+ * client has — so the user had no warning and no way round it.
+ *
+ * Three outcomes now, and only the middle one is new:
+ *
+ *   no row owns the name          -> 201, a new row
+ *   an ACTIVE row owns it         -> 409, unchanged. Two live issuers
+ *                                    called Mexico must stay impossible:
+ *                                    the seed matches BY NAME and a second
+ *                                    one makes its join multiply rows.
+ *   a DEACTIVATED row owns it     -> 200, that row revived, same id
+ *
+ * 200 and not 201: nothing was created. The body carries `revived: true`
+ * and `denominationsRestored`, which is what the client actually branches
+ * on — the status is there so the protocol is not lying about what
+ * happened.
+ */
 router.post('/issuers', async (req: Request, res: Response) => {
   const parsed = readIssuerBody(req.body);
   if (!parsed.ok) {
@@ -268,10 +467,47 @@ router.post('/issuers', async (req: Request, res: Response) => {
   const issuer = parsed.value;
 
   try {
-    const clash = await findNameClash(issuer.name, null);
-    if (clash) {
+    const match = await findNameMatch(issuer.name, null);
+
+    if (match?.isActive) {
       logWarn(`Refusing duplicate issuer name: ${issuer.name}`);
-      res.status(409).json({ error: `"${clash}" is already an issuer` });
+      res.status(409).json({ error: `"${match.name}" is already an issuer` });
+      return;
+    }
+
+    if (match) {
+      // DERIVED with the row's OWN Kind as the fallback, exactly as PUT
+      // does it, because there IS a row. Without it, reviving the undated
+      // `British Colonial` would silently reclassify it as 'modern'.
+      const kind = resolveIssuerKind(
+        issuer.validFrom,
+        issuer.validTo,
+        issuer.suppliedKind ?? (await storedKindOf(match.issuerId))
+      );
+
+      logInfo(`Reviving soft-deleted issuer ${match.issuerId}: ${issuer.name} (${kind}, derived)`);
+      const outcome = await reviveIssuer(match.issuerId, issuer, kind);
+      logInfo(
+        `Issuer ${match.issuerId} revived; ${outcome.denominationsRestored} denomination(s) restored`
+      );
+
+      res.status(200).json({
+        issuerId: match.issuerId,
+        name: issuer.name,
+        isoCode: issuer.isoCode,
+        kind,
+        validFrom: issuer.validFrom,
+        validTo: issuer.validTo,
+        sortOrder: outcome.sortOrder,
+        denominationCount: outcome.denominationCount,
+        coinCount: outcome.coinCount,
+        isActive: true,
+        // The two fields that make this answer different from a creation.
+        // The client needs BOTH: `revived` decides the sentence, and the
+        // count decides whether the online lookup runs at all.
+        revived: true,
+        denominationsRestored: outcome.denominationsRestored,
+      });
       return;
     }
 
@@ -338,9 +574,20 @@ router.put('/issuers/:id', async (req: Request, res: Response) => {
   const issuer = parsed.value;
 
   try {
-    const clash = await findNameClash(issuer.name, id);
-    if (clash) {
-      res.status(409).json({ error: `"${clash}" is already an issuer` });
+    // PUT STILL REFUSES A DEACTIVATED NAME, and it has to: letting the
+    // UPDATE through would hit UQ_Issuers_Name and turn a 409 into a 500
+    // with SQL in it. Renaming is also the wrong instrument for it —
+    // merging this issuer into a removed one would abandon this issuer's
+    // own denominations. What changes here is only the WORDING, because
+    // "already an issuer" is baffling when the issuer is not in the list.
+    const match = await findNameMatch(issuer.name, id);
+    if (match) {
+      res.status(409).json({
+        error: match.isActive
+          ? `"${match.name}" is already an issuer`
+          : `"${match.name}" is a removed issuer that still holds that name. ` +
+            `Add it again from the Issuers list to bring it back, with its denominations.`,
+      });
       return;
     }
 
@@ -394,65 +641,112 @@ router.put('/issuers/:id', async (req: Request, res: Response) => {
 });
 
 /**
- * Soft-delete an issuer — REFUSED while denominations still point at it.
+ * Soft-delete an issuer, CASCADING to its denominations and their coins.
  *
- * *** THE ONLY REFUSAL ON THIS SCREEN, AND THE REASON IS SPECIFIC. ***
- * Everywhere else the screen counts, warns and does as it is told — a
- * warned-about deletion must go through. This one is different because it is
- * the one case the database cannot catch and the user cannot undo in one
- * step:
+ * *** THIS ROUTE USED TO REFUSE, AND THE REFUSAL WAS THE BUG. ***
+ * It answered 409 while any active denomination was filed under the issuer,
+ * on the argument that the user should move or remove them first. In
+ * practice the owner did exactly that, the screen's cached count never
+ * caught up, and Remove refused forever. "I tried removing the
+ * denominations first, but that didn't work" is that story. The refusal
+ * also stood in for a rename the UI never offered, so the one person who
+ * hit it was not trying to delete anything at all.
  *
- *   * The delete is SOFT (IsActive = 0), so FK_Denominations_Issuer never
- *     fires — it only guards an actual row deletion.
- *   * The denominations keep their IssuerId, pointing at a row GET no longer
- *     returns. The maintenance screen files exactly that case under "No
- *     issuer yet" (see denomination-grouping.ts, which deliberately does not
- *     drop them), so all of that issuer's denominations reappear at the
- *     bottom of a list of over a thousand with nothing saying why.
- *   * Reactivating the issuer afterwards puts them back, but only if
- *     somebody works out that is what happened.
+ * What the refusal was protecting against is still real, so it is handled
+ * rather than dropped. The delete is SOFT (IsActive = 0), so
+ * FK_Denominations_Issuer never fires — it only guards an actual row
+ * deletion — and denominations left behind would keep an IssuerId pointing
+ * at a row GET no longer returns, reappearing under "No issuer yet" in a
+ * list of over a thousand with nothing saying why. So they are NOT left
+ * behind: they are deactivated in the same breath, and their coins are
+ * unlinked exactly the way DELETE /denominations/:id unlinks them.
  *
- * Making the user move or remove the denominations first keeps every step
- * explicit and separately reversible. The 409 carries the count so the
- * screen can say what to do rather than just "no".
+ * *** THE THREE STATEMENTS ARE ONE TRANSACTION, AND THAT IS NOT OPTIONAL. ***
+ * A half-removed issuer — gone from the list, with live denominations still
+ * filed under it — is strictly worse than the refusal this replaces: the
+ * user cannot see the orphans, cannot reach them, and has no reason to
+ * suspect them. Either all three land or none do.
+ *
+ * ORDER MATTERS. The coins are unlinked BEFORE the denominations are
+ * deactivated, because the subquery that finds them filters on
+ * `IsActive = 1`. Swap the two and the UPDATE matches nothing, the response
+ * reports zero coins touched, and the rows it should have cleared keep
+ * pointing at denominations that no longer exist.
+ *
+ * *** NOTHING HERE WRITES TO Coins.Denomination. *** Only the id link is
+ * cleared. The recorded TEXT is the user's own evidence of what the coin
+ * says and it survives untouched, which is what lets the client promise
+ * that no coin is lost and that re-selecting a denomination re-links it.
+ * See services/denominations/denomination-display.ts for what a coin in
+ * that state renders as — and for the sentinel that must never be written
+ * into the column in place of this.
+ *
+ * The response carries both counts so the caller can report what actually
+ * happened rather than what it predicted would happen.
  */
 router.delete('/issuers/:id', async (req: Request, res: Response) => {
   const id = Number.parseInt(toSingleValue(req.params['id']), 10);
 
   try {
-    const denominationCount = await withDb(async (db) => {
-      const result = await db.request()
-        .input('id', DB_BINDINGS.issuerId, id)
-        .query('SELECT COUNT(*) AS DenominationCount FROM Denominations WHERE IssuerId = @id AND IsActive = 1');
-      return Number(result.recordset[0]?.['DenominationCount'] ?? 0);
+    const outcome = await withDb(async (db) => {
+      const transaction = new DbTransaction(db);
+      let began = false;
+
+      try {
+        await transaction.begin();
+        began = true;
+
+        const unlinked = await new DbRequest(transaction)
+          .input('id', DB_BINDINGS.issuerId, id)
+          .query(`
+            UPDATE Coins SET DenominationId = NULL
+            WHERE DenominationId IN (
+              SELECT DenominationId FROM Denominations
+              WHERE IssuerId = @id AND IsActive = 1
+            )
+          `);
+
+        const denominations = await new DbRequest(transaction)
+          .input('id', DB_BINDINGS.issuerId, id)
+          .query('UPDATE Denominations SET IsActive = 0 WHERE IssuerId = @id AND IsActive = 1');
+
+        const issuer = await new DbRequest(transaction)
+          .input('id', DB_BINDINGS.issuerId, id)
+          .query('UPDATE Issuers SET IsActive = 0 WHERE IssuerId = @id');
+
+        const issuerRows = issuer.rowsAffected[0] ?? 0;
+
+        // No such issuer. Roll back rather than commit a no-op: it costs
+        // nothing here and it means the only way this transaction ever
+        // commits is the way that removes all three.
+        if (issuerRows === 0) {
+          await safeRollback(transaction, 'DELETE /api/issuers/:id');
+          return null;
+        }
+
+        await transaction.commit();
+
+        return {
+          denominationsRemoved: denominations.rowsAffected[0] ?? 0,
+          coinsUnlinked: unlinked.rowsAffected[0] ?? 0,
+        };
+      } catch (innerErr) {
+        await safeRollback(began ? transaction : null, 'DELETE /api/issuers/:id');
+        throw innerErr;
+      }
     });
 
-    if (denominationCount > 0) {
-      logWarn(`Refusing to remove issuer ${id}: ${denominationCount} denominations still filed under it`);
-      res.status(409).json({
-        error:
-          `${denominationCount} denomination${denominationCount === 1 ? '' : 's'} ` +
-          'are still filed under this issuer. Move or remove them first.',
-        denominationCount,
-      });
-      return;
-    }
-
-    const rowsAffected = await withDb(async (db) => {
-      const result = await db.request()
-        .input('id', DB_BINDINGS.issuerId, id)
-        .query('UPDATE Issuers SET IsActive = 0 WHERE IssuerId = @id');
-      return result.rowsAffected[0];
-    });
-
-    if (rowsAffected === 0) {
+    if (outcome === null) {
       logWarn(`Issuer not found: ${id}`);
       res.status(404).json({ error: 'Issuer not found' });
       return;
     }
 
-    logInfo(`Issuer ${id} soft-deleted successfully`);
-    res.status(204).send();
+    logInfo(
+      `Issuer ${id} soft-deleted; ${outcome.denominationsRemoved} denomination(s) removed, ` +
+        `${outcome.coinsUnlinked} coin(s) unlinked`
+    );
+    res.json({ issuerId: id, ...outcome });
   } catch (err) {
     sendDbError(res, 'DELETE /api/issuers/:id', err, 'Failed to delete issuer');
   }

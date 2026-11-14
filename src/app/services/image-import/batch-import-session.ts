@@ -26,6 +26,13 @@ import { StorageService } from '../storage.service';
 import { imageSourcePaths } from '../image-source-paths';
 import { BaseFolderState } from './base-folder-state';
 import { verifyBaseFolder, verdictMessage } from './base-folder-check';
+import {
+  DEFAULT_IMAGE_STORAGE_SETTINGS,
+  loadImageStorageSettings,
+  type ImageStorageSettings
+} from './image-storage-settings';
+import { makeReferencedEncoder, NO_BASE_FOLDER_MESSAGE } from './referenced-encoder';
+import { referenceUrlForPath } from './reference-url';
 import { chunkCoinIds, type ExistingSourcePaths } from './already-attached';
 import {
   DEFAULT_EXISTING_PHOTO_MODE,
@@ -153,6 +160,22 @@ export class BatchImportSession {
   private readonly thumbnails = new ThumbnailCache();
 
   /**
+   * How the photos this import attaches will be stored, from Settings.
+   *
+   * Held as a signal so the review screen can SAY which mode it is about to
+   * use — the difference between "the database will hold these pictures" and
+   * "the database will hold only their locations" is not something to
+   * discover afterwards. Restored in the constructor and read again at
+   * confirm time, because Settings can be changed while this screen is open.
+   *
+   * Defaults to 'stored' at the default budget, which is what the import did
+   * before the setting existed. See image-storage-settings.ts.
+   */
+  readonly storageSettings = signal<ImageStorageSettings>({
+    ...DEFAULT_IMAGE_STORAGE_SETTINGS
+  });
+
+  /**
    * The folder the picked photos actually live in, on the machine hosting the
    * app -- the one thing a browser refuses to tell us, so the user confirms it
    * once and it is remembered. See base-folder-state.ts and source-path.ts.
@@ -189,8 +212,11 @@ export class BatchImportSession {
      * session can still be constructed in an injection context that does not
      * provide StorageService (which is how some unit tests build it); without
      * it the folder simply resets each time.
+     *
+     * Also where the two photo-storage settings are read from — the same
+     * object, the same best-effort contract. See image-storage-settings.ts.
      */
-    storage?: StorageService,
+    private readonly storage?: StorageService,
     /**
      * Used for two things: asking the backend where the app is installed, so a
      * first-time user's base-folder box can start from a real path; and
@@ -215,6 +241,14 @@ export class BatchImportSession {
     // outright, an empty box is a state the screen already handles with a
     // visible warning.
     void this.folder.restore();
+
+    // Same fire-and-forget treatment, and safe for the same reason: the
+    // defaults ARE the app's previous behaviour, so a slow or failed read
+    // leaves the screen describing exactly what would have happened before
+    // this setting existed. The value is read again at confirm time.
+    void loadImageStorageSettings(storage).then(settings =>
+      this.storageSettings.set(settings)
+    );
   }
 
    /*
@@ -806,6 +840,33 @@ export class BatchImportSession {
      * exactly as it always did.
       */
     this.blockedReason.set(null);
+
+     /*
+     * THE STORAGE MODE, RE-READ. Settings is a different dialog and can have
+     * been changed since this screen opened; the mode decides whether the
+     * next few minutes read 4 GB off a share or no bytes at all, so it is
+     * read now rather than trusted from construction time.
+      */
+    const storageSettings = await loadImageStorageSettings(this.storage);
+    this.storageSettings.set(storageSettings);
+
+     /*
+     * THE REFERENCED-MODE GUARD — a reference with nothing to point at is a
+     * photo thrown away.
+     *
+     * In 'referenced' storage the database gets the path and NOT the
+     * picture, and the path can only be built from the confirmed base folder
+     * (a browser never reveals where a picked file really lives — see
+     * source-path.ts). With no folder there is nothing to write on either
+     * side, so the whole run is refused here, before any coin is touched,
+     * rather than producing a summary full of per-file failures.
+      */
+    if (storageSettings.mode === 'referenced' && !this.folder.value().trim()) {
+      this.progress.set(null);
+      this.blockedReason.set(NO_BASE_FOLDER_MESSAGE);
+      return;
+    }
+
     if (this.api) {
       const api = this.api;
       const verdict = await verifyBaseFolder(
@@ -893,7 +954,31 @@ export class BatchImportSession {
         this.inv.updateCoin(coinId, { imagePaths });
       },
       onProgress: progress => this.progress.set(progress),
-      encode: this.encoder
+       /*
+       * WHAT ONE PHOTO TURNS INTO — the only thing the two storage modes
+       * change about this import.
+       *
+       *   referenced : no file is read. The photo becomes a reference to
+       *                where it already lives, and the database is handed
+       *                the path with no picture (referenced-encoder.ts).
+       *   stored     : the file is read, decoded and downscaled to fit the
+       *                size budget, exactly as it always has been.
+       *
+       * `this.encoder` is the specs' stub and wins over both: there is no
+       * <canvas> in the unit-test environment.
+       *
+       * The URL builder is the API's own, so the reference is absolute. A
+       * relative one would 404 under `ng serve`, where the page is on :4200
+       * and the API on :3000.
+        */
+      encode:
+        this.encoder ??
+        (storageSettings.mode === 'referenced'
+          ? makeReferencedEncoder(this.folder.value(), path =>
+              this.api ? this.api.imageFileUrl(path) : referenceUrlForPath(path)
+            )
+          : undefined),
+      maxStoredImageBytes: storageSettings.maxStoredImageBytes
     });
 
     this.summary.set(result);

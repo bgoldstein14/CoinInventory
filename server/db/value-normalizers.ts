@@ -3,14 +3,14 @@
  * that came in as JSON to a SQL Server parameter.
  *
  * These live on their own because more than one place needs them: the coin
- * column table (db/coin-fields.ts) and the transactions routes both store dates
+ * column table (db/coin-fields.ts) and the spot-price routes both store dates
  * in NVARCHAR columns and must normalize them the same way. Keeping one copy is
  * what stops the two paths drifting apart.
  */
 
 /**
  * Normalizes a value destined for one of the text-based date columns
- * (PurchaseDate / SoldDate / Transactions.TransactionDate are NVARCHAR, not DATE).
+ * (PurchaseDate / SoldDate are NVARCHAR, not DATE).
  *
  * Binding a JS Date into an NVARCHAR column makes SQL Server stringify it in a
  * server-locale-dependent format that will not round-trip back through

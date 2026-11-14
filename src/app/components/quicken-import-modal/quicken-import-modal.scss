@@ -18,6 +18,21 @@
   h3 { margin: 0 0 8px; font-size: 0.88rem; }
 }
 
+// "Import only coins I still own". Sits under the filter grid rather than
+// inside it: the controls above narrow WHICH coins, this one changes whether
+// the owner's history comes with them, and it is the one with a default
+// worth noticing.
+.qif-sold-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
 .account-selector { margin-top: 12px; }
 
 .account-header {

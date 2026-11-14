@@ -28,7 +28,7 @@ import { NVarChar, Char, Int, Bit, Decimal, MAX } from './column-types';
  * Grouped by table so a schema change has one obvious place to land.
  */
 export const DB_BINDINGS = {
-  /** Coins.CoinId / CoinImages.CoinId / Transactions.CoinId */
+  /** Coins.CoinId / CoinImages.CoinId */
   coinId: NVarChar(36),
 
   // ----- CoinImages ---------------------------------------------------
@@ -52,13 +52,11 @@ export const DB_BINDINGS = {
    */
   imageSourcePath: NVarChar(400),
 
-  // ----- Transactions -------------------------------------------------
-  transactionId: NVarChar(36),    // TransactionId         UNIQUEIDENTIFIER (bound as text)
-  transactionType: NVarChar(50),  // TransactionType       NVARCHAR(50)
-  transactionDate: NVarChar(30),  // TransactionDate       NVARCHAR(30)  <- text, not DATE
-  transactionAmount: Decimal(12, 2),
-  transactionDealer: NVarChar(200), // Dealer              NVARCHAR(200)
-  transactionNotes: NVarChar(MAX),
+  // ----- Transactions: GONE. DO NOT RE-ADD THESE ----------------------
+  // Six bindings lived here (transactionId / Type / Date / Amount / Dealer /
+  // Notes) for a Transactions table that no longer exists. The buy and the
+  // sale are now columns on Coins and are bound from db/coin-fields.ts like
+  // every other coin field, so a binding here would have no column to name.
 
   // ----- SpotPrices ---------------------------------------------------
   spotPrice: Decimal(10, 2),      // Gold/Silver/Platinum  DECIMAL(10,2)

@@ -22,7 +22,6 @@ import {
   defaultRows,
   ISSUER_ID_OFFSET,
   sourceColumnsFor,
-  TRANSACTION_ONE,
 } from './fixture-collection';
 import { FixtureSourceReader, textColumn } from './fixture-source-reader';
 import { openTarget, TargetNotEmptyError } from './target';
@@ -83,7 +82,6 @@ describe('the migration, end to end', () => {
 
     expect(count(database, 'Coins')).toBe(2);
     expect(count(database, 'CoinImages')).toBe(2);
-    expect(count(database, 'Transactions')).toBe(1);
     expect(count(database, 'SpotPrices')).toBe(1);
     expect(count(database, 'CoinSets')).toBe(1);
     expect(count(database, 'AppSettings')).toBe(2);
@@ -138,9 +136,6 @@ describe('the migration, end to end', () => {
     expect(
       rows(database, 'SELECT DISTINCT CoinId FROM CoinImages').map((row) => row['CoinId'])
     ).toEqual([COIN_ONE.toLowerCase()]);
-    expect(one(database, 'SELECT * FROM Transactions')['TransactionId']).toBe(
-      TRANSACTION_ONE.toLowerCase()
-    );
   });
 
   it('copies ImageData verbatim as base64 — Stage 3 does the BLOB', async () => {
@@ -488,7 +483,7 @@ describe('--dry-run', () => {
 
     await runMigration(reader, opened, { ...DEFAULTS, dryRun: true }, (line) => logged.push(line));
 
-    for (const table of ['CoinImages', 'Transactions']) {
+    for (const table of ['CoinImages', 'SpotPrices']) {
       expect(logged.join('\n')).toContain(table);
     }
   });

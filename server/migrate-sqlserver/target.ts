@@ -5,7 +5,7 @@
  * *** REQUIREMENT 3 LIVES HERE AND IT IS THE CHEAPEST SAFETY IN THE TOOL. ***
  * The owner has already made test coins while checking Stage 1. A second run
  * of a migration that merged would give him two of every coin, two of every
- * photograph and two of every transaction, with new ids, and no way to tell
+ * photograph and two of every spot price, with new ids, and no way to tell
  * which half is which. So:
  *
  *   - a target with any owner data in it is REFUSED, by default, with the
@@ -143,7 +143,7 @@ export class TargetNotEmptyError extends Error {
         `${detail}\n\n` +
         `  Nothing has been written and nothing has been read from SQL Server.\n\n` +
         `  This tool will not merge. A second run that merged would give you a\n` +
-        `  second copy of every coin, photograph and transaction, with new ids,\n` +
+        `  second copy of every coin, photograph and spot price, with new ids,\n` +
         `  and no way to tell the two apart.\n\n` +
         `  What to do:\n` +
         `    - if those rows are the test coins from Stage 1, re-run with --force,\n` +

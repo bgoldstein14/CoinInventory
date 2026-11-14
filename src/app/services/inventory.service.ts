@@ -3,7 +3,6 @@ import {
   CoinRecord,
   SpotPrices,
   SpotPriceMeta,
-  TransactionRecord,
   Denomination,
   MintMarkOption
 } from '../types/coin.model';
@@ -17,7 +16,6 @@ import { CoinEditor } from './inventory/coin-editor';
 import { CoinImageHydrator } from './inventory/coin-image-hydrator';
 import { CoinCollection } from './inventory/coin-collection';
 import { LookupManager } from './inventory/lookup-manager';
-import { TransactionManager } from './inventory/transaction-manager';
 import { ConnectionManager } from './inventory/connection-manager';
 import { LoadFailure } from './inventory/load-failure';
 // The one-time "fill in the missing precious-metal data" maintenance pass.
@@ -56,7 +54,6 @@ const defaultSpotPrices: SpotPrices = { gold: 0, silver: 0, platinum: 0, copper:
  *   coin-editor.ts          field edits: optimistic paint, debounce, minimal PUT
  *   coin-collection.ts      add / import / delete whole coins, and selection
  *   lookup-manager.ts       categories, coin sets, denominations, mint marks
- *   transaction-manager.ts  the buy/sell history rows
  *   connection-manager.ts   start-up loading and the connection banner
  *   coin-factory.ts         building a blank / imported CoinRecord
  *   inventory-metrics.ts    totals, distinct lists, melt value (all pure)
@@ -80,7 +77,6 @@ export class InventoryService {
   readonly selectedCoinId = signal<string | null>(null);
   readonly categoryOptions = signal<string[]>([]);
   readonly coinSets = signal<string[]>([]);
-  readonly transactions = signal<TransactionRecord[]>([]);
   readonly spotPrices = signal<SpotPrices>({ ...defaultSpotPrices });
 
   /**
@@ -152,12 +148,6 @@ export class InventoryService {
    */
   readonly hasSpotPrices = computed(() => hasAnySpotPrice(this.spotPrices()));
 
-  readonly selectedCoinTransactions = computed(() => {
-    const coinId = this.selectedCoinId();
-    if (!coinId) return [];
-    return this.transactions().filter(t => t.coinId === coinId);
-  });
-
   private readonly apiService = inject(ApiService);
   private readonly logger = inject(LoggingService);
   private readonly notificationService = inject(NotificationService);
@@ -187,17 +177,9 @@ export class InventoryService {
     this.notificationService
   );
 
-  private readonly txns = new TransactionManager(
-    this.transactions,
-    this.apiService,
-    this.logger,
-    this.notificationService
-  );
-
   private readonly coins = new CoinCollection(
     this.inventory,
     this.selectedCoinId,
-    this.txns,
     this.changeTracker,
     this.drafts,
     this.lookups,
@@ -233,7 +215,6 @@ export class InventoryService {
     loadFailure: this.loadFailure,
     categoryOptions: this.categoryOptions,
     coinSets: this.coinSets,
-    transactions: this.transactions,
     denominations: this.denominations,
     mintMarks: this.mintMarks,
     catalogs: this.catalogs,
@@ -349,7 +330,7 @@ export class InventoryService {
     this.coins.importInventoryData(json);
   }
 
-  /** Remove a coin from the list, its transactions, and the database. */
+  /** Remove a coin from the list, the change tracker, and the database. */
   deleteCoin(coinId: string): void {
     this.coins.deleteCoin(coinId);
   }
@@ -422,15 +403,12 @@ export class InventoryService {
     return outcome;
   }
 
-  // ---- Transactions (buy / sell history attached to a coin) ----
-
-  addTransaction(txn: TransactionRecord): void {
-    this.txns.addTransaction(txn);
-  }
-
-  deleteTransaction(txnId: string): void {
-    this.txns.deleteTransaction(txnId);
-  }
+  // ---- Transactions: GONE ----
+  //
+  // There was an addTransaction / deleteTransaction pair here, backed by
+  // inventory/transaction-manager.ts and a Transactions table. Both are
+  // deleted. The buy and the sale are fields on the coin now, so they are
+  // written by updateCoin() like every other field.
 
   // ---- Spot prices and melt value ----
 

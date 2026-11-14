@@ -136,8 +136,28 @@ function readVersion(relativeFromServerRoot: string): string {
 
   for (const candidate of candidates) {
     try {
-      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as { version?: unknown };
-      if (typeof parsed.version === 'string') return parsed.version;
+      const parsed = JSON.parse(fs.readFileSync(candidate, 'utf8')) as {
+        version?: unknown;
+        buildNumber?: unknown;
+      };
+      if (typeof parsed.version !== 'string') continue;
+
+      /*
+       * Report the same four-part string the title bar shows.
+       *
+       * `buildNumber` is a separate field because `1.0.0.0` is not valid
+       * semver and npm rejects it. Only the root package.json carries one;
+       * the server's does not, and appends nothing — so a report reads
+       * `1.0.0.0` for the app and `1.0.0` for the server, which is honest
+       * about where each number came from.
+       *
+       * Until 2026-11-14 the root package.json still said `0.0.0`, so every
+       * support report ever written claimed to come from version 0.0.0.
+       * src/app/version.spec.ts is what stops that recurring.
+       */
+      return typeof parsed.buildNumber === 'number'
+        ? `${parsed.version}.${parsed.buildNumber}`
+        : parsed.version;
     } catch {
       // Not there, or not JSON. Try the next layout.
     }
@@ -155,10 +175,14 @@ async function readCounts(): Promise<{ counts: SupportCounts | null; error?: str
   try {
     const result = await withDb(async (db) =>
       db.request().query(
+        // `soldCoins` replaced the old `transactions` count when the
+        // Transactions table was dropped. It is still a pure COUNT(*) with
+        // no column list, so it cannot leak content.
         `SELECT
            (SELECT COUNT(*) FROM Coins)        AS coins,
            (SELECT COUNT(*) FROM CoinImages)   AS photos,
-           (SELECT COUNT(*) FROM Transactions) AS transactions`
+           (SELECT COUNT(*) FROM Coins WHERE SoldDate IS NOT NULL
+                                          OR SoldPrice IS NOT NULL) AS soldCoins`
       )
     );
 
@@ -169,7 +193,7 @@ async function readCounts(): Promise<{ counts: SupportCounts | null; error?: str
       counts: {
         coins: Number(row['coins'] ?? 0),
         photos: Number(row['photos'] ?? 0),
-        transactions: Number(row['transactions'] ?? 0)
+        soldCoins: Number(row['soldCoins'] ?? 0)
       }
     };
   } catch (err) {

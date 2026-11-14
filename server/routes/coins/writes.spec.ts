@@ -217,7 +217,8 @@ describe('POST /api/coins', () => {
     expect(capturedInputs().some((entry) => entry.name === 'dealer')).toBe(false);
     for (const statement of executedSql()) {
       // The INSERT targets Coins, so a bare "Dealer" here could only be the
-      // dropped coin column. Transactions.Dealer lives in a different route.
+      // dropped coin column. There is no Dealer column anywhere any more:
+      // the deal's counterparty is PurchasedFrom / SoldTo.
       expect(statement).not.toContain('Dealer');
     }
   });
@@ -313,7 +314,11 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
     expect(await queryRows('SELECT CoinId FROM Coins WHERE CoinId = @id', { id: 'longpath-id' })).toEqual([]);
   });
 
-  it('keeps SortOrder gap-free when an entry carries no image data', async () => {
+  it('keeps SortOrder gap-free when an entry carries nothing usable', async () => {
+    /* NOTE what is and is not dropped now that photographs can be REFERENCED.
+     * An entry with a path and no picture used to be dropped; it is now a
+     * referenced photograph and is stored (with ImageData NULL) — see the
+     * test below. Only entries with neither a picture nor a path go. */
     await request(app)
       .post('/api/coins')
       .send({
@@ -321,8 +326,9 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
         denomination: 'Dollar',
         imagePaths: [
           'data:image/png;base64,a',
-          '',                                        // dropped by the normalizer
-          { sourcePath: 'C:\\pics\\no-data.jpg' },   // dropped: no imageData
+          '',                        // dropped by the normalizer
+          { imageData: '' },         // dropped: no picture and no path
+          null,                      // dropped
           'data:image/png;base64,b',
         ],
       });
@@ -332,6 +338,31 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
     expect(rows.map((row) => row['ImageData'])).toEqual([
       'data:image/png;base64,a',
       'data:image/png;base64,b',
+    ]);
+  });
+
+  it('writes a REFERENCED photograph as a path with no picture', async () => {
+    /* The second storage mode (Settings > Photographs). The user chose to
+     * keep the picture on disk, so the row records where it is and the
+     * database deliberately does not carry it. SortOrder still has no gaps:
+     * a referenced entry is a real photograph, not a dropped one. */
+    await request(app)
+      .post('/api/coins')
+      .send({
+        id: 'ref-id',
+        denomination: 'Dollar',
+        imagePaths: [
+          { sourcePath: 'C:\\pics\\front.jpg' },
+          '/api/images/file?path=' + encodeURIComponent('C:\\pics\\back.jpg'),
+        ],
+      });
+
+    const rows = await imagesOf('ref-id');
+    expect(rows.map((row) => row['SortOrder'])).toEqual([0, 1]);
+    expect(rows.map((row) => row['ImageData'])).toEqual([null, null]);
+    expect(rows.map((row) => row['SourcePath'])).toEqual([
+      'C:\\pics\\front.jpg',
+      'C:\\pics\\back.jpg',
     ]);
   });
 });
@@ -680,6 +711,59 @@ describe('PUT /api/coins/:id', () => {
     expect(coin['Notes']).toBe('Nice toning');
   });
 
+  /*
+   * THE DEAL RECORD, WHICH USED TO BE A TABLE.
+   *
+   * These replace the POST /api/transactions coverage deleted from
+   * routes/data/data.spec.ts. The property they protect is not "a field can
+   * be saved" — it is that the two NOTES columns stay two columns. A single
+   * wrong `column:` in db/coin-fields.ts would make one overwrite the other
+   * with a 200 response and nothing visible until the user reopened the coin.
+   */
+  it('writes the purchase and sale counterparties and the deal note', async () => {
+    await existingCoin();
+
+    const res = await request(app).put('/api/coins/abc-123').send({
+      purchasedFrom: 'Heritage',
+      purchasePrice: 412.35,
+      purchaseDate: '2019-04-02',
+      soldTo: 'Stacks',
+      soldPrice: 500,
+      soldDate: '2024-06-15',
+      transactionNotes: 'Paid in two instalments.',
+    });
+    expect(res.status).toBe(200);
+
+    const [coin] = await queryRows('SELECT * FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
+    expect(coin['PurchasedFrom']).toBe('Heritage');
+    expect(coin['PurchasePrice']).toBe(412.35);
+    expect(coin['PurchaseDate']).toBe('2019-04-02');
+    expect(coin['SoldTo']).toBe('Stacks');
+    expect(coin['SoldPrice']).toBe(500);
+    expect(coin['SoldDate']).toBe('2024-06-15');
+    expect(coin['TransactionNotes']).toBe('Paid in two instalments.');
+  });
+
+  it('keeps the deal note and the coin note in separate columns', async () => {
+    await insertCoin({ CoinId: 'abc-123', Denomination: '$1', Notes: 'Lovely cartwheel lustre' });
+
+    await request(app)
+      .put('/api/coins/abc-123')
+      .send({ transactionNotes: "18% buyer's premium" });
+
+    const [coin] = await queryRows('SELECT * FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
+    // The coin's own note is UNTOUCHED by a write to the deal's note.
+    expect(coin['Notes']).toBe('Lovely cartwheel lustre');
+    expect(coin['TransactionNotes']).toBe("18% buyer's premium");
+
+    // And the other way round.
+    await request(app).put('/api/coins/abc-123').send({ notes: 'Rim nick at 4 o clock' });
+
+    const [after] = await queryRows('SELECT * FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
+    expect(after['Notes']).toBe('Rim nick at 4 o clock');
+    expect(after['TransactionNotes']).toBe("18% buyer's premium");
+  });
+
   it('ignores a stray tags key and still writes the real fields normally', async () => {
     // Removing the tag delete/re-insert from this transaction must not disturb
     // the partial-update behaviour around it. A body carrying BOTH a real field
@@ -716,7 +800,7 @@ describe('DELETE /api/coins/:id', () => {
     expect(await queryRows('SELECT CoinId FROM Coins WHERE CoinId = @id', { id: 'abc-123' })).toEqual([]);
   });
 
-  it('takes the coin\'s photographs and transactions with it', async () => {
+  it('takes the coin\'s photographs with it', async () => {
     // routes/coins/writes.ts says "images cascade" and never deletes them
     // itself. Against the mock that was an unverified claim about a database
     // nobody had; ON DELETE CASCADE is now declared in db/schema.sql and
@@ -725,19 +809,10 @@ describe('DELETE /api/coins/:id', () => {
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,a', sourcePath: null },
     ]);
-    await withTestDb((database) => {
-      database
-        .prepare(
-          'INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount) ' +
-            "VALUES ('t1', 'abc-123', 'purchase', '2024-01-01', 10)"
-        )
-        .run();
-    });
 
     expect(await request(app).delete('/api/coins/abc-123')).toMatchObject({ status: 204 });
 
     expect(await imagesOf()).toEqual([]);
-    expect(await queryRows('SELECT TransactionId FROM Transactions')).toEqual([]);
   });
 });
 

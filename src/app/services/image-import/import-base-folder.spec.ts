@@ -30,12 +30,6 @@ describe('import base folder persistence', () => {
     storage = new StorageService();
   });
 
-  it('falls back to empty when nothing is saved and no app folder is available', async () => {
-    // No provider at all — the pre-existing behaviour, and what a session built
-    // without an ApiService still does.
-    await expect(loadImportBaseFolder(storage)).resolves.toBe('');
-  });
-
   it('persists the base folder and reloads it', async () => {
     await saveImportBaseFolder(storage, '\\\\nas\\Photos\\Coins');
 

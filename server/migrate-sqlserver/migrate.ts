@@ -273,7 +273,7 @@ export async function runMigration(
       catalogIdMap: reference.catalogIdMap,
     };
 
-    log('Your coins, photographs and transactions...');
+    log('Your coins, photographs and spot prices...');
     const copied = await copyOwnerTables(reader, database, shape, intended, maps, log);
     for (const outcome of copied) {
       const images =

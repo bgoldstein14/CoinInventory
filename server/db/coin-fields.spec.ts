@@ -110,11 +110,25 @@ describe('COIN_FIELDS matches db/schema.sql', () => {
     // Coins.Dealer was dropped (migration 006). A binding left behind here
     // would make every INSERT name a column that does not exist.
     //
-    // This does NOT concern Transactions.Dealer, which still exists and is
-    // bound as DB_BINDINGS.transactionDealer in db/bindings.ts.
+    // Transactions.Dealer used to be the exception this test called out. The
+    // table is gone too; the counterparty is now TWO coin fields, one per
+    // side of the deal, and they are bound here like everything else.
     expect(COIN_FIELDS['dealer']).toBeUndefined();
     expect(parseTable('Coins').has('Dealer')).toBe(false);
-    expect(parseTable('Transactions').has('Dealer')).toBe(true);
+    expect(() => parseTable('Transactions')).toThrow(/no CREATE TABLE for Transactions/);
+    expect(COIN_FIELDS['purchasedFrom'].column).toBe('PurchasedFrom');
+    expect(COIN_FIELDS['soldTo'].column).toBe('SoldTo');
+  });
+
+  it('binds the deal’s note and the coin’s note to DIFFERENT columns', () => {
+    // The two boxes are adjacent in the detail panel. If these ever named
+    // the same column the user’s coin description would be overwritten by a
+    // line about a dealer’s premium, with a 200 response and nothing to see.
+    expect(COIN_FIELDS['notes'].column).toBe('Notes');
+    expect(COIN_FIELDS['transactionNotes'].column).toBe('TransactionNotes');
+    expect(COIN_FIELDS['notes'].column).not.toBe(COIN_FIELDS['transactionNotes'].column);
+    expect(parseTable('Coins').has('Notes')).toBe(true);
+    expect(parseTable('Coins').has('TransactionNotes')).toBe(true);
   });
 
   it('binds the text-based date columns as text, not as a date type', () => {

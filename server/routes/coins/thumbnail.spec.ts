@@ -29,8 +29,11 @@
  * every test inserts its coin before its photographs.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import request from 'supertest';
+import fs from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 
 import {
   executedSql,
@@ -245,5 +248,87 @@ describe('GET /api/coins/:id/thumbnail', () => {
     } finally {
       await rebuildTestDatabase();
     }
+  });
+});
+
+/*
+ * REFERENCED PHOTOGRAPHS — the second storage mode.
+ *
+ * When the user chooses, in Settings, to keep photos on disk rather than in
+ * the database, CoinImages.ImageData is NULL and SourcePath is the whole of
+ * what the row holds. The grid's Photo column must still work, so this route
+ * streams the original file instead of decoding a stored copy.
+ *
+ * The file on disk here is a REAL file in a temp directory, not a mock: the
+ * thing being tested is that the route reads the disk at all, and a stubbed
+ * `fs` would pass whether or not it did.
+ */
+describe('GET /api/coins/:id/thumbnail — referenced photographs', () => {
+  let tempDir: string;
+
+  beforeEach(async () => {
+    tempDir = await fs.promises.mkdtemp(join(tmpdir(), 'coin-thumb-'));
+  });
+
+  afterEach(async () => {
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+  });
+
+  /** A coin whose one photograph is a path and nothing else. */
+  async function givenReferencedCoin(coinId: string, sourcePath: string | null): Promise<void> {
+    await insertCoin({ CoinId: coinId, Denomination: '$1', Year: '1921' });
+    await withTestDb((database) => {
+      database
+        .prepare(
+          'INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) ' +
+            'VALUES (@coinId, NULL, 0, @sourcePath)'
+        )
+        .run({ coinId, sourcePath });
+    });
+  }
+
+  it('streams the original file when the row holds a path and no picture', async () => {
+    const original = join(tempDir, 'morgan-obverse.jpg');
+    await fs.promises.writeFile(original, JPEG_BYTES);
+    await givenReferencedCoin('ref-1', original);
+
+    const res = await request(app).get('/api/coins/ref-1/thumbnail');
+
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toContain('image/jpeg');
+    expect(Buffer.from(res.body)).toEqual(JPEG_BYTES);
+  });
+
+  it('404s when the referenced original has been moved or deleted', async () => {
+    // The trade-off of the mode, stated: there is no copy in the database to
+    // fall back on. A 404 is what a coin with no photograph produces, so the
+    // grid shows its ordinary empty cell rather than a broken image.
+    await givenReferencedCoin('ref-2', join(tempDir, 'gone.jpg'));
+
+    const res = await request(app).get('/api/coins/ref-2/thumbnail');
+
+    expect(res.status).toBe(404);
+  });
+
+  it('refuses to serve a path that is not an image file', async () => {
+    // Same allow-list as GET /api/images/file. A SourcePath is only ever
+    // written by this app, but it is still a path out of the database going
+    // into fs.createReadStream.
+    const notAnImage = join(tempDir, 'secrets.env');
+    await fs.promises.writeFile(notAnImage, 'TOKEN=hunter2');
+    await givenReferencedCoin('ref-3', notAnImage);
+
+    const res = await request(app).get('/api/coins/ref-3/thumbnail');
+
+    expect(res.status).toBe(404);
+    expect(res.text).not.toContain('hunter2');
+  });
+
+  it('still 404s when the row has neither a picture nor a path', async () => {
+    await givenReferencedCoin('ref-4', null);
+
+    const res = await request(app).get('/api/coins/ref-4/thumbnail');
+
+    expect(res.status).toBe(404);
   });
 });

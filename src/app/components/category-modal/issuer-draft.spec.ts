@@ -19,6 +19,8 @@ import {
   ISSUER_NAME_MAX_LENGTH,
   blankIssuerDraft,
   describeIssuerRemoval,
+  describeIssuerRevived,
+  describeLookupSkippedForRevival,
   previewIssuerKind,
   validateIssuerDraft,
 } from './issuer-draft';
@@ -210,27 +212,167 @@ describe('previewIssuerKind', () => {
   });
 });
 
+/*
+ * describeIssuerRemoval — THE WARNING, AT BOTH MAGNITUDES
+ *
+ * This used to REFUSE while denominations were filed under the issuer, and
+ * that refusal is the fault the owner reported: he removed the
+ * denominations, the cached count never moved, and the button went on
+ * saying no. Removal now cascades, so every test below is about the
+ * sentence that asks permission rather than about a veto.
+ */
 describe('describeIssuerRemoval', () => {
-  it('allows removing an issuer that has no denominations', () => {
-    const outcome = describeIssuerRemoval('Burma', 0);
-    expect(outcome.allowed).toBe(true);
-    expect(outcome.message).toContain('Burma');
+  it('is routine for an issuer with nothing filed under it', () => {
+    const plan = describeIssuerRemoval('Burma', 0, 0);
+    expect(plan.severity).toBe('routine');
+    expect(plan.message).toContain('Burma');
+    expect(plan.message).toContain('no denominations');
   });
 
-  it('refuses while denominations still point at it, and says how many', () => {
-    // THE BUG THIS PREVENTS: soft-deleting the issuer leaves its
-    // denominations pointing at a row that is no longer returned, so they
-    // all silently fall into the "no issuer yet" group — a mess the user did
-    // not ask for and cannot undo with one click. Making them move or
-    // remove the denominations first keeps the decision explicit.
-    const outcome = describeIssuerRemoval('Mexico', 23);
-    expect(outcome.allowed).toBe(false);
-    expect(outcome.message).toContain('23 denominations');
+  it('is still routine when denominations go but no coin depends on them', () => {
+    // Housekeeping. A duplicate issuer added five minutes ago, or a country
+    // the collection does not actually cover. Saying this in the same voice
+    // as the 43-coin case is how a user learns to click through both.
+    const plan = describeIssuerRemoval('Burma', 3, 0);
+    expect(plan.severity).toBe('routine');
+    expect(plan.message).toContain('3 denominations');
+    expect(plan.message).toContain('No coin uses');
+    expect(plan.message).toContain('nothing else changes');
+  });
+
+  it('escalates once coins depend on it, and SAYS THE NUMBER', () => {
+    // A warning that cannot name the number is not strong, it is alarming:
+    // the only answer to "some of your coins use these" is no, and the user
+    // is left with the mess they opened this screen to clear up.
+    const plan = describeIssuerRemoval('Mexico', 23, 43);
+    expect(plan.severity).toBe('serious');
+    expect(plan.message).toContain('43 coins');
+    expect(plan.message).toContain('all 23 of its denominations');
+  });
+
+  it('promises, in the serious case, that no coin is deleted and each keeps its text', () => {
+    // The user is accepting a RE-LINK, not data loss. Without this sentence
+    // the dialog is asking them to gamble their collection on a guess.
+    const plan = describeIssuerRemoval('Mexico', 23, 43);
+    expect(plan.message).toContain('No coin is deleted');
+    expect(plan.message).toContain('keeps the denomination text');
+    expect(plan.message).toContain('re-links them');
+    expect(plan.message).toContain('read as Other');
+    expect(plan.message).toContain('cannot be undone in one step');
+  });
+
+  it('says two visibly different things at the two magnitudes', () => {
+    // The escalation itself, asserted rather than assumed. If a later edit
+    // folded the two branches into one sentence every other test here would
+    // still pass.
+    const routine = describeIssuerRemoval('Mexico', 23, 0);
+    const serious = describeIssuerRemoval('Mexico', 23, 43);
+    expect(routine.message).not.toBe(serious.message);
+    expect(routine.message).not.toContain('cannot be undone');
+    expect(serious.message.length).toBeGreaterThan(routine.message.length);
+  });
+
+  it('never puts a sentinel in front of the user', () => {
+    // "OTHER" here is the null-link behaviour, not a string anything stores.
+    // A dialog that names `__OTHER__` would be describing a bug.
+    for (const plan of [
+      describeIssuerRemoval('Mexico', 0, 0),
+      describeIssuerRemoval('Mexico', 3, 0),
+      describeIssuerRemoval('Mexico', 3, 9),
+    ]) {
+      expect(plan.message).not.toContain('__OTHER__');
+    }
+  });
+
+  it('gets the singular right on both counts', () => {
+    const one = describeIssuerRemoval('Mexico', 1, 1);
+    expect(one.message).toContain('its 1 denomination?');
+    expect(one.message).toContain('1 coin uses it');
+    expect(one.message).not.toContain('1 denominations');
+    expect(one.message).not.toContain('1 coins');
+
+    const oneDenomination = describeIssuerRemoval('Mexico', 1, 0);
+    expect(oneDenomination.message).toContain('Its 1 denomination goes with it');
+  });
+
+  it('reports the counts it was given, clamped to whole non-negative numbers', () => {
+    // The component reads these straight back out to decide what to say
+    // afterwards, so a negative or fractional count must not travel.
+    const plan = describeIssuerRemoval('Mexico', 2.7, -4);
+    expect(plan.denominationCount).toBe(2);
+    expect(plan.coinCount).toBe(0);
+    expect(plan.severity).toBe('routine');
+  });
+});
+
+/*
+ * ----- Telling the user an issuer came BACK rather than being added -----
+ *
+ * Removal is a SOFT delete, so re-adding a removed issuer revives the
+ * original row — same id, denominations with it. The owner met the broken
+ * half of this ("I got an error saying the Issuer(s) already exist"); these
+ * cover the half that replaces it, which is making sure the good outcome is
+ * not also a silent one.
+ */
+describe('describeIssuerRevived', () => {
+  it('says RESTORED, not added, and quotes the number that came back', () => {
+    // "Added" would be the wrong first word: the user pressed Add and what
+    // they got was their old issuer, id and all. The count is quoted
+    // because a number can be checked against the list and "its
+    // denominations" cannot.
+    const said = describeIssuerRevived('Burma', 3);
+
+    expect(said).toContain('Restored');
+    expect(said).not.toContain('Added');
+    expect(said).toContain('Burma');
+    expect(said).toContain('3');
   });
 
   it('gets the singular right', () => {
-    const outcome = describeIssuerRemoval('Mexico', 1);
-    expect(outcome.message).toContain('1 denomination ');
-    expect(outcome.message).not.toContain('1 denominations');
+    const said = describeIssuerRevived('Burma', 1);
+    expect(said).toContain('its 1 denomination');
+    expect(said).not.toContain('denominations');
+  });
+
+  it('does NOT claim the coins were re-linked, because they were not', () => {
+    // The removal set Coins.DenominationId = NULL and reviving the LABEL
+    // does not put it back. A sentence that read as "everything is as it
+    // was" would be the one lie this screen cannot afford.
+    const said = describeIssuerRevived('Burma', 3);
+
+    expect(said).toContain('re-select');
+    expect(said.toLowerCase()).toContain('other');
+  });
+
+  it('has its OWN sentence for a revival that brought nothing back', () => {
+    // "Restored Burma and all 0 of its denominations" is the kind of
+    // sentence that teaches a user to stop reading these messages.
+    const said = describeIssuerRevived('Burma', 0);
+
+    expect(said).toContain('Restored');
+    expect(said).toContain('no denominations');
+    expect(said).not.toContain('0');
+  });
+
+  it('treats a missing or nonsense count as none rather than printing it', () => {
+    expect(describeIssuerRevived('Burma', Number.NaN)).toContain('no denominations');
+    expect(describeIssuerRevived('Burma', -2)).toContain('no denominations');
+  });
+});
+
+describe('describeLookupSkippedForRevival', () => {
+  it('says nothing left the machine, which is the promise the checkbox made', () => {
+    // The user ticked the consent box and no request went out. That is the
+    // one moment they are owed the promise back, because they have no way
+    // to check it otherwise.
+    const said = describeLookupSkippedForRevival('Burma', 3);
+
+    expect(said).toContain('nothing left this machine');
+    expect(said).toContain('Burma');
+    expect(said).toContain('3');
+  });
+
+  it('still points at the manual route, like every other lookup message', () => {
+    expect(describeLookupSkippedForRevival('Burma', 3)).toContain('below');
   });
 });

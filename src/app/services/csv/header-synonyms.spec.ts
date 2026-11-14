@@ -120,8 +120,56 @@ describe('matchHeaderToField', () => {
     expect(matchHeaderToField('ozt')).toBeUndefined();
   });
 
-  it('still refuses Dealer, the column that was deliberately removed', () => {
-    expect(matchHeaderToField('Dealer')).toBeUndefined();
+  it('places Dealer on Purchased From, now that there is a field for it', () => {
+    /* THIS ASSERTION USED TO BE `toBeUndefined()`, AND THE CHANGE IS NOT A
+     * RELAXATION. `Dealer` was refused because the COIN-LEVEL dealer field
+     * had been removed and there was nowhere for the column to land -- the
+     * refusal was about the absence of a field, never about the word. The
+     * transactions rework put the buy side's counterparty back on the coin
+     * as `purchasedFrom`, so the heading now has a correct destination and
+     * refusing it would throw away the one column a collector's spreadsheet
+     * reliably carries.
+     *
+     * `Weight (oz)` is the case this must NOT be confused with: that field
+     * exists and always did, and the refusal there is about the UNIT. It is
+     * asserted directly above and stays. */
+    expect(matchHeaderToField('Dealer')).toBe('purchasedFrom');
+    expect(matchHeaderToField('Bought From')).toBe('purchasedFrom');
+    expect(matchHeaderToField('Seller')).toBe('purchasedFrom');
+    expect(matchHeaderToField('Vendor')).toBe('purchasedFrom');
+    expect(matchHeaderToField('Purchased From')).toBe('purchasedFrom');
+  });
+
+  it('keeps the buy side and the sale side apart', () => {
+    // The one pair in the table that could be got backwards. A swap here
+    // writes the dealer into "Sold To" on every owned coin, which reads as
+    // a sale that never happened.
+    expect(matchHeaderToField('Buyer')).toBe('soldTo');
+    expect(matchHeaderToField('Sold To')).toBe('soldTo');
+    expect(matchHeaderToField('Seller')).not.toBe('soldTo');
+    expect(matchHeaderToField('Dealer')).not.toBe('soldTo');
+  });
+
+  it('refuses the counterparty headings that could mean either side', () => {
+    // `Sold By` is the near-miss: `sold` and `sold for` belong to soldPrice,
+    // so the heading reads as the sale side while meaning the purchase side.
+    // `Auction House` and `Consignor` genuinely are either side.
+    for (const header of ['Sold By', 'Auction House', 'Consignor', 'From']) {
+      expect(matchHeaderToField(header)).toBeUndefined();
+    }
+  });
+
+  it('places a transaction note without ever taking the coin note', () => {
+    expect(matchHeaderToField('Transaction Notes')).toBe('transactionNotes');
+    expect(matchHeaderToField('Deal Notes')).toBe('transactionNotes');
+    expect(matchHeaderToField('Purchase Notes')).toBe('transactionNotes');
+
+    // The coin's own note keeps every bare spelling. Coins.Notes and
+    // Coins.TransactionNotes are two columns; see server/db/coin-fields.ts.
+    expect(matchHeaderToField('Notes')).toBe('notes');
+    expect(matchHeaderToField('Memo')).toBe('notes');
+    expect(matchHeaderToField('Comments')).toBe('notes');
+    expect(matchHeaderToField('Remarks')).toBe('notes');
   });
 });
 
@@ -426,13 +474,19 @@ describe('mapHeadersToFields with column values — the ambiguous `Date` heading
   });
 
   it('does not let values rescue a heading that is refused outright', () => {
-    // Weight (oz) and Dealer are refused for reasons values cannot change.
+    // `Weight (oz)` is the wrong unit and `Auction House` could be either
+    // counterparty; neither is a question a column of values can settle.
+    // (`Dealer` stood here until the transactions rework gave it a field --
+    // see the Purchased From tests above. It is kept in the sheet so this
+    // spec also proves a refused column does not poison its neighbours.)
+    const headers = ['Weight (oz)', 'Auction House', 'Dealer'];
     const mapping = mapHeadersToFields(
-      ['Weight (oz)', 'Dealer'],
-      textColumnSamples(['Weight (oz)', 'Dealer'], [['0.7734', 'Heritage']])
+      headers,
+      textColumnSamples(headers, [['0.7734', 'Stack’s', 'Heritage']])
     );
     expect(mapping['Weight (oz)']).toBeUndefined();
-    expect(mapping['Dealer']).toBeUndefined();
+    expect(mapping['Auction House']).toBeUndefined();
+    expect(mapping['Dealer']).toBe('purchasedFrom');
   });
 
   it('reads the values of every other column without changing their mapping', () => {

@@ -38,8 +38,6 @@ import { ALL_TABLES } from './tables';
 const GUID_COLUMNS = new Set([
   'Coins.CoinId',
   'CoinImages.CoinId',
-  'Transactions.TransactionId',
-  'Transactions.CoinId',
 ]);
 
 /** Turns one db/schema.sql column into what INFORMATION_SCHEMA would say. */
@@ -114,7 +112,6 @@ export const CATALOG_ID_OFFSET = 700;
 /** A sample coin, with every numeric column populated to five decimals. */
 export const COIN_ONE = 'A1B2C3D4-0000-4000-8000-000000000001';
 export const COIN_TWO = 'A1B2C3D4-0000-4000-8000-000000000002';
-export const TRANSACTION_ONE = 'B1B2C3D4-0000-4000-8000-000000000001';
 
 /** What the fixture builder lets a spec change. */
 export interface FixtureOverrides {
@@ -232,17 +229,6 @@ export function buildSourceTables(
     CoinImages: [
       { ImageId: 1, CoinId: COIN_ONE, ImageData: 'data:image/jpeg;base64,AAAA', SortOrder: 0, SourcePath: 'C:\\photos\\1.jpg' },
       { ImageId: 2, CoinId: COIN_ONE, ImageData: 'data:image/jpeg;base64,BBBB', SortOrder: 1, SourcePath: null },
-    ],
-    Transactions: [
-      {
-        TransactionId: TRANSACTION_ONE,
-        CoinId: COIN_ONE,
-        TransactionType: 'purchase',
-        TransactionDate: '2019-04-02',
-        Amount: 412.35,
-        Dealer: 'Heritage',
-        Notes: null,
-      },
     ],
     SpotPrices: [
       {

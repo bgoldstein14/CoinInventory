@@ -40,6 +40,7 @@
   */
 
 import { Injectable } from '@angular/core';
+import { encodeWithinBudget, type BudgetedEncode } from './encode-budget';
 
 /** Longest edge, in pixels, that we will store. */
 export const MAX_LONG_EDGE = 1600;
@@ -135,50 +136,91 @@ export class ImageDownscaleService {
     const bitmap = await this.decode(file);
 
     try {
-      const target = computeScaledSize(bitmap.width, bitmap.height, maxEdge);
-
-      const canvas = document.createElement('canvas');
-      canvas.width = target.width;
-      canvas.height = target.height;
-
-      const context = canvas.getContext('2d');
-      if (!context) throw new Error('Could not get a 2D canvas context');
-
-      // A white backdrop matters for PNGs and GIFs with transparency: JPEG has
-      // no alpha channel, so without this the transparent areas come out black.
-      context.fillStyle = '#ffffff';
-      context.fillRect(0, 0, target.width, target.height);
-
-      // The browser's built-in smoothing is a good bilinear/box filter; asking
-      // for 'high' avoids the aliasing you get from a raw nearest-neighbour
-      // squeeze of a 4000 px photo down to 1600 px.
-      context.imageSmoothingEnabled = true;
-      context.imageSmoothingQuality = 'high';
-      context.drawImage(bitmap as unknown as CanvasImageSource, 0, 0, target.width, target.height);
-
-      // Always JPEG, even when the source was a PNG: a photograph of a coin
-      // compresses far better as JPEG, and we are not preserving transparency.
-      const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-
-      // Free the canvas backing store promptly. Doing 1,700 of these without
-      // shrinking the canvas leaves a lot of retained pixel buffers around.
-      canvas.width = 0;
-      canvas.height = 0;
-
-      return {
-        dataUrl,
-        width: target.width,
-        height: target.height,
-        originalBytes: file.size,
-        storedBytes: dataUrlByteLength(dataUrl),
-        resized: target.resized
-      };
+      return this.render(bitmap, file, maxEdge, JPEG_QUALITY);
     } finally {
       // createImageBitmap results hold native memory until closed. Skipped
       // harmlessly for the HTMLImageElement fallback path.
       const closable = bitmap as unknown as { close?: () => void };
       if (typeof closable.close === 'function') closable.close();
     }
+  }
+
+  /**
+   * Shrink one file so the STORED copy fits a byte budget.
+   *
+   * The file is DECODED ONCE and re-drawn per attempt: decoding is the
+   * expensive half (a 46 MB JPEG over a share), the canvas work is not, and
+   * at the default budget there is only ever one attempt anyway because
+   * rung 0 of the ladder is today's 1600 px / quality 0.85.
+   *
+   * See encode-budget.ts for the ladder, for why a budget cannot be computed
+   * arithmetically, and for why a photo that cannot be squeezed small enough
+   * is kept at its smallest rather than dropped.
+   */
+  async downscaleWithin(file: File, maxStoredBytes: number): Promise<BudgetedEncode> {
+    const bitmap = await this.decode(file);
+
+    try {
+      return await encodeWithinBudget(maxStoredBytes, attempt =>
+        Promise.resolve(this.render(bitmap, file, attempt.maxEdge, attempt.quality))
+      );
+    } finally {
+      const closable = bitmap as unknown as { close?: () => void };
+      if (typeof closable.close === 'function') closable.close();
+    }
+  }
+
+  /**
+   * One encode of an already-decoded image at a given size and quality.
+   *
+   * Split out of `downscale` when the byte budget arrived: the budget needs
+   * several encodes of the SAME decoded bitmap, and decoding once per attempt
+   * would multiply the only expensive step in the whole import.
+   */
+  private render(
+    bitmap: ImageBitmap | HTMLImageElement,
+    file: File,
+    maxEdge: number,
+    quality: number
+  ): DownscaleResult {
+    const target = computeScaledSize(bitmap.width, bitmap.height, maxEdge);
+
+    const canvas = document.createElement('canvas');
+    canvas.width = target.width;
+    canvas.height = target.height;
+
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('Could not get a 2D canvas context');
+
+    // A white backdrop matters for PNGs and GIFs with transparency: JPEG has
+    // no alpha channel, so without this the transparent areas come out black.
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, target.width, target.height);
+
+    // The browser's built-in smoothing is a good bilinear/box filter; asking
+    // for 'high' avoids the aliasing you get from a raw nearest-neighbour
+    // squeeze of a 4000 px photo down to 1600 px.
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'high';
+    context.drawImage(bitmap as unknown as CanvasImageSource, 0, 0, target.width, target.height);
+
+    // Always JPEG, even when the source was a PNG: a photograph of a coin
+    // compresses far better as JPEG, and we are not preserving transparency.
+    const dataUrl = canvas.toDataURL('image/jpeg', quality);
+
+    // Free the canvas backing store promptly. Doing 1,700 of these without
+    // shrinking the canvas leaves a lot of retained pixel buffers around.
+    canvas.width = 0;
+    canvas.height = 0;
+
+    return {
+      dataUrl,
+      width: target.width,
+      height: target.height,
+      originalBytes: file.size,
+      storedBytes: dataUrlByteLength(dataUrl),
+      resized: target.resized
+    };
   }
 
   /**

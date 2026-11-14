@@ -147,7 +147,7 @@ describe('BIT', () => {
 
 describe('types the driver cannot bind at all', () => {
   it('turns a Date into YYYY-MM-DD for the text date columns', () => {
-    // PurchaseDate / SoldDate / TransactionDate are TEXT, not dates. A raw
+    // PurchaseDate / SoldDate are TEXT, not dates. A raw
     // Date throws at the driver; a locale-formatted one would not round-trip
     // back through rowToCoin().
     expect(toBindValue('purchaseDate', NVarChar(30), new Date('2024-01-15T10:30:00Z'))).toBe(

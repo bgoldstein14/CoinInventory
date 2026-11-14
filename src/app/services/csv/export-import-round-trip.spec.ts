@@ -15,6 +15,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
 import { CSV_MAPPABLE_FIELDS, CsvService } from '../csv.service';
+import { isSoldRecord } from '../import-sold';
 import { BOM } from './byte-order-mark';
 
 /**
@@ -199,6 +200,143 @@ describe('the Source column', () => {
     const mapping = csv.autoMapHeaders(headers);
 
     expect(csv.mapRowToCoin(['Morgan Dollar'], headers, mapping).source).toBe('csv');
+  });
+});
+
+/**
+ * THE SEVEN TRANSACTION FIELDS, END TO END.
+ *
+ * The transactions rework folded the old `Transactions` table onto the coin:
+ * `purchaseDate`, `purchasePrice`, `purchasedFrom`, `soldDate`, `soldPrice`,
+ * `soldTo` and `transactionNotes`. Five of the seven were mappable and two --
+ * `purchasedFrom` and `transactionNotes` -- were not in CSV_MAPPABLE_FIELDS
+ * at all, so a collector's spreadsheet with a `Dealer` column had nowhere to
+ * put it and an export dropped the deal note on the floor.
+ *
+ * CSV and Excel are the paths where that information genuinely exists -- a
+ * Quicken investment register names an account where a spreadsheet names a
+ * dealer -- so these are the paths that must carry all seven. The QIF side of
+ * the same decision is in quicken-import.service.ts, under THE PAYEE IS NOT A
+ * DEALER, and it fills neither counterparty on purpose.
+ */
+describe('the seven transaction fields', () => {
+  const TRANSACTION_FIELDS = [
+    'purchaseDate', 'purchasePrice', 'purchasedFrom',
+    'soldDate', 'soldPrice', 'soldTo', 'transactionNotes'
+  ] as const;
+
+  it('are every one of them mappable, which is the gap this closed', () => {
+    const mappable = new Set(CSV_MAPPABLE_FIELDS.filter(field => field.key).map(field => field.key));
+    const missing = TRANSACTION_FIELDS.filter(field => !mappable.has(field));
+    expect(missing).toEqual([]);
+  });
+
+  it('round-trips all seven through an export and re-import', () => {
+    // Export columns are DERIVED from CSV_MAPPABLE_FIELDS, so a field that
+    // is mappable is exportable by construction -- but "by construction" has
+    // been wrong before (the Source column), and a value that survives the
+    // whole loop is the only proof that matters.
+    const { csv, written } = serviceCapturing();
+    csv.exportCsv([coin({
+      purchaseDate: '2024-03-15',
+      purchasePrice: 1250,
+      purchasedFrom: 'Harbourstone Coins',
+      soldDate: '2025-02-01',
+      soldPrice: 1400,
+      soldTo: 'Tollgate Rarities',
+      transactionNotes: "18% buyer's premium, paid in two instalments"
+    })]);
+
+    const rows = csv.parseCsv(written());
+    const mapping = csv.autoMapHeaders(rows[0]);
+    expect(rows[0].filter(header => !mapping[header])).toEqual([]);
+
+    const reimported = csv.mapRowToCoin(rows[1], rows[0], mapping);
+    expect(reimported.purchaseDate).toBe('2024-03-15');
+    expect(reimported.purchasePrice).toBe(1250);
+    expect(reimported.purchasedFrom).toBe('Harbourstone Coins');
+    expect(reimported.soldDate).toBe('2025-02-01');
+    expect(reimported.soldPrice).toBe(1400);
+    expect(reimported.soldTo).toBe('Tollgate Rarities');
+    expect(reimported.transactionNotes).toBe("18% buyer's premium, paid in two instalments");
+  });
+
+  it('reads a stranger sheet headed Dealer, which is where the dealer lives', () => {
+    const { csv } = serviceCapturing();
+    const headers = ['Coin Type', 'Dealer', 'Transaction Notes', 'Notes'];
+    const mapping = csv.autoMapHeaders(headers);
+    const imported = csv.mapRowToCoin(
+      ['Morgan Dollar', 'Heritage', 'Lot 2214, 20% premium', 'Rim nick at 4 o’clock'],
+      headers,
+      mapping
+    );
+
+    expect(imported.purchasedFrom).toBe('Heritage');
+    expect(imported.transactionNotes).toBe('Lot 2214, 20% premium');
+    // *** THE COIN'S OWN NOTE IS UNTOUCHED. *** Two database columns, two
+    // CSV columns, and neither may absorb the other.
+    expect(imported.notes).toBe('Rim nick at 4 o’clock');
+  });
+
+  it('never routes a bare Notes column to the transaction note', () => {
+    const { csv } = serviceCapturing();
+    const headers = ['Coin Type', 'Notes'];
+    const imported = csv.mapRowToCoin(
+      ['Morgan Dollar', 'Rim nick'],
+      headers,
+      csv.autoMapHeaders(headers)
+    );
+
+    expect(imported.notes).toBe('Rim nick');
+    expect(imported.transactionNotes).toBeUndefined();
+  });
+
+  it('leaves both blank when a sheet has Purchase Notes AND Sale Notes', () => {
+    // One field, two claimants of equal confidence: rule 3 in
+    // csv/header-synonyms.ts leaves a tie unplaced rather than picking. The
+    // two columns hold different text and only the user knows which to keep,
+    // so he is asked on the mapping screen.
+    const { csv } = serviceCapturing();
+    const mapping = csv.autoMapHeaders(['Coin Type', 'Purchase Notes', 'Sale Notes']);
+
+    expect(mapping['Purchase Notes']).toBeUndefined();
+    expect(mapping['Sale Notes']).toBeUndefined();
+    expect(mapping['Coin Type']).toBe('coinType');
+  });
+
+  it('keeps the dealer out of Sold To and the buyer out of Purchased From', () => {
+    // The one mapping in this file that would be silently wrong rather than
+    // merely absent: a swap claims a sale that never happened.
+    const { csv } = serviceCapturing();
+    const headers = ['Seller', 'Buyer'];
+    const imported = csv.mapRowToCoin(
+      ['Harbourstone Coins', 'Tollgate Rarities'],
+      headers,
+      csv.autoMapHeaders(headers)
+    );
+
+    expect(imported.purchasedFrom).toBe('Harbourstone Coins');
+    expect(imported.soldTo).toBe('Tollgate Rarities');
+  });
+
+  it('counts a coin with only a buyer as sold, now that the buyer can be mapped', () => {
+    // The third arm of services/import-sold.ts, reachable from a sheet.
+    const { csv } = serviceCapturing();
+    const headers = ['Coin Type', 'Sold To'];
+    const imported = csv.mapRowToCoin(
+      ['Morgan Dollar', 'Tollgate Rarities'],
+      headers,
+      csv.autoMapHeaders(headers)
+    );
+
+    expect(isSoldRecord(imported)).toBe(true);
+    // And the dealer on the BUY side must never trip the same rule.
+    const bought = csv.mapRowToCoin(
+      ['Morgan Dollar', 'Harbourstone Coins'],
+      ['Coin Type', 'Dealer'],
+      csv.autoMapHeaders(['Coin Type', 'Dealer'])
+    );
+    expect(isSoldRecord(bought)).toBe(false);
   });
 });
 

@@ -158,7 +158,7 @@ is visible; neither silent error is recoverable.
 `InventoryService` is the single front door to the collection, and it owns the
 signals every component reads. The work is delegated to focused classes under
 `inventory/` — change tracking, drafts, field edits, whole-coin operations,
-lookups, transactions, connection handling, metrics.
+lookups, connection handling, metrics.
 
 Those helpers are ordinary classes created with `new`, not Angular services.
 The constraint that produced that choice is that `InventoryService` must stay

@@ -15,12 +15,10 @@ export type { CollectionStatus } from './collection-status';
 /**
  * A single coin in the inventory. Mirrors the Coins table.
  *
- * There is no coin-level `dealer` field, and `TransactionRecord.dealer`
- * further down this file is a DIFFERENT field that stays. A coin-level
- * dealer said "this coin came from Heritage"; a transaction-level dealer
- * says "THIS purchase, on this date, for this amount, was with Heritage",
- * which survives a coin being bought from one dealer and later sold to
- * another. If you are grepping for `dealer`, check which one you have found.
+ * There is no `dealer` field and there must not be one. A single "where did
+ * this coin come from" string cannot describe a coin bought from one dealer
+ * and later sold to another, which is why the two counterparties are two
+ * separate fields: `purchasedFrom` and `soldTo`, below.
  *
  * Old JSON/CSV exports may still carry `dealer` or `tags` keys. That is
  * harmless: the import normaliser in services/inventory/coin-factory.ts does
@@ -67,6 +65,16 @@ export interface CoinRecord {
   purchaseDate: string;
   purchasePrice: number;
   currentValue: number;
+  /**
+   * THE COIN'S OWN NOTE. What it is, how it looks, where it sits in the
+   * collection, in the collector's own words.
+   *
+   * *** THIS IS NOT `transactionNotes`. *** That one, further down, is the
+   * note on the DEAL. The two boxes are adjacent in the detail panel, so the
+   * names are deliberately unlike each other: there is no `coinNotes` and
+   * this is never spelled with a prefix, so a grep for either finds one
+   * field and never both. Backed by Coins.Notes.
+   */
   notes: string;
   /* THE COIN'S PHOTOGRAPHS — AND WHY THIS KEY IS OPTIONAL
    *
@@ -121,6 +129,32 @@ export interface CoinRecord {
   hasCacSticker?: boolean;
   soldPrice?: number;
   soldDate?: string;
+  /*
+   * THE ACQUISITION / DISPOSAL RECORD — the three fields that replaced the
+   * Transactions table and its TransactionRecord type.
+   *
+   * There is no separate record type any more and no `transactions` list:
+   * a coin has ONE purchase and at most ONE sale. The money and the dates
+   * are the fields ALREADY ABOVE — `purchaseDate` / `purchasePrice` (shown
+   * in the UI as **Cost**) and `soldDate` / `soldPrice`. Only these three
+   * were missing.
+   */
+  /** Who the coin was bought FROM. Backed by Coins.PurchasedFrom. */
+  purchasedFrom?: string;
+  /** Who the coin was sold TO. Backed by Coins.SoldTo. */
+  soldTo?: string;
+  /**
+   * THE NOTE ON THE DEAL: "paid in two instalments", "consigned through
+   * Heritage, 18% buyer's premium". Backed by Coins.TransactionNotes.
+   *
+   * *** THIS IS NOT `notes`. *** `notes` above is the COIN's own note and
+   * long predates this field. The two boxes sit next to each other in the
+   * detail panel, which is precisely why the names share no spelling: a
+   * grep for `transactionNotes` finds this one and nothing else, and code
+   * that writes the wrong key would replace the user's coin description
+   * with a line about a dealer's premium and report success.
+   */
+  transactionNotes?: string;
   /**
    * The coin's GROSS weight — the whole coin, alloy included — in GRAMS.
    *
@@ -299,6 +333,24 @@ export interface QuickenImportRecord {
   country: string;
   notes: string;
   source: 'quicken';
+  /* ---- THE DISPOSAL, WHEN THE QIF RECORDED ONE ----
+   *
+   * A Quicken investment account has no "sold" column: it has a Buy and,
+   * later, a Sell / SellX / ShrsOut, and the importer reads a disposal off
+   * the net quantity. These two carry what that disposal said, so a coin
+   * known to be gone arrives with the evidence rather than with a bare
+   * status -- and so it satisfies the one "is this sold?" rule the CSV and
+   * Excel imports also use (services/import-sold.ts).
+   *
+   * Both UNDEFINED on a coin still held, and `soldPrice` is also undefined
+   * when the disposal block stated no amount at all (a ShrsOut transfer
+   * between accounts carries a quantity and nothing else). It is NOT 0 in
+   * that case: 0 is a real sale price -- a coin given away -- and the sold
+   * rule counts it as one. */
+  /** ISO `YYYY-MM-DD` date of the latest disposal. */
+  soldDate?: string;
+  /** Proceeds of that same disposal, when the block stated an amount. */
+  soldPrice?: number;
   /* THE FIVE ALLOY / WEIGHT FIELDS.
    *
    * All five come from ONE function -- `composePmFields` in pm-fill.ts, which
@@ -655,25 +707,21 @@ export interface PendingImageReview {
   decision: 'auto' | 'review' | 'confirmed' | 'skipped';
 }
 
-export interface TransactionRecord {
-  id: string;
-  coinId: string;
-  type: 'purchase' | 'sale' | 'trade' | 'appraisal';
-  date: string;
-  amount: number;
-  /**
-   * Who this ONE transaction was with — the seller on a purchase, the buyer on
-   * a sale, the appraiser on an appraisal.
-   *
-   * KEEP. CoinRecord has no `dealer` field and must not grow one: a single
-   * "where did this coin come from" string on the coin cannot describe a
-   * coin bought from one dealer and later sold to another. This one belongs
-   * to an individual dated, priced event, and is backed by
-   * Transactions.Dealer.
-   */
-  dealer: string;
-  notes: string;
-}
+/*
+ * TransactionRecord USED TO BE HERE AND IS GONE.
+ *
+ * It described a row of the Transactions table: id, coinId, type, date,
+ * amount, dealer, notes. The table was dropped and its data moved onto the
+ * coin — `purchaseDate` / `purchasePrice` / `purchasedFrom` for the buy,
+ * `soldDate` / `soldPrice` / `soldTo` for the sale, and `transactionNotes`
+ * for the note. See those fields on CoinRecord.
+ *
+ * The old type carried a `dealer` field and a long comment arguing that
+ * CoinRecord must never grow one, because a single string cannot describe a
+ * coin bought from one dealer and later sold to another. That argument is
+ * ANSWERED, not ignored: there are two counterparty fields now, one per
+ * side of the deal, which is what the owner actually records.
+ */
 
 export interface SpotPrices {
   gold: number;

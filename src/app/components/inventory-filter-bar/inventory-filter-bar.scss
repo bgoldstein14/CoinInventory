@@ -75,6 +75,77 @@
   }
 }
 
+// ---- Status tick boxes ----
+//
+// A group of checkboxes where the other advanced filters are single
+// controls, so it opts out of `.filter-group label`'s grid layout rather
+// than inheriting a shape meant for a caption above an input.
+
+.status-filter {
+  display: grid;
+  gap: 4px;
+  font-size: 0.75rem;
+  color: #5c4935;
+  font-weight: 600;
+  min-width: 260px;
+}
+
+.status-filter__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.status-filter__actions {
+  display: inline-flex;
+  gap: 8px;
+}
+
+.link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: 600;
+  color: #8e5b2d;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.status-filter__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 6px 10px;
+  border: 1px solid #d9c7a5;
+  border-radius: 8px;
+  background: #fdfaf6;
+}
+
+// Beats `.filter-group label` above, which lays a caption out over an input.
+.filter-group .status-filter__option {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  font-weight: 500;
+  cursor: pointer;
+
+  input {
+    width: auto;
+    accent-color: #8e5b2d;
+  }
+}
+
+// The empty-grid explanation. Deliberately plain rather than an alert: the
+// user did this on purpose one click ago and one more click undoes it.
+.status-filter__empty {
+  margin: 0;
+  font-weight: 500;
+  color: #7a6a53;
+}
+
 // ---- Print ----
 // Filtering controls are pointless on paper.
 

@@ -85,8 +85,8 @@ and you map them yourself.
 
 **A `Dealer` column is no longer recognised.** Coins used to carry a dealer name
 and older exports still have that column. The field was removed — who a coin
-came from is recorded on its transactions instead — so the column has nothing
-left to map onto. An old file still imports perfectly well; the Dealer column is
+came from is recorded in **Purchased from**, and who it went to in **Sold to** —
+so that column has nothing left to map onto. An old file still imports perfectly well; the Dealer column is
 simply ignored, along with the rest of the row importing as normal.
 
 ### ⚠ The weight column changed from troy ounces to grams

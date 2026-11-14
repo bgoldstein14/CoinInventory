@@ -11,8 +11,8 @@
  *
  *     Coins.CurrentValue is ONE COLUMN HOLDING ONE NUMBER. When the owner
  *     re-appraises a coin, the new figure overwrites the old one in place.
- *     No history of it is kept anywhere — not in the Coins table, not in the
- *     Transactions table, not in the JSON export.
+ *     No history of it is kept anywhere — not in the Coins table and not in
+ *     the JSON export.
  *
  * So a value-over-time line would have to be invented out of the one data
  * point that exists, and the only honest shape it could take is a flat line

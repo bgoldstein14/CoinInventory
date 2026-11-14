@@ -187,3 +187,76 @@ describe('GET /api/coins/:id/images', () => {
     expect(res.body[0].imageData).toBe('data:image/png;base64,mine');
   });
 });
+
+/*
+ * REFERENCED PHOTOGRAPHS — "the database holds the location, not the picture".
+ *
+ * THE PROPERTY THESE TESTS EXIST FOR: after a full round trip — read the
+ * coin's photographs, send them straight back as an ordinary save — the
+ * database must still hold NO picture. The client's `<img src>` needs a
+ * string it can load, so a referenced row is rendered as this server's own
+ * file-streaming URL; the risk is that the URL is then written back into
+ * ImageData on the next save and the mode quietly becomes "stored".
+ */
+describe('referenced photographs', () => {
+  const ORIGINAL = 'C:\\Coin Pictures\\1921 morgan.jpg';
+
+  it('renders a row with no picture as a link to its original file', async () => {
+    await insertCoin({ CoinId: 'ref-1', Denomination: '$1' });
+    await insertImages([
+      { CoinId: 'ref-1', ImageData: null, SortOrder: 0, SourcePath: ORIGINAL },
+    ]);
+
+    const res = await request(app).get('/api/coins/ref-1/images');
+
+    expect(res.status).toBe(200);
+    expect(res.body[0].sourcePath).toBe(ORIGINAL);
+    // Loadable by an <img>, and pointing at the original rather than
+    // carrying it: the path is in the query string, not a base64 payload.
+    expect(res.body[0].imageData).toContain('/api/images/file?path=');
+    expect(res.body[0].imageData).toContain(encodeURIComponent(ORIGINAL));
+    expect(res.body[0].imageData).not.toContain('base64');
+  });
+
+  it('leaves the database carrying no picture after a save round trip', async () => {
+    await insertCoin({ CoinId: 'ref-2', Denomination: '$1' });
+    await insertImages([
+      { CoinId: 'ref-2', ImageData: null, SortOrder: 0, SourcePath: ORIGINAL },
+    ]);
+
+    // Exactly what the client does: read the photographs, then save the coin
+    // with the array it was given.
+    const read = await request(app).get('/api/coins/ref-2/images');
+    const saved = await request(app)
+      .put('/api/coins/ref-2')
+      .send({ imagePaths: read.body.map((image: { imageData: string }) => image.imageData) });
+
+    expect(saved.status).toBeLessThan(300);
+
+    const rows = await withTestDb((database) =>
+      database
+        .prepare('SELECT ImageData, SourcePath FROM CoinImages WHERE CoinId = ?')
+        .all('ref-2')
+    );
+
+    expect(rows).toHaveLength(1);
+    // THE MUTATION THIS CATCHES: storing the reference URL (or anything
+    // else) in ImageData. Referenced means the database does not carry the
+    // picture — not "carries a smaller picture".
+    expect((rows[0] as { ImageData: string | null }).ImageData).toBeNull();
+    expect((rows[0] as { SourcePath: string }).SourcePath).toBe(ORIGINAL);
+  });
+
+  it('keeps stored photographs stored — the two modes do not bleed', async () => {
+    await insertCoin({ CoinId: 'both', Denomination: '$1' });
+    await insertImages([
+      { CoinId: 'both', ImageData: 'data:image/png;base64,kept', SortOrder: 0, SourcePath: ORIGINAL },
+      { CoinId: 'both', ImageData: null, SortOrder: 1, SourcePath: 'C:\\pics\\b.jpg' },
+    ]);
+
+    const res = await request(app).get('/api/coins/both/images');
+
+    expect(res.body[0].imageData).toBe('data:image/png;base64,kept');
+    expect(res.body[1].imageData).toContain('/api/images/file?path=');
+  });
+});

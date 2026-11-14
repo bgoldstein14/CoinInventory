@@ -622,21 +622,13 @@ describe('the British Mandate for Palestine', () => {
     }
   });
 
-  it('can be picked up by re-running 013 against a database that predates it', () => {
-    // THE INSTRUCTION THE OWNER NEEDS, AS A TEST. Both inserts are
-    // NOT EXISTS-guarded -- issuers by Name, denominations by
-    // (IssuerId, Label) -- so running 013 again on a database that already
-    // holds the other 61 issuers adds Palestine and its seven rows and
-    // nothing else. Without the guards a second run would double every
-    // denomination, and two candidates under one issuer resolve to NULL.
-    const onDisk = fs.readFileSync(SEED_MIGRATION_PATH, 'utf8');
-    expect(onDisk).toMatch(
-      /INSERT INTO Issuers[\s\S]*?WHERE NOT EXISTS \(SELECT 1 FROM Issuers i WHERE i\.Name = s\.Name\)/
-    );
-    expect(onDisk).toMatch(
-      /INSERT INTO Denominations[\s\S]*?WHERE NOT EXISTS \(\s*SELECT 1 FROM Denominations d\s*WHERE d\.IssuerId = i\.IssuerId AND d\.Label = s\.Label\s*\)/
-    );
-  });
+  // Re-running 013 safely (both inserts NOT EXISTS-guarded -- issuers by
+  // Name, denominations by (IssuerId, Label), so a second run against a
+  // database that already holds the other 61 issuers adds Palestine and its
+  // seven rows and nothing else) is asserted over this same migration file
+  // by `can be picked up by re-running 013, or simply by reopening the app`
+  // in the ancient-issuers block below, which additionally pins the
+  // db/seed.ts guards. It is not restated here.
 });
 
 /*

@@ -98,8 +98,9 @@ export class CsvService {
    *
    * A header that cannot be placed is ABSENT from the returned dictionary,
    * which the mapping dropdown renders as "(skip)" for the user to set.
-   * `Weight (oz)` and `Dealer` are refused -- see the long notes on
-   * CSV_MAPPABLE_FIELDS above and in header-synonyms.ts.
+   * `Weight (oz)` is refused -- see the long notes on CSV_MAPPABLE_FIELDS
+   * above and in header-synonyms.ts. (`Dealer` was refused alongside it
+   * while no field existed for it; it now maps to `purchasedFrom`.)
    *
    * @param columnValues sampled cells per column, keyed by header text.
    *   Optional, and the whole reason it exists is the one heading the

@@ -193,7 +193,7 @@ function detailOf(err: unknown, context: string): string {
  * @param err             - The caught error.
  * @param fallbackMessage - Message used for the generic 500 case.
  * @param subject         - Noun phrase for the thing the caller was waiting
- *                          for ('coin list', 'coin', 'transaction list'). Only
+ *                          for ('coin list', 'coin', 'spot price list'). Only
  *                          read when the failure turns out to be a delivery
  *                          one, which is the one case where the message has to
  *                          name it.

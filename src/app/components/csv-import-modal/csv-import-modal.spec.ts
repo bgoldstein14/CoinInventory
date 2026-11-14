@@ -3,6 +3,8 @@ import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { CsvService } from '../../services/csv.service';
 import { InventoryService } from '../../services/inventory.service';
 import { CsvImportModal } from './csv-import-modal';
@@ -54,6 +56,184 @@ describe('CsvImportModal', () => {
     expect(inv.inventory()[0].denomination).toBe('Dollar');
     expect(inv.inventory()[0].purchasePrice).toBe(150);
     expect(inv.inventory()[0].source).toBe('csv');
+  });
+});
+
+/*
+ * "IMPORT ONLY COINS I STILL OWN" IS NOT A QUICKEN FEATURE.
+ *
+ * It lived on the QIF dialog alone, which made it a property of one file
+ * format rather than of the import. It is now offered here too, on the same
+ * terms and with the same default (off), keyed on the same rule: a coin
+ * counts as sold when it has a sold date, a sold price or a buyer.
+ *
+ * The rule's own edge cases -- a price of 0, a whitespace-only buyer -- are
+ * covered in services/csv/sold-filter.spec.ts, which runs them through the
+ * mapping. These are about the DIALOG: that the control exists, that it is
+ * wired to the plan, and that the number on the button follows it.
+ */
+describe('the sold filter on the CSV / Excel dialog', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
+  const csv =
+    'Coin Type,Denomination,Year,Sold Date\n' +
+    'Morgan Dollar,Dollar,1881,2013-11-16\n' +
+    'Walking Liberty,Half Dollar,1943,\n';
+
+  async function loaded() {
+    const { modal, inv } = createModal();
+    const file = new File([csv], 'coins.csv', { type: 'text/csv' });
+    await modal['handleFileSelection']({ target: { files: [file] } } as unknown as Event);
+    return { modal, inv };
+  }
+
+  it('starts UNTICKED, so a sold coin imports like any other', async () => {
+    const { modal } = await loaded();
+
+    expect(modal['onlyUnsoldCoins']()).toBe(false);
+    expect(modal['plannedImportCount']()).toBe(2);
+    expect(modal['plannedSoldExclusions']()).toBe(0);
+  });
+
+  it('drops the sold row, and the count on the button follows', async () => {
+    const { modal } = await loaded();
+    modal['setOnlyUnsoldCoins'](true);
+
+    expect(modal['plannedImportCount']()).toBe(1);
+    expect(modal['plannedSoldExclusions']()).toBe(1);
+  });
+
+  it('imports exactly what the preview promised', async () => {
+    const { modal, inv } = await loaded();
+    modal['setOnlyUnsoldCoins'](true);
+    modal['importCsv']();
+
+    expect(inv.inventory().map(coin => coin.coinType)).toEqual(['Walking Liberty']);
+  });
+
+  it('puts the row back when it is unticked again', async () => {
+    const { modal } = await loaded();
+    modal['setOnlyUnsoldCoins'](true);
+    modal['setOnlyUnsoldCoins'](false);
+
+    expect(modal['plannedImportCount']()).toBe(2);
+    expect(modal['plannedSoldExclusions']()).toBe(0);
+  });
+
+  it('knows when the file maps no sold column, so it can say so', async () => {
+    const { modal } = await loaded();
+    expect(modal['mappedSoldFields']()).toEqual(['soldDate']);
+    expect(modal['hasNoSoldColumn']()).toBe(false);
+
+    const { modal: bare } = createModal();
+    const file = new File(
+      ['Coin Type,Denomination\nMorgan Dollar,Dollar\n'],
+      'bare.csv',
+      { type: 'text/csv' }
+    );
+    await bare['handleFileSelection']({ target: { files: [file] } } as unknown as Event);
+
+    expect(bare['hasNoSoldColumn']()).toBe(true);
+    bare['setOnlyUnsoldCoins'](true);
+    expect(bare['plannedImportCount']()).toBe(1);
+  });
+});
+
+describe('the sold tick box is actually on the dialog', () => {
+  /** HTML comments out, so documentation cannot satisfy a test. */
+  function stripComments(source: string): string {
+    return source.replace(/<!--[\s\S]*?-->/g, '');
+  }
+
+  const TEMPLATE = stripComments(
+    readFileSync(join(__dirname, 'csv-import-modal.html'), 'utf8')
+  );
+
+  it('renders a checkbox bound to the option', () => {
+    expect(TEMPLATE).toContain('onlyUnsoldCoins()');
+    expect(TEMPLATE).toContain('setOnlyUnsoldCoins(');
+  });
+
+  it('says what counts as sold, from the module that decides it', () => {
+    // The sentence is interpolated rather than retyped, so the dialog
+    // cannot describe a rule the code does not apply.
+    expect(TEMPLATE).toContain('soldRuleSentence');
+  });
+
+  it('tells the user when the option can have no effect', () => {
+    expect(TEMPLATE).toContain('hasNoSoldColumn()');
+  });
+});
+
+/*
+ * TWO MENU ENTRIES, ONE DIALOG.
+ *
+ * The Import menu used to carry a single "Excel or CSV" item. It now carries
+ * "Excel" and "CSV" separately, because a user holding a spreadsheet should
+ * find the word in a list rather than decode a compound label. What did NOT
+ * split is this component: both doors open it, and from the mapping grid
+ * down every rule -- auto-mapping, the 2-of-3 completeness check, the alloy
+ * inference -- is shared. A second modal would be a second copy of those
+ * rules, and the failure mode of two copies is that the same under-specified
+ * row is accepted on one path and refused on the other.
+ *
+ * So `mode` may change what the dialog SAYS and never what it can READ.
+ */
+describe('CsvImportModal — which door it was opened through', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
+  it('defaults to Excel, which is the first Import menu entry', () => {
+    // The split button's face runs the first entry; see app-toolbar.spec.ts.
+    const { modal } = createModal();
+
+    expect(modal.mode()).toBe('excel');
+    expect(modal['heading']()).toBe('Import from an Excel workbook');
+    expect(modal['filePickerLabel']()).toBe('Select Excel workbook');
+  });
+
+  it('suggests both formats whichever door was used', () => {
+    /* `accept` leads with the format the menu entry named and still lists
+     * the other. It is a hint to the operating system's file dialog, NOT a
+     * gate: handleFileSelection() routes on the extension. */
+    const { modal } = createModal();
+
+    expect(modal['acceptedExtensions']()).toContain('.xlsx');
+    expect(modal['acceptedExtensions']()).toContain('.csv');
+  });
+
+  it('reads a CSV perfectly well through the Excel door', () => {
+    /* The property that makes one dialog safe. A user who picked the wrong
+     * menu entry is not told off; refusing a file this dialog can plainly
+     * read, in order to be right about a menu click, is pedantry at his
+     * expense. */
+    const { modal } = createModal();
+    const csv = 'Coin Type,Denomination,Year\nMorgan Dollar,Dollar,1889\n';
+    const file = new File([csv], 'coins.csv', { type: 'text/csv' });
+
+    expect(modal.mode()).toBe('excel');
+    return modal['handleFileSelection']({ target: { files: [file] } } as unknown as Event)
+      .then(() => {
+        expect(modal['csvRows']()).toHaveLength(1);
+        expect(modal['fileError']()).toBe('');
+      });
+  });
+
+  it('binds the heading and the accept list rather than hard-coding them', () => {
+    /* Read as text: there is no jsdom here. Comments are stripped first --
+     * the template explains the split at length and names both formats in
+     * that prose, so an assertion against the raw file would match the
+     * explanation and pass with the bindings removed. */
+    const markup = readFileSync(join(__dirname, 'csv-import-modal.html'), 'utf8')
+      .replace(/<!--[\s\S]*?-->/g, '');
+
+    expect(markup).toContain('{{ heading() }}');
+    expect(markup).toContain('[attr.accept]="acceptedExtensions()"');
+    expect(markup, 'the old fixed title is gone').not.toContain('Import from a spreadsheet');
+    expect(markup, 'the old fixed picker label is gone').not.toContain('Select Excel or CSV file');
   });
 });
 

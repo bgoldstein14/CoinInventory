@@ -289,6 +289,17 @@
   margin-bottom: 4px;
 }
 
+// The hint under the caption. Half the reason the two notes boxes cannot be
+// mistaken for each other: the caption says which one this is, the hint says
+// what goes in it. See the long comment in coin-editor-form.html.
+.detail-notes-hint {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 400;
+  color: #8a7a63;
+  margin-bottom: 4px;
+}
+
 .detail-notes textarea {
   // `block`, not the browser default `inline-block`: see above. It also makes
   // `width: 100%` mean the full row rather than the full row plus whatever
@@ -348,4 +359,82 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
+}
+
+// ---- The transactions section ----
+//
+// Moved here from coin-detail-panel.scss when the Transactions TABLE was
+// dropped. It has to live in this component because it renders between the
+// editor grid and the coin's Notes box, both of which are this template's
+// children.
+//
+// THE CARD IS LOAD-BEARING, NOT DECORATION. It is the fourth of the four
+// things keeping this block's notes box from reading as a duplicate of the
+// coin's Notes box below it: a titled, tinted, bordered card against the
+// plain panel background. See the comment in coin-editor-form.html.
+.detail-transactions {
+  margin-top: 14px;
+  padding: 12px;
+  background: #faf6f1;
+  border: 1px solid #ecdcc0;
+  border-radius: 10px;
+  min-width: 0;
+
+  h3 { margin: 0 0 2px; font-size: 0.88rem; }
+}
+
+.detail-transactions__intro {
+  margin: 0 0 10px;
+  font-size: 0.7rem;
+  color: #8a7a63;
+}
+
+// Three fields to a line, collapsing to one on a narrow sidebar. `1fr`
+// columns rather than fixed widths so the two long counterparty names and
+// the date controls all stay inside the panel instead of pushing it wider.
+.detail-transactions__row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 1100px) {
+  .detail-transactions__row { grid-template-columns: minmax(0, 1fr); }
+}
+
+.detail-transaction-notes {
+  display: block;
+  margin-top: 4px;
+}
+
+.detail-transaction-notes-label {
+  display: block;
+  font-size: 0.72rem;
+  color: #5c4935;
+  font-weight: 700;
+}
+
+.detail-transaction-notes-hint {
+  display: block;
+  font-size: 0.66rem;
+  font-weight: 400;
+  color: #8a7a63;
+  margin-bottom: 4px;
+}
+
+// *** TALLER THAN THE COIN'S NOTES BOX ON PURPOSE. *** The owner asked for
+// the transaction note to be the bigger of the two, and the size difference
+// is also one of the four cues that stop the adjacent boxes reading as the
+// same field. `.detail-notes textarea` above is min-height: 52px; keep this
+// one comfortably above it.
+.detail-transaction-notes textarea {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  resize: vertical;
+  padding: 7px 8px;
+  border: 1px solid #d9c7a5;
+  border-radius: 7px;
+  background: #fdfaf6;
 }

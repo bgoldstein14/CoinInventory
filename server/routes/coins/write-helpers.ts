@@ -140,12 +140,18 @@ export async function insertImages(
  * insertImages().
  */
 export function resolveSourcePath(
-  imageData: string,
+  imageData: string | null,
   suppliedSourcePath: string | null,
   knownSourcePaths?: ReadonlyMap<string, string>
 ): string | null {
   // The caller told us where the file is. The caller is the authority.
   if (suppliedSourcePath !== null) return suppliedSourcePath;
+
+  /* A REFERENCED image (imageData null) has nothing to look itself up by —
+   * the rescue map is keyed on image data and there is none. It cannot reach
+   * here with no path either: an entry with neither is dropped by
+   * normalizeImageEntry rather than written as an empty row. */
+  if (imageData === null) return null;
 
   // Nothing supplied: fall back to what the coin already had recorded for this
   // same image, if anything. `?? null` keeps "unknown" as a single value.

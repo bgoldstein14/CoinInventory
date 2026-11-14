@@ -201,13 +201,13 @@ describe('buildFailureReport', () => {
 
   it('names whatever subject the route gave it', () => {
     const report = buildFailureReport(invalidStringLength(), {
-      context: 'GET /api/transactions',
-      subject: 'transaction list',
-      fallbackMessage: 'Failed to retrieve transactions',
+      context: 'GET /api/spot-prices/latest',
+      subject: 'spot prices',
+      fallbackMessage: 'Failed to retrieve spot prices',
       retrieved: true,
     });
 
-    expect(report.message).toBe('The transaction list could not be sent to the screen.');
+    expect(report.message).toBe('The spot prices could not be sent to the screen.');
   });
 });
 

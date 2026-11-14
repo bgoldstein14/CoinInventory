@@ -98,6 +98,24 @@
           </section>
         }
 
+        <!-- THE ISSUER LIST DID NOT LOAD, AND IT STAYS SAID.
+             The two panes below are built out of that list: the Issuers
+             pane IS it, and every heading on the Denominations pane comes
+             from it. With an empty list the Denominations pane files all
+             1,207 rows under "No issuer yet", and one added issuer then
+             leaves exactly one heading on screen — which reads as the
+             screen having filtered itself down to the issuer just added.
+             The toast that announced the failure is long gone by then, so
+             the state says so itself, and offers the retry. -->
+        @if (issuerListUnavailable()) {
+          <p class="reference-error" role="alert">
+            The issuer list could not be loaded{{ issuerLoadError() ? ': ' + issuerLoadError() : '' }}.
+            Issuer headings are missing until it loads, so denominations are
+            shown under &ldquo;No issuer yet&rdquo;.
+            <button type="button" class="link-button" (click)="retryLoadIssuers()">Try again</button>
+          </p>
+        }
+
         @switch (activeSection()) {
 
           <!-- Categories -->
@@ -199,24 +217,79 @@
             @if (sortedIssuers().length > 0) {
               <ul class="reference-list">
                 @for (issuer of sortedIssuers(); track issuer.issuerId) {
-                  <li class="reference-row">
-                    <span class="reference-row__name">
-                      {{ issuer.name }}
-                      @if (issuer.isoCode) { <span class="reference-row__tag">{{ issuer.isoCode }}</span> }
-                      <span class="reference-row__tag">{{ issuer.kind }}</span>
-                      @if (issuer.validFrom !== null || issuer.validTo !== null) {
-                        <span class="reference-row__years">{{ issuer.validFrom ?? '?' }}&ndash;{{ issuer.validTo ?? 'now' }}</span>
+                  @if (isEditingIssuer(issuer.issuerId)) {
+                    <!-- EDITING, IN PLACE.
+                         The row this replaces offered Remove and nothing
+                         else, so a name typed in the wrong case could only
+                         be deleted. PUT /issuers/:id had been on the server
+                         the whole time. Same fields and same order as the
+                         add form above, so the two read as one control. -->
+                    <li class="reference-row reference-row--editing">
+                      <div class="reference-form reference-form--wrap">
+                        <input type="text" class="reference-input"
+                          [maxlength]="issuerNameMaxLength"
+                          [ngModel]="issuerEditDraft().name"
+                          (ngModelChange)="setIssuerEditField('name', $event)"
+                          aria-label="Issuer name" />
+                        <input type="text" class="reference-input reference-input--iso" placeholder="ISO"
+                          maxlength="2"
+                          [ngModel]="issuerEditDraft().isoCode"
+                          (ngModelChange)="setIssuerEditField('isoCode', $event)"
+                          aria-label="Two-letter ISO code, if there is one" />
+                        <input type="text" class="reference-input reference-input--year" placeholder="From"
+                          [ngModel]="issuerEditDraft().validFrom"
+                          (ngModelChange)="setIssuerEditField('validFrom', $event)"
+                          aria-label="First year, negative for BC" />
+                        <input type="text" class="reference-input reference-input--year" placeholder="To"
+                          [ngModel]="issuerEditDraft().validTo"
+                          (ngModelChange)="setIssuerEditField('validTo', $event)"
+                          aria-label="Last year, blank if it still issues" />
+                        <!-- derivedIssuerEditKind, NOT derivedIssuerKind.
+                             The edit preview falls back to the kind already
+                             stored when the year span says nothing, which is
+                             what the server does on PUT and what keeps
+                             British Colonial out of 'modern'. -->
+                        <span class="reference-row__tag reference-row__tag--derived"
+                          aria-live="polite">{{ derivedIssuerEditKind() }}</span>
+                        <button type="button" class="secondary" [disabled]="issuerEditBusy()"
+                          (click)="saveIssuerEdit()">Save</button>
+                        <button type="button" class="link-button"
+                          (click)="cancelIssuerEdit()">Cancel</button>
+                      </div>
+                      @if (issuerEditError()) {
+                        <p class="reference-error" role="alert">{{ issuerEditError() }}</p>
                       }
-                    </span>
-                    <!-- Two numbers: removing an issuer and removing a
-                         denomination have different consequences, so the user
-                         needs both before deciding. -->
-                    <span class="reference-row__usage">
-                      {{ issuer.denominationCount }} denominations &middot; {{ usageLabel(issuer.coinCount) }}
-                    </span>
-                    <button type="button" class="secondary small-button"
-                      (click)="removeIssuer(issuer)">Remove</button>
-                  </li>
+                    </li>
+                  } @else {
+                    <li class="reference-row">
+                      <span class="reference-row__name">
+                        {{ issuer.name }}
+                        @if (issuer.isoCode) { <span class="reference-row__tag">{{ issuer.isoCode }}</span> }
+                        <span class="reference-row__tag">{{ issuer.kind }}</span>
+                        @if (issuer.validFrom !== null || issuer.validTo !== null) {
+                          <span class="reference-row__years">{{ issuer.validFrom ?? '?' }}&ndash;{{ issuer.validTo ?? 'now' }}</span>
+                        }
+                      </span>
+                      <!-- Two numbers: removing an issuer and removing a
+                           denomination have different consequences, so the user
+                           needs both before deciding.
+                           BOTH ARE DERIVED, not read off the issuer record.
+                           `issuer.denominationCount` is the snapshot that
+                           arrived with the list and never came back down when
+                           a denomination was removed, which is what made
+                           Remove refuse forever. These two read the live
+                           lists, so the figure here and the rows under this
+                           issuer's heading on the next pane cannot
+                           disagree. -->
+                      <span class="reference-row__usage">
+                        {{ issuerDenominationLabel(issuer.issuerId) }} &middot; {{ usageLabel(issuerCoinCount(issuer.issuerId)) }}
+                      </span>
+                      <button type="button" class="secondary small-button"
+                        (click)="beginIssuerEdit(issuer)">Edit</button>
+                      <button type="button" class="secondary small-button"
+                        (click)="removeIssuer(issuer)">Remove</button>
+                    </li>
+                  }
                 }
               </ul>
             } @else {
@@ -226,10 +299,20 @@
 
           <!-- Denominations -->
           @case ('denominations') {
+            <!-- ONE control, not two. 70 issuer groups is too many to
+                 scroll past to reach one of them, and with everything
+                 already folded a second "Collapse all" button would be a
+                 button that visibly does nothing. `expandAllControl()`
+                 reads the groups on screen and offers the half that would
+                 change something. -->
             <div class="reference-form">
               <input type="search" class="reference-input" placeholder="Search all denominations&hellip;"
                 [ngModel]="denominationSearch()" (ngModelChange)="denominationSearch.set($event)"
                 aria-label="Search denominations" />
+              <button type="button" class="secondary small-button"
+                [attr.aria-label]="expandAllControl().ariaLabel"
+                [title]="expandAllControl().ariaLabel"
+                (click)="pressExpandAll()">{{ expandAllControl().label }}</button>
             </div>
 
             <div class="reference-form reference-form--wrap">
@@ -262,7 +345,11 @@
             }
 
             @for (group of denominationGroups(); track group.heading) {
-              <section class="issuer-group">
+              <!-- A collapsed group is CHROME, not content: the modifier
+                   strips its padding, its gap and its bottom border so 70
+                   folded headings are a list you can scan rather than a
+                   second scroll. -->
+              <section class="issuer-group" [class.issuer-group--collapsed]="isCollapsed(group.heading)">
                 <button type="button" class="issuer-group__header"
                   [attr.aria-expanded]="!isCollapsed(group.heading)"
                   (click)="toggleGroup(group.heading)">

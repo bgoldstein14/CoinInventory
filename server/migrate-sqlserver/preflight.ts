@@ -251,7 +251,6 @@ export const REQUIRED_DECIMALS: ReadonlyArray<{
   { table: 'Coins', column: 'PurchasePrice', precision: 12, scale: 2, migration: null },
   { table: 'Coins', column: 'CurrentValue', precision: 12, scale: 2, migration: null },
   { table: 'Coins', column: 'SoldPrice', precision: 12, scale: 2, migration: null },
-  { table: 'Transactions', column: 'Amount', precision: 12, scale: 2, migration: null },
   { table: 'Denominations', column: 'FaceValue', precision: 18, scale: 6, migration: '011-add-issuers-and-denomination-links.sql' },
 ];
 

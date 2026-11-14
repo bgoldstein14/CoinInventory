@@ -44,6 +44,7 @@ import {
   type LabelledDenomination
 } from './image-matching/coin-signature';
 import { ImageDownscaleService } from './image-import/image-downscaler';
+import { DEFAULT_MAX_STORED_IMAGE_BYTES } from './image-import/image-storage-settings';
 import { describePhoto, sideSortOrder } from './image-import/photo-variant';
 import {
   AttachOptions,
@@ -279,17 +280,34 @@ export class BatchImageImportService {
    */
   attachSelected(
     rows: readonly BatchImageRow[],
-    options: Omit<AttachOptions, 'encode'> & { encode?: AttachOptions['encode'] }
+    options: Omit<AttachOptions, 'encode'> & {
+      encode?: AttachOptions['encode'];
+      /**
+       * The size budget for the STORED copy, from Settings. Omitted means
+       * the default, which is above anything the 1600 px / quality 0.85
+       * encoder produces and so leaves this import byte-for-byte as it has
+       * always been. Ignored when `encode` is supplied — the referenced
+       * mode stores nothing, and the specs' stub encoder has no bytes to
+       * budget. See services/image-import/encode-budget.ts.
+       */
+      maxStoredImageBytes?: number;
+    }
   ): Promise<BatchImportSummary> {
+    const { maxStoredImageBytes, ...attachOptions } = options;
+
     return runAttach(rows, {
-      ...options,
-      encode: options.encode ?? (file => this.encodeWithDownscaler(file))
+      ...attachOptions,
+      encode: options.encode ?? (file => this.encodeWithDownscaler(file, maxStoredImageBytes))
     });
   }
 
   /** The production encoder: shrink to 1600 px / quality 0.85 via <canvas>. */
-  private async encodeWithDownscaler(file: File): Promise<EncodedImage> {
-    const result = await this.downscaler.downscale(file);
+  private async encodeWithDownscaler(
+    file: File,
+    maxStoredImageBytes?: number
+  ): Promise<EncodedImage> {
+    const budget = maxStoredImageBytes ?? DEFAULT_MAX_STORED_IMAGE_BYTES;
+    const { result } = await this.downscaler.downscaleWithin(file, budget);
     return {
       dataUrl: result.dataUrl,
       originalBytes: result.originalBytes,

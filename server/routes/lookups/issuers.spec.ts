@@ -21,8 +21,10 @@
  *     coins" BEFORE the user presses Remove.
  *   * POST refuses a duplicate name itself rather than letting
  *     UQ_Issuers_Name turn into a 500 with SQL in the message.
- *   * DELETE refuses while denominations still point at the issuer. It is a
- *     SOFT delete, so FK_Denominations_Issuer will not catch that for us.
+ *   * DELETE CASCADES to the issuer's denominations and unlinks their coins,
+ *     in one transaction. It is a SOFT delete, so FK_Denominations_Issuer
+ *     will not catch an orphan for us — the transaction is what guarantees
+ *     there is never one.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -427,42 +429,451 @@ describe('PUT /api/issuers/:id', () => {
   });
 });
 
+/*
+ * DELETE CASCADES. It used to answer 409 while any denomination was filed
+ * under the issuer, which is the refusal the owner met and could not get
+ * past: he removed the denominations, the screen's cached count did not
+ * move, and the button kept saying no. The refusal is gone and the thing it
+ * was protecting against is handled instead — the denominations go with the
+ * issuer in the same transaction, so there is never a moment where one is
+ * gone and the others are not.
+ */
 describe('DELETE /api/issuers/:id', () => {
-  it('refuses while denominations are still filed under it', async () => {
-    // THE BUG THIS PREVENTS: the delete is SOFT, so
-    // FK_Denominations_Issuer does not fire. Mexico's thirty-one
-    // denominations would keep their IssuerId, the issuer would stop being
-    // returned, and all thirty-one would silently appear under "No issuer
-    // yet" — spread through a list of 1,207 with no way to undo it in one
-    // step.
+  /** Mexico's active denominations, which the cascade must take with it. */
+  async function activeDenominationIds(issuerId: number): Promise<number[]> {
+    const rows = await queryRows(
+      'SELECT DenominationId FROM Denominations WHERE IssuerId = @id AND IsActive = 1 ORDER BY DenominationId',
+      { id: issuerId }
+    );
+    return rows.map((row) => Number(row['DenominationId']));
+  }
+
+  it('cascades to the denominations instead of refusing, and says how many of each', async () => {
     const id = Number((await issuerNamed('Mexico'))['IssuerId']);
+    const denominationIds = await activeDenominationIds(id);
+    expect(denominationIds).toHaveLength(31);
+
+    await insertCoin({ CoinId: 'mx-a', Denomination: '8 Reales', DenominationId: denominationIds[0] });
+    await insertCoin({ CoinId: 'mx-b', Denomination: 'Pillar Dollar', DenominationId: denominationIds[0] });
+    await insertCoin({ CoinId: 'mx-c', Denomination: '1 Peso', DenominationId: denominationIds[1] });
 
     const res = await request(app).delete(`/api/issuers/${id}`);
-    expect(res.status).toBe(409);
-    expect(res.body.error).toContain('31');
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ issuerId: id, denominationsRemoved: 31, coinsUnlinked: 3 });
 
-    // Nothing was touched: still active, still carrying its denominations.
     const [stored] = await queryRows('SELECT IsActive FROM Issuers WHERE IssuerId = @id', { id });
-    expect(stored['IsActive']).toBe(1);
+    expect(stored['IsActive']).toBe(0);
+
+    // NOT ONE LEFT ACTIVE. An issuer that is gone with live denominations
+    // still filed under it is the state this whole route exists to avoid:
+    // they would reappear under "No issuer yet" with nothing saying why.
+    expect(await activeDenominationIds(id)).toEqual([]);
   });
 
-  it('soft-deletes an issuer that has none', async () => {
+  it('unlinks the affected coins and leaves their recorded text alone', async () => {
+    // THE FALLBACK TO "OTHER" IS THE NULL LINK, NOT A STRING. The coin keeps
+    // what it always said and simply stops pointing at a row that no longer
+    // exists; denomination-display.ts turns that pair into the display form.
+    // A sentinel written into Coins.Denomination here is a defect this
+    // project has already had once.
+    const id = Number((await issuerNamed('Mexico'))['IssuerId']);
+    const [first] = await activeDenominationIds(id);
+    await insertCoin({ CoinId: 'mx-text', Denomination: 'Pillar Dollar', DenominationId: first });
+
+    await request(app).delete(`/api/issuers/${id}`);
+
+    const [coin] = await queryRows(
+      'SELECT Denomination, DenominationId FROM Coins WHERE CoinId = @id',
+      { id: 'mx-text' }
+    );
+    expect(coin['DenominationId']).toBeNull();
+    expect(coin['Denomination']).toBe('Pillar Dollar');
+  });
+
+  it('writes no sentinel into Coins.Denomination for any affected coin', async () => {
+    const id = Number((await issuerNamed('Mexico'))['IssuerId']);
+    const ids = await activeDenominationIds(id);
+    await insertCoin({ CoinId: 'mx-1', Denomination: '8 Reales', DenominationId: ids[0] });
+    await insertCoin({ CoinId: 'mx-2', Denomination: '', DenominationId: ids[1] });
+    await insertCoin({ CoinId: 'mx-3', Denomination: '1 Peso', DenominationId: ids[2] });
+
+    await request(app).delete(`/api/issuers/${id}`);
+
+    const rows = await queryRows('SELECT CoinId, Denomination FROM Coins ORDER BY CoinId');
+    for (const row of rows) {
+      expect(String(row['Denomination'] ?? '')).not.toContain('OTHER');
+    }
+    expect(rows.map((row) => row['Denomination'])).toEqual(['8 Reales', '', '1 Peso']);
+  });
+
+  it('touches nothing belonging to another issuer', async () => {
+    const mexico = Number((await issuerNamed('Mexico'))['IssuerId']);
+    const peru = Number((await issuerNamed('Peru'))['IssuerId']);
+    const peruBefore = await activeDenominationIds(peru);
+    expect(peruBefore.length).toBeGreaterThan(0);
+
+    const [peruFirst] = peruBefore;
+    await insertCoin({ CoinId: 'pe-1', Denomination: '8 Reales', DenominationId: peruFirst });
+
+    await request(app).delete(`/api/issuers/${mexico}`);
+
+    expect(await activeDenominationIds(peru)).toEqual(peruBefore);
+    const [coin] = await queryRows('SELECT DenominationId FROM Coins WHERE CoinId = @id', { id: 'pe-1' });
+    expect(Number(coin['DenominationId'])).toBe(peruFirst);
+  });
+
+  it('soft-deletes an issuer that has no denominations, reporting two zeroes', async () => {
     const created = await request(app).post('/api/issuers').send({ name: 'Burma', kind: 'modern' });
     const id = created.body.issuerId;
 
     const res = await request(app).delete(`/api/issuers/${id}`);
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ issuerId: id, denominationsRemoved: 0, coinsUnlinked: 0 });
 
-    // THE ROW IS STILL THERE. A hard delete would also answer 204, and
+    // THE ROW IS STILL THERE. A hard delete would also answer 200, and
     // nothing in the response can tell the two apart.
     const [stored] = await queryRows('SELECT IsActive FROM Issuers WHERE IssuerId = @id', { id });
     expect(stored).toBeDefined();
     expect(stored['IsActive']).toBe(0);
   });
 
-  it('404s for an id that is not there', async () => {
+  it('404s for an id that is not there, and rolls the transaction back', async () => {
     const res = await request(app).delete('/api/issuers/999');
     expect(res.status).toBe(404);
     expect(await queryRows('SELECT 1 FROM Issuers')).toHaveLength(70);
+    // Nothing was committed on the way to the 404: every seeded
+    // denomination is still active.
+    const [{ Live: live }] = await queryRows(
+      'SELECT COUNT(*) AS Live FROM Denominations WHERE IsActive = 0'
+    );
+    expect(Number(live)).toBe(0);
+  });
+});
+
+/*
+ * ===================== RE-ADDING A REMOVED ISSUER =====================
+ *
+ * *** THE BUG THE OWNER REPORTED AFTER TESTING. *** "The Edit/Delete of
+ * Issuer looks like it worked, except when I tried to add them back in, I
+ * got an error saying the Issuer(s) already exist."
+ *
+ * Both halves of the trap are pinned below before anything about the fix,
+ * because the second one is what makes the obvious repair wrong:
+ *
+ *   * The deactivated row still holds the name, and the duplicate check
+ *     counted it, so re-adding was refused.
+ *   * `AND IsActive = 1` on that check is NOT the fix — it would let the
+ *     INSERT through into UQ_Issuers_Name, turning an explicable 409 into
+ *     a 500 with "UNIQUE constraint failed" in it, for the same action.
+ */
+describe('POST /api/issuers — reviving a removed one', () => {
+  /** Remove an issuer the way the screen does, and report what went with it. */
+  async function removeIssuerNamed(name: string): Promise<{ id: number; denominationsRemoved: number }> {
+    const row = await issuerNamed(name);
+    const id = Number(row['IssuerId']);
+    const res = await request(app).delete(`/api/issuers/${id}`);
+    expect(res.status).toBe(200);
+    return { id, denominationsRemoved: Number(res.body.denominationsRemoved) };
+  }
+
+  it('THE TRAP, HALF ONE: the removed row still holds the name', async () => {
+    // Not a test of the fix. A test of the fact the fix exists for: a soft
+    // delete leaves the row, and the row keeps Name. Anything that matches
+    // on name alone therefore still finds it.
+    const { id } = await removeIssuerNamed('Mexico');
+
+    const [stored] = await queryRows('SELECT Name, IsActive FROM Issuers WHERE IssuerId = @id', { id });
+    expect(stored['Name']).toBe('Mexico');
+    expect(stored['IsActive']).toBe(0);
+
+    // And it is invisible to the screen, which is why the form's own
+    // duplicate check cannot catch it either.
+    const list = await request(app).get('/api/issuers');
+    expect(list.body.some((issuer: { name: string }) => issuer.name === 'Mexico')).toBe(false);
+  });
+
+  it('THE TRAP, HALF TWO: UQ_Issuers_Name would fire if the insert were let through', async () => {
+    // *** THIS IS WHY `AND IsActive = 1` IS NOT THE FIX. *** Measured
+    // against the real constraint in db/schema.sql rather than assumed.
+    await removeIssuerNamed('Mexico');
+
+    let message = 'the INSERT was allowed, so the constraint is not what the route claims';
+    try {
+      await withTestDb((database) => {
+        database
+          .prepare(
+            'INSERT INTO Issuers (Name, IsoCode, Kind, SortOrder, IsActive) ' +
+              "VALUES ('Mexico', 'MX', 'modern', 9999, 1)"
+          )
+          .run();
+      });
+    } catch (err) {
+      message = String(err);
+    }
+    expect(message).toContain('UNIQUE constraint failed: Issuers.Name');
+  });
+
+  it('THE TRAP, HALF TWO (b): Name is COLLATE NOCASE, so a different case collides too', async () => {
+    // A fix that lower-cased its way around the constraint would not work
+    // either. 'mexico' and 'Mexico' are one row as far as UQ_Issuers_Name
+    // is concerned.
+    await removeIssuerNamed('Mexico');
+
+    let message = 'the INSERT was allowed';
+    try {
+      await withTestDb((database) => {
+        database
+          .prepare("INSERT INTO Issuers (Name, Kind, SortOrder, IsActive) VALUES ('mexico', 'modern', 9999, 1)")
+          .run();
+      });
+    } catch (err) {
+      message = String(err);
+    }
+    expect(message).toContain('UNIQUE constraint failed: Issuers.Name');
+  });
+
+  it('REUSES THE ROW AND ITS ID rather than creating a second one', async () => {
+    // *** THE DATA-INTEGRITY PROPERTY OF THE WHOLE CHANGE. *** Denominations
+    // and coins reach an issuer BY ID. A revival that minted a new id would
+    // leave every row filed under the old one pointing at an issuer GET does
+    // not return — the invisible orphan the cascade in DELETE exists to make
+    // impossible, arrived at from the other direction.
+    const { id } = await removeIssuerNamed('Mexico');
+
+    const res = await request(app).post('/api/issuers').send({ name: 'Mexico', isoCode: 'MX', validFrom: 1821 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.issuerId).toBe(id);
+    expect(res.body.revived).toBe(true);
+
+    // ONE row called Mexico, and it is the original.
+    const rows = await queryRows("SELECT IssuerId, IsActive FROM Issuers WHERE Name = 'Mexico'");
+    expect(rows).toHaveLength(1);
+    expect(Number(rows[0]['IssuerId'])).toBe(id);
+    expect(rows[0]['IsActive']).toBe(1);
+
+    // Still 70 issuer rows in total: nothing was inserted.
+    expect(await queryRows('SELECT 1 FROM Issuers')).toHaveLength(70);
+  });
+
+  it('BRINGS THE DENOMINATIONS BACK, still filed under the same issuer id', async () => {
+    // *** THE DECISION, PINNED. *** The denominations went as a CASCADE of
+    // the issuer removal, not one by one, so the undo of that removal
+    // brings them back. The alternative — a live issuer with 31 dead
+    // denominations under it — is the invisible-orphan state in mirror
+    // image, and the user's next act would be to add the same labels again,
+    // producing two rows with one label under one issuer. That duplicate
+    // resolves every coin carrying the text to NULL, so it costs a
+    // denomination rather than adding one.
+    const { id, denominationsRemoved } = await removeIssuerNamed('Mexico');
+    expect(denominationsRemoved).toBe(31);
+
+    const res = await request(app).post('/api/issuers').send({ name: 'Mexico', isoCode: 'MX', validFrom: 1821 });
+
+    expect(res.status).toBe(200);
+    expect(res.body.denominationsRestored).toBe(31);
+    // The badge the screen draws has to agree with it.
+    expect(res.body.denominationCount).toBe(31);
+
+    const live = await queryRows(
+      'SELECT 1 FROM Denominations WHERE IssuerId = @id AND IsActive = 1',
+      { id }
+    );
+    expect(live).toHaveLength(31);
+    // None left behind: a half-restore is the state nobody can see.
+    const dead = await queryRows(
+      'SELECT 1 FROM Denominations WHERE IssuerId = @id AND IsActive = 0',
+      { id }
+    );
+    expect(dead).toHaveLength(0);
+  });
+
+  it('does NOT re-link the coins the removal unlinked, and leaves their text alone', async () => {
+    // The promise the removal made, kept on the way back. The cascade set
+    // Coins.DenominationId = NULL and reviving the LABEL does not restore
+    // the link — which is also why the objection recorded in
+    // denominations.ts ("reactivating would silently re-link coins the user
+    // had already decided to detach") cannot apply to this path.
+    const mexico = await issuerNamed('Mexico');
+    const [denomination] = await queryRows(
+      'SELECT DenominationId FROM Denominations WHERE IssuerId = @id ORDER BY SortOrder LIMIT 1',
+      { id: Number(mexico['IssuerId']) }
+    );
+    await insertCoin({
+      CoinId: 'revive-1',
+      Denomination: '8 Reales',
+      DenominationId: Number(denomination['DenominationId']),
+    });
+
+    await removeIssuerNamed('Mexico');
+    const res = await request(app).post('/api/issuers').send({ name: 'Mexico', isoCode: 'MX', validFrom: 1821 });
+    expect(res.status).toBe(200);
+
+    const [coin] = await queryRows(
+      "SELECT Denomination, DenominationId FROM Coins WHERE CoinId = 'revive-1'"
+    );
+    expect(coin['DenominationId']).toBeNull();
+    // The user's own record of what the coin says, untouched throughout.
+    expect(coin['Denomination']).toBe('8 Reales');
+
+    // So the revived issuer reports no coins, truthfully.
+    expect(res.body.coinCount).toBe(0);
+  });
+
+  it('applies the fields the user just submitted, keeping the id and the slot', async () => {
+    const mexico = await issuerNamed('Mexico');
+    const id = Number(mexico['IssuerId']);
+    const sortOrder = Number(mexico['SortOrder']);
+    await request(app).delete(`/api/issuers/${id}`);
+
+    // Different ISO code and a closed year span: what they typed now is
+    // their current answer, not what the row held when it was removed.
+    const res = await request(app)
+      .post('/api/issuers')
+      .send({ name: 'Mexico', isoCode: 'mx', validFrom: 1821, validTo: 1863 });
+
+    expect(res.status).toBe(200);
+    const [stored] = await queryRows('SELECT * FROM Issuers WHERE IssuerId = @id', { id });
+    expect(stored['IsoCode']).toBe('MX');
+    expect(stored['ValidFrom']).toBe(1821);
+    expect(stored['ValidTo']).toBe(1863);
+    // DERIVED from the new span, like every other write.
+    expect(stored['Kind']).toBe('historical');
+    // SortOrder is the row's own slot and was never the problem.
+    expect(Number(stored['SortOrder'])).toBe(sortOrder);
+  });
+
+  it('does NOT rewrite British Colonial when it is revived without years', async () => {
+    // The same fallback PUT needs, on the same row, for the same reason:
+    // there IS a row, so its own Kind is the honest answer for a span that
+    // says nothing. Without it the revival silently reclassifies it.
+    const { id } = await removeIssuerNamed('British Colonial');
+    const [before] = await queryRows('SELECT Kind FROM Issuers WHERE IssuerId = @id', { id });
+    expect(before['Kind']).toBe('historical');
+
+    const res = await request(app).post('/api/issuers').send({ name: 'British Colonial' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.kind).toBe('historical');
+    const [stored] = await queryRows('SELECT Kind FROM Issuers WHERE IssuerId = @id', { id });
+    expect(stored['Kind']).toBe('historical');
+  });
+
+  it('revives on a differently-cased and padded name, because the row would collide anyway', async () => {
+    const { id } = await removeIssuerNamed('Mexico');
+
+    const res = await request(app).post('/api/issuers').send({ name: '  mexico  ' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.issuerId).toBe(id);
+    // The name the user typed now wins — this is also how the screen
+    // corrects the casing of a row it could previously only delete.
+    const [stored] = await queryRows('SELECT Name FROM Issuers WHERE IssuerId = @id', { id });
+    expect(stored['Name']).toBe('mexico');
+  });
+
+  it('reports a revival with no denominations as a revival, and zero', async () => {
+    // The zero is a different sentence on the screen and a different
+    // decision about the online lookup, so it has to be distinguishable
+    // from "31 came back" in the body rather than only in the wording.
+    const created = await request(app).post('/api/issuers').send({ name: 'Burma', isoCode: 'MM' });
+    const id = created.body.issuerId;
+    await request(app).delete(`/api/issuers/${id}`);
+
+    const res = await request(app).post('/api/issuers').send({ name: 'Burma', isoCode: 'MM' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.issuerId).toBe(id);
+    expect(res.body.revived).toBe(true);
+    expect(res.body.denominationsRestored).toBe(0);
+    expect(res.body.denominationCount).toBe(0);
+  });
+
+  it('STILL refuses an ACTIVE duplicate, with 409 and no revival flag', async () => {
+    // The half of the old behaviour that was always right. Two live issuers
+    // called Mexico must stay impossible: the seed matches BY NAME and a
+    // second one makes its join multiply rows instead of failing.
+    const res = await request(app).post('/api/issuers').send({ name: ' mexico ' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('Mexico');
+    expect(res.body.revived).toBeUndefined();
+    expect(await queryRows("SELECT * FROM Issuers WHERE Name = 'Mexico'")).toHaveLength(1);
+  });
+
+  it('prefers the ACTIVE row when a deactivated one also matches the folded name', async () => {
+    // UQ_Issuers_Name folds CASE but not WHITESPACE, so 'Mexico ' and
+    // 'Mexico' really can both be rows while the route's own comparison
+    // treats them as one name. If the deactivated one won, adding an issuer
+    // whose name a LIVE issuer already holds would revive the dead one and
+    // leave two live issuers answering to the same name.
+    await withTestDb((database) => {
+      database
+        .prepare(
+          'INSERT INTO Issuers (Name, Kind, SortOrder, IsActive) ' +
+            "VALUES ('Mexico ', 'modern', 9999, 0)"
+        )
+        .run();
+    });
+
+    const res = await request(app).post('/api/issuers').send({ name: 'Mexico' });
+
+    expect(res.status).toBe(409);
+    // The dead near-miss stayed dead.
+    const [padded] = await queryRows("SELECT IsActive FROM Issuers WHERE Name = 'Mexico '");
+    expect(padded['IsActive']).toBe(0);
+  });
+
+  it('creates a genuinely new issuer with 201 and no revival flag', async () => {
+    // The revival path must not have quietly swallowed the creation path.
+    const res = await request(app).post('/api/issuers').send({ name: 'Nowhereland' });
+
+    expect(res.status).toBe(201);
+    expect(res.body.revived).toBeUndefined();
+    expect(res.body.denominationsRestored).toBeUndefined();
+    expect(await queryRows('SELECT 1 FROM Issuers')).toHaveLength(71);
+  });
+
+  it('leaves another issuer untouched while one is revived', async () => {
+    await removeIssuerNamed('Mexico');
+    const [before] = await queryRows(
+      "SELECT COUNT(*) AS Live FROM Denominations d JOIN Issuers i ON i.IssuerId = d.IssuerId " +
+        "WHERE i.Name = 'France' AND d.IsActive = 1"
+    );
+
+    await request(app).post('/api/issuers').send({ name: 'Mexico' });
+
+    const [after] = await queryRows(
+      "SELECT COUNT(*) AS Live FROM Denominations d JOIN Issuers i ON i.IssuerId = d.IssuerId " +
+        "WHERE i.Name = 'France' AND d.IsActive = 1"
+    );
+    expect(Number(after['Live'])).toBe(Number(before['Live']));
+  });
+});
+
+describe('PUT /api/issuers/:id — renaming onto a removed name', () => {
+  it('refuses, and says the name belongs to a REMOVED issuer rather than an existing one', async () => {
+    // It has to refuse: letting the UPDATE through would hit
+    // UQ_Issuers_Name and turn a 409 into a 500 with SQL in it. Renaming is
+    // also the wrong instrument — merging this issuer into a removed one
+    // would abandon this issuer's own denominations. Only the wording
+    // changed, because "already an issuer" is baffling when the issuer is
+    // nowhere on the screen.
+    const mexico = await issuerNamed('Mexico');
+    await request(app).delete(`/api/issuers/${Number(mexico['IssuerId'])}`);
+
+    const france = await issuerNamed('France');
+    const res = await request(app)
+      .put(`/api/issuers/${Number(france['IssuerId'])}`)
+      .send({ name: 'Mexico' });
+
+    expect(res.status).toBe(409);
+    expect(res.body.error).toContain('removed issuer');
+
+    // Neither row moved.
+    const [stored] = await queryRows('SELECT Name FROM Issuers WHERE IssuerId = @id', {
+      id: Number(france['IssuerId']),
+    });
+    expect(stored['Name']).toBe('France');
   });
 });

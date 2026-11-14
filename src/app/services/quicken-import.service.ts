@@ -43,6 +43,14 @@ import { detectCountry, detectForeignDenomination } from './coin-countries';
 // The 2-of-3 "is this really a coin?" rule is shared with the manual
 // add-a-coin flow -- see the re-export block further down.
 import { checkMainCoinDetails } from './coin-completeness';
+// "Has this record been sold?" -- one definition, shared with the CSV and
+// Excel imports, so the tick box means the same thing in all three dialogs.
+// See services/import-sold.ts; in particular a sold price of 0 counts.
+import { isSoldRecord } from './import-sold';
+// The three words the hobby uses for a counterfeit, defined once. Imported
+// as DATA ONLY -- see AUTHENTICITY_MARKER_PATTERNS below for why reusing the
+// vocabulary is not the same thing as reusing the matcher's exclusion.
+import { COUNTERFEIT_MARKER_WORDS } from './image-matching/filename-vocabulary';
 
 interface CoinTypeRange {
   min: number;
@@ -323,6 +331,63 @@ const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
  * ------------------------------------------------------------------------- */
 const CAC_STICKER_PATTERN = /\bCAC(?:'?d)?\b/i;
 
+/* ---------------------------------------------------------------------------
+ * AUTHENTICITY WORDING -- "FAKE", "Counterfeit", "Replica", "not genuine"
+ *
+ * *** THIS IS AN IMPORT RULE AND IT IS NOT AN EXCLUSION. ***
+ * A counterfeit the owner keeps in a drawer is a thing he owns, so it is a
+ * row in his inventory like any other, and it imports like any other. The
+ * ONLY job of this list here is to make sure the word that distinguishes it
+ * from the genuine coin of the same date and grade SURVIVES THE IMPORT.
+ *
+ * Before this existed the wording was dropped on the floor. "1855 3CS - VF -
+ * FAKE" imported as a 1855 three-cent silver in VF with an EMPTY Variety
+ * field -- byte for byte the same record as the genuine one two rows above
+ * it. Five records in the QIF corpus are in exactly that state.
+ *
+ * WHY VARIETY AND NOT NOTES. Variety is the coin-describing free-text field:
+ * it already carries "Type I", "DDO", "Repunched Date". "This one is a fake"
+ * is the same KIND of fact -- a statement about the object -- and it is one
+ * the owner needs to see in the grid. Notes is reserved for the Quicken memo
+ * column and may not be synthesised into; see the `notes:` assignment in
+ * `parse` and the comment on it.
+ *
+ * *** DO NOT CONFUSE THIS WITH THE IMAGE MATCHER'S EXCLUSION. ***
+ * `filename-vocabulary.ts` uses the same three words to keep a counterfeit
+ * PHOTOGRAPH out of the AUTOMATED matching run, and that exclusion is
+ * matcher-only by policy: such a photo stays listable, searchable and
+ * attachable by hand. Nothing here changes that, and nothing there may be
+ * read as a reason to refuse an import.
+ *
+ * The three single words are REUSED from that module rather than re-typed,
+ * so "what counts as the word fake" has one definition (and so "copy" stays
+ * absent on both sides -- see the long note there). "not genuine" is added
+ * only here: it is a phrase a Quicken security name can carry, and it is not
+ * a shape the filename side's word list can express.
+ * ------------------------------------------------------------------------- */
+const AUTHENTICITY_MARKER_PATTERNS: readonly RegExp[] = [
+  ...COUNTERFEIT_MARKER_WORDS.map(word => new RegExp(`\\b${word}\\b`, 'i')),
+  /\bnot\s+genuine\b/i
+];
+
+/**
+ * The authenticity wording a security name carries, VERBATIM, or '' when it
+ * carries none -- which is the overwhelmingly common case.
+ *
+ * The matched text is returned exactly as the owner typed it ("FAKE" stays
+ * "FAKE") rather than normalised to a canonical spelling: Variety is a field
+ * he reads, and rewriting his own word in it would be a change he did not
+ * ask for.
+ */
+function detectAuthenticityWording(securityName: string): string {
+  const found: string[] = [];
+  for (const pattern of AUTHENTICITY_MARKER_PATTERNS) {
+    const match = securityName.match(pattern);
+    if (match) found.push(match[0]);
+  }
+  return found.join(' ');
+}
+
 /** Action codes that represent acquiring a position -- i.e. a coin entering the collection. */
 const ACQUISITION_ACTIONS = new Set([
   'buy',
@@ -344,6 +409,66 @@ const DISPOSITION_ACTIONS = new Set(['sell', 'sellx', 'shrsout', 'shtsell', 'rtr
 
 /** Action codes for cash-only transfers — no security involved, skip silently. */
 const CASH_TRANSFER_ACTIONS = new Set(['xin', 'xout']);
+
+/* ---------------------------------------------------------------------------
+ * QUICKEN'S TRANSFER BOILERPLATE, AND WHY IT IS THE ONLY THING STRIPPED
+ *
+ * When a holding is moved between two Quicken accounts, Quicken writes the
+ * memo itself: `Xfr From: Misc. Coins` on the receiving side and
+ * `Xfr To: Odd Type Set` on the sending side. The owner never typed either
+ * one, and he is explicit about what they are worth in his inventory:
+ *
+ *     "Do not put in that 'Xfr From....' note. It's not really helpful. If
+ *      there's a note/memo field from the QIF then use it, otherwise leave
+ *      Notes as blank."
+ *
+ * Measured over the QIF corpus before this rule existed: 66 of 457 imported
+ * coins carried a note and ALL 66 of them were `Xfr From: …`. Not most --
+ * all. The Notes column was, in practice, a column of Quicken's bookkeeping.
+ *
+ * *** THE RULE IS A SHAPE, NOT A SUBJECT. ***
+ * It matches a memo that IS the boilerplate: `Xfr`, then `From` or `To`,
+ * then a colon, then the account name -- from the very start of the memo.
+ * It deliberately does NOT look for the words "transfer", "xfr" or "from"
+ * anywhere in a memo, because a memo is the one field on the record the
+ * owner wrote himself and a filter that reads its subject matter will
+ * eventually eat one. These all SURVIVE, and there are tests saying so:
+ *
+ *     "Opening transfer"              -- the corpus's own wording
+ *     "Transferred from the bank box"
+ *     "Xfr paperwork mislaid"         -- starts with the word and is still a memo
+ *     "Sold to pay for the xfr to NGC"
+ *
+ * Only the generated line goes. Anything else is used verbatim, and a block
+ * with no memo at all leaves Notes blank -- there is no fallback and nothing
+ * is synthesised. See the `notes:` assignment in `parse`.
+ * ------------------------------------------------------------------------- */
+const QUICKEN_TRANSFER_MEMO = /^\s*xfr\s+(?:from|to)\s*:/i;
+
+/**
+ * The memo to write into Notes: the owner's own words, or '' when the memo
+ * line is Quicken's transfer boilerplate or absent altogether.
+ */
+export function memoForNotes(memo: string | undefined): string {
+  const text = (memo ?? '').trim();
+  if (!text) return '';
+  return QUICKEN_TRANSFER_MEMO.test(text) ? '' : text;
+}
+
+/**
+ * Did this block state a money amount at all?
+ *
+ * `resolveAmount` below answers 0 for a block that stated none, which is
+ * the right answer for a cost basis and the WRONG one for a sale price: the
+ * import's "is this sold?" rule counts a price of 0 as a real price (a coin
+ * given away), so a transfer with no amount must leave the field unset
+ * rather than claim nothing was paid. Mirrors `resolveAmount`'s own two
+ * sources so the two cannot disagree about what "stated" means.
+ */
+function statesAmount(fields: ParsedInvestmentFields): boolean {
+  if (fields.amount !== undefined || fields.altAmount !== undefined) return true;
+  return fields.price !== undefined && fields.quantity !== undefined;
+}
 
 /* The 2-of-3 main-detail rule lives in `coin-completeness.ts` because the
  * manual "Add coin" button needs the same rule to decide when a half-typed row
@@ -371,11 +496,62 @@ export interface QuickenRejectedRecord {
   reason: string;
 }
 
+/**
+ * What the caller may switch on for one parse.
+ *
+ * One option today, and it is deliberately an object rather than a fourth
+ * positional boolean: `parse(text, accounts, choices, true)` at a call site
+ * says nothing about what is true.
+ */
+export interface QuickenParseOptions {
+  /**
+   * Leave out coins that have been SOLD.
+   *
+   * "Sold" is the one rule every import path uses -- the record has a sold
+   * date, a sold price or a buyer (services/import-sold.ts). In a QIF none
+   * of those three is a column; what a Quicken investment account has is a
+   * Buy and, later, a Sell / SellX / ShrsOut. So net quantity <= 0 is how
+   * this parser DETECTS a disposal, and when it finds one it writes the
+   * disposal's date and proceeds onto the record, which is what makes the
+   * coin satisfy the shared rule from then on.
+   *
+   * *** DEFAULT FALSE: EVERYTHING COMES IN, SOLD COINS INCLUDED. ***
+   * This is the opposite of what this parser used to do unconditionally, and
+   * the reversal is the point. The owner wants the coins he USED TO OWN in
+   * the database so he can report on them: what he paid, what he got, what
+   * passed through his hands. Dropping them made 379 of the QIF corpus's 484
+   * coin records unimportable with no way to ask for them -- and the modal
+   * never even displayed the list, so they vanished silently.
+   *
+   * Switch it on and the old behaviour is back, reported in
+   * `skippedRecords` rather than discarded.
+   */
+  excludeSold?: boolean;
+}
+
 export interface QuickenParseResult {
   importedRecords: QuickenImportRecord[];
-  skippedRecords: QuickenImportRecord[]; // Coins with net quantity <= 0 (sold or transferred out)
-  /** Coins held (net qty > 0) but failing the 2-of-3 main-detail rule. */
+  /**
+   * Coins held OUT of the import by `excludeSold`. Empty -- always -- when
+   * that option is off, because then nothing is being held out.
+   *
+   * This is NOT "the sold coins"; for that, see `soldSecurityNames`, which
+   * is populated either way.
+   */
+  skippedRecords: QuickenImportRecord[];
+  /** Coins failing the 2-of-3 main-detail rule. */
   rejectedRecords: QuickenRejectedRecord[];
+  /**
+   * The security name of every coin whose net quantity came out <= 0 --
+   * sold, or transferred out to another account.
+   *
+   * Reported REGARDLESS of `excludeSold`, because the caller needs it in
+   * both directions: to say how many rows the option is hiding when it is
+   * on, and to mark the imported coins as Sold rather than Owned when it is
+   * off. A coin imported as Owned that the owner parted with in 2013 would
+   * be counted in his collection's total and put on his insurance schedule.
+   */
+  soldSecurityNames: string[];
   warnings: string[];
   accounts: string[];
 }
@@ -397,11 +573,12 @@ export class QuickenImportService {
   /**
    * Parses raw QIF text into normalized coin import records.
    *
-   * Net-quantity filtering: Tracks both acquisitions and dispositions
-   * to calculate the net quantity (current holdings) per security.
-   * Only coins with net qty > 0 are included in importedRecords;
-   * coins with net qty <= 0 (fully sold or transferred out) are
-   * returned in skippedRecords for reference.
+   * Net quantity: acquisitions and dispositions are both tracked so the net
+   * holding per security is known. BY DEFAULT IT CHANGES NOTHING ABOUT WHAT
+   * IMPORTS -- a coin that has been sold is still a coin the owner had, and
+   * it comes in with every other. The names of those coins are reported in
+   * `soldSecurityNames`. Pass `{ excludeSold: true }` to leave them out, in
+   * which case they are reported in `skippedRecords` instead.
    *
    * @param qifText Raw contents of a `.qif` export.
    * @param selectedAccounts When provided, only transactions under a
@@ -425,22 +602,46 @@ export class QuickenImportService {
    *   stale entry -- for a security that has since been renamed in Quicken,
    *   or a value nobody offered -- is ignored rather than trusted. This is
    *   not a back door for editing arbitrary fields during import.
+   * @param options See `QuickenParseOptions`. Omitted means every default,
+   *   and the defaults are "import everything".
    */
   parse(
     qifText: string,
     selectedAccounts?: string | string[],
-    denominationChoices?: Readonly<Record<string, string>>
+    denominationChoices?: Readonly<Record<string, string>>,
+    options?: QuickenParseOptions
   ): QuickenParseResult {
+    const excludeSold = options?.excludeSold === true;
     const warnings: string[] = [];
     const accounts = new Set<string>();
     let currentAccount: string | null = null;
 
-    // Net-quantity tracking map: security name -> { qty, latestRecord, latestDate }
+    // Net-quantity tracking map: security name -> { qty, latestRecord,
+    // latestDate, and the LATEST DISPOSAL's date and proceeds }.
+    //
+    // The disposal half is what lets a QIF-detected sale satisfy the same
+    // "has a sold date, a sold price or a buyer" rule a CSV row satisfies:
+    // the sale is in the file, on the Sell / SellX / ShrsOut block, and
+    // without reading it off that block the importer would know a coin was
+    // gone and be unable to say when or for how much.
     // We track all transactions (acquisitions and dispositions) to determine
     // which coins are still held (net qty > 0).
     const netQuantityMap = new Map<
       string,
-      { qty: number; latestRecord: QuickenImportRecord | null; latestDate: string }
+      {
+        qty: number;
+        latestRecord: QuickenImportRecord | null;
+        latestDate: string;
+        /** Date of the most recent disposal, '' when there has been none. */
+        soldDate: string;
+        /**
+         * Proceeds of that same disposal, UNDEFINED when the block stated
+         * no amount. A `ShrsOut` transfer to another account carries a
+         * quantity and nothing else: there were no proceeds, and writing a
+         * 0 would be claiming the coin was given away.
+         */
+        soldPrice: number | undefined;
+      }
     >();
 
     const selected = Array.isArray(selectedAccounts)
@@ -584,7 +785,72 @@ export class QuickenImportService {
         // Read from the security name when it names a country, falling back
         // to this collection's long-standing default. See parseAttributes.
         country: attrs.country,
-        notes: fields.memo ?? '',
+        /* NOTES IS THE QUICKEN MEMO COLUMN (`M`) AND NOTHING ELSE -- AND
+         * NOT EVEN ALL OF THAT.
+         *
+         * No fallback, no synthesis, no concatenation: a block with no `M`
+         * line produces a BLANK Notes field, even though the security name,
+         * the payee, the account and the action are all sitting right here
+         * and any of them could be made to read like a note. They are not
+         * the owner's note, and a field he did not write is a field he
+         * cannot trust.
+         *
+         * `memoForNotes` applies the one subtraction: Quicken's OWN
+         * generated `Xfr From: …` / `Xfr To: …` transfer memo is dropped,
+         * because the owner did not write that either. It was 66 of the 66
+         * notes this import used to produce. A memo he DID write is used
+         * verbatim, including one that happens to mention a transfer; see
+         * QUICKEN_TRANSFER_MEMO for why the rule matches a shape and not a
+         * subject.
+         *
+         * In particular the authenticity wording ("FAKE") does NOT come
+         * here -- it is a description of the coin and it goes to Variety;
+         * see AUTHENTICITY_MARKER_PATTERNS. */
+        notes: memoForNotes(fields.memo),
+         /* ---- THE PAYEE IS NOT A DEALER, SO NOBODY IS WRITTEN HERE ----
+         *
+         * *** `purchasedFrom`, `soldTo` AND `transactionNotes` ARE ABSENT
+         * FROM THIS LITERAL ON PURPOSE. *** Not forgotten, not deferred:
+         * this importer has no honest source for any of them and writing a
+         * plausible value would be worse than writing none.
+         *
+         * WHAT A QIF ACTUALLY OFFERS. The only counterparty-shaped line in
+         * an investment block is `P`, the payee -- and in an investment
+         * register Quicken fills it with whatever the transaction was filed
+         * against, which is routinely THE ACCOUNT ITSELF: "Misc. Coins",
+         * "Odd Type Set". Copied into Purchased From that gives the owner a
+         * wrong name on every coin he then has to clear by hand. In his
+         * words, less than useless.
+         *
+         * WHY NOT FILTER THE ACCOUNT NAMES OUT AND KEEP THE REST? Because
+         * the test cannot be made to hold. A `!Account` block names the
+         * accounts THIS FILE declares, so a one-account export -- which is
+         * what the import modal invites -- cannot recognise a payee that is
+         * another account's name, and nothing distinguishes a dealer called
+         * "Westmarch Coin Co." from an account called "Westmarch Coin Co.".
+         * A rule that catches some of them leaves the rest behind under a
+         * field that now looks trustworthy, which is the worse failure: an
+         * empty field is visibly empty and a wrong one has to be noticed
+         * first. Same judgement as the `Xfr From:` memo rule above, applied
+         * to a different field.
+         *
+         * MEASURED, AND THE MEASUREMENT HAS A HOLE WORTH KNOWING ABOUT. In
+         * `testing/qif-corpus/` 84% of acquisition blocks carry a `P` and
+         * every distinct value is a dealer name, because the generator
+         * invents dealers (`DEALERS` in generate-corpus.mjs). So the corpus
+         * would score a payee -> Purchased From rule at 100% correct while
+         * the owner's own export -- the file this rule exists for -- scores
+         * it near 0%. The corpus cannot referee this decision and must not
+         * be cited as though it had.
+         *
+         * `transactionNotes` is the same answer for a simpler reason: the
+         * memo line already has a destination (`notes`, above), and there
+         * is no second memo on a QIF block to put here.
+         *
+         * THE MECHANICAL GUARANTEE. `parseInvestmentFields` has no `case
+         * 'P'`, so the payee is never read off the file at all -- there is
+         * no variable in scope here that could be assigned by accident.
+         * quicken-payee-not-a-dealer.spec.ts holds both halves down. */
         source: 'quicken',
         // All five alloy / weight fields come from the single lookup above,
         // so they can never disagree with each other. Three outcomes: the
@@ -617,12 +883,32 @@ export class QuickenImportService {
       const existing = netQuantityMap.get(fields.security) ?? {
         qty: 0,
         latestRecord: null,
-        latestDate: ''
+        latestDate: '',
+        soldDate: '',
+        soldPrice: undefined as number | undefined
       };
 
       if (DISPOSITION_ACTIONS.has(actionKey)) {
-        // Disposition: decrement quantity
+        // Disposition: decrement quantity, and remember WHEN and FOR HOW
+        // MUCH. `purchaseDate` / `purchasePrice` are this block's date and
+        // amount; on a Sell block those are the sale's, which is exactly
+        // what the record's Sold Date and Sold Price are.
         existing.qty -= 1;
+        // The LATEST disposal wins, matching how the latest acquisition
+        // wins for the record itself. `>=` so that two disposals on one day
+        // settle on the last one in the file rather than the first.
+        if (purchaseDate >= existing.soldDate) {
+          existing.soldDate = purchaseDate;
+          /* NO AMOUNT MEANS NO PRICE, NOT A PRICE OF ZERO.
+           * A `ShrsOut` transfer to another Quicken account carries a
+           * quantity and no `T`/`U`/`I` line at all. `resolveAmount`
+           * answers 0 for it, which here would read as "sold for nothing"
+           * -- a claim the file never made, and one the import filter
+           * treats as PRESENT (see services/import-sold.ts, where 0 is a
+           * real price). So the amount is written only when the block
+           * actually stated one. */
+          existing.soldPrice = statesAmount(fields) ? purchasePrice : undefined;
+        }
         netQuantityMap.set(fields.security, existing);
       } else if (ACQUISITION_ACTIONS.has(actionKey)) {
         // Acquisition: increment quantity and update latest record if newer
@@ -651,15 +937,21 @@ export class QuickenImportService {
     // Every record that ends up in `importedRecords` passes through this one
     // loop, so this is the only place the import rules need to be enforced.
     // Two gates, in order:
-    //   1. Net quantity: coins fully sold/transferred out (qty <= 0) are not
-    //      held any more, so they go to `skippedRecords`.
-    //   2. Main-detail rule: a held coin still needs at least 2 of
+    //   1. Sold, AND ONLY IF THE CALLER ASKED FOR IT. A coin fully sold or
+    //      transferred out (qty <= 0) is no longer held, but it is still a
+    //      coin the owner had, and by default it imports like any other --
+    //      see QuickenParseOptions.excludeSold for why the default changed.
+    //      Either way its security name is recorded in `soldSecurityNames`
+    //      so the caller can tell the two apart, and its Sold Date / Sold
+    //      Price are written onto the record from the disposal block.
+    //   2. Main-detail rule: a coin still needs at least 2 of
     //      Year / Coin Type / Denomination, or it goes to `rejectedRecords`
     //      (an exception the user can see -- and optionally override in the
     //      import modal) rather than being silently dropped.
     const importedRecords: QuickenImportRecord[] = [];
     const skippedRecords: QuickenImportRecord[] = [];
     const rejectedRecords: QuickenRejectedRecord[] = [];
+    const soldSecurityNames: string[] = [];
 
     for (const [securityName, data] of netQuantityMap.entries()) {
       const record = data.latestRecord;
@@ -669,8 +961,37 @@ export class QuickenImportService {
         continue;
       }
 
-      if (data.qty <= 0) {
-        // Gate 1: coin has been fully sold or transferred out.
+      /* Gate 1, part one: HOW A QIF SAYS A COIN IS GONE.
+       *
+       * Net quantity, and nothing else. A Quicken investment account has no
+       * "sold" flag -- what it has is a Buy and, later, a Sell / SellX /
+       * ShrsOut, and a coin whose acquisitions and disposals net to zero or
+       * less is one the owner no longer holds. That is the honest reading
+       * of the document, so it stays the DETECTOR.
+       *
+       * What it is no longer allowed to be is a SECRET. The sale it found
+       * is written onto the record -- the date of the last disposal, and
+       * its proceeds when the block stated any -- so the coin arrives
+       * carrying the same evidence a CSV row would carry, and the filter
+       * below can ask every import path the one question in
+       * services/import-sold.ts. Before this, a QIF-imported coin was known
+       * to be sold and had no sold date to show for it. */
+      const soldByNetQuantity = data.qty <= 0;
+      if (soldByNetQuantity) {
+        soldSecurityNames.push(securityName);
+        if (data.soldDate) record.soldDate = data.soldDate;
+        if (data.soldPrice !== undefined) record.soldPrice = data.soldPrice;
+      }
+
+      /* Gate 1, part two: THE FILTER, which keys on the shared rule.
+       *
+       * `isSoldRecord` is the same predicate the CSV and Excel imports
+       * apply, so "only coins I still own" means one thing in all three
+       * dialogs. `soldByNetQuantity` is kept alongside it rather than being
+       * replaced by it: a disposal block with no `D` line leaves nothing
+       * for the rule to read, and a coin Quicken says is gone must not slip
+       * back into an import the user asked to be free of them. */
+      if (excludeSold && (soldByNetQuantity || isSoldRecord(record))) {
         skippedRecords.push(record);
         continue;
       }
@@ -695,6 +1016,7 @@ export class QuickenImportService {
       importedRecords,
       skippedRecords,
       rejectedRecords,
+      soldSecurityNames,
       warnings,
       accounts: [...accounts]
     };
@@ -1009,6 +1331,19 @@ export class QuickenImportService {
       variety = 'DDO';
     } else if (/\bDDR\b/i.test(securityName)) {
       variety = 'DDR';
+    }
+
+    /* AUTHENTICITY WORDING JOINS THE VARIETY, IT DOES NOT REPLACE IT.
+     *
+     * Appended rather than written with `else if` above, because the two
+     * facts are independent: "1861 3CS DDO - FAKE" is a doubled-die
+     * counterfeit and both halves have to survive. A name carrying only the
+     * marker gets the marker alone, which is the case all five corpus rows
+     * are in. See AUTHENTICITY_MARKER_PATTERNS for why this is not an
+     * exclusion and why it is not written into Notes. */
+    const authenticity = detectAuthenticityWording(securityName);
+    if (authenticity) {
+      variety = variety ? `${variety} ${authenticity}` : authenticity;
     }
 
     /* -----------------------------------------------------------------------

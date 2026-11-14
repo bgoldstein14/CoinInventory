@@ -66,14 +66,30 @@ export const CSV_MAPPABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'composition', label: 'Composition' },
   { key: 'purchaseDate', label: 'Purchase Date' },
   { key: 'purchasePrice', label: 'Purchase Price' },
+   /*
+   * WHO IT CAME FROM. The buy side's counterparty, and the mirror of
+   * `Sold To` further down.
+   *
+   * *** THIS IS THE COLUMN A COLLECTOR'S SPREADSHEET ACTUALLY HAS. ***
+   * It is here because a hand-kept inventory names the dealer -- "Heritage",
+   * "Great Collections", the man at the Thursday show -- in a column headed
+   * `Dealer`, `Seller` or `Bought From`. A Quicken investment register does
+   * not: its payee on a BuyX is routinely the account itself, which is why
+   * quicken-import.service.ts writes NOTHING here (the long THE PAYEE IS NOT
+   * A DEALER note in that file). CSV and Excel are the paths where this
+   * information genuinely exists, so they are the paths that can carry it.
+   *
+   * A `{ key: 'dealer', label: 'Dealer' }` entry once sat a few lines below,
+   * for a COIN-LEVEL dealer field that was removed; `Dealer` was refused as
+   * a heading from then until now because there was no field for it to land
+   * on. There is again -- this one -- and `dealer` is a synonym of it in
+   * csv/header-synonyms.ts. The label is `Purchased From` rather than
+   * `Dealer` because the field is also right for a private sale, an estate
+   * or a gift, none of which involve a dealer.
+    */
+  { key: 'purchasedFrom', label: 'Purchased From' },
   { key: 'currentValue', label: 'Current Value' },
   { key: 'notes', label: 'Notes' },
-  // A `{ key: 'dealer', label: 'Dealer' }` entry sat here. The coin-level
-  // dealer field was removed, and because this one list drives the importer's
-  // auto-mapping, the Export -> CSV columns AND the blank template, deleting it
-  // here removes the Dealer column from all three at once. An older file that
-  // still carries a Dealer column simply has no field to map it onto now, so it
-  // is left unmapped and ignored -- the rest of the row imports normally.
   /*
   *
    * The two "how and where do I hold this coin" columns, either side of Set.
@@ -153,6 +169,35 @@ export const CSV_MAPPABLE_FIELDS: { key: string; label: string }[] = [
   { key: 'weight', label: 'Weight (g)' },
   { key: 'soldPrice', label: 'Sold Price' },
   { key: 'soldDate', label: 'Sold Date' },
+  // WHO BOUGHT IT. Here because the import's "only coins I still own"
+  // option counts a record as sold when it has a sold date, a sold price OR
+  // A BUYER -- somebody entering a spreadsheet from memory may remember only
+  // who took it. Without this column that third arm of the rule is
+  // unreachable from a CSV or a workbook, and the option would mean
+  // something narrower on those paths than it does on the Quicken one.
+  { key: 'soldTo', label: 'Sold To' },
+   /*
+   * THE DEAL'S NOTE, AND IT IS NOT THE COIN'S NOTE.
+   *
+   * *** DO NOT MERGE THIS WITH `notes` ABOVE. *** They are two columns in
+   * the database (`Coins.Notes` and `Coins.TransactionNotes`; see
+   * server/db/coin-fields.ts, which carries the same warning and a test on
+   * it). `Notes` is about the OBJECT -- "rim nick at 4 o'clock", "ex-Eliasberg"
+   * -- and survives the coin changing hands. This one is about the DEAL --
+   * "18% buyer's premium", "paid in two instalments", "part of a three-coin
+   * lot" -- and is meaningless without it.
+   *
+   * Because the two are separate fields they are separate columns here, so
+   * a sheet that has both imports both and an export round-trips both. The
+   * synonyms in csv/header-synonyms.ts are kept strictly apart for the same
+   * reason: `Memo`, `Comment` and `Remarks` belong to `notes`, and only a
+   * heading that SAYS it is about the transaction (`Transaction Notes`,
+   * `Deal Notes`, `Purchase Notes`) comes here.
+   *
+   * It is placed at the end of the transaction run -- after both legs --
+   * because it covers the buy and the sale alike, not one of them.
+    */
+  { key: 'transactionNotes', label: 'Transaction Notes' },
   // `Source` is here so that Export -> CSV actually round-trips. exportCsv()
   // writes a Source column; leaving it off this list makes that column
   // unmappable -- not by auto-mapping and not by hand, because the mapping

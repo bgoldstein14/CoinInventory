@@ -1,9 +1,12 @@
 import { Component, ElementRef, computed, inject, input, output, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { cacGreenBeanIconPath } from '../../features/inventory/coin-icons';
 import { collectionZeroState } from '../../features/inventory/collection-zero-state';
+import { CoinGroup } from '../../features/inventory/grid-grouping';
 import {
   handleGridRowKey, nextFocusedIndex, rowTabIndex, tabbableRowId
 } from '../../features/inventory/grid-keyboard';
+import { handleGroupHeadingKey, isMovableGroup } from '../../features/inventory/group-order';
 import { InventoryColumnsStore } from '../../features/inventory/inventory-columns.store';
 import { InventoryFilterStore } from '../../features/inventory/inventory-filter.store';
 import { InventorySelectionStore } from '../../features/inventory/inventory-selection.store';
@@ -34,7 +37,12 @@ import {
  */
 @Component({
   selector: 'app-inventory-table',
-  imports: [],
+  // FormsModule for the "Group by" <select> alone. `[ngModel]` rather than a
+  // plain `[value]` binding because a bound `value` on a <select> is applied
+  // before the @for has created its <option>s, so the browser finds nothing
+  // to match and silently resets the control to blank — the saved grouping
+  // would be in force with the menu claiming "None".
+  imports: [FormsModule],
   templateUrl: './inventory-table.html',
   styleUrl: './inventory-table.scss'
 })
@@ -131,9 +139,22 @@ export class InventoryTable {
    */
   private readonly focusedCoinId = signal<string | null>(null);
 
-  /** The ids currently on screen, in the order the user sees them. */
+  /**
+   * The ids currently on screen, in the order the user sees them.
+   *
+   * `renderedInventory()`, NOT `filteredInventory()`, and the difference is
+   * the whole of what grouping does to the keyboard. A coin inside a
+   * collapsed group passes every filter and is not on screen; arrowing onto
+   * it would move the tab stop to an element that was never rendered and
+   * leave the user with no visible focus and no way back.
+   *
+   * So Down from the last row of an open group lands on the first row of
+   * the next OPEN group, stepping over every collapsed group in between,
+   * and with no grouping at all this is byte-for-byte the old list. Group
+   * headings are not in this sequence: they are buttons, reached with Tab.
+   */
   private readonly visibleCoinIds = computed(() =>
-    this.filters().filteredInventory().map(coin => coin.id)
+    this.filters().renderedInventory().map(coin => coin.id)
   );
 
   /** The single row carrying `tabindex="0"`. See grid-keyboard.tabbableRowId. */
@@ -218,6 +239,171 @@ export class InventoryTable {
       (element as HTMLElement).focus?.();
       return;
     }
+  }
+
+  /* =====================================================================
+   * DRAGGING A GROUP HEADING INTO PLACE
+   *
+   * "The grid groupings should be movable, so I could drag a grouping to the
+   * top, or wherever I like."
+   *
+   * THE PLATFORM'S OWN DRAG AND DROP, NOT A LIBRARY. The four handlers below
+   * are the whole of it: `draggable` on the heading, `dragstart` to remember
+   * what is moving, `dragover` with a `preventDefault()` (without which the
+   * browser refuses every drop), and `drop`. @angular/cdk's drag-drop entry
+   * point would be a new dependency pulled in for one gesture on one list,
+   * days after the @defer work cut this bundle from 938 kB to 563 kB, and it
+   * would hand a slice of that straight back. The browser also draws the drag
+   * image for free, which is most of what a library is bought for.
+   *
+   * ITS ONE REAL COST IS TOUCH: HTML5 drag events do not fire for a finger.
+   * This is a desktop application shipped as a setup.exe in a webview shell,
+   * and the Alt+Arrow gesture below covers anyone the mouse does not.
+   *
+   * WHAT IS *NOT* HERE: which heading ends up where. That is
+   * features/inventory/group-order.ts, through the store — a drag handler is
+   * the one place in this app a test cannot reach, so it holds no rules.
+   * ===================================================================== */
+
+  /** The heading currently being dragged, or null. Drives the drop targets
+   *  and the dimmed source row. */
+  protected readonly draggedGroupLabel = signal<string | null>(null);
+
+  /** The heading the pointer is over, so it can show where the drop lands. */
+  protected readonly dropTargetGroupLabel = signal<string | null>(null);
+
+  /**
+   * May this heading be picked up?
+   *
+   * No for the empty bucket — it is pinned last deliberately, because on an
+   * imported collection it is routinely the biggest group there is and at the
+   * top it buries every real heading. And no when there is only one movable
+   * group, because a grip handle on a heading with nowhere to go is a control
+   * that lies. Both rules are the pure model's; this reads them.
+   */
+  protected canDragGroup(group: CoinGroup): boolean {
+    return isMovableGroup(group) && this.filters().canReorderGroups();
+  }
+
+  /** `draggable="true"`, or no attribute at all. A literal `draggable="false"`
+   *  on the empty bucket would be the same behaviour with an extra claim in
+   *  the markup for a test to mistake for the real one. */
+  protected groupDraggable(group: CoinGroup): 'true' | null {
+    return this.canDragGroup(group) ? 'true' : null;
+  }
+
+  /** Would a drop on this heading mean anything? Not onto itself, not onto
+   *  the pinned empty bucket. */
+  protected isGroupDropTarget(group: CoinGroup): boolean {
+    const dragged = this.draggedGroupLabel();
+    return dragged !== null && dragged !== group.label && isMovableGroup(group);
+  }
+
+  /** Highlight the heading the drop would land on. */
+  protected isGroupDropHighlight(group: CoinGroup): boolean {
+    return this.dropTargetGroupLabel() === group.label && this.isGroupDropTarget(group);
+  }
+
+  protected onGroupDragStart(event: DragEvent, group: CoinGroup): void {
+    if (!this.canDragGroup(group)) {
+      // Refuse the drag outright rather than letting the browser start one
+      // that `drop` will then have to ignore.
+      event.preventDefault?.();
+      return;
+    }
+
+    this.draggedGroupLabel.set(group.label);
+    const transfer = event.dataTransfer;
+    if (!transfer) return;
+    transfer.effectAllowed = 'move';
+    // Firefox will not begin a drag at all unless some payload is set.
+    transfer.setData?.('text/plain', group.label);
+  }
+
+  protected onGroupDragOver(event: DragEvent, group: CoinGroup): void {
+    if (!this.isGroupDropTarget(group)) return;
+    // THE LOAD-BEARING preventDefault: without it the element is not a drop
+    // target and the browser refuses the drop with no error anywhere.
+    event.preventDefault?.();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    this.dropTargetGroupLabel.set(group.label);
+  }
+
+  protected onGroupDragLeave(group: CoinGroup): void {
+    if (this.dropTargetGroupLabel() === group.label) this.dropTargetGroupLabel.set(null);
+  }
+
+  protected onGroupDrop(event: DragEvent, group: CoinGroup): void {
+    event.preventDefault?.();
+    const dragged = this.draggedGroupLabel();
+    this.endGroupDrag();
+    if (dragged === null) return;
+    // A drop on the empty bucket is refused by the model, which leaves the
+    // dragged group exactly where it was. Silently, and on purpose: the
+    // bucket showed no drop highlight, so nothing was promised.
+    this.filters().dropGroupOn(dragged, group.label);
+  }
+
+  /** Fires whether the drag was dropped or abandoned — the only reliable
+   *  place to clear the highlight. */
+  protected endGroupDrag(): void {
+    this.draggedGroupLabel.set(null);
+    this.dropTargetGroupLabel.set(null);
+  }
+
+  /**
+   * ALT + ARROW UP / DOWN ON A FOCUSED HEADING — the keyboard's way to do
+   * exactly what the mouse does.
+   *
+   * The grid is fully keyboard-operable (grid-keyboard.ts), and a reordering
+   * only a mouse could reach would be the single thing in it a keyboard user
+   * could not do. The heading is already a real <button>, so Tab arrives here
+   * with no extra work; the gesture itself and why it is Alt+Arrow rather than
+   * the bare arrows is argued in features/inventory/group-order.ts.
+   */
+  protected onGroupHeadingKeydown(event: KeyboardEvent, group: CoinGroup): void {
+    if (!this.canDragGroup(group)) return;
+
+    handleGroupHeadingKey(event, {
+      move: (delta) => {
+        if (this.filters().moveGroup(group.label, delta)) this.refocusGroupHeading(group.label);
+      }
+    });
+  }
+
+  /** What the heading says it can do, as a tooltip. The same sentence the
+   *  `aria-keyshortcuts` attribute states formally, in words a mouse user
+   *  also gets — this gesture is useless if nobody finds it. */
+  protected groupHeadingTitle(group: CoinGroup): string {
+    if (!this.canDragGroup(group)) {
+      return group.isEmptyBucket
+        ? 'Coins with no value for this column. This group always stays last.'
+        : 'Click to open or close this group.';
+    }
+    return 'Click to open or close. Drag, or press Alt+Up / Alt+Down, to move this group.';
+  }
+
+  /**
+   * Put focus back on the heading that just moved.
+   *
+   * Re-ordering the list makes Angular move the row's DOM nodes, and a moved
+   * element loses focus in Chromium — which for a keyboard user means one
+   * Alt+Down and the focus is gone from the grid entirely. The re-focus is
+   * deferred because the DOM has not been updated yet at the moment the key
+   * handler returns, and it is skipped entirely when there is no host element
+   * (the specs build this component from a bare injector).
+   */
+  private refocusGroupHeading(label: string): void {
+    const root = this.host?.nativeElement;
+    if (!root || typeof root.querySelectorAll !== 'function') return;
+
+    setTimeout(() => {
+      for (const element of Array.from(root.querySelectorAll('[data-group-heading]'))) {
+        if (element.getAttribute('data-group-heading') !== label) continue;
+        (element as HTMLElement).focus?.();
+        return;
+      }
+    });
   }
 
   /* =====================================================================

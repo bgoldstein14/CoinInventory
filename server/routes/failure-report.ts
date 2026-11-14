@@ -153,7 +153,7 @@ export interface FailureContext {
   context: string;
   /**
    * What the user was waiting for, as a noun phrase: 'coin list', 'coin',
-   * 'transaction list'. Used only by the delivery wording, which has to name
+   * 'spot price list'. Used only by the delivery wording, which has to name
    * the thing — "the response could not be sent" means nothing to anyone.
    */
   subject: string;

@@ -96,8 +96,29 @@ export const inventoryColumnOrder = [
   'metalContent',
   'weight',
   'pmWeightGrams',
-  'pmPercent',
-  'source'
+  'pmPercent'
+  /* THERE IS NO 'source' ENTRY, AND THAT IS DELIBERATE.
+   *
+   * `Coins.Source` ('quicken', 'csv', 'manual') is still written on every
+   * record, still filterable from the filter bar's Source dropdown, still a
+   * CSV_MAPPABLE_FIELDS column so Export -> CSV round-trips it, and still
+   * queryable in the database. What it stopped being is a column the user is
+   * OFFERED in the grid: it says where a row came from, which is a fact
+   * about the import and not about the coin, and in a grid this dense every
+   * offered column costs width that the money columns need.
+   *
+   * Removing it from this array is the whole removal, which is the point of
+   * the array. The column picker lists it, InventoryColumnsStore sorts by
+   * it, and `normalizeVisibleColumns` filters a stored preference against
+   * it -- so a user who had Source ticked simply loses the tick on his next
+   * load, with no migration.
+   *
+   * The reports are unaffected in both directions. The inventory listing
+   * prints the columns the grid is showing, so it can no longer print this
+   * one; the insurance schedule never could -- `source` is named in
+   * INSURANCE_WITHHELD_FIELDS in report-fields.ts, which is typed on
+   * `keyof CoinRecord` and not on InventoryColumn, so that withholding
+   * still compiles and is still pinned by its own test. */
 ] as const;
 
 export type InventoryColumn = (typeof inventoryColumnOrder)[number];
@@ -138,8 +159,9 @@ export const inventoryColumnLabels: Record<InventoryColumn, string> = {
   // read side by side and divided into one another without conversion.
   weight: 'Weight (g)',
   pmWeightGrams: 'PM Weight (g)',
-  pmPercent: 'PM %',
-  source: 'Source'
+  pmPercent: 'PM %'
+  // No `source` label: it is no longer a grid column. See the note at the
+  // foot of inventoryColumnOrder.
 };
 
 /**
@@ -495,8 +517,10 @@ export function formatInventoryCell(
     case 'pmPercent':
       return coin.pmPercent ? `${coin.pmPercent.toFixed(1)}%` : '—';
 
-    case 'source':
-      return coin.source;
+    // No `source` case: it is not a grid column any more. A report asking
+    // for it would fall through to the em-dash below rather than throwing,
+    // but no report can ask — see the note at the foot of
+    // inventoryColumnOrder.
 
     default:
       return '—';

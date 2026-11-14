@@ -48,6 +48,10 @@
 
 import { CoinRecord } from '../../types/coin.model';
 import { describeMissingCoinDetail, hasEnoughCoinDetail } from '../coin-completeness';
+// "Has this record been sold?" -- the rule the QIF import uses too, so
+// "import only coins I still own" means one thing on all three paths. A sold
+// price of 0 counts; a whitespace-only buyer does not. See import-sold.ts.
+import { isSoldRecord } from '../import-sold';
 
 /** One worksheet, or one CSV file, to be imported. */
 export interface ImportSource {
@@ -76,6 +80,28 @@ export interface SheetTally {
   rejected: number;
   /** Of `accepted`, how many carry a `denominationId`. See ImportPlan. */
   linkedDenominations: number;
+  /** Rows this sheet held back because they are sold. See ImportPlan. */
+  excludedAsSold: number;
+}
+
+/** What the caller may switch on for one plan. */
+export interface ImportPlanOptions {
+  /**
+   * Leave out rows that have been SOLD -- the record has a sold date, a
+   * sold price or a buyer (services/import-sold.ts).
+   *
+   * *** DEFAULT FALSE: EVERYTHING COMES IN, SOLD COINS INCLUDED. ***
+   * The same default, and the same tick box, as the Quicken import. A coin
+   * the owner no longer has is still a coin he had, and what he paid and
+   * what he got for it is the part he wants to report on. Narrowing to the
+   * current holding is the deliberate act, and the rows it holds back are
+   * counted in `excludedAsSold` rather than vanishing.
+   *
+   * A file that maps none of the three columns satisfies the rule nowhere,
+   * so switching this on changes nothing -- which is the honest outcome and
+   * is why the dialog says so rather than hiding the option.
+   */
+  excludeSold?: boolean;
 }
 
 export interface ImportPlan {
@@ -87,6 +113,16 @@ export interface ImportPlan {
   rejected: ImportRejection[];
   /** One tally per source, in the order they were given. */
   perSheet: SheetTally[];
+  /**
+   * How many rows the "only coins I still own" option held back.
+   *
+   * Always 0 when the option is off, because then nothing is being held
+   * back. Counted rather than listed: unlike a row refused for want of
+   * detail, an excluded sale is exactly what the user asked for, and the
+   * only thing worth saying is how many -- so the number on the button is
+   * never a surprise.
+   */
+  excludedAsSold: number;
    /*
    * HOW MANY ACCEPTED ROWS LINKED TO A KNOWN DENOMINATION
    *
@@ -151,20 +187,37 @@ function describeRow(coin: CoinRecord, row: string[]): string {
 export function planImport(
   sources: ImportSource[],
   mapping: Record<string, string>,
-  mapRow: RowMapper
+  mapRow: RowMapper,
+  options?: ImportPlanOptions
 ): ImportPlan {
+  const excludeSold = options?.excludeSold === true;
   const accepted: CoinRecord[] = [];
   const rejected: ImportRejection[] = [];
   const perSheet: SheetTally[] = [];
   let linkedDenominations = 0;
+  let excludedAsSold = 0;
 
   for (const source of sources) {
     let sheetAccepted = 0;
     let sheetRejected = 0;
     let sheetLinked = 0;
+    let sheetExcludedAsSold = 0;
 
     source.rows.forEach((row, index) => {
       const mapped = mapRow(row, source.headers, mapping);
+
+      /* THE SOLD FILTER RUNS BEFORE THE COMPLETENESS RULE, AND THAT ORDER
+       * IS DELIBERATE. A row the user has asked not to import is not a row
+       * he needs told about: listing "1881 Morgan — no Denomination" for a
+       * coin he sold in 2013 and explicitly filtered out would be an
+       * exception he can do nothing useful with. So an excluded sale is
+       * counted and nothing else; only rows that were actually going to be
+       * created are judged for detail. */
+      if (excludeSold && isSoldRecord(mapped)) {
+        excludedAsSold += 1;
+        sheetExcludedAsSold += 1;
+        return;
+      }
 
       if (hasEnoughCoinDetail(mapped)) {
         accepted.push(mapped);
@@ -193,7 +246,8 @@ export function planImport(
       ...(source.sheetName === undefined ? {} : { sheetName: source.sheetName }),
       accepted: sheetAccepted,
       rejected: sheetRejected,
-      linkedDenominations: sheetLinked
+      linkedDenominations: sheetLinked,
+      excludedAsSold: sheetExcludedAsSold
     });
   }
 
@@ -202,6 +256,7 @@ export function planImport(
     acceptedCount: accepted.length,
     rejected,
     perSheet,
-    linkedDenominations
+    linkedDenominations,
+    excludedAsSold
   };
 }

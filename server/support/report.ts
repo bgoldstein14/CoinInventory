@@ -8,7 +8,7 @@
  * break by accident:
  *
  *   COUNTS, NOT CONTENT   The collection is described by how many coins,
- *                         photos and transactions there are. Not one coin,
+ *                         photos and sold coins there are. Not one coin,
  *                         price, note, grade or photo path. "How big" is a
  *                         useful debugging fact; "what is in it" is the
  *                         user's private financial position.

@@ -43,113 +43,26 @@
     >{{ draft.summary }}</p>
   }
 
-  <app-coin-editor-form [coin]="coin()" />
+  <!-- THE EDITABLE FIELDS, AND NOW ALSO THE TRANSACTIONS SECTION.
 
-  <!-- ORIGINAL IMAGE FILES
-       The database only holds a downscaled copy of each photo. This section
-       documents where the real, full-resolution file lives on the machine
-       hosting the app, and lets the user click through to it.
+       `showTransactions` is handed DOWN rather than used here. The section
+       has to render immediately above the coin’s Notes box, and that box is
+       inside CoinEditorForm’s template, so nothing this component renders
+       could be placed between the two. See the long comment at the section
+       itself in coin-editor-form.html. -->
+  <app-coin-editor-form [coin]="coin()" [showTransactions]="showTransactions()" />
 
-       Each path is clickable only while the file is actually there; once it
-       has been moved or deleted the path is still listed (that is the point —
-       it records where the photo used to be) but is shown muted and is not a
-       link. See CoinImagePathLink.
+  <!-- TWO SECTIONS USED TO FOLLOW AND BOTH ARE GONE.
 
-       `photos()` rather than `coin().imagePaths`: the list endpoint does not
-       send photographs, so the key is absent until this coin's fetch lands
-       (see server/routes/coins/list-query.ts). -->
-  @if (photos().length > 0) {
-    <div class="detail-image-paths">
-      <h3>Original image files</h3>
-      <!--
-        The list is rendered UNCONDITIONALLY, and that is deliberate. Each
-        CoinImagePathLink is what triggers the lazy fetch of this coin's
-        paths, and it renders nothing when there is no path to show. Gating
-        the list on `anyPathRecorded()` would mean no link is ever created,
-        so the fetch would never run and the answer would never change — the
-        classic chicken-and-egg.
-      -->
-      <div class="image-path-list">
-        @for (imagePath of photos(); track imagePath) {
-          <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
-        }
-      </div>
-      @if (!anyPathRecorded()) {
-        <!-- Nothing on record for any of this coin's photos: imported before
-             the app started tracking locations, or added by drag-and-drop.
-             One unobtrusive sentence rather than a column of blank rows. -->
-        <p class="image-path-empty">
-          No original file locations were recorded for these photos.
-        </p>
-      }
-    </div>
-  }
+       "Original image files" listed where each photo’s full-resolution
+       original lives on this machine. Removed at the owner’s request: the
+       paths are long, they pushed the panel wide, and the gallery is where
+       photos are actually worked with. The data is untouched —
+       CoinImages.SourcePath is still written and still served by
+       GET /api/images/file; only this read-out of it has gone.
 
-  @if (showTransactions()) {
-    <div class="detail-transactions">
-      <h3>Transactions</h3>
-      @if (inv.selectedCoinTransactions().length > 0) {
-        <ul class="transaction-list">
-          @for (txn of inv.selectedCoinTransactions(); track txn.id) {
-            <li>
-              <span class="txn-type">{{ txn.type }}</span>
-              <span class="txn-amount">${{ txn.amount | number: '1.2-2' }}</span>
-              <span class="txn-date">{{ txn.date }}</span>
-              @if (txn.dealer) { <span class="txn-dealer">{{ txn.dealer }}</span> }
-              <button type="button" class="secondary small-button" (click)="deleteTransaction(txn.id)">×</button>
-            </li>
-          }
-        </ul>
-      }
-      <!--
-        Each control carries a visible caption, matching the coin editor's
-        `.detail-field` pattern (shared via styles/_field.scss). Never use
-        `placeholder` as the only label: it vanishes as soon as you type and
-        leaves the row unlabelled.
-      -->
-      <div class="add-transaction-form">
-        <label class="detail-field">
-          <span>Type</span>
-          <select #txnType>
-            <option value="purchase">Purchase</option>
-            <option value="sale">Sale</option>
-            <option value="trade">Trade</option>
-            <option value="appraisal">Appraisal</option>
-          </select>
-        </label>
-
-        <label class="detail-field detail-field--txn-amount">
-          <span>Amount</span>
-          <input #txnAmount type="number" step="0.01" />
-        </label>
-
-        <label class="detail-field">
-          <span>Dealer</span>
-          <input #txnDealer type="text" />
-        </label>
-
-        <label class="detail-field">
-          <span>Date</span>
-          <input #txnDate type="date" />
-        </label>
-
-        <label class="detail-field detail-field--txn-notes">
-          <span>Notes</span>
-          <input #txnNotes type="text" />
-        </label>
-        <!-- A transaction row in the database points at a coin row, so it
-             cannot be saved before the coin itself exists. A brand new coin
-             is a local draft until it has 2 of Year / Coin Type /
-             Denomination — the tooltip says exactly what is still needed. -->
-        <button
-          type="button"
-          class="small-button"
-          [disabled]="inv.isDraftCoin(coin().id)"
-          [title]="inv.isDraftCoin(coin().id) ? inv.draftHint(coin()) : 'Add this transaction'"
-          (click)="addTransactionForSelectedCoin($any(txnType.value), Number(txnAmount.value), txnDealer.value, txnDate.value, txnNotes.value); txnAmount.value=''; txnDealer.value=''; txnNotes.value=''"
-        >Add</button>
-      </div>
-    </div>
-  }
-
+       The transaction HISTORY — a list of rows plus an add-a-transaction
+       form — went with the Transactions table. A coin has one purchase and
+       at most one sale, and those are fields on the coin now, edited in the
+       Transactions section inside the form above. -->
 </aside>

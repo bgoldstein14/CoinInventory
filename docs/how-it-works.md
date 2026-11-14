@@ -250,10 +250,21 @@ Because `Coins.MetalContent` is an `NVARCHAR` column rather than a foreign key, 
 
 ### Transactions
 
-- Per-coin transaction history (purchase, sale, appraisal, insurance)
-- Add transactions with type, amount, dealer, date, and notes
-- Transactions removed automatically when their parent coin is deleted
-- Whether the detail panel shows transaction history is a Settings toggle
+> **Superseded (2026-11-14).** There is no longer a `Transactions` table, a
+> per-coin history, or an add-a-transaction form. A coin has ONE purchase and
+> at most ONE sale, which is what the owner records, so the whole deal is
+> fields on the coin.
+
+- **Cost**, **Purchase Date** and **Purchased from** — the buy
+- **Sold for**, **Sold Date** and **Sold to** — the sale
+- **Notes about this purchase or sale** — the deal's note, which is a
+  SEPARATE column from the coin's own Notes and must stay separate
+- All seven are edited in an optional **Transactions** section in the detail
+  panel, shown by the same Settings toggle as before, and placed **above**
+  the coin's Notes box so the two notes boxes read as different things
+- They go with the coin when it is deleted, by definition: they are columns
+  on its row
+- The owner accepted a database reset for this change; there is no migration
 
 ### Reports (modal)
 
@@ -269,7 +280,7 @@ Each `CoinRecord` tracks: denomination, year, coin type, category, country, grad
 
 There was also a `tags: string[]` field, backed by a `CoinTags` table and a Tags column in the grid. It was removed. The reason is worth recording, because the shape of the mistake is easy to repeat: tags were plumbed through every layer *except* any way to enter one. The table existed, the API read and wrote it, search looked inside it and the grid had a formatter for it — but the editor had no input, bulk edit did not offer the field, and neither importer could set one, so every code path that created a coin hard-coded an empty list. The column could only ever show a dash. Rather than build the missing UI, the concept was dropped. Older JSON exports still contain the key; importing one of those still works. The mechanism is worth spelling out because it is easy to break by accident: `normalizeImportedCoins` in `services/inventory/coin-factory.ts` spreads whatever keys the file happened to contain and then overwrites the handful it cares about, so a stray `tags` key simply rides along as an inert extra property — TypeScript never sees it (the value arrives as parsed JSON at runtime, not as a checked literal), nothing reads it, and no validation step rejects unknown keys. What *would* break it is rebuilding the object from an explicit field list **and** adding a schema check that rejects unknown keys. If that ever happens, make `tags` an explicitly ignored key rather than an error — importing an old backup must not fail. `coin-factory.spec.ts` pins it. Existing databases are cleaned up by `server/migrations/005-drop-coin-tags.sql`.
 
-There was also a `dealer?: string` field — who the coin came from — backed by a `Coins.Dealer` column, an editor input, a Dealer grid column, a "Search dealers" box in the advanced filter panel, a bulk-edit option and a Dealer column in the CSV import/export. It was removed at the owner's request. Unlike tags it was a real, working field; it was simply redundant. The same information is already recorded per event on the **transaction** rows, and recorded better: a coin-level string can only say "this coin is associated with Heritage", while a transaction says "the purchase on 2024-01-15, for $150, was with Heritage" — and can say something different about the sale two years later. **Transactions keep their own `dealer` field; only the coin-level one is gone.** Older CSV and JSON exports still contain a Dealer column; importing one still works, the column simply has nothing to map onto and is ignored. Existing databases are cleaned up by `server/migrations/006-drop-coin-dealer.sql`, which must drop `IX_Coins_Dealer` before it can drop the column.
+There was also a `dealer?: string` field — who the coin came from — backed by a `Coins.Dealer` column, an editor input, a Dealer grid column, a "Search dealers" box in the advanced filter panel, a bulk-edit option and a Dealer column in the CSV import/export. It was removed at the owner's request. Unlike tags it was a real, working field; it was simply redundant. The same information is already recorded per event on the **transaction** rows, and recorded better: a coin-level string can only say "this coin is associated with Heritage", while a transaction says "the purchase on 2024-01-15, for $150, was with Heritage" — and can say something different about the sale two years later. **Superseded (2026-11-14): the transaction rows are gone too.** The argument above was answered rather than abandoned — there are now TWO counterparty fields on the coin, `purchasedFrom` and `soldTo`, one per side of the deal, so a coin bought from one dealer and sold to another is still described correctly. Older CSV and JSON exports still contain a Dealer column; importing one still works, the column simply has nothing to map onto and is ignored. Existing databases are cleaned up by `server/migrations/006-drop-coin-dealer.sql`, which must drop `IX_Coins_Dealer` before it can drop the column.
 
 `imagePaths` is still a `string[]` of `data:` URLs, deliberately. Widening it to an array of objects was considered and rejected: it is bound directly to `<img [src]>` in four places (the gallery, the photo viewer, the table thumbnail, the report) and it is one of the fields the change tracker diffs, and a mistake in the change-tracking path is how the user previously lost data. The original file paths therefore live in a side table instead — see "Where each photo came from" below.
 
@@ -665,7 +676,7 @@ Enriching every outgoing array from one place means a path, once known, survives
 
 #### SQL Server backend (`server/`)
 
-The coin collection lives in SQL Server. A separate Express/TypeScript backend provides the REST API. The schema is created and seeded from `server/setup-database.sql`, which defines the canonical tables for coins, images, categories, denominations, mint marks, metal contents, transactions, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
+The coin collection lives in SQL Server. A separate Express/TypeScript backend provides the REST API. The schema is created and seeded from `server/setup-database.sql`, which defines the canonical tables for coins, images, categories, denominations, mint marks, metal contents, spot prices, and app settings with proper foreign keys and indexes. Authentication defaults to Windows (trusted connection) for easy local development.
 
 **`setup-database.sql` drops every table before creating it, so it is only for an empty or disposable database.** Changes to a database that already has coins in it go in `server/migrations/` instead, as numbered scripts following two rules: guard every statement so re-running the file is harmless (there is no migration-tracking table in this project, so "safe to run twice" is what takes its place), and never drop or rewrite a column that holds user data. The numbering starts at 002 because `setup-database.sql` is effectively migration 001 — the baseline every delta is measured against.
 
@@ -675,7 +686,7 @@ The coin collection lives in SQL Server. A separate Express/TypeScript backend p
 | `003-multiple-images-per-coin.sql` | Adds `SourcePath` if 002 was never run, renumbers duplicate `SortOrder` values per coin, and replaces `IX_CoinImages_CoinId` with `IX_CoinImages_CoinId_SortOrder`. Prints a summary of the table when it finishes |
 | `004-widen-weight-precision.sql` | `Coins.Weight` and `Coins.PmWeightGrams` from `DECIMAL(10,4)` to `DECIMAL(12,5)`, so the five decimals the editor shows are the five the database keeps |
 | `005-drop-coin-tags.sql` | Drops the `CoinTags` table — but only if it is empty |
-| `006-drop-coin-dealer.sql` | Drops `IX_Coins_Dealer`, then the `Coins.Dealer` column. `Transactions.Dealer` is a different column and is untouched |
+| `006-drop-coin-dealer.sql` | Drops `IX_Coins_Dealer`, then the `Coins.Dealer` column. (It left `Transactions.Dealer` alone; that whole table has since been dropped, and the counterparty is now `Coins.PurchasedFrom` / `Coins.SoldTo`) |
 
 003 repeats 002's column deliberately: the two changes ship together, and a database that got the index but not the column would be a confusing half state. Run them in order if you have not run either; run 003 alone if you prefer.
 
@@ -693,7 +704,7 @@ The coin collection lives in SQL Server. A separate Express/TypeScript backend p
 | Coin images | `GET /api/coins/:id/images`, `POST /api/coins/:id/images`, `DELETE /api/coins/:id/images/:imageId` |
 | Original image files | `GET /api/images/file?path=`, `POST /api/images/exists` |
 | Lookups | `GET/POST/DELETE /api/categories`, `/api/coin-sets`; `GET/POST/PUT/DELETE /api/denominations`, `/api/mintmarks`; `GET /api/metalcontents` |
-| Transactions | `GET /api/transactions`, `POST /api/transactions`, `DELETE /api/transactions/:id` |
+| Transactions | *(none — the buy and the sale are coin fields, saved by `PUT /api/coins/:id`)* |
 | Spot prices | `GET /api/spot-prices/latest`, `GET /api/spot-prices/fetch`, `POST /api/spot-prices` |
 | Settings | `GET /api/settings/:key`, `PUT /api/settings/:key` |
 | Logging | `POST /api/log` |

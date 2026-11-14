@@ -24,6 +24,12 @@
  * per 3 bytes), so decoding before sending makes the response a third smaller
  * and is what `<img src>` needs anyway.
  *
+ * REFERENCED PHOTOGRAPHS. When the user has chosen (in Settings) to keep
+ * photos on disk rather than in the database, ImageData is NULL and the only
+ * thing the row holds is SourcePath. This route then streams that original
+ * file instead of decoding a stored copy, so the Photo column looks and
+ * behaves the same in both storage modes. See routes/images/reference-url.ts.
+ *
  * There is no re-sizing step, and that is a limitation rather than a choice:
  * the stored copy is already downscaled (~1600px, ~250 KB) and the server has
  * no image library to shrink it further. If one is ever added, this is the
@@ -37,7 +43,9 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { logInfo, logWarn } from '../../logger';
+import fs from 'node:fs';
+import { logInfo, logWarn, logError } from '../../logger';
+import { imageContentTypeFor } from '../images/allowed-types';
 import { withDb, DB_BINDINGS } from '../../db';
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
@@ -121,6 +129,80 @@ export function decodeStoredImage(stored: unknown): DecodedImage | null {
   return { bytes, contentType };
 }
 
+/**
+ * Serve a REFERENCED photograph's thumbnail by streaming the original file.
+ *
+ * The three rules this borrows from routes/images/file.ts, which serves the
+ * same files to the photo viewer:
+ *
+ *   - the extension allow-list decides what may be read at all;
+ *   - the bytes are STREAMED, because an original can be 46 MB and a grid
+ *     asks for a screenful of them at once;
+ *   - a stream error after the headers are out destroys the response rather
+ *     than trying to set a status, which would throw on an I/O callback and
+ *     take the process down.
+ *
+ * It never throws. A missing file is a 404 — exactly what a coin with no
+ * photograph produces — so the grid shows its ordinary empty cell and does
+ * not need to know which storage mode the photo used.
+ */
+async function streamOriginalThumbnail(
+  res: Response,
+  sourcePath: string,
+  coinId: string
+): Promise<void> {
+  const contentType = imageContentTypeFor(sourcePath);
+  if (!contentType) {
+    logWarn(`Referenced thumbnail for coin ${coinId} is not a servable image type`);
+    res.status(404).json({ error: 'No image available for this coin.' });
+    return;
+  }
+
+  try {
+    const stats = await fs.promises.stat(sourcePath);
+    if (!stats.isFile()) {
+      logWarn(`Referenced thumbnail for coin ${coinId} is not a regular file`);
+      res.status(404).json({ error: 'No image available for this coin.' });
+      return;
+    }
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', String(stats.size));
+    // Same "ask before reusing" rule as the stored path: a photograph the
+    // user has just replaced on disk must not keep appearing in the grid.
+    res.setHeader('Cache-Control', 'no-cache');
+
+    const stream = fs.createReadStream(sourcePath);
+
+    stream.on('error', (streamErr: Error) => {
+      logError(`Error streaming referenced thumbnail for coin ${coinId}`, streamErr);
+      if (res.headersSent) res.destroy(streamErr);
+      else res.status(500).json({ error: 'Failed to read the original image file.' });
+    });
+
+    // The browser scrolled the row away: stop pulling bytes off the disk.
+    res.on('close', () => stream.destroy());
+
+    logInfo(`Served referenced thumbnail for coin ${coinId} (${stats.size} bytes)`);
+    stream.pipe(res);
+  } catch (err) {
+    const code = (err as { code?: string } | null)?.code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') {
+      // The original has been moved or deleted. For a referenced photograph
+      // that means the picture is gone — there is no copy in the database to
+      // fall back to, which is the whole trade-off of the mode.
+      logWarn(`Referenced thumbnail missing on disk for coin ${coinId}`);
+      res.status(404).json({ error: 'No image available for this coin.' });
+      return;
+    }
+
+    logError(`Referenced thumbnail failed for coin ${coinId}`, err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to read the original image file.' });
+    }
+  }
+}
+
 // GET /api/coins/:id/thumbnail
 //
 // 200  the image bytes
@@ -137,18 +219,38 @@ router.get('/:id/thumbnail', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
   try {
-    const image = await withDb(async (db) => {
+    const row = await withDb(async (db) => {
       // TOP 1 + ORDER BY SortOrder: one row, and the one the gallery calls
       // the main photo. The id is BOUND, never interpolated — it arrives from
       // the URL and the spec sends a `'; DROP TABLE Coins; --` id to keep
       // that honest.
       const result = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
-        .query('SELECT ImageData FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder LIMIT 1');
+        .query(
+          'SELECT ImageData, SourcePath FROM CoinImages WHERE CoinId = @id ORDER BY SortOrder LIMIT 1'
+        );
 
-      const row = result.recordset[0] as Record<string, unknown> | undefined;
-      return row ? decodeStoredImage(row['ImageData']) : null;
+      return result.recordset[0] as Record<string, unknown> | undefined;
     });
+
+    const image = row ? decodeStoredImage(row['ImageData']) : null;
+
+     /*
+     * REFERENCED PHOTOGRAPHS — ImageData is NULL on purpose.
+     *
+     * The user chose, in Settings, to keep the picture on disk rather than
+     * in the database. There is nothing to decode, so the grid's Photo
+     * column is served by STREAMING the original file instead. Streaming,
+     * never readFile: these are camera originals up to ~46 MB and a grid
+     * paints a screenful of rows at once (design §4.9a.3).
+     *
+     * Only reached when the row holds no picture, so a stored photograph
+     * still costs exactly what it did before: one decode, no disk access.
+      */
+    if (!image && typeof row?.['SourcePath'] === 'string' && row['SourcePath'].trim()) {
+      await streamOriginalThumbnail(res, row['SourcePath'].trim(), id);
+      return;
+    }
 
     if (!image) {
       // Logged at warn, not error, and without the id in a hot loop message:

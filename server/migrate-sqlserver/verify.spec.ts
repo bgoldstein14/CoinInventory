@@ -123,13 +123,13 @@ describe('reference containment', () => {
 });
 
 describe('value by value', () => {
-  it('compares six columns per coin plus the transaction and spot prices', async () => {
+  it('compares six columns per coin plus the spot prices', async () => {
     const { opened, reader } = await migrated();
     const result = await checkNumericValues(reader, opened.database);
 
-    // 2 coins x 6 + 1 transaction x 1 + 1 spot price row x 4
-    expect(result.rowsChecked).toBe(4);
-    expect(result.valuesChecked).toBe(17);
+    // 2 coins x 6 + 1 spot price row x 4
+    expect(result.rowsChecked).toBe(3);
+    expect(result.valuesChecked).toBe(16);
     expect(result.differences).toEqual([]);
   });
 
@@ -159,14 +159,17 @@ describe('value by value', () => {
     expect(result.differences[0]).toMatchObject({ column: 'SoldPrice', source: null, target: 0 });
   });
 
-  it('catches a transaction amount and a spot price', async () => {
+  // This case used to change Transactions.Amount AND SpotPrices.Copper and
+  // assert both were caught, which is what proved OTHER_NUMERIC_COLUMNS is
+  // walked as a LIST rather than its first entry being checked. Transactions
+  // is gone, so the list has one entry; the property that survives is that
+  // the non-Coins entry is checked at all, which is what this now pins.
+  it('catches a spot price', async () => {
     const { opened, reader } = await migrated();
-    opened.database.prepare('UPDATE Transactions SET Amount = 412.36').run();
     opened.database.prepare('UPDATE SpotPrices SET Copper = 4.1235').run();
 
     const result = await checkNumericValues(reader, opened.database);
     expect(result.differences.map((difference) => difference.column).sort()).toEqual([
-      'Amount',
       'Copper',
     ]);
   });
@@ -219,7 +222,6 @@ describe('the link check compares what the ids MEAN', () => {
 describe('the guard on the verification itself', () => {
   const counts: CountCheck[] = [
     { table: 'Coins', source: 105, target: 105, matches: true },
-    { table: 'Transactions', source: 8, target: 8, matches: true },
     { table: 'SpotPrices', source: 3, target: 3, matches: true },
     { table: 'CoinImages', source: 2140, target: 2140, matches: true },
     { table: 'CoinSets', source: 4, target: 4, matches: true },
@@ -227,8 +229,10 @@ describe('the guard on the verification itself', () => {
   ];
 
   const fullCoverage: ValueCheck = {
-    rowsChecked: 105 + 8 + 3,
-    valuesChecked: 105 * 6 + 8 * 1 + 3 * 4,
+    // Coins + SpotPrices. The `+ 8 * 1` term was Transactions.Amount, which
+    // went with the table; OTHER_NUMERIC_COLUMNS has one entry now.
+    rowsChecked: 105 + 3,
+    valuesChecked: 105 * 6 + 3 * 4,
     differences: [],
   };
 
@@ -257,7 +261,7 @@ describe('the guard on the verification itself', () => {
   it('REFUSES a verification that covered only some of the rows', () => {
     expect(() =>
       assertCoverage(counts, { ...fullCoverage, valuesChecked: 630 }, fullLinks)
-    ).toThrow(/Expected 650 value comparison/);
+    ).toThrow(/Expected 642 value comparison/);
   });
 
   it('REFUSES a link check that skipped coins', () => {
@@ -279,7 +283,7 @@ describe('the guard on the verification itself', () => {
 describe('a source with no rows at all', () => {
   it('still verifies, and the coverage guard does not fire on zero of zero', async () => {
     const empty = buildFixtureReader({
-      rows: { Coins: [], CoinImages: [], Transactions: [], SpotPrices: [], CoinSets: [] },
+      rows: { Coins: [], CoinImages: [], SpotPrices: [], CoinSets: [] },
     });
     const { outcome } = await migrated(empty);
 

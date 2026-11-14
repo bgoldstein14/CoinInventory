@@ -10,6 +10,37 @@ describe('inventoryColumnOrder', () => {
     expect(inventoryColumnOrder.indexOf('year')).toBeLessThan(inventoryColumnOrder.indexOf('mintMark'));
     expect(inventoryColumnOrder.indexOf('mintMark') - inventoryColumnOrder.indexOf('year')).toBe(1);
   });
+
+  it('does not offer Source as a grid column', () => {
+    /* `Coins.Source` ('quicken', 'csv', 'manual') says where a ROW came
+     * from, which is a fact about the import and not about the coin. It is
+     * still written on every record, still filterable from the filter bar's
+     * Source dropdown, still a CSV export column and still queryable in the
+     * database; it simply stopped being one of the boxes in the Columns
+     * panel, in a grid where every offered column costs width the money
+     * columns need.
+     *
+     * This array is the whole mechanism -- the picker lists it, the store
+     * sorts by it, and a stored preference is filtered against it -- so a
+     * user who had Source ticked loses the tick on his next load with no
+     * migration. */
+    expect([...inventoryColumnOrder]).not.toContain('source');
+    expect(Object.keys(inventoryColumnLabels)).not.toContain('source');
+    expect(defaultVisibleColumns).not.toContain('source');
+  });
+
+  it('still records where a coin came from, which is the point', () => {
+    /* The column went; the DATA did not. If this ever fails, the removal
+     * has gone further than it was meant to. */
+    const coin = makeCoin({ source: 'quicken' });
+    expect(coin.source).toBe('quicken');
+  });
+
+  it('agrees with its own label table, in both directions', () => {
+    // A column with no header, or a header with no column, is how the
+    // picker ends up offering something the grid cannot render.
+    expect(Object.keys(inventoryColumnLabels).sort()).toEqual([...inventoryColumnOrder].sort());
+  });
 });
 
 /*
@@ -223,9 +254,9 @@ describe('the Storage column', () => {
 });
 
 describe('the new columns keep every existing ordering invariant', () => {
-  it('leaves Mint Mark immediately after Year', () => {
-    expect(inventoryColumnOrder.indexOf('mintMark') - inventoryColumnOrder.indexOf('year')).toBe(1);
-  });
+  // Mint Mark immediately after Year is asserted by
+  // `inventoryColumnOrder > places Mint Mark immediately after Year`, over
+  // the same module constant, so it is not restated here.
 
   it('leaves Cert immediately before Grade', () => {
     // The long-standing invariant: the slab's certification and the grade

@@ -89,8 +89,8 @@ describe('GET /api/coins', () => {
     // The tag feature is gone, so the key must not come back at all.
     expect(coin).not.toHaveProperty('tags');
     // The coin-level dealer field is gone too, so the key must not come back
-    // even if an old database still has the column. (Transaction rows keep
-    // their own dealer; that is served by GET /api/transactions.)
+    // even if an old database still has the column. (The deal's counterparty
+    // is purchasedFrom / soldTo, which are ordinary coin fields.)
     expect(coin).not.toHaveProperty('dealer');
     expect(coin.weight).toBe(0.7734);
     expect(coin.metalContent).toBe('Silver');

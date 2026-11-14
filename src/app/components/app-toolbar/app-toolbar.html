@@ -3,22 +3,27 @@
     <button type="button" class="secondary small-button" (click)="addCoinRequested.emit()">Add Coin</button>
 
     <!-- THE MAIN BUTTON'S DEFAULT IS THE FIRST MENU ENTRY, and that is the
-         whole reason it is 'csv'. It used to be 'qif', so pressing Import
+         whole reason it is 'excel'. It used to be 'qif', so pressing Import
          without opening the menu ran the importer fewest users want —
          Quicken files. The default and the top of the list are kept the
          same thing deliberately: a split button whose face does something
          other than its first entry is a trap you only spring once. -->
     <div class="split-button" [class.open]="importMenuOpen()">
-      <button type="button" class="small-button" (click)="handleImportSelection('csv')">Import</button>
+      <button type="button" class="small-button" (click)="handleImportSelection('excel')">Import</button>
       <button type="button" class="small-button split-button__toggle" (click)="toggleImportMenu()" aria-label="Choose import type">▾</button>
       @if (importMenuOpen()) {
         <div class="split-menu">
-          <!-- One entry, both formats. The modal behind it takes an .xlsx
-               workbook or a .csv and converges them onto the same mapping
-               screen, so splitting this into two menu items would ask the
-               user to classify their own file before opening it. -->
-          <button type="button" class="menu-item" (click)="handleImportSelection('csv')">Excel or CSV</button>
-          <button type="button" class="menu-item" (click)="handleImportSelection('json')">JSON</button>
+          <!-- Two entries, one dialog. They were a single "Excel or CSV"
+               item; the modal still reads either format and still converges
+               them on one mapping screen, but a user holding a spreadsheet
+               should be able to find the word "Excel" in a list rather than
+               parse a compound label. See ImportKind in app-toolbar.ts.
+               Excel first: it is the commoner of the two, and it is the
+               split button's default. -->
+          <button type="button" class="menu-item" (click)="handleImportSelection('excel')">Excel</button>
+          <button type="button" class="menu-item" (click)="handleImportSelection('csv')">CSV</button>
+          <!-- There is no JSON entry and there must not be one. Export →
+               JSON stays; importing one was removed deliberately. -->
           <!-- QIF is third because it is the least likely import for
                anyone but the owner, who moved this collection off Quicken
                once and will not do it again. Commonest first is the whole
@@ -57,16 +62,70 @@
       ⚙ Settings
     </button>
 
-    <!-- Help > Report a problem. Last, next to Settings, because it is the
-         other thing that is about the application rather than about coins. -->
+    <!-- Help. Last, next to Settings, because it is the other thing that is
+         about the application rather than about coins.
+
+         THE ONLY ICON-ONLY BUTTON IN THIS ROW. Everything else here is a
+         word, and that is not an inconsistency to be tidied away: a
+         question mark in a circle is the one glyph in this application that
+         a user already knows the meaning of, so it buys back the width that
+         "? Help" cost without costing comprehension. Nothing else on this
+         toolbar has a symbol anybody would recognise.
+
+         IT IS A FILLED DISC, NOT A DRAWN RING, AND THAT IS THE POINT. The
+         first version was a thin outline in `currentColor` at 16px, which
+         the owner read as too small and too drab. The recognisable help
+         affordance is the solid circle with a white question mark in it, so
+         that is what this is: one filled circle, a stroked hook and a dot,
+         three elements of hand-written SVG. NO ICON LIBRARY. The @defer work
+         just took 375 kB out of the bundle and this button lives in `main`,
+         which is exactly the chunk a dependency would land in.
+
+         The disc takes its colour from the stylesheet through
+         `fill="currentColor"`, so the one hex that decides what this looks
+         like lives next to the contrast reasoning that justifies it, in
+         app-toolbar.scss. The question mark is hard-coded #fff because it is
+         drawn ON the disc — it is not a second themeable colour, it is the
+         hole in the first one.
+
+         IT IS UNLABELLED ON SCREEN, SO THE NAME HAS TO COME FROM SOMEWHERE
+         ELSE AND BOTH ROUTES ARE WIRED:
+           aria-label="Help"  - what a screen reader announces. Without it
+                                the button announces as nothing at all,
+                                because its only child is an SVG.
+           title="Help"       - the hover tooltip, for the sighted user who
+                                cannot tell what the glyph does.
+         The SVG itself is aria-hidden and focusable="false": it is
+         decoration once the button has a name, and in IE-era Angular builds
+         an SVG without focusable="false" takes tab focus of its own.
+
+         The <button> is a real button, so it is tab-reachable and fires on
+         Enter and Space with no help from us. Do not swap it for a div. -->
     <button
       type="button"
       class="secondary small-button help-button"
       (click)="requestHelp()"
-      title="Report a problem"
-      aria-label="Report a problem"
+      title="Help"
+      aria-label="Help"
     >
-      ? Help
+      <svg
+        class="help-icon"
+        viewBox="0 0 24 24"
+        width="24"
+        height="24"
+        aria-hidden="true"
+        focusable="false"
+      >
+        <circle cx="12" cy="12" r="11" fill="currentColor" />
+        <path
+          d="M9.3 9.2a2.75 2.75 0 1 1 3.35 2.95c-.65.2-1 .72-1 1.45v.5"
+          fill="none"
+          stroke="#ffffff"
+          stroke-width="2"
+          stroke-linecap="round"
+        />
+        <circle cx="12" cy="17.1" r="1.2" fill="#ffffff" />
+      </svg>
     </button>
   </div>
 </div>

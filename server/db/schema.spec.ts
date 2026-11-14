@@ -34,10 +34,9 @@ const TABLES = [
   'MetalContents',
   'MintMarks',
   'SpotPrices',
-  'Transactions',
 ];
 
-describe('the twelve tables', () => {
+describe('the eleven tables', () => {
   it('all exist', async () => {
     const rows = await queryRows(
       "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
@@ -56,7 +55,8 @@ describe('the twelve tables', () => {
     expect(names).toContain('IX_CoinImages_CoinId_SortOrder');
     expect(names).toContain('IX_Coins_DenominationId');
     expect(names).toContain('IX_Denominations_IssuerId');
-    expect(names).toContain('IX_Transactions_CoinId');
+    // IX_Transactions_CoinId went with the Transactions table.
+    expect(names).not.toContain('IX_Transactions_CoinId');
   });
 
   it('no longer has the tables and columns that were dropped', async () => {
@@ -65,9 +65,18 @@ describe('the twelve tables', () => {
     ).map((row) => row['name']);
     // Migration 005.
     expect(tables).not.toContain('CoinTags');
-    // Migration 006. Transactions.Dealer is a different column and stays.
+    // Migration 006. There is no Dealer column anywhere any more: the
+    // Transactions table that carried the surviving one has been dropped,
+    // and its counterparty is two fields on Coins instead.
     expect(parseTable('Coins').has('Dealer')).toBe(false);
-    expect(parseTable('Transactions').has('Dealer')).toBe(true);
+    expect(tables).not.toContain('Transactions');
+    // The three columns that replaced the table.
+    expect(parseTable('Coins').has('PurchasedFrom')).toBe(true);
+    expect(parseTable('Coins').has('SoldTo')).toBe(true);
+    expect(parseTable('Coins').has('TransactionNotes')).toBe(true);
+    // And the coin's own note is still its own. Two notes columns that had
+    // ended up with one name would be one column, silently.
+    expect(parseTable('Coins').has('Notes')).toBe(true);
   });
 
   it('has the columns migrations 010, 011 and 012 added', () => {
@@ -106,8 +115,6 @@ describe('foreign keys are enforced, not decorative', () => {
     // photographs have no meaning without the coin.
     const forImages = await queryRows('PRAGMA foreign_key_list(CoinImages)');
     expect(forImages[0]['on_delete']).toBe('CASCADE');
-    const forTransactions = await queryRows('PRAGMA foreign_key_list(Transactions)');
-    expect(forTransactions[0]['on_delete']).toBe('CASCADE');
   });
 
   it('refuses a coin pointing at a denomination that does not exist', async () => {
@@ -120,23 +127,16 @@ describe('foreign keys are enforced, not decorative', () => {
     ).rejects.toThrow(/FOREIGN KEY constraint failed/);
   });
 
-  it('cascades a coin delete to its photographs and transactions', async () => {
+  it('cascades a coin delete to its photographs', async () => {
     await withTestDb((database) => {
       database.prepare("INSERT INTO Coins (CoinId, Denomination) VALUES ('casc', '$1')").run();
       database
         .prepare("INSERT INTO CoinImages (CoinId, ImageData, SortOrder) VALUES ('casc', 'a', 0)")
         .run();
-      database
-        .prepare(
-          'INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount) ' +
-            "VALUES ('t', 'casc', 'purchase', '2024-01-01', 1)"
-        )
-        .run();
       database.prepare("DELETE FROM Coins WHERE CoinId = 'casc'").run();
     });
 
     expect(await queryRows('SELECT ImageId FROM CoinImages')).toEqual([]);
-    expect(await queryRows('SELECT TransactionId FROM Transactions')).toEqual([]);
   });
 
   it('enforces the BIT check constraints', async () => {

@@ -21,7 +21,7 @@
  *
  * *** THE IDS THAT TRAVEL AND THE IDS THAT DO NOT. ***
  *
- *   CoinId, TransactionId, ImageId, SpotPriceId  — PRESERVED. They identify
+ *   CoinId, ImageId, SpotPriceId  — PRESERVED. They identify
  *   the owner's own rows, nothing re-seeds them, and keeping them means a
  *   CSV he exported last year still names the same coin. SQLite accepts an
  *   explicit value for an INTEGER PRIMARY KEY AUTOINCREMENT column and
@@ -72,7 +72,6 @@ export interface CopyOutcome {
 const ORDER_BY: Partial<Record<TableName, readonly string[]>> = {
   Coins: ['CoinId'],
   CoinImages: ['CoinId', 'SortOrder'],
-  Transactions: ['TransactionId'],
   SpotPrices: ['SpotPriceId'],
   CoinSets: ['SetName'],
   AppSettings: ['SettingKey'],

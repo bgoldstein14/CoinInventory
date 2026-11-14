@@ -15,8 +15,8 @@
  *
  *   2. VALUE BY VALUE ON EVERY NUMBER. `Weight`, `PmWeightGrams`,
  *      `PmPercent`, `PurchasePrice`, `CurrentValue`, `SoldPrice` — the six
- *      §4.1 names — plus `Transactions.Amount` and the four `SpotPrices`
- *      columns, which are the same kind of value and cost one more pass.
+ *      §4.1 names — plus the four `SpotPrices` columns, which are the same
+ *      kind of value and cost one more pass.
  *
  *      *** THE COMPARISON IS `===` AND MUST STAY `===`. *** db/schema.sql's
  *      numeric-storage note explains the whole reason REAL was chosen over
@@ -297,7 +297,7 @@ export async function checkNumericValues(
     }
   );
 
-  // ----- Transactions.Amount and the four SpotPrices columns -------------
+  // ----- The four SpotPrices columns -------------------------------------
   for (const spec of OTHER_NUMERIC_COLUMNS) {
     const keyColumn = spec.key[0];
     const targetRows = new Map<string, Record<string, unknown>>();
@@ -456,7 +456,7 @@ export function assertCoverage(
     counts.find((check) => check.table === table)?.source ?? 0;
 
   const expectedRows =
-    sourceRowsOf('Coins') + sourceRowsOf('Transactions') + sourceRowsOf('SpotPrices');
+    sourceRowsOf('Coins') + sourceRowsOf('SpotPrices');
 
   const expectedValues =
     sourceRowsOf('Coins') * COINS_NUMERIC_COLUMNS.length +

@@ -19,7 +19,7 @@ function httpError(status: number, statusText: string, body?: unknown) {
  *
  * This service wraps all backend HTTP calls via Angular's HttpClient.
  * It provides methods for:
- * - CRUD operations on coins, categories, coin sets, transactions
+ * - CRUD operations on coins, categories and coin sets
  * - Reference data (denominations, mint marks)
  * - Spot price proxy
  * - Logging
@@ -125,30 +125,20 @@ describe('ApiService', () => {
   });
 
   // --- Transactions ---
+  //
+  // getTransactions / createTransaction / deleteTransaction were tested here
+  // and all three are gone with the /api/transactions endpoints. There is
+  // nothing to move: they asserted a URL. What replaces them is the
+  // assertion that no such method survives — a leftover one would be a
+  // second write path to the coin fields the deal record now lives in, and
+  // it would fail at runtime rather than at compile time, because the
+  // client reaches it through a plain HttpClient call.
 
-  it('getTransactions calls GET /api/transactions', () => {
-    service.getTransactions();
-    expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/transactions`);
-  });
-
-  it('createTransaction calls POST /api/transactions', () => {
-    const txn = {
-      id: 't1',
-      coinId: 'c1',
-      type: 'purchase' as const,
-      date: '2024-01-01',
-      amount: 100,
-      dealer: 'Heritage',
-      notes: 'Auction win',
-    };
-
-    service.createTransaction(txn);
-    expect(mockHttpClient.post).toHaveBeenCalledWith(`${baseUrl}/api/transactions`, txn);
-  });
-
-  it('deleteTransaction calls DELETE /api/transactions/:id', () => {
-    service.deleteTransaction('t1');
-    expect(mockHttpClient.delete).toHaveBeenCalledWith(`${baseUrl}/api/transactions/t1`);
+  it('no longer exposes any transaction endpoint', () => {
+    const api = service as unknown as Record<string, unknown>;
+    expect(api['getTransactions']).toBeUndefined();
+    expect(api['createTransaction']).toBeUndefined();
+    expect(api['deleteTransaction']).toBeUndefined();
   });
 
   // --- Reference Data ---

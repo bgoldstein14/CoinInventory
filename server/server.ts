@@ -10,10 +10,12 @@
  *   routes/coins/      — Coin CRUD + image management (mounted at /api/coins)
  *   routes/lookups/    — Categories, Metal Contents, Coin Sets, Denominations,
  *                        Mint Marks (mounted at /api)
- *   routes/data/       — Transactions, Spot Prices, Settings, Frontend Log
+ *   routes/data/       — Spot Prices, Settings, Frontend Log
  *                        (mounted at /api)
  *   routes/images/     — Serving / existence-checking the ORIGINAL image files
  *                        on the host's disk (mounted at /api/images)
+ *   routes/backup/     — §16: back the collection up to a file the user
+ *                        chooses, and restore from one (mounted at /api)
  *   routes/error-handler.ts — the app-wide Express error handler
  *
  * Database helpers live in the db/ folder (getPool, withDb, rowToCoin,
@@ -37,6 +39,7 @@ import lookupsRouter from './routes/lookups';
 import dataRouter from './routes/data';
 import imagesRouter from './routes/images';
 import supportRouter from './routes/support';
+import backupRouter from './routes/backup';
 import { globalErrorHandler } from './routes/error-handler';
 
 // Re-exported so tests and other consumers can import it from './server'.
@@ -56,7 +59,22 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
-const angularDistPath = path.resolve(__dirname, '..', 'dist', 'coin-inventory-app');
+// Where the built Angular app lives. The trailing 'browser' is not optional:
+// the application builder (@angular/build:application, angular.json ->
+// architect.build) writes the browser bundle to
+// `<outputPath>/browser/`, not to `<outputPath>/` as the old webpack
+// `browser` builder did. Point this one directory too high and nothing
+// breaks loudly — the build still succeeds, express.static serves nothing,
+// and the SPA fallback sends an index.html that is not there, so the user
+// gets an empty page from a server that reports itself healthy. The path is
+// exported, and dist-path.spec.ts asserts the real build lands on it.
+export const angularDistPath = path.resolve(
+  __dirname,
+  '..',
+  'dist',
+  'coin-inventory-app',
+  'browser',
+);
 app.use(express.static(angularDistPath));
 
 app.use('/api', (req, _res, next) => {
@@ -86,9 +104,22 @@ app.use('/api/images', imagesRouter);
 // collection as COUNTS ONLY and writes nothing until the user has seen and
 // approved the text. See routes/support/index.ts.
 app.use('/api', supportRouter);
+// /api/backup/* and /api/restore/* — §16, "make the collection portable".
+// Mounted LAST of the API routers and deliberately so: /api/restore closes
+// the shared database handle and renames the file underneath it, which is
+// the one thing no other router is allowed to do, and keeping it visibly
+// apart from the CRUD routers above is part of how that stays true. See
+// routes/backup/index.ts, and db/pool.ts's withDatabaseOffline().
+app.use('/api', backupRouter);
 
-// Angular SPA fallback — must be LAST route
-app.get('*', (_req: Request, res: Response) => {
+// Angular SPA fallback — must be LAST route.
+//
+// `'/*splat'`, not `'*'`. Express 5 replaced path-to-regexp, and a bare `*`
+// is no longer a valid pattern — it throws at startup with
+// "Missing parameter name at index 1", which takes the whole server down
+// rather than failing one route. A wildcard must now be NAMED; `splat` is
+// the conventional name and the segment it captures is unused here.
+app.get('/*splat', (_req: Request, res: Response) => {
   res.sendFile(path.join(angularDistPath, 'index.html'));
 });
 

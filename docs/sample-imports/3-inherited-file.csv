@@ -1,0 +1,26 @@
+﻿Item,Desc,Jahr,Ref,Val,A,B,Col 7,Qty,#,Rem.,Note,Grd,Out,Recd,To
+INV-001,Morgan Dollar,1881,KM-110,165.00,$1,United States,S,1,1,Riverbend Coins,"Frosty cheek, light bag marks",MS63,,,
+INV-002,Classic Head Half Cent,1809,C-3,210.00,½¢,United States,,1,2,Orchard Hill Numismatics,Encoding check: the denomination is a half-cent sign,VG8,,,
+INV-003,Gold Sovereign,1912,KM-820,705.00,£1,United Kingdom,,1,3,Mapleford Coin Gallery,Encoding check: the denomination is a pound sign,AU55,,,
+INV-004,Liberty Head Nickel,1903,KM-112,14.00,5¢,United States,,1,4,Thursday club swap,Even grey tone,VF20,,,
+INV-005,Walking Liberty Half,1943,KM-142,27.50,50¢,United States,D,1,5,Riverbend Coins,,AU58,,,
+INV-006,Indian Head Cent,1877,Snow-1,780.00,1¢,United States,,1,6,"Estate lot, local auction",Key date for the series,G4,,,
+INV-007,Mercury Dime,1916,KM-140,1900.00,10¢,United States,D,1,7,Harborview Coin Co.,Sold on at a small profit,F12,02.05.2024,1850.00,Harborview Auctions
+INV-008,"Wheat Cent, worn",1944,KM-A132,2.00,1¢,United States,,1,8,Junk box,"GIVEN AWAY: Sold Price is 0, which still counts as sold",VF,14.08.2023,0,Club raffle winner
+INV-009,Buffalo Nickel,1936,KM-134,16.00,5¢,United States,,1,9,Riverbend Coins,"Sold To holds spaces only, so this one is NOT sold",XF40,,,"   "
+INV-010,Standing Liberty Quarter,1927,KM-145,34.00,25¢,United States,,1,10,Mail bid sale,Sold date but no price and no buyer,VG10,01.12.2022,,
+INV-011,Franklin Half,1955,KM-199,60.00,50¢,United States,,1,11,Riverbend Coins,Buyer only: no sold date and no sold price,MS64,,,"Private collector, out of state"
+INV-012,Three Cent Silver - FAKE,1861,KM-75,0.00,3¢,United States,,1,12,"Bourse table, name not kept","Bought as genuine, proved to be a struck copy. FAKE is in the description column.",XF45,,,
+INV-013,Roman Provincial Bronze,117,RPC 1234,70.00,,Roman Empire,,1,13,Ancients dealer,No denomination at all: the server refuses this row,Fine,,,
+INV-014,,1913,,,,,,1,14,Flea market,Only a year: fails the 2-of-3 completeness rule,,,,
+INV-015,-,1888,,,n/a,,,1,15,Flea market,Placeholder text in two of the three main details,AG3,,,
+INV-016,Canadian Large Cent,1901,KM-7,19.00,1¢,Canada,,1,16,Mapleford Coin Gallery,,VF30,,,
+INV-017,Mexican 8 Reales,1799,KM-109,420.00,8 Reales,Mexico,Mo,1,17,Mapleford Coin Gallery,"Pillar type, chop marks on reverse",VF25,,,
+INV-018,German Empire 1 Mark,1875,KM-7,45.00,1 Mark,Germany,A,1,18,Online bid,,XF45,,,
+INV-019,Japanese 50 Sen,1937,Y-50,21.00,50 Sen,Japan,,1,19,Online bid,,AU50,,,
+INV-020,Australian Florin,1927,KM-31,38.00,2 Shillings,Australia,M,1,20,Online bid,Canberra commemorative,VF20,,,
+INV-021,Peace Dollar,1922,KM-150,55.00,$1,United States,,1,21,Riverbend Coins,,MS62,20.01.2025,52.00,Harborview Auctions
+INV-022,Barber Dime,1908,KM-113,8.00,10¢,United States,O,1,22,Junk box,,G6,03.03.2023,7.25,"Weekend show, cash buyer"
+INV-023,Seated Liberty Dime,1853,KM-A92,95.00,10¢,United States,,1,23,Orchard Hill Numismatics,Arrows at date,VF20,,,
+INV-024,Two Cent Piece,1864,KM-94,48.00,2¢,United States,,1,24,Riverbend Coins,,VF35,,,
+INV-025,British Penny,1967,KM-897,3.00,1 Penny,United Kingdom,,4,25,Dealer bulk lot,"Common, kept for the type set",UNC,,,

@@ -52,7 +52,7 @@ import { buildDbConfig, IN_MEMORY_DATABASE, type DbConfig } from './config';
 import { isConnectionError } from './errors';
 import { openSqliteDatabase, SQLITE_DRIVER_NAME } from './driver';
 import { DbConnection } from './sql-api';
-import { applySchema, enableWriteAheadLog } from './schema';
+import { applySchema, enableWriteAheadLog, stampSchemaVersion, SCHEMA_VERSION } from './schema';
 import { seedReferenceData } from './seed';
 
 /**
@@ -128,6 +128,43 @@ async function openConnection(): Promise<OpenConnection> {
 
       if (config.file !== IN_MEMORY_DATABASE) enableWriteAheadLog(database);
       applySchema(database);
+
+      /* STAMP THE SCHEMA VERSION — §16.
+       *
+       * AFTER applySchema, because the number describes the shape the file
+       * now has rather than the shape it arrived with, and because a stamp
+       * on a database whose tables failed to build would be a lie that
+       * outlived the error.
+       *
+       * It belongs HERE, in the one place that opens the database, for the
+       * same reason the schema and the seed do: it is idempotent, so there
+       * is no "is this a new database?" test to get wrong, and no path by
+       * which a file this application has opened can be left unidentified.
+       *
+       * This is NOT the start of a migration runner — see the long note at
+       * the top of db/schema.ts. Nothing here replays anything; it records
+       * a number and, when the number is from the future, says so and
+       * leaves it alone.
+       */
+      const stamp = stampSchemaVersion(database);
+      if (stamp.stamped) {
+        logInfo(
+          `Stamped schema version ${stamp.after} on the coin database ` +
+            `(it carried ${stamp.before}).`
+        );
+      }
+      if (stamp.newerThanThisBuild) {
+        // Not fatal, and deliberately not: refusing to open would leave a
+        // user whose file is from a newer build with no application at all,
+        // where in practice the shapes are usually compatible. The log line
+        // is what turns "it behaves oddly" into a one-minute diagnosis.
+        logWarn(
+          `The coin database reports schema version ${stamp.before}, which is NEWER than ` +
+            `this build understands (${SCHEMA_VERSION}). It was probably written by a later ` +
+            `version of Coin Inventory. Continuing, but some data may not be readable.`
+        );
+      }
+
       const seeded = seedReferenceData(database);
 
       const total =
@@ -281,5 +318,50 @@ export async function withDb<T>(fn: (db: DbConnection) => Promise<T>): Promise<T
 
     const retryHandle = await acquireConnection();
     return await fn(retryHandle.connection);
+  }
+}
+
+/**
+ * Runs `work` with NO DATABASE OPEN, then lets the next caller open whatever
+ * is now at the path. The one legitimate way to replace the file underneath
+ * a running application (§16's restore, and nothing else).
+ *
+ * *** THIS IS NOT A LOOPHOLE IN "NO ROUTE HANDLER MAY CALL resetPool()". ***
+ * Read that rule for what it actually forbids: route code tearing the shared
+ * connection down ON AN ORDINARY ERROR, which was a primary cause of the
+ * original production crash. The handle was fine; the route panicked. Here
+ * the handle is not fine in a much more literal sense — the file it points
+ * at is about to stop existing, because the user asked for it to be replaced.
+ * An open handle to a renamed file is exactly the thing that must not
+ * survive, so closing it is the correct action and not a reflex.
+ *
+ * What keeps it from decaying into the banned pattern:
+ *
+ *   - It is NOT exported from db/index.ts. A route reaching for it has to
+ *     import db/pool.ts by name and will meet this comment.
+ *   - It is unconditional. There is no error to misjudge, no retry, and no
+ *     circumstance in which calling it is a guess about the handle's health.
+ *   - The reopen is the ordinary lazy one. Nothing here holds a handle open
+ *     across `work`, so a failure inside `work` leaves the next request to
+ *     open the file in whatever state `work` left it — which is precisely
+ *     what restore's own rollback relies on.
+ *
+ * On Windows the close is not optional in a second way: a file with an open
+ * handle cannot be renamed, so without this the rename at the heart of
+ * "move the current database aside" fails with EBUSY.
+ */
+export async function withDatabaseOffline<T>(work: () => Promise<T>): Promise<T> {
+  // Unconditional — no generation argument. Whatever is open, close it.
+  await resetPool();
+  logInfo('The coin database is closed for a restore; the next request will reopen it.');
+
+  try {
+    return await work();
+  } finally {
+    // Nothing to put back: `current` is already null, so the next
+    // acquireConnection() opens the file as it now stands. Said out loud
+    // because an empty finally is otherwise indistinguishable from a
+    // forgotten one.
+    logInfo('Restore window closed; the next request will open the coin database.');
   }
 }

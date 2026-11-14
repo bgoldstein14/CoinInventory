@@ -75,6 +75,134 @@
   color: #3b2a14;
 }
 
+// "Show transactions section in details" and its box, on ONE line.
+//
+// WHY THIS DID NOT WORK THE FIRST TIME, because the markup already said
+// "inline" and the box was still sitting under the sentence.
+//
+// `styles/_modal.scss`, used by every dialog in the app, styles a bare
+// <label> as a stacked form field:
+//
+//     label { display: flex; flex-direction: column; gap: 3px; ... }
+//     label span { font-weight: 600; text-transform: uppercase; ... }
+//
+// The <label> here IS the element that contains the sentence and the
+// checkbox, so that `column` is what broke the row — and the row class was
+// put on the WRAPPER <div>, which has exactly one child and therefore
+// nothing to lay out. Turning the wrapper into a flex row changed nothing
+// visible, which is why it still read wrong after being "fixed".
+//
+// So the direction is set on the label itself, below, and the wrapper rule
+// stays only because a single child still has to be top-aligned in a column
+// of settings rows. The caption treatment goes with it: an uppercase
+// letter-spaced SPAN is the house style for the name of a field sitting
+// above its control, and applying it to a sentence the user reads left to
+// right is the other half of what made this row look like two settings.
+.settings-row--inline {
+  flex-direction: row;
+  align-items: center;
+}
+
+.checkbox-label--inline {
+  display: inline-flex;
+  // NOT inherited and NOT optional — see above. Without it the shared
+  // `label { flex-direction: column }` puts the box back on its own line.
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+
+  // A sentence, not a field caption.
+  > span {
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+
+  // The partial's `input` rule gives every input 6px/10px of padding, a
+  // border and a background — on a checkbox that is a fat bordered box with
+  // a halo, which is the other half of "it wastes space". `appearance: auto`
+  // puts the native control back.
+  input[type='checkbox'] {
+    appearance: auto;
+    flex: 0 0 auto;
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    accent-color: #8e5b2d;
+    cursor: pointer;
+  }
+}
+
+// ---- Photographs ----
+//
+// Each mode is a radio with a bold one-line answer and a muted explanation
+// underneath it, indented past the control so the two lines read as one
+// block. The explanations are long on purpose: this choice decides whether
+// the application keeps its own copy of the user's photographs, and the
+// consequence of getting it wrong is not recoverable from inside the app.
+
+.radio-label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: start;
+  gap: 8px;
+  color: #3b2a14;
+  cursor: pointer;
+
+  input { margin-top: 3px; }
+
+  // The bold answer and its explanation stack inside the second column.
+  > span {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .hint-text { margin: 0; max-width: 72ch; }
+}
+
+// The "nothing already imported is touched" sentence. Set apart with a rule
+// and a tint so it is not read as part of the second radio's explanation —
+// it applies to both of them.
+.settings-note {
+  margin: 2px 0 0;
+  padding: 8px 10px;
+  background: #faf5ec;
+  border-left: 3px solid #8e5b2d;
+  border-radius: 6px;
+  max-width: 72ch;
+
+  strong { color: #3b2a14; }
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+
+  > label { color: #3b2a14; }
+  .hint-text { margin: 0; max-width: 72ch; }
+}
+
+.settings-field-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  input[type='number'] { width: 7em; }
+}
+
+.settings-units {
+  font-size: 0.78rem;
+  color: #6b5a40;
+}
+
 // ---- Maintenance section ----
 //
 // The one block in this dialog that changes COIN RECORDS. It is set apart
@@ -208,6 +336,252 @@
   // so it cannot push the Save button off the bottom of the dialog.
   max-height: 110px;
   overflow-y: auto;
+}
+
+// ---- Backup and restore (§16) ----
+//
+// Reuses the Maintenance block wholesale — .settings-maintenance,
+// .maintenance-action, .maintenance-heading, .maintenance-explainer,
+// .maintenance-buttons, .maintenance-progress, .maintenance-result and
+// .maintenance-failed are all the ones above. What is added here is only
+// what genuinely has no equivalent: a path box wide enough to read a
+// Windows path in, a progress bar, and the two coloured panels that carry
+// the "what is in this file" summary and the photograph warning.
+//
+// Same palette throughout (#3b2a14 text, #e3d6bf borders, #8e5b2d accent),
+// so the section reads as part of the same card rather than as something
+// bolted on.
+
+.backup-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  width: 100%;
+
+  label {
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #8a7a63;
+  }
+}
+
+// A Windows path is long and the user has to be able to READ it to spot a
+// typo, so this is full width and sized down rather than wrapped.
+.backup-path-input {
+  width: 100%;
+  font-size: 0.76rem;
+  // A path is a technical string: a proportional font makes l, I and 1
+  // indistinguishable in exactly the place that matters.
+  font-family: Consolas, 'Courier New', monospace;
+}
+
+.backup-progress-track {
+  width: 100%;
+  height: 8px;
+  background: #e8dcc6;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.backup-progress-fill {
+  height: 100%;
+  background: #8e5b2d;
+  transition: width 0.2s linear;
+}
+
+// Where the file went. The most useful line on the panel, so it is the one
+// that is allowed to be a monospaced, selectable, wrapping block.
+.backup-result-path {
+  margin: 0;
+  font-size: 0.74rem;
+  color: #3b2a14;
+  word-break: break-all;
+
+  strong {
+    font-family: Consolas, 'Courier New', monospace;
+    font-weight: 600;
+  }
+}
+
+// The restore half gets a warmer edge than the backup half, because one of
+// them is reversible and the other is the only control in the application
+// that can replace everything the user owns.
+.restore-action {
+  border-left-color: #8a2c22;
+}
+
+.restore-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 10px;
+  background: #f3ece0;
+  border: 1px solid #e3d6bf;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  color: #3b2a14;
+
+  p { margin: 0; }
+}
+
+// "Restoring will replace..." — the two facts the user will not infer.
+.restore-consequence {
+  padding-top: 6px;
+  border-top: 1px dashed #d9c7a5;
+  font-weight: 600;
+}
+
+// The photograph warning. Not an error — nothing has gone wrong and the
+// coins are all fine — so it uses a caution tone rather than the #8a2c22
+// failure red that .maintenance-failed owns.
+.restore-warning {
+  margin: 0;
+  padding: 8px 10px;
+  background: #fbf0d8;
+  border-left: 3px solid #b8832a;
+  border-radius: 4px;
+  font-size: 0.74rem;
+  line-height: 1.5;
+  color: #6b4e12;
+}
+
+// ---- Choosing a folder, and choosing a file out of it ----
+//
+// Added after the owner tested the first build. Three things, and the
+// first is the one that actually stopped him:
+//
+//   --empty            an empty box must LOOK empty. A greyed example
+//                      path reads as a filled-in value, which is exactly
+//                      what happened: he believed the field was set and
+//                      could not work out why the buttons were dead.
+//   .backup-blocked-reason   the sentence that says why a button is off.
+//   .backup-file-list  the *.db files the server found, as a list of
+//                      choices rather than a path to type.
+//
+// Same palette as the rest of this section (#3b2a14 text, #e3d6bf
+// borders, #8e5b2d accent) — nothing here restyles what was tidied twice
+// this week, it only adds what had no equivalent.
+
+// THE EMPTY STATE, DRAWN AS EMPTY. A dashed edge and a flatter fill, so
+// "there is nothing in here" is readable at a glance without reading the
+// placeholder at all — which is the point, since reading the placeholder
+// is what misled him.
+.backup-path-input--empty {
+  border-style: dashed;
+  background: #faf6ee;
+
+  &::placeholder {
+    font-style: italic;
+    // Deliberately NOT path-shaped and deliberately not monospaced: the
+    // watermark must not be able to pass for a value.
+    font-family: inherit;
+    color: #a2937c;
+  }
+}
+
+// The picker and the "check this folder" button, side by side under the
+// box they both act on.
+.backup-picker-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+// WHAT THE PICKER ACTUALLY LEARNED, AND WHAT WAS ASSUMED. Quiet, because
+// it is a disclosure rather than a warning — nothing has gone wrong, the
+// browser simply cannot say where a folder is.
+.backup-guess-note {
+  margin: 0;
+  padding: 7px 9px;
+  background: #f3ece0;
+  border-left: 3px solid #8e5b2d;
+  border-radius: 4px;
+  font-size: 0.73rem;
+  line-height: 1.5;
+  color: #4a3a22;
+}
+
+// *** WHY THE BUTTON IS OFF. *** Not an error — the user has done
+// nothing wrong — so it does not borrow .maintenance-failed's red. It
+// just has to be impossible to miss while sitting next to the control.
+.backup-blocked-reason {
+  margin: 0;
+  padding: 7px 9px;
+  background: #fbf0d8;
+  border-left: 3px solid #b8832a;
+  border-radius: 4px;
+  font-size: 0.73rem;
+  line-height: 1.5;
+  color: #6b4e12;
+}
+
+// The *.db files the server found. Capped in height because a folder of
+// fifty backups must not push the Save button off the dialog.
+.backup-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.backup-file-choice {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 9px;
+  background: #fdfaf4;
+  border: 1px solid #e3d6bf;
+  border-radius: 5px;
+  text-align: left;
+  cursor: pointer;
+  color: #3b2a14;
+
+  &:hover { background: #f3ece0; }
+
+  &:disabled { cursor: default; opacity: 0.6; }
+}
+
+// The chosen one. A border AND a background, not colour alone — this is
+// the file that is about to replace a collection.
+.backup-file-choice--chosen {
+  background: #efe3cd;
+  border-color: #8e5b2d;
+  box-shadow: inset 3px 0 0 #8e5b2d;
+}
+
+.backup-file-name {
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 0.74rem;
+  font-weight: 600;
+  word-break: break-all;
+}
+
+// Size and date: the two things that tell two similarly named backups
+// apart, which is the question somebody staring at this list is asking.
+.backup-file-detail {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: #8a7a63;
+  white-space: nowrap;
+}
+
+// A picker cannot be used mid-backup. Matches the image import's
+// treatment of the same situation.
+.file-picker--disabled {
+  opacity: 0.55;
+  cursor: default;
+  pointer-events: none;
 }
 
 // ---- Responsive & print ----

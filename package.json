@@ -1,15 +1,17 @@
 {
   "name": "coin-inventory-app",
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "buildNumber": 0,
   "scripts": {
     "ng": "ng",
     "start": "npx kill-port 3000 4200 && concurrently -k \"npm --prefix server run dev\" \"npm run start:app\"",
-    "start:app": "ng serve --host 0.0.0.0 --port 4200",
+    "start:app": "node scripts/ng-wasm-safe.mjs serve --host 0.0.0.0 --port 4200",
     "start:server": "npx kill-port 3000 4200 && npm --prefix server run dev",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
+    "build": "node scripts/ng-wasm-safe.mjs build",
+    "watch": "node scripts/ng-wasm-safe.mjs build --watch --configuration development",
     "test": "vitest run --root src",
     "test:server": "cd server && npm test",
+    "bump-build": "node scripts/bump-build.mjs",
     "migrate:from-sqlserver": "cd server && npm run migrate:from-sqlserver --"
   },
   "private": true,
@@ -27,21 +29,21 @@
     "tslib": "^2.3.0"
   },
   "overrides": {
-    "esbuild": "npm:esbuild-wasm@0.28.1"
+    "esbuild": "npm:esbuild-wasm@0.28.1",
+    "sass-embedded": "npm:sass@1.101.0",
+    "sass": "1.101.0"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "^22.1.3",
     "@angular/build": "^22.1.3",
     "@angular/cli": "^22.1.3",
     "@angular/compiler-cli": "^22.1.0",
-    "concurrently": "^9.1.0",
+    "concurrently": "^10.0.7",
     "fake-indexeddb": "^6.2.5",
     "fflate": "^0.8.3",
-    "jsdom": "^28.0.0",
     "kill-port": "^2.0.1",
     "prettier": "^3.8.1",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.11"
+    "vitest": "^5.1.0"
   },
   "engines": {
     "node": ">=22.5.0"

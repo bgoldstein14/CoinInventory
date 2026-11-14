@@ -280,7 +280,7 @@ export class SupportModal {
    */
   readonly includedSummary = computed<string[]>(() => [
     'Which versions of the app, the server and Windows you are running, and your processor type.',
-    'How many coins, photos and transactions you have — counts only, never anything that is in them.',
+    'How many coins, photos and sold coins you have — counts only, never anything that is in them.',
     `${this.recentErrorCount()} error(s) the app recorded this session.`,
     this.logSummaryLine(),
     'Whatever you typed in the box above.',

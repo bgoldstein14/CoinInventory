@@ -48,8 +48,13 @@
  * csv.service.ts explains why leaving that column unmapped is the only honest
  * option; this file must not undo it.
  *
- * `Dealer` is refused for the same class of reason: the coin-level dealer
- * field was removed, so there is no field for that column to land on.
+ * `Dealer` USED TO BE refused for a related reason -- the coin-level dealer
+ * field was removed, so there was no field for that column to land on. There
+ * is one again: `purchasedFrom`, the buy side's counterparty, and `dealer` is
+ * now one of its synonyms. The refusal was never about the word; it was about
+ * there being nowhere for it to go, and that has changed. (`Weight (oz)` is
+ * not the same case and must stay refused: the field exists, the UNIT is
+ * wrong.)
  *
  * ---- ONE SYNONYM IS DECIDED BY THE COLUMN'S VALUES, NOT BY ITS HEADING ----
  * `Date` is the only heading in the table that is ambiguous about WHICH KIND
@@ -106,9 +111,17 @@ export function normalizeHeader(raw: string): string {
  *
  *   price / amount / total   ambiguous between three money fields (see above)
  *   weight (oz) / ozt        wrong unit; see the header comment
- *   dealer                   the field no longer exists
  *   source                   provenance is ours, not the user's, to state --
  *                            it is importable only so an export round-trips
+ *   auction house            ambiguous between the two counterparty fields:
+ *                            the house you bought THROUGH and the house you
+ *                            consigned TO are both "the auction house"
+ *   consignor                names who put the coin INTO an auction, which
+ *                            on a purchase row is somebody the buyer never
+ *                            dealt with and may never learn
+ *
+ * `dealer` is NOT on that list any more. It was, while there was no field
+ * for it; `purchasedFrom` is that field and `dealer` is its synonym below.
  *
  * A field's own key and label are NOT repeated here; exact matching already
  * covers them, and duplicating them would make this table look like the
@@ -192,7 +205,51 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
     'current val', 'current price', 'worth', 'retail', 'book value',
     'appraised value', 'valuation'
   ],
+  /*
+   * WHO SOLD IT TO ME. Note what is absent as much as what is here.
+   *
+   * `dealer` leads the list because it is the heading a collector's sheet
+   * actually uses. `seller` is safe DESPITE looking like the sale side: on
+   * an inventory row the owner is the seller only after he has sold it, and
+   * the column he labels "Seller" is the person he bought from. The sale
+   * side says so out loud -- `buyer`, `sold to buyer` -- so the two never
+   * compete for one heading.
+   *
+   * `sold by` is NOT here, and the near-miss is the reason. `sold` and
+   * `sold for` are synonyms of `soldPrice` two entries down, so a sheet
+   * headed `Sold By` would read as the sale side to anyone scanning this
+   * table even though it means the opposite. Rule 1 of this file's header
+   * exists for exactly that kind of heading: left unmatched, it arrives at
+   * the mapping screen blank and the user places it in two seconds.
+   *
+   * `from` on its own is refused: a sheet's `From` is as likely to be the
+   * start of a date or grade range. `auction house` and `consignor` are
+   * refused too; see the omissions list in this file's header.
+   */
+  purchasedFrom: [
+    'dealer', 'dealer name', 'bought from', 'buy from', 'seller',
+    'vendor', 'supplier', 'acquired from', 'source of purchase'
+  ],
   notes: ['note', 'comment', 'comments', 'remarks', 'memo'],
+  /*
+   * THE DEAL'S NOTE. Every spelling here SAYS it is about the transaction,
+   * and that is the whole rule separating this list from `notes` above:
+   * a bare `Memo`, `Comment` or `Remarks` column is about the coin and
+   * belongs there. Nothing is listed in both, and a spec asserts it --
+   * the two are different database columns (Coins.Notes and
+   * Coins.TransactionNotes) and a synonym in both tables would quietly
+   * route one sheet's column to whichever field won the tie-break.
+   *
+   * `purchase notes` and `sale notes` both point here because there is one
+   * field for both legs. A sheet carrying BOTH columns therefore ties, and
+   * rule 3 leaves both blank for the user to place -- which is right: they
+   * hold different text and only he knows which to keep.
+   */
+  transactionNotes: [
+    'transaction notes', 'transaction note', 'transaction memo',
+    'transaction comments', 'deal notes', 'deal note',
+    'purchase notes', 'sale notes'
+  ],
   coinSet: ['set name', 'coin set', 'collection', 'album', 'folder'],
   metalContent: ['metal', 'metal type', 'precious metal'],
   // Grams only. Anything that names ounces is refused -- see the file header.
@@ -201,7 +258,13 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
     'sold', 'sold for', 'sold amount', 'sold value', 'sale price',
     'sale amount', 'realized', 'realized price'
   ],
-  soldDate: ['date sold', 'date of sale', 'sale date', 'sold on']
+  soldDate: ['date sold', 'date of sale', 'sale date', 'sold on'],
+  // "Buyer" is who the coin went TO, never who it came from. The purchase
+  // side NOW HAS a column of its own (`purchasedFrom`, above) where it had
+  // none before, so this is the one pair in the table that could be got
+  // backwards: keep the two lists disjoint and keep every spelling here
+  // unmistakably about the SALE.
+  soldTo: ['buyer', 'sold to buyer']
 };
 
 /**

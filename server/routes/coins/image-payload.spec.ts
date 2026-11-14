@@ -43,10 +43,77 @@ describe('normalizeImageEntry', () => {
     expect(normalizeImageEntry({ data: 'y' })?.imageData).toBe('y');
   });
 
-  it('returns null for anything that carries no usable image data', () => {
-    for (const junk of [null, undefined, '', 0, 42, true, [], {}, { sourcePath: 'C:\\a.jpg' }]) {
+  it('returns null for anything that carries neither a picture nor a path', () => {
+    // `{ sourcePath }` is DELIBERATELY not in this list any more: an entry
+    // with a path and no picture is now a REFERENCED photograph, which is a
+    // real thing to store. See the referenced describe block below.
+    for (const junk of [null, undefined, '', 0, 42, true, [], {}, { imageData: '' }]) {
       expect(normalizeImageEntry(junk)).toBeNull();
     }
+  });
+});
+
+/*
+ * REFERENCED PHOTOGRAPHS — "store where it is, not what it looks like".
+ *
+ * The user picks the mode in Settings. These tests pin the two things that
+ * make it a real mode rather than a label: the database must not end up with
+ * the picture, and nothing may be stored that has neither a picture nor a
+ * path (that would be a photograph silently thrown away).
+ */
+describe('normalizeImageEntry — referenced photographs', () => {
+  const REFERENCE = '/api/images/file?path=C%3A%5Cpics%5Ca.jpg';
+  const ABSOLUTE = `http://localhost:3000${REFERENCE}`;
+
+  it('stores a path and NO picture when the entry is a reference URL', () => {
+    // THE MUTATION THIS CATCHES: letting the URL fall through to the
+    // bare-string branch, which would write the URL text into ImageData and
+    // make "referenced" a lie.
+    expect(normalizeImageEntry(REFERENCE)).toEqual({
+      imageData: null,
+      sourcePath: 'C:\\pics\\a.jpg'
+    });
+  });
+
+  it('recognises the reference with an origin in front of it', () => {
+    // The client builds the absolute form, because a relative URL would be
+    // fetched from the dev server (:4200) rather than the API (:3000).
+    expect(normalizeImageEntry(ABSOLUTE)).toEqual({
+      imageData: null,
+      sourcePath: 'C:\\pics\\a.jpg'
+    });
+  });
+
+  it('takes the reference in object form too, and prefers the supplied path', () => {
+    expect(
+      normalizeImageEntry({ imageData: ABSOLUTE, sourcePath: '\\\\nas\\pics\\b.jpg' })
+    ).toEqual({ imageData: null, sourcePath: '\\\\nas\\pics\\b.jpg' });
+  });
+
+  it('treats "a path and no picture" as referenced', () => {
+    expect(normalizeImageEntry({ sourcePath: 'C:\\a.jpg' })).toEqual({
+      imageData: null,
+      sourcePath: 'C:\\a.jpg'
+    });
+    expect(normalizeImageEntry({ imageData: null, sourcePath: 'C:\\a.jpg' })).toEqual({
+      imageData: null,
+      sourcePath: 'C:\\a.jpg'
+    });
+  });
+
+  it('refuses a reference that points nowhere', () => {
+    // Neither a picture nor a location. Storing the row would lose the
+    // photograph quietly; dropping it is what every other unusable entry
+    // gets, and the import reports it.
+    expect(normalizeImageEntry('/api/images/file?path=')).toBeNull();
+    expect(normalizeImageEntry({ imageData: '/api/images/file?path=', sourcePath: '  ' })).toBeNull();
+  });
+
+  it('never mistakes a stored data URL for a reference', () => {
+    expect(normalizeImageEntry('data:image/jpeg;base64,abc')).toEqual({
+      imageData: 'data:image/jpeg;base64,abc',
+      sourcePath: null
+    });
   });
 });
 

@@ -103,7 +103,7 @@ export async function resetTestDatabase(): Promise<void> {
   await connection.withLock(() => {
     const database = rawDatabase(connection);
     // Child tables first. Foreign keys are ON, which is the point.
-    for (const table of ['CoinImages', 'Transactions', 'Coins', 'SpotPrices', 'AppSettings']) {
+    for (const table of ['CoinImages', 'Coins', 'SpotPrices', 'AppSettings']) {
       database.exec(`DELETE FROM ${table}`);
     }
   });

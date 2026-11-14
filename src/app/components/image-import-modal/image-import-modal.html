@@ -68,6 +68,22 @@
           location is not recorded, so there will be nothing to click through to.
         </p>
       }
+
+      <!-- WHICH STORAGE MODE THIS IMPORT WILL USE.
+           Set in Settings, and consequential enough to state here rather
+           than leave to be discovered: in "referenced" the database is
+           handed the path and no picture, so the folder above stops being a
+           convenience and becomes the only copy of the photograph. Only
+           shown for the non-default mode — a banner on every ordinary
+           import is a banner nobody reads. -->
+      @if (session.storageSettings().mode === 'referenced') {
+        <p class="hint-text hint-text--warn">
+          <strong>Photos will be referenced, not copied.</strong> Only the location of
+          each file is saved; the picture itself stays on disk and nowhere else, so
+          moving or deleting these files removes the photo from the app too. Change
+          this in Settings.
+        </p>
+      }
       @if (session.folder.preview(); as example) {
         <p class="source-path-example">
           <strong>Check this before you save.</strong> Each photo&rsquo;s location

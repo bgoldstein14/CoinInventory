@@ -105,3 +105,39 @@
   strong { white-space: nowrap; }
   span { flex: 1 1 auto; }
 }
+
+// ---- The loading state of the deferred screens (@defer in app.html) ----
+//
+// Every dialog in the shell, and the detail sidebar, are now fetched on
+// demand. On a local install a chunk arrives in a few milliseconds, so each
+// block is written as `@loading (after 100ms)`: on a normal open nothing is
+// ever drawn here. A box that flashes up and vanishes is worse than a dialog
+// that takes 40 ms longer.
+//
+// What this is for is the slow first open — cold disk cache, a busy machine —
+// where a click that paints nothing at all reads as a broken button.
+.defer-loading {
+  position: fixed;
+  inset: 0;
+  // The same layer the real modal backdrops use (styles/_modal.scss), so the
+  // handover from this to the dialog itself is invisible.
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 14, 8, 0.5);
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+// The detail sidebar is not a dialog: it is a column of the main grid, and
+// `.has-detail` has already reserved its 420px while the chunk loads. Fill
+// that column instead of covering the screen — dimming the whole app for a
+// sidebar would be a bigger interruption than the thing being waited for.
+.defer-loading--panel {
+  position: static;
+  background: transparent;
+  border: 1px dashed #e8daca;
+  border-radius: 14px;
+  color: #8a7a68;
+}

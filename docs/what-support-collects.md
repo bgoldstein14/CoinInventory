@@ -41,7 +41,7 @@ is written until you press the button.
 |---|---|
 | App, server and Node versions | So a bug can be matched to a release. |
 | Your Windows version and processor type | Most "it works for me" differences live here. |
-| How big your collection is | **Counts only** — how many coins, photos and transactions. |
+| How big your collection is | **Counts only** — how many coins, how many photos, and how many coins are marked sold. |
 | Errors you saw in the app this session | The failures behind the red messages. |
 | The most recent log lines | Only if you leave **Include recent log** ticked. Roughly the last two or three minutes of activity. |
 | The names and sizes of your log files | Names and sizes. Not their contents. Sent either way. |

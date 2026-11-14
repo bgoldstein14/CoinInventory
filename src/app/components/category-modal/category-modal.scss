@@ -148,6 +148,22 @@
   }
 }
 
+/* The row while it is being EDITED.
+   It stops being a row of text and becomes a form, so the flex direction
+   flips: the fields wrap onto their own lines instead of being squeezed
+   into the one line a name and a badge fitted on. The tint is what tells
+   the user, at a glance down a list of seventy, which one is open. */
+.reference-row--editing {
+  display: block;
+  padding: 8px 10px;
+  background: #fdf8f0;
+  border-left: 3px solid #d9c7a5;
+
+  .reference-form {
+    margin: 0;
+  }
+}
+
 .reference-row__name {
   flex: 1 1 auto;
   min-width: 0;
@@ -211,6 +227,46 @@
     background: #f4ecdf;
     transform: none;
     box-shadow: none;
+  }
+}
+
+/* COLLAPSED IS THE COMPACT STATE, AND IT HAS TO EARN ITS KEEP.
+ *
+ * Folding 70 issuer groups is only worth doing if what is left is shorter
+ * than the thing it replaced. At the expanded metrics a shut group is still
+ * a 10px-radius card with 7px of padding, a 1px bottom border under a
+ * header with nothing under it, and 6px of air below — roughly 36px each,
+ * so 70 of them is 2,500px of scrolling to look at a list of names.
+ *
+ * Shut, a group is a ROW IN A LIST and is styled like one: the border is
+ * the hairline between neighbours, the radius and the gap go, and the
+ * padding drops to what keeps the text legible. That is about 23px each,
+ * and the whole reference list fits in roughly a page and a half. The
+ * expanded group is untouched — it is content, and content keeps its card.
+ *
+ * The caret is the only thing that distinguishes the two states at a
+ * glance, which is why it stays full strength while everything else
+ * quietens down. */
+.issuer-group--collapsed {
+  margin-bottom: 0;
+  border-radius: 0;
+  border-bottom-width: 0;
+
+  &:first-of-type {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+  }
+
+  &:last-of-type {
+    border-bottom-width: 1px;
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+  }
+
+  .issuer-group__header {
+    padding: 3px 12px;
+    border-bottom: none;
+    background: #fdfbf7;
   }
 }
 

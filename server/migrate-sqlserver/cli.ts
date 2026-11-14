@@ -225,8 +225,8 @@ export function formatSummary(outcome: MigrationOutcome): string {
   lines.push('');
   lines.push('  Verified: every owner table has the same number of rows on both');
   lines.push('  sides; every one of your reference rows is present; every weight,');
-  lines.push('  precious-metal figure, percentage, price, transaction amount and');
-  lines.push('  spot price is byte-for-byte the same number (an exact ===, not a');
+  lines.push('  precious-metal figure, percentage, price and spot price is');
+  lines.push('  byte-for-byte the same number (an exact ===, not a');
   lines.push('  tolerance); and every coin still points at the denomination and');
   lines.push('  catalogue it pointed at, matched by name rather than by id.');
   lines.push('');

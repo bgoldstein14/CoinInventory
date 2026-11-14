@@ -80,14 +80,40 @@
  */
 
 // ----- Configuration --------------------------------------------------
-export { buildDbConfig, resolveDataDirectory, DB_PATH_ENV_VAR, DB_DIR_ENV_VAR } from './config';
+export {
+  buildDbConfig,
+  resolveDataDirectory,
+  DB_PATH_ENV_VAR,
+  DB_DIR_ENV_VAR,
+  DATABASE_FILE_NAME,
+  IN_MEMORY_DATABASE,
+} from './config';
 export type { DbConfig } from './config';
 
 // ----- Connection error classification --------------------------------
 export { isConnectionError, sqlErrorNumber } from './errors';
 
 // ----- Connection lifecycle (single-flight, generation-guarded) -------
+// `withDatabaseOffline` is deliberately NOT re-exported here. It is §16's
+// restore window and it closes the shared handle; a route reaching for it
+// must import db/pool.ts by name and read the comment above it first.
 export { getPool, resetPool, withDb } from './pool';
+
+// ----- What shape the file is (§16) -----------------------------------
+// The stamp that makes a database identifiable once it leaves this machine.
+export { SCHEMA_VERSION, UNSTAMPED_SCHEMA_VERSION, readSchemaVersion } from './schema';
+
+// ----- Backup / restore file operations (§16) -------------------------
+// The handle never leaves db/ — these take and return paths and plain data.
+export {
+  BACKUP_METADATA_PREFIX,
+  copyDatabaseFile,
+  distinctFolders,
+  looksLikeSqliteFile,
+  readDatabaseFileFacts,
+  writeBackupMetadata,
+} from './backup';
+export type { DatabaseFileFacts } from './backup';
 
 // ----- The request-shaped API the routes speak ------------------------
 export { DbConnection, DbRequest, DbTransaction, DbQueryError } from './sql-api';

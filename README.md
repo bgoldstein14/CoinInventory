@@ -188,6 +188,11 @@ npm run build      # tsc -p tsconfig.build.json
 npm run typecheck  # tsc --noEmit, type-checks the specs too
 ```
 
+The frontend builds with `@angular/build:application` (esbuild/Vite), not the deprecated webpack `@angular-devkit/build-angular:browser`. Two consequences are worth knowing:
+
+- **The output moved down one directory.** The bundle lands in `dist/coin-inventory-app/browser/`, not `dist/coin-inventory-app/`. `server.ts` serves that folder and sends its `index.html` for every non-API route; `server/dist-path.spec.ts` reads `angular.json` and fails if the two ever disagree, because nothing else would — the build succeeds, the server starts, and the browser gets an empty page.
+- **`npm run build`, `npm run watch`, and `npm run start:app` go through `scripts/ng-wasm-safe.mjs` instead of calling `ng` directly.** On a machine where group policy blocks native binaries, `esbuild` is overridden to `esbuild-wasm` (see `overrides` in `package.json`), and esbuild-wasm has a startup race that makes `ng build` fail with `The working directory "...": is not an absolute path`. That wrapper runs one tiny esbuild call first, which settles the race, then hands over to the CLI unchanged. Running `ng build` by hand on such a machine will fail; use the npm scripts. The wrapper's header explains the race in full, and the file can be deleted the day the overrides go.
+
 The server build uses `tsconfig.build.json`, which extends `tsconfig.json` but excludes `**/*.spec.ts` and `test-support/`. `tsconfig.json` deliberately includes everything so `typecheck` covers the tests; the build must not emit them. When it did, `npm run build` produced `dist/*.spec.js`, Vitest discovered those stale compiled copies and tried to run them, and they failed with "Vitest cannot be imported in a CommonJS module using require()".
 
 A stale `dist/` is worth taking seriously here: `npm start` runs `node dist/server.js`. **A `dist/` built before the connection-pool fix will silently run the old crashing code** — the version with no `pool.on('error')` listener. If you see the old symptoms after applying the fix, delete `server/dist/` and rebuild.

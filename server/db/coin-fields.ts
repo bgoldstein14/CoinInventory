@@ -210,6 +210,45 @@ export const COIN_FIELDS: Record<string, CoinColumnBinding> = {
    * src/app/types/catalog-reference.ts, which caps the editor input.
    */
   catalogNumber: { column: 'CatalogNumber', sqlType: NVarChar(50), maxLength: 50 },
+  /*
+   * THE ACQUISITION / DISPOSAL RECORD — what used to be the Transactions
+   * table. The table is gone; see the block on these columns in
+   * db/schema.sql for why.
+   *
+   * ONLY THREE ENTRIES APPEAR HERE because only three columns are new. The
+   * money and the dates were already bound further up this same map and are
+   * REUSED, NOT DUPLICATED:
+   *
+   *   purchaseDate  -> Coins.PurchaseDate     the buy's date
+   *   purchasePrice -> Coins.PurchasePrice    the buy's price (UI: "Cost")
+   *   soldDate      -> Coins.SoldDate         the sale's date
+   *   soldPrice     -> Coins.SoldPrice        the sale's price
+   *
+   * Adding a second binding for any of those would generate an UPDATE that
+   * names the same column twice, so do not.
+   *
+   * 200 characters on both counterparties, matching the old
+   * Transactions.Dealer width: these are names of dealers, auction houses
+   * and people, and the old column was the measured answer to how long they
+   * get.
+   */
+  purchasedFrom: { column: 'PurchasedFrom', sqlType: NVarChar(200), maxLength: 200 },
+  soldTo:        { column: 'SoldTo',        sqlType: NVarChar(200), maxLength: 200 },
+  /*
+   * *** transactionNotes IS NOT notes. DO NOT MERGE THEM, DO NOT RENAME
+   * EITHER TO THE OTHER. ***
+   *
+   *   notes            -> Coins.Notes             the COIN's own note
+   *   transactionNotes -> Coins.TransactionNotes  the DEAL's note
+   *
+   * They sit next to each other in the detail panel, which is exactly why
+   * the keys and the columns are spelled so differently: there is no bare
+   * `Notes` on this side and no `CoinNotes` on that one, so a grep for
+   * either finds one field and never both. A PUT carrying the wrong key
+   * would overwrite the user's coin description with a line about a dealer's
+   * premium, with a 200 response and nothing to notice.
+   */
+  transactionNotes: { column: 'TransactionNotes', sqlType: NVarChar(MAX) },
 };
 
 /**

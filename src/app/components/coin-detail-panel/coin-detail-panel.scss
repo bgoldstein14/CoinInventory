@@ -1,9 +1,8 @@
-// Styles for the detail sidebar frame: action buttons, original-file list and
-// the transaction history. The editable form's own styles live with
-// CoinEditorForm.
+// Styles for the detail sidebar FRAME: the action buttons and the draft
+// note. Everything inside the frame — the editable grid, the Transactions
+// card and the Notes box — is CoinEditorForm and is styled there.
 @use '../../styles/controls' as *;
 @use '../../styles/panel' as *;
-@use '../../styles/field' as *;
 
 // Keep the component host out of the layout: `<aside class="panel
 // detail-panel">` must remain a direct child of the `.main-content` grid for
@@ -82,105 +81,17 @@
   }
 }
 
-// ---- Transaction history ----
-
-// ---- Original image files ----
-// Same card treatment as the transaction history below, so the sidebar reads
-// as a stack of consistent sections.
-.detail-image-paths {
-  margin-top: 14px;
-  padding: 12px;
-  background: #faf6f1;
-  border: 1px solid #ecdcc0;
-  border-radius: 10px;
-  // The sidebar is narrow and paths are long. Without this a flex/grid child
-  // refuses to shrink below its content width and pushes the panel wider.
-  min-width: 0;
-
-  h3 { margin: 0 0 8px; font-size: 0.88rem; }
-}
-
-// A stacked list of paths. The children are the CoinImagePathLink components'
-// own <a>/<span> elements: that component sets `:host { display: contents }`,
-// so they become direct grid items here and the `gap` spaces the text itself
-// rather than an invisible wrapper.
-.image-path-list {
-  display: grid;
-  gap: 5px;
-  min-width: 0;
-}
-
-.image-path-empty {
-  margin: 0;
-  color: #8a7a63;
-  font-size: 0.78rem;
-}
-
-.detail-transactions {
-  margin-top: 14px;
-  padding: 12px;
-  background: #faf6f1;
-  border: 1px solid #ecdcc0;
-  border-radius: 10px;
-
-  h3 { margin: 0 0 8px; font-size: 0.88rem; }
-}
-
-.transaction-list {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  display: grid;
-  gap: 6px;
-
-  li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px;
-    background: #fff;
-    border: 1px solid #e8daca;
-    border-radius: 8px;
-    font-size: 0.8rem;
-  }
-}
-
-.txn-type {
-  text-transform: capitalize;
-  font-weight: 600;
-  font-size: 0.72rem;
-  padding: 2px 6px;
-  border-radius: 999px;
-  background: #eaf1fb;
-  color: #29528a;
-}
-
-.txn-amount { font-weight: 600; }
-.txn-date { color: #7a6a53; }
-.txn-dealer { color: #5c4935; font-style: italic; }
-
-// Each control is wrapped in a `.detail-field` label, so the flex children
-// here are the labels rather than the bare inputs. The control's own
-// appearance (border, padding, background) comes from the shared
-// `styles/_field.scss` rule, which is what keeps this row visually identical
-// to the coin editor above it.
-.add-transaction-form {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-  align-items: end; // captions vary in height; keep the controls on one line
-
-  .detail-field { flex: 0 0 auto; }
-
-  // Sizes go on the `.detail-field` wrapper, not on the control itself.
-  select { min-width: 100px; }
-  input[type="date"] { width: 130px; }
-}
-
-.detail-field--txn-amount { width: 90px; }
-
-// Notes takes whatever room is left on the row.
-.detail-field--txn-notes { flex: 1 1 120px; min-width: 120px; }
+// ---- Transaction history and original image files: BOTH REMOVED ----
+//
+// This file used to carry `.detail-transactions`, `.transaction-list`, the
+// `.txn-*` chips, `.add-transaction-form`, `.detail-image-paths`,
+// `.image-path-list` and `.image-path-empty`. The history list and its
+// add-a-transaction row went with the Transactions table; the original-file
+// list was removed from the panel at the owner’s request.
+//
+// The Transactions SECTION that replaced the history is a card of coin
+// fields in CoinEditorForm, and its styles live in coin-editor-form.scss
+// beside the Notes box it has to stay distinguishable from.
 
 // ---- "Needs a Denomination before it can be saved" ----
 //

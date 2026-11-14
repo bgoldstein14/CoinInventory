@@ -80,6 +80,52 @@ export interface NewIssuer {
 }
 
 /**
+ * What `POST /api/issuers` answers with — a CREATION or a REVIVAL.
+ *
+ * *** REMOVAL IS A SOFT DELETE, SO A REMOVED ISSUER STILL HOLDS ITS NAME. ***
+ * Adding it again therefore cannot insert a second row: `UQ_Issuers_Name`
+ * forbids it, and a new id would orphan every denomination filed under the
+ * old one. The server revives the existing row instead, keeping the id, and
+ * says so here.
+ *
+ * `revived` is absent on a plain creation rather than `false`, because the
+ * creation path's body is unchanged and the client reads it as truthy.
+ */
+export interface IssuerCreationResult extends IssuerRecord {
+  /** True when an existing, soft-deleted row came back rather than a new one. */
+  revived?: boolean;
+  /**
+   * How many of its denominations came back with it.
+   *
+   * ZERO IS A REAL ANSWER and a different sentence: the issuer is back but
+   * empty, and the user has to be told which of the two happened. It also
+   * decides whether the online lookup runs — proposing labels the issuer
+   * already has would invite a duplicate under one issuer, which resolves
+   * every coin carrying that text to NULL.
+   */
+  denominationsRestored?: number;
+}
+
+/**
+ * What `DELETE /api/issuers/:id` reports it actually did.
+ *
+ * The removal CASCADES — the issuer's denominations go with it and every
+ * coin using one has its `DenominationId` cleared — so a bare 204 would
+ * leave the screen unable to say how much it just changed. Both numbers are
+ * read back to the user, and they come from the transaction rather than
+ * from the counts the confirmation quoted, which is the difference between
+ * reporting what happened and repeating what was predicted.
+ *
+ * `Coins.Denomination` is NOT among the things that changed. The coins keep
+ * the text they already recorded; only the link goes.
+ */
+export interface IssuerRemovalResult {
+  issuerId: number;
+  denominationsRemoved: number;
+  coinsUnlinked: number;
+}
+
+/**
  * What `GET /api/denomination-lookup` said happened.
  *
  *   results      candidates came back

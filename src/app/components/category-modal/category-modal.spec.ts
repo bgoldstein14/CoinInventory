@@ -101,7 +101,12 @@ async function createModal(
   api['lookUpDenominations'] = vi.fn(() =>
     of(options.lookup ?? { outcome: 'none', source: 'Wikidata', proposals: [], reason: null })
   );
-  api['deleteIssuer'] = vi.fn(() => of(undefined));
+  // The real shape. DELETE cascades and reports what it removed, and the
+  // screen reads those numbers back to the user; a bare `of(undefined)`
+  // here would let a component that ignored them pass.
+  api['deleteIssuer'] = vi.fn((id: number) =>
+    of({ issuerId: id, denominationsRemoved: 0, coinsUnlinked: 0 })
+  );
 
   const injector = Injector.create({
     providers: [
@@ -650,19 +655,6 @@ describe('CategoryModal — issuers', () => {
     expect(modal['issuerDraft']().name).toBe('Parthia');
   });
 
-  it('refuses to remove an issuer that still has denominations, without asking', async () => {
-    // A refusal, not a warning — see describeIssuerRemoval for why this one
-    // case differs from every other Remove on this screen.
-    const { modal, api } = await createModal();
-    const { prompts } = captureConfirm(true);
-
-    await modal.removeIssuer(MEXICO);
-
-    expect(api['deleteIssuer']).not.toHaveBeenCalled();
-    expect(prompts).toEqual([]);
-    expect(modal['issuerError']()).toContain('2 denominations');
-  });
-
   it('removes an empty issuer once confirmed', async () => {
     const { modal, api } = await createModal();
     answerConfirm(true);
@@ -679,6 +671,393 @@ describe('CategoryModal — issuers', () => {
 
     await modal.removeIssuer(BURMA);
     expect(api['deleteIssuer']).not.toHaveBeenCalled();
+  });
+});
+
+/* ----- Issuers: THE DENOMINATION COUNT, AND WHY IT USED TO GO STALE -----
+ *
+ * `IssuerRecord.denominationCount` arrives with the issuer list and is a
+ * snapshot of a server-side GROUP BY. It was then maintained by hand —
+ * incremented when the online lookup wrote rows and decremented by nothing
+ * at all — and `removeIssuer` consulted it before deciding whether the
+ * issuer could go. So the owner removed the denominations, the number did
+ * not move, and Remove refused forever. "I tried removing the denominations
+ * first, but that didn't work" is this, exactly.
+ *
+ * The repair is not a reload after every edit; it is that there is no
+ * second copy to go stale. These tests pin that the figure comes from
+ * `inv.denominations()`, which is the same array the pane next door
+ * renders. */
+
+describe('CategoryModal — the issuer denomination count is derived, not cached', () => {
+  it('counts the live denominations and ignores the number the record carried', async () => {
+    // MEXICO says denominationCount: 2. The live list says three.
+    const { modal, inv } = await createModal();
+    inv.denominations.set([
+      ...DENOMINATIONS,
+      { denominationId: 105, label: '2 Reales', country: 'MX', issuerId: 1, sortOrder: 3, isActive: true },
+    ]);
+
+    expect(MEXICO.denominationCount).toBe(2);
+    expect(modal['issuerDenominationCount'](1)).toBe(3);
+  });
+
+  it('comes DOWN the moment a denomination is removed — the bug itself', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    expect(modal['issuerDenominationCount'](1)).toBe(2);
+
+    // Exactly what removeDenomination does to the list: replace it without
+    // the removed row. Nothing patches a count and nothing reloads.
+    inv.denominations.set(DENOMINATIONS.filter((d) => d.denominationId !== 103));
+    expect(modal['issuerDenominationCount'](1)).toBe(1);
+
+    inv.denominations.set([]);
+    expect(modal['issuerDenominationCount'](1)).toBe(0);
+  });
+
+  it('lets Remove through once the denominations are gone, with no reload in between', async () => {
+    // THE OWNER'S SEQUENCE, END TO END. Remove the denominations, then the
+    // issuer. The old code never reached the server on the second step.
+    const { modal, inv, api } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    const { prompts } = captureConfirm(true);
+
+    inv.denominations.set([]);
+    await modal.removeIssuer(MEXICO);
+
+    expect(api['deleteIssuer']).toHaveBeenCalledWith(1);
+    expect(prompts[0]).toContain('no denominations');
+    expect(modal['issuerError']()).toBe('');
+  });
+
+  it('does not double-count the rows the online lookup just wrote', async () => {
+    // acceptProposals used to ADD labels.length to the cached count on top
+    // of inv.addDenomination having already appended the rows. With the
+    // count derived, a second increment would now show four where there
+    // are two.
+    const { modal, inv } = await createModal({
+      lookup: {
+        outcome: 'results',
+        source: 'Wikidata',
+        proposals: [{ label: '8 Reales' }, { label: '1 Peso' }],
+        reason: null,
+      } as DenominationLookupResult,
+    });
+    vi.spyOn(inv, 'addDenomination').mockImplementation(async (d) => {
+      inv.denominations.set([
+        ...inv.denominations(),
+        { denominationId: 900 + inv.denominations().length, issuerId: 1, sortOrder: 0, isActive: true, country: 'MX', label: '', ...d } as Denomination,
+      ]);
+    });
+
+    modal['lookupIssuer'].set(MEXICO);
+    modal['lookupProposals'].set([
+      { label: '8 Reales', chosen: true },
+      { label: '1 Peso', chosen: true },
+    ]);
+    await modal.acceptProposals();
+
+    expect(modal['issuerDenominationCount'](1)).toBe(2);
+  });
+
+  it('sums the coin usage of an issuer’s denominations, and no one else’s', async () => {
+    // The usage index in createModal says denomination 103 is used by 3
+    // coins. 104 is used by none, and Burma's 201 is somebody else's.
+    const { modal, inv } = await createModal();
+    inv.denominations.set([
+      ...DENOMINATIONS,
+      { denominationId: 201, label: '1 Kyat', country: 'MM', issuerId: 2, sortOrder: 1, isActive: true },
+    ]);
+
+    expect(modal['issuerCoinCount'](1)).toBe(3);
+    expect(modal['issuerCoinCount'](2)).toBe(0);
+  });
+});
+
+/* ----- Issuers: the cascade, and the warning in front of it ----- */
+
+describe('CategoryModal — removing an issuer cascades, after a warning', () => {
+  it('warns with BOTH numbers and names the issuer', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    const { prompts } = captureConfirm(false);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(prompts[0]).toContain('Mexico');
+    expect(prompts[0]).toContain('all 2 of its denominations');
+    // THE COIN COUNT. A warning that cannot say this is not strong, just
+    // alarming — the user's only safe answer would be no.
+    expect(prompts[0]).toContain('3 coins');
+  });
+
+  it('promises that no coin is deleted and each keeps its text', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    const { prompts } = captureConfirm(false);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(prompts[0]).toContain('No coin is deleted');
+    expect(prompts[0]).toContain('read as Other');
+    expect(prompts[0]).not.toContain('__OTHER__');
+  });
+
+  it('escalates: an issuer no coin depends on gets the quieter sentence', async () => {
+    const { modal, inv } = await createModal();
+    // Mexico's two denominations, neither of them used by a coin.
+    inv.denominations.set([
+      { denominationId: 301, label: '4 Reales', country: 'MX', issuerId: 1, sortOrder: 1, isActive: true },
+      { denominationId: 302, label: '2 Reales', country: 'MX', issuerId: 1, sortOrder: 2, isActive: true },
+    ]);
+    const { prompts } = captureConfirm(false);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(prompts[0]).toContain('2 denominations');
+    expect(prompts[0]).toContain('nothing else changes');
+    expect(prompts[0]).not.toContain('cannot be undone');
+  });
+
+  it('does NOT call the server when the confirmation is declined', async () => {
+    const { modal, inv, api } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    answerConfirm(false);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(api['deleteIssuer']).not.toHaveBeenCalled();
+    expect(modal['issuers']().some((issuer) => issuer.issuerId === 1)).toBe(true);
+  });
+
+  it('re-reads the denominations and the counts, because the cascade changed rows it did not name', async () => {
+    // The server has just deactivated denominations this client is still
+    // holding. Leaving them in the list would put them back under "No
+    // issuer yet" — the exact mess the old refusal was invented to avoid.
+    const { modal, inv, api } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    const load = vi.spyOn(inv, 'loadDenominations').mockResolvedValue(undefined);
+    answerConfirm(true);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(api['deleteIssuer']).toHaveBeenCalledWith(1);
+    expect(load).toHaveBeenCalled();
+    // Once on open, once after the cascade.
+    expect(api['getReferenceUsage'].mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('reports what the SERVER says it did, not what the dialog predicted', async () => {
+    const { modal, inv, api, notification } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    vi.spyOn(inv, 'loadDenominations').mockResolvedValue(undefined);
+    api['deleteIssuer'] = vi.fn(() => of({ issuerId: 1, denominationsRemoved: 31, coinsUnlinked: 43 }));
+    answerConfirm(true);
+
+    await modal.removeIssuer(MEXICO);
+
+    const said = notification['showInfo'].mock.calls.map((call) => String(call[0]));
+    expect(said.some((message) => message.includes('31 denominations') && message.includes('43 coins'))).toBe(
+      true
+    );
+  });
+
+  it('keeps the issuer and says why when the server refuses', async () => {
+    const { modal, inv, api } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    api['deleteIssuer'] = vi.fn(() => throwError(() => new Error('boom')));
+    answerConfirm(true);
+
+    await modal.removeIssuer(MEXICO);
+
+    expect(modal['issuers']().some((issuer) => issuer.issuerId === 1)).toBe(true);
+    expect(modal['issuerError']().length).toBeGreaterThan(0);
+  });
+});
+
+/* ----- Issuers: RENAMING, which is the fault behind all the others -----
+ *
+ * The owner typed a name in lower case and the row offered him one button:
+ * Remove. PUT /issuers/:id had been on the server the whole time and
+ * nothing called it. */
+
+describe('CategoryModal — editing an issuer', () => {
+  it('fills the edit form from the row, years as strings', async () => {
+    const { modal } = await createModal();
+
+    modal['beginIssuerEdit'](MEXICO);
+
+    expect(modal['editingIssuerId']()).toBe(1);
+    expect(modal['issuerEditDraft']()).toEqual({
+      name: 'Mexico',
+      isoCode: 'MX',
+      validFrom: '1821',
+      validTo: '',
+      // Editing an issuer must never fire the outbound lookup.
+      lookUpOnline: false,
+    });
+  });
+
+  it('PUTs the edit and keeps the id, sending no kind', async () => {
+    // NO `kind` IN THE PAYLOAD, exactly as the add path sends none. The
+    // server derives it and falls back to the stored value; asserting one
+    // here would be the client overruling that.
+    const { modal, api } = await createModal();
+    api['updateIssuer'] = vi.fn((id: number, issuer: Record<string, unknown>) =>
+      of({ ...MEXICO, ...issuer, issuerId: id })
+    );
+
+    modal['beginIssuerEdit'](MEXICO);
+    modal['setIssuerEditField']('name', 'México');
+    await modal.saveIssuerEdit();
+
+    expect(api['updateIssuer']).toHaveBeenCalledWith(1, {
+      name: 'México',
+      isoCode: 'MX',
+      validFrom: 1821,
+      validTo: null,
+    });
+    const row = modal['issuers']().find((issuer) => issuer.issuerId === 1);
+    expect(row?.name).toBe('México');
+    expect(modal['editingIssuerId']()).toBeNull();
+  });
+
+  it('lets an issuer keep its own name — the lower-case fix, which is the point', async () => {
+    // Validating against EVERY name, including this row's own, would make
+    // "mexico" -> "Mexico" fail against itself. That is the one edit this
+    // whole feature exists for.
+    const { modal, api } = await createModal({
+      issuers: [{ ...MEXICO, name: 'mexico' }, BURMA],
+    });
+    api['updateIssuer'] = vi.fn((id: number, issuer: Record<string, unknown>) =>
+      of({ ...MEXICO, ...issuer, issuerId: id })
+    );
+
+    modal['beginIssuerEdit']({ ...MEXICO, name: 'mexico' });
+    modal['setIssuerEditField']('name', 'Mexico');
+    await modal.saveIssuerEdit();
+
+    expect(api['updateIssuer']).toHaveBeenCalled();
+    expect(modal['issuerEditError']()).toBe('');
+  });
+
+  it('still catches a clash with a DIFFERENT issuer', async () => {
+    const { modal, api } = await createModal();
+
+    modal['beginIssuerEdit'](MEXICO);
+    modal['setIssuerEditField']('name', 'burma');
+    await modal.saveIssuerEdit();
+
+    expect(api['updateIssuer']).not.toHaveBeenCalled();
+    expect(modal['issuerEditError']()).toContain('Burma');
+  });
+
+  it('keeps the row open, with the typing in it, when the server refuses', async () => {
+    const { modal, api } = await createModal();
+    api['updateIssuer'] = vi.fn(() => throwError(() => new Error('409')));
+
+    modal['beginIssuerEdit'](MEXICO);
+    modal['setIssuerEditField']('name', 'Mexico City');
+    await modal.saveIssuerEdit();
+
+    expect(modal['editingIssuerId']()).toBe(1);
+    expect(modal['issuerEditDraft']().name).toBe('Mexico City');
+    expect(modal['issuerEditError']().length).toBeGreaterThan(0);
+  });
+
+  it('reports what is wrong with the draft instead of PUTting it', async () => {
+    const { modal, api } = await createModal();
+
+    modal['beginIssuerEdit'](MEXICO);
+    modal['setIssuerEditField']('isoCode', 'MMM');
+    await modal.saveIssuerEdit();
+
+    expect(api['updateIssuer']).not.toHaveBeenCalled();
+    expect(modal['issuerEditError']()).toContain('two letters');
+  });
+
+  it('cancels without writing anything', async () => {
+    const { modal, api } = await createModal();
+
+    modal['beginIssuerEdit'](MEXICO);
+    modal['setIssuerEditField']('name', 'Nowhere');
+    modal['cancelIssuerEdit']();
+    await modal.saveIssuerEdit();
+
+    expect(api['updateIssuer']).not.toHaveBeenCalled();
+    expect(modal['editingIssuerId']()).toBeNull();
+  });
+
+  /**
+   * THE BRITISH COLONIAL GUARANTEE, on the edit path.
+   *
+   * resolveIssuerKind keeps a STORED kind when the year span is blank, so
+   * that the one seeded issuer with no dates and a curated 'historical' is
+   * not silently reclassified the first time somebody fixes a typo in it.
+   * The edit form has to show the same thing the server will store, or the
+   * tag the user reads while saving disagrees with the row they save.
+   */
+  it('previews the STORED kind for an undated issuer, not the undated default', async () => {
+    const colonial = {
+      ...BURMA,
+      issuerId: 7,
+      name: 'British Colonial',
+      isoCode: null,
+      kind: 'historical' as const,
+      validFrom: null,
+      validTo: null,
+    };
+    const { modal } = await createModal({ issuers: [colonial] });
+
+    modal['beginIssuerEdit'](colonial);
+    modal['setIssuerEditField']('name', 'British Colonial ');
+
+    expect(modal['derivedIssuerEditKind']()).toBe('historical');
+  });
+
+  it('DOES reclassify once the user gives that issuer years', async () => {
+    const colonial = {
+      ...BURMA,
+      issuerId: 7,
+      name: 'British Colonial',
+      isoCode: null,
+      kind: 'historical' as const,
+      validFrom: null,
+      validTo: null,
+    };
+    const { modal } = await createModal({ issuers: [colonial] });
+
+    modal['beginIssuerEdit'](colonial);
+    modal['setIssuerEditField']('validFrom', '-27');
+
+    expect(modal['derivedIssuerEditKind']()).toBe('ancient');
+  });
+
+  it('offers Edit on the row and wires the form, in the template', async () => {
+    // No jsdom here, so the template text is asserted directly. Comments
+    // are stripped first — this block is introduced by one that names
+    // every handler below.
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain('beginIssuerEdit(issuer)');
+    expect(template).toContain('saveIssuerEdit()');
+    expect(template).toContain('cancelIssuerEdit()');
+    expect(template).toContain('isEditingIssuer(issuer.issuerId)');
+    // The edit preview, not the add form's.
+    expect(template).toContain('derivedIssuerEditKind()');
+  });
+
+  it('reads the row badge off the derived counts, never off the record', async () => {
+    // A template that went back to `issuer.denominationCount` would pass
+    // every component test in this file while showing the user the stale
+    // number that made Remove refuse forever.
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain('issuerDenominationLabel(issuer.issuerId)');
+    expect(template).toContain('issuerCoinCount(issuer.issuerId)');
+    expect(template).not.toContain('issuer.denominationCount');
+    expect(template).not.toContain('issuer.coinCount');
   });
 });
 
@@ -1217,5 +1596,416 @@ describe('CategoryModal — the online denomination lookup', () => {
     // And the consent checkbox is on the form, not hidden in Settings.
     expect(template).toContain('setLookUpOnline(');
     expect(template).toContain('lookupConsentLabel');
+  });
+});
+
+/* ----- Folding 70 issuer groups ----- */
+
+describe('CategoryModal — collapse and expand all', () => {
+  it('opens with every group expanded, as the pane always has', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    expect(modal['isCollapsed']('Mexico')).toBe(false);
+    expect(modal['isCollapsed']('Burma')).toBe(false);
+  });
+
+  it('offers Collapse first, and folds every group with one press', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    expect(modal['expandAllControl']().action).toBe('collapse');
+    modal['pressExpandAll']();
+
+    expect(modal['isCollapsed']('Mexico')).toBe(true);
+    expect(modal['isCollapsed']('Burma')).toBe(true);
+  });
+
+  it('then offers Expand, and the next press opens them again', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    modal['pressExpandAll']();
+    expect(modal['expandAllControl']().action).toBe('expand');
+
+    modal['pressExpandAll']();
+    expect(modal['isCollapsed']('Mexico')).toBe(false);
+    expect(modal['isCollapsed']('Burma')).toBe(false);
+  });
+
+  it('still offers Collapse while a single group is left open', async () => {
+    // One open group is enough to bury the headings under it, which is the
+    // only reason the control exists. A majority rule would make the button
+    // do the wrong thing at exactly the moment it matters.
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    modal['pressExpandAll']();
+    modal['toggleGroup']('Mexico');
+
+    expect(modal['expandAllControl']().action).toBe('collapse');
+  });
+
+  it('keeps every group OPEN while a search is running, however it was folded', async () => {
+    // The rule that was already here and must survive: hiding a search
+    // result because its group happened to be shut makes the search
+    // silently incomplete.
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    modal['pressExpandAll']();
+    expect(modal['isCollapsed']('Mexico')).toBe(true);
+
+    modal['denominationSearch'].set('reales');
+    expect(modal['isCollapsed']('Mexico')).toBe(false);
+
+    // And the fold is remembered rather than thrown away by the search.
+    modal['denominationSearch'].set('');
+    expect(modal['isCollapsed']('Mexico')).toBe(true);
+  });
+
+  it('folds a group that was filtered out while the button was pressed', async () => {
+    /* THE HOLE A LIST OF FOLDED HEADINGS WOULD HAVE. Collapse all while a
+     * search is narrowing the pane to one issuer, then clear the search:
+     * with a denylist the groups that were not on screen were never named
+     * and would spring open again. */
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    modal['denominationSearch'].set('reales');
+    expect(modal['denominationGroups']().map((group) => group.heading)).toEqual(['Mexico']);
+    modal['pressExpandAll']();
+
+    modal['denominationSearch'].set('');
+    expect(modal['isCollapsed']('Burma')).toBe(true);
+  });
+
+  it('puts the control on the denominations pane, and marks a shut group compact', async () => {
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain('pressExpandAll()');
+    expect(template).toContain('expandAllControl().label');
+    expect(template).toContain('expandAllControl().ariaLabel');
+    // The modifier is what makes the collapsed state SHORTER rather than
+    // merely emptier; without it 70 folded cards are their own scroll.
+    expect(template).toContain('issuer-group--collapsed');
+  });
+
+  it('has a rule for the compact state, not just a class name', async () => {
+    const styles = readFileSync(join(__dirname, 'category-modal.scss'), 'utf8');
+    expect(styles).toContain('.issuer-group--collapsed');
+  });
+});
+
+/* ----- Landing on a newly added issuer ----- */
+
+describe('CategoryModal — the issuer just added is focused, never isolated', () => {
+  async function addSiam(modal: CategoryModal): Promise<void> {
+    modal['issuerDraft'].set({
+      name: 'Siam',
+      isoCode: 'MM',
+      validFrom: '1948',
+      validTo: '1989',
+      lookUpOnline: false,
+    });
+    await modal.addIssuerFromDraft();
+  }
+
+  it('opens the new issuer and folds every other one', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    await addSiam(modal);
+
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(modal['isCollapsed']('Siam')).toBe(false);
+    expect(modal['isCollapsed']('Mexico')).toBe(true);
+    expect(modal['isCollapsed']('Burma')).toBe(true);
+  });
+
+  it('LEAVES EVERY OTHER ISSUER IN THE LIST', async () => {
+    /* *** THE BUG THIS REPLACES. *** The pane used to leave the owner
+     * looking at the issuer he had just added with no route to any other.
+     * Focus is a collapse, so the other issuers are still grouped, still
+     * counted and still on screen. */
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    await addSiam(modal);
+
+    const headings = modal['denominationGroups']().map((group) => group.heading);
+    expect(headings).toEqual(['Burma', 'Mexico', 'Siam']);
+  });
+
+  it('leaves them one click from opening, with their rows intact', async () => {
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+
+    await addSiam(modal);
+    modal['toggleGroup']('Mexico');
+
+    expect(modal['isCollapsed']('Mexico')).toBe(false);
+    const mexico = modal['denominationGroups']().find((group) => group.heading === 'Mexico');
+    expect(mexico?.denominations.map((d) => d.label)).toEqual(['8 Reales', '1 Peso']);
+  });
+
+  it('focuses the same way after the lookup proposals are accepted', async () => {
+    const { modal, inv } = await createModal({
+      lookup: { outcome: 'results', source: 'Wikidata', proposals: ['kyat'], reason: null },
+    });
+    inv.denominations.set(DENOMINATIONS);
+    vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+
+    modal['issuerDraft'].set({
+      name: 'Siam',
+      isoCode: 'MM',
+      validFrom: '1948',
+      validTo: '1989',
+      lookUpOnline: true,
+    });
+    await modal.addIssuerFromDraft();
+    await modal.acceptProposals();
+
+    expect(modal['isCollapsed']('Siam')).toBe(false);
+    expect(modal['isCollapsed']('Mexico')).toBe(true);
+    expect(modal['denominationGroups']().map((group) => group.heading)).toContain('Mexico');
+  });
+
+  it('opens the group a denomination was just added to, and only that one', async () => {
+    // Writing a row into a folded group and leaving it folded reads as the
+    // Add button having done nothing — and folded is now a normal state to
+    // be adding from.
+    const { modal, inv } = await createModal();
+    inv.denominations.set(DENOMINATIONS);
+    vi.spyOn(inv, 'addDenomination').mockResolvedValue(undefined);
+
+    modal['pressExpandAll']();
+    modal['newDenominationIssuerId'].set(1);
+    modal['newDenominationLabel'].set('2 Pesos');
+    await modal.addDenominationFromDraft();
+
+    expect(modal['isCollapsed']('Mexico')).toBe(false);
+    expect(modal['isCollapsed']('Burma')).toBe(true);
+  });
+});
+
+/* ----- The one state in which the pane really does show one issuer ----- */
+
+describe('CategoryModal — a failed issuer load says so and stays said', () => {
+  async function createWithFailedIssuers() {
+    const created = await createModal();
+    created.api['getIssuers'] = vi.fn(() => throwError(() => new Error('offline')));
+    await created.modal['retryLoadIssuers']();
+    return created;
+  }
+
+  it('records the failure instead of only firing a toast', async () => {
+    /* *** WHY THIS MATTERS ON THIS SCREEN. *** Nothing filters the
+     * denominations pane by issuer: its headings ARE the issuer list. An
+     * empty list therefore files all 1,207 rows under "No issuer yet",
+     * and one added issuer leaves exactly one heading on screen — which
+     * reads as the pane having filtered itself. The toast that announced
+     * the failure is gone by the time the user gets there. */
+    const { modal } = await createWithFailedIssuers();
+
+    expect(modal['issuers']()).toEqual([]);
+    expect(modal['issuerLoadFailed']()).toBe(true);
+  });
+
+  it('raises the banner on the two panes built out of the issuer list', async () => {
+    const { modal } = await createWithFailedIssuers();
+
+    modal.selectSection('denominations');
+    expect(modal['issuerListUnavailable']()).toBe(true);
+
+    modal.selectSection('issuers');
+    expect(modal['issuerListUnavailable']()).toBe(true);
+  });
+
+  it('does not raise it on a pane the failure cannot affect', async () => {
+    // A standing warning on a pane it does not apply to is a warning users
+    // learn to read past.
+    const { modal } = await createWithFailedIssuers();
+
+    modal.selectSection('categories');
+    expect(modal['issuerListUnavailable']()).toBe(false);
+  });
+
+  it('clears once a retry succeeds', async () => {
+    const { modal, api } = await createWithFailedIssuers();
+
+    api['getIssuers'] = vi.fn(() => of([MEXICO, BURMA]));
+    await modal['retryLoadIssuers']();
+
+    expect(modal['issuerLoadFailed']()).toBe(false);
+    expect(modal['issuers']().map((issuer) => issuer.name)).toEqual(['Mexico', 'Burma']);
+  });
+
+  it('renders the banner and its retry, comments stripped first', async () => {
+    const template = stripTemplateComments(readFileSync(join(__dirname, 'category-modal.html'), 'utf8'));
+
+    expect(template).toContain('issuerListUnavailable()');
+    expect(template).toContain('retryLoadIssuers()');
+  });
+});
+
+/* ----- Issuers: re-adding one that was removed ----- */
+
+/*
+ * *** THE BUG THE OWNER REPORTED. *** "The Edit/Delete of Issuer looks like
+ * it worked, except when I tried to add them back in, I got an error saying
+ * the Issuer(s) already exist."
+ *
+ * Removal is a SOFT delete, so the row kept the name. The server now revives
+ * that row instead of refusing, and these cover the screen's half: the form
+ * must NOT catch it as a duplicate (it cannot see a removed issuer and
+ * should not try), and the user must be TOLD that what came back is their
+ * old issuer rather than a new one.
+ */
+describe('CategoryModal — re-adding a removed issuer', () => {
+  /** The answer the server gives when a soft-deleted row came back. */
+  function revivalOf(overrides: Record<string, unknown> = {}) {
+    return {
+      ...BURMA,
+      issuerId: 42,
+      name: 'Burma',
+      denominationCount: 3,
+      coinCount: 0,
+      revived: true,
+      denominationsRestored: 3,
+      ...overrides,
+    };
+  }
+
+  function burmaDraft(lookUpOnline: boolean) {
+    return { name: 'Burma', isoCode: '', validFrom: '', validTo: '', lookUpOnline };
+  }
+
+  it('POSTS a removed name instead of catching it as a duplicate', async () => {
+    // The form compares against `issuers()`, which holds only the ACTIVE
+    // ones because that is all GET returns. A removed 'Burma' is therefore
+    // not a clash here and the request must go out — the server's answer to
+    // it is a revival. Teaching the form about removed issuers would only
+    // reinstate the refusal the owner hit.
+    const { modal, api } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() => of(revivalOf()));
+
+    modal['issuerDraft'].set(burmaDraft(false));
+    await modal.addIssuerFromDraft();
+
+    expect(api['createIssuer']).toHaveBeenCalledTimes(1);
+    expect(modal['issuerError']()).toBe('');
+  });
+
+  it('SAYS it was restored, with the number of denominations that came back', async () => {
+    // *** THE MOMENT THE USER FINDS OUT WHETHER THEIR DATA RETURNED. ***
+    // Doing this silently is the failure mode even though the outcome is
+    // the good one: they pressed Add expecting a blank issuer.
+    const { modal, api, notification } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() => of(revivalOf()));
+
+    modal['issuerDraft'].set(burmaDraft(false));
+    await modal.addIssuerFromDraft();
+
+    const said = (notification['showInfo'] as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[0])
+    );
+    expect(said.some((line) => line.includes('Restored') && line.includes('3'))).toBe(true);
+  });
+
+  it('keeps the id the server reused rather than inventing a row', async () => {
+    // Denominations and coins reach an issuer BY ID. The list the screen
+    // holds has to carry the revived row's own id or every later action on
+    // it — edit, remove, file a denomination under it — addresses the wrong
+    // issuer.
+    const { modal, api } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() => of(revivalOf()));
+
+    modal['issuerDraft'].set(burmaDraft(false));
+    await modal.addIssuerFromDraft();
+
+    const added = modal['issuers']().filter((issuer) => issuer.name === 'Burma');
+    expect(added).toHaveLength(1);
+    expect(added[0].issuerId).toBe(42);
+  });
+
+  it('does NOT run the online lookup when the denominations came back with it', async () => {
+    // *** NOT A DEGRADATION — THE CORRECT BEHAVIOUR. *** The issuer already
+    // holds these labels, so the source would propose what it has;
+    // accepting one would put two rows with the same label under one
+    // issuer, and a coin carrying that text then resolves as ambiguous,
+    // which resolves to NULL. The lookup would cost a denomination.
+    //
+    // The checkbox is left ON here on purpose: this must hold for the user
+    // who WANTED the lookup, not only for the one who turned it off.
+    const { modal, api } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() => of(revivalOf()));
+
+    modal['issuerDraft'].set(burmaDraft(true));
+    await modal.addIssuerFromDraft();
+
+    expect(api['lookUpDenominations']).not.toHaveBeenCalled();
+    expect(modal['lookupMessage']()).toContain('nothing left this machine');
+    expect(modal['lookupPhase']()).toBe('settled');
+  });
+
+  it('DOES run the lookup when the revived issuer came back empty', async () => {
+    // Nothing came back, so the issuer really is empty and the lookup is
+    // exactly as useful as it is for a brand-new one.
+    const { modal, api } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() =>
+      of(revivalOf({ denominationCount: 0, denominationsRestored: 0 }))
+    );
+
+    modal['issuerDraft'].set(burmaDraft(true));
+    await modal.addIssuerFromDraft();
+
+    expect(api['lookUpDenominations']).toHaveBeenCalledWith('Burma');
+  });
+
+  it('still says it was restored when nothing came back with it', async () => {
+    // The row is still their old one, with its id, and that is still not
+    // what pressing Add looks like it does.
+    const { modal, api, notification } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() =>
+      of(revivalOf({ denominationCount: 0, denominationsRestored: 0 }))
+    );
+
+    modal['issuerDraft'].set(burmaDraft(false));
+    await modal.addIssuerFromDraft();
+
+    const said = (notification['showInfo'] as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[0])
+    );
+    expect(said.some((line) => line.includes('Restored') && line.includes('no denominations'))).toBe(true);
+  });
+
+  it('says nothing about restoring when the issuer was genuinely created', async () => {
+    // The default stub answers without `revived`, which is the creation
+    // shape. A screen that announced a restore for every add would be
+    // worse than one that never did.
+    const { modal, notification } = await createModal({ issuers: [MEXICO] });
+
+    modal['issuerDraft'].set(burmaDraft(false));
+    await modal.addIssuerFromDraft();
+
+    const said = (notification['showInfo'] as ReturnType<typeof vi.fn>).mock.calls.map(
+      (call) => String(call[0])
+    );
+    expect(said.some((line) => line.includes('Restored'))).toBe(false);
+  });
+
+  it('lands the user on the revived issuer so they can see what came back', async () => {
+    // The whole point of saying "3 denominations came back" is that the
+    // user can check it. Leaving them on the Issuers pane to go and find it
+    // is most of the same omission.
+    const { modal, api } = await createModal({ issuers: [MEXICO] });
+    api['createIssuer'] = vi.fn(() => of(revivalOf()));
+
+    modal['issuerDraft'].set(burmaDraft(true));
+    await modal.addIssuerFromDraft();
+
+    expect(modal['activeSection']()).toBe('denominations');
+    expect(modal['newDenominationIssuerId']()).toBe(42);
   });
 });

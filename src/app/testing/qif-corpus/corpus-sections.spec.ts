@@ -40,6 +40,20 @@ import { describe, expect, it } from 'vitest';
 import { QIF_ACCOUNTS, decodeQif } from '../qif-accounts.fixture';
 import { QuickenImportService } from '../../services/quicken-import.service';
 
+/**
+ * Files that import NO coins at all, whatever the options.
+ *
+ * Ancients, and only Ancients. An ancient coin has no year, no denomination
+ * and no grade, so every row in it fails the 2-of-3 main-detail rule and
+ * lands in `rejectedRecords` -- visibly, as an exception, which is the
+ * honest outcome until the catalogue-reference design in
+ * `docs/ancients-matching-plan.md` is built. Its sold coins are still NAMED
+ * (that is asserted for every file, this one included); what cannot be
+ * asserted about it is any statement of the form "more coins import when
+ * the sold ones are let in", because the answer is zero either way.
+ */
+const IMPORTS_NOTHING = new Set(['Ancients.QIF']);
+
 /** Ancients is excluded from QIF_ACCOUNTS; its file is tested here too. */
 const FILES: ReadonlyArray<[string, string]> = [
   ...QIF_ACCOUNTS.map((a) => [a.file, a.account] as [string, string]),
@@ -125,15 +139,45 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
     expect(result.accounts).toContain('Driftwood Brokerage');
   });
 
-  it('applies the net-quantity rule, so sold coins land in skippedRecords', () => {
-    /* The corpus reproduces a real held/sold split per account -- the
-     * 2-3-20-cent collection has held 112 coins and still owns 6 -- so both
-     * lists are non-empty on every account and the rule is measured rather
-     * than assumed. */
+  it('imports the sold coins too, and names them', () => {
+    /* THE DEFAULT IS "EVERYTHING". The corpus reproduces a real held/sold
+     * split per account -- the 2-3-20-cent collection has held 112 coins
+     * and still owns 6 -- so a parser that dropped the sold ones would come
+     * back with a fraction of the file. It used to, and silently: nothing
+     * holds them out now, and nothing is reported as held out.
+     *
+     * `soldSecurityNames` is populated regardless, which is what lets the
+     * import mark those coins Sold instead of adding them to what the
+     * collection is worth. */
     const result = parse(text, account);
-    expect(result.importedRecords.length + result.skippedRecords.length + result.rejectedRecords.length)
+    expect(result.importedRecords.length + result.rejectedRecords.length).toBeGreaterThan(0);
+    expect(result.skippedRecords, 'nothing was asked to be held out').toEqual([]);
+    expect(result.soldSecurityNames.length, `${account} sold nothing`).toBeGreaterThan(0);
+
+    if (IMPORTS_NOTHING.has(file)) return;
+
+    const imported = result.importedRecords.map(securityNameOf);
+    const soldAndImported = result.soldSecurityNames.filter((name) => imported.includes(name));
+    expect(soldAndImported.length, `${account} imported none of its sold coins`)
       .toBeGreaterThan(0);
-    expect(result.skippedRecords.length, `${account} sold nothing`).toBeGreaterThan(0);
+  });
+
+  it('holds the sold coins out, and lists them, when asked to', () => {
+    /* The tick box in the import modal. Same file, same account, one
+     * option: the coins named as sold move out of `importedRecords` and
+     * into `skippedRecords`, where the dialog lists them. Nothing is
+     * discarded in either direction. */
+    const everything = parse(text, account);
+    const heldOnly = new QuickenImportService().parse(text, account, undefined, {
+      excludeSold: true
+    });
+
+    expect(heldOnly.soldSecurityNames).toEqual(everything.soldSecurityNames);
+
+    if (IMPORTS_NOTHING.has(file)) return;
+
+    expect(heldOnly.importedRecords.length).toBeLessThan(everything.importedRecords.length);
+    expect(heldOnly.skippedRecords.length, `${account} held nothing out`).toBeGreaterThan(0);
   });
 
   it('raises no warnings on the sections it ignores', () => {

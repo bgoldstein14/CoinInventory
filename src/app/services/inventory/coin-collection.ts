@@ -6,7 +6,6 @@ import { NotificationService } from '../notification.service';
 import { CoinChangeTracker } from './coin-change-tracker';
 import { CoinDraftRegistry } from './coin-draft-registry';
 import { LookupManager } from './lookup-manager';
-import { TransactionManager } from './transaction-manager';
 import { createBlankCoin, normalizeImportedCoins } from './coin-factory';
 import { firstValueFrom } from 'rxjs';
 
@@ -37,7 +36,6 @@ export class CoinCollection {
   constructor(
     private readonly inventory: WritableSignal<CoinRecord[]>,
     private readonly selectedCoinId: WritableSignal<string | null>,
-    private readonly transactions: TransactionManager,
     private readonly tracker: CoinChangeTracker,
     /** Which coins are still local-only drafts. See coin-draft-registry.ts. */
     private readonly drafts: CoinDraftRegistry,
@@ -263,9 +261,9 @@ export class CoinCollection {
   /* ---- Deleting coins ---- */
 
   /**
-   * Remove a coin everywhere: from the list, from its transactions, from the
-   * change tracker (so no queued write fires for a coin that no longer
-   * exists), and finally from the database.
+   * Remove a coin everywhere: from the list, from the change tracker (so no
+   * queued write fires for a coin that no longer exists), and finally from
+   * the database.
    */
   deleteCoin(coinId: string): void {
     // Ask BEFORE we forget anything: an unsaved draft has no row in the
@@ -273,7 +271,6 @@ export class CoinCollection {
     const wasUnsaved = this.drafts.isUnsaved(coinId);
 
     this.inventory.set(this.inventory().filter(c => c.id !== coinId));
-    this.transactions.removeForCoin(coinId);
     this.tracker.clear(coinId);
     this.drafts.clear(coinId);
     this.ensureSelectedCoin();

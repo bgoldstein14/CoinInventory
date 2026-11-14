@@ -65,6 +65,46 @@
             <input type="text" placeholder="e.g. Dime, Quarter" [ngModel]="qifDenominationFilter()" (ngModelChange)="qifDenominationFilter.set($event)" />
           </label>
         </div>
+
+        <!-- UNTICKED BY DEFAULT, ON PURPOSE. Everything comes in, coins the
+             owner has already sold included, so the money he spent and the
+             money he got back stay reportable. Ticking this narrows the
+             import to what he still holds. -->
+        <label class="qif-sold-toggle">
+          <input
+            type="checkbox"
+            [checked]="onlyUnsoldCoins()"
+            (change)="setOnlyUnsoldCoins($any($event.target).checked)"
+          />
+          <span>Import only coins I still own (leave out anything sold)</span>
+        </label>
+        <p class="hint-text">{{ soldRuleSentence }} A Quicken file has no such
+          column, so a coin is taken to be sold when its buys and sells net to
+          nothing — and the sale's date and amount are then imported with it.</p>
+
+        <!-- WHY THIS SAYS WHAT IS FILLED AS WELL AS WHAT IS NOT.
+             "Purchased From is left blank" on its own reads as a limitation
+             someone should fix. It is a choice: the only counterparty-shaped
+             line in an investment block is the payee, which in these files is
+             routinely the account itself ("Misc. Coins"), and filling the
+             field with that gives the user something to clear on every coin.
+             Measured on the real corpus: purchase date and price arrive on
+             457 of 457 records, buyer and seller on none. -->
+        <p class="hint-text">
+          Quicken records what you paid and when, and the sale if there was one, so
+          <strong>Cost</strong>, <strong>Purchase Date</strong>, <strong>Sold Price</strong> and
+          <strong>Sold Date</strong> come across. It does not record who you bought from or sold
+          to, so <strong>Purchased From</strong> and <strong>Sold To</strong> are left empty rather
+          than filled with the Quicken account name — which you would only have to clear again.
+          A CSV or Excel file can map those columns if you have them.
+        </p>
+
+        @if (!onlyUnsoldCoins() && soldImportCount() > 0) {
+          <p class="hint-text">
+            {{ soldImportCount() }} of these are no longer held. They will be imported with a
+            status of Sold, so they stay reportable without counting towards the collection's value.
+          </p>
+        }
       </div>
 
       @if (quickenAccounts().length > 0) {
@@ -183,6 +223,46 @@
                   <td>{{ exception.record.coinType || '—' }}</td>
                   <td>{{ exception.record.denomination || '—' }}</td>
                   <td>{{ exception.reason }}</td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      }
+
+      <!--
+        WHAT THE TICK BOX IS HOLDING OUT.
+
+        Only ever non-empty while "Import only coins I still own" is ticked.
+        It is listed rather than counted because this used to happen
+        UNCONDITIONALLY and INVISIBLY: 379 of the QIF corpus's 484 coin
+        records were discarded by the net-quantity rule and no part of this
+        dialog said so. A filter the user asked for still has to show its
+        work.
+      -->
+      @if (skippedRecords().length > 0) {
+        <div class="exception-list" role="region" aria-label="Coins left out as sold">
+          <h3>No longer held — left out ({{ skippedRecords().length }})</h3>
+          <p class="hint-text">
+            These coins were sold or transferred out, and "Import only coins I still own"
+            is ticked. Untick it to bring them in as well; they will arrive marked Sold.
+          </p>
+          <table class="exception-table">
+            <thead>
+              <tr>
+                <th>Quicken security name</th>
+                <th>Year</th>
+                <th>Coin Type</th>
+                <th>Denomination</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (record of skippedRecords(); track record.id) {
+                <tr>
+                  <td><code>{{ record.securityName }}</code></td>
+                  <td>{{ record.year || '—' }}</td>
+                  <td>{{ record.coinType || '—' }}</td>
+                  <td>{{ record.denomination || '—' }}</td>
                 </tr>
               }
             </tbody>

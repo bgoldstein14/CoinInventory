@@ -19,7 +19,7 @@
  */
 
 /**
- * The twelve tables, parent before child. The order is the order they are
+ * The eleven tables, parent before child. The order is the order they are
  * written in, so a foreign key always has its target already present.
  */
 export const ALL_TABLES = [
@@ -32,7 +32,6 @@ export const ALL_TABLES = [
   'CoinSets',
   'Coins',
   'CoinImages',
-  'Transactions',
   'SpotPrices',
   'AppSettings',
 ] as const;
@@ -68,7 +67,6 @@ export const OWNER_TABLES = [
   'CoinSets',
   'Coins',
   'CoinImages',
-  'Transactions',
   'SpotPrices',
   'AppSettings',
 ] as const satisfies readonly TableName[];
@@ -78,7 +76,7 @@ export const OWNER_TABLES = [
  *
  * Reference tables cannot be part of this test — db/seed.ts fills them on
  * the first open, so a brand-new, untouched database already has 1,274 rows
- * in them. These six are empty on a database nobody has put anything into.
+ * in them. These five are empty on a database nobody has put anything into.
  */
 export const OCCUPANCY_TABLES = OWNER_TABLES;
 
@@ -87,7 +85,6 @@ export const OCCUPANCY_TABLES = OWNER_TABLES;
  * order, so a child is gone before its parent.
  */
 export const DELETE_ORDER = [
-  'Transactions',
   'CoinImages',
   'Coins',
   'CoinSets',
@@ -123,7 +120,6 @@ export const OTHER_NUMERIC_COLUMNS: ReadonlyArray<{
   key: readonly string[];
   columns: readonly string[];
 }> = [
-  { table: 'Transactions', key: ['TransactionId'], columns: ['Amount'] },
   {
     table: 'SpotPrices',
     key: ['SpotPriceId'],

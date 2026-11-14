@@ -374,18 +374,14 @@
     </label>
   </div>
 
+  <!-- VALUE AND MELT, AND NOTHING ELSE ON THIS ROW.
+       `Price` used to lead this row. It is `purchasePrice`, i.e. what the
+       coin COST, and it now lives in the Transactions section below under
+       its proper name, Cost, next to the date it was paid on. Value (what
+       the coin is worth today) and Melt (what the metal in it is worth) are
+       facts about the coin rather than about a deal, so they stay exactly
+       where they were. -->
   <div class="detail-editor__row detail-editor__row--pricing">
-    <label class="detail-field detail-field--money">
-      <span>Price</span>
-      <!-- `prefix`/`group` reproduce the old "$1,234.56" display exactly. -->
-      <input
-        [appNumericField]="coin().purchasePrice"
-        [decimals]="2"
-        prefix="$"
-        [group]="true"
-        (numericValueChange)="updateNumericField('purchasePrice', $event)"
-      />
-    </label>
     <label class="detail-field detail-field--money">
       <span>Value</span>
       <input
@@ -485,20 +481,130 @@
     </label>
   </div>
 
-  <!-- The empty second cell keeps this row the same two-column shape as the
-       rows above it. -->
-  <div class="detail-editor__row">
-    <label class="detail-field">
-      <span>Purchase date</span>
-      <input type="date" [ngModel]="coin().purchaseDate" (ngModelChange)="updateSelectedCoin('purchaseDate', $event)" />
-    </label>
-    <label class="detail-field">
-      <span> </span>
-      <input aria-label="Spacer" style="visibility: hidden;" />
-    </label>
-  </div>
+  <!-- `Purchase date` used to be here, on a row of its own with a hidden
+       spacer beside it. It has moved into the Transactions section below, so
+       that the date and the price paid on it are read together. -->
 </div>
 
+<!-- ================= THE TRANSACTIONS SECTION =================
+     Optional: shown only when Settings > "Show transactions section in
+     details" is on. It replaces the old Transactions TABLE, which had its
+     own rows, its own ids and its own endpoints; there is one purchase and
+     at most one sale per coin now and they are ordinary coin fields.
+
+     *** IT SITS ABOVE THE NOTES BLOCK, NOT BELOW IT, AND THAT IS NOT
+     COSMETIC. *** The two blocks each contain a notes box. Putting the
+     transaction one last would leave the coin's own Notes stranded in the
+     middle of the deal record and make the final box on the panel the one
+     the user is least likely to want. Read top to bottom the panel now goes:
+     the coin -> the deal -> what you want to remember about the coin.
+
+     *** THE TWO NOTES BOXES MUST NEVER READ AS TWO OF THE SAME THING. ***
+     Four things keep them apart, and none of them is redundant:
+       1. different captions — "Notes about this purchase or sale" against
+          "Notes about the coin itself". Neither is the bare word "Notes".
+       2. a one-line hint under each caption saying what belongs in it.
+       3. different sizes. The transaction box is the taller of the two, as
+          asked for: it is the one that gets paragraphs.
+       4. different surroundings. This one is inside a titled, tinted card;
+          the coin's note is on the plain panel background outside it.
+     If you are changing either box, change it so all four still hold. -->
+@if (showTransactions()) {
+  <section class="detail-transactions" aria-labelledby="coin-transaction-heading">
+    <h3 id="coin-transaction-heading">Transactions</h3>
+    <p class="detail-transactions__intro">
+      The deal, not the coin: what it cost, what it sold for, and who with.
+    </p>
+
+    <div class="detail-transactions__row">
+      <label class="detail-field detail-field--money">
+        <!-- "Cost", not "Price". Same column as before (PurchasePrice) and
+             the same `prefix`/`group` money formatting; the caption says
+             what the number IS, next to the date it was paid on, rather
+             than leaving "Price" to be confused with Value above. -->
+        <span>Cost</span>
+        <input
+          [appNumericField]="coin().purchasePrice"
+          [decimals]="2"
+          prefix="$"
+          [group]="true"
+          (numericValueChange)="updateNumericField('purchasePrice', $event)"
+        />
+      </label>
+      <label class="detail-field">
+        <span>Purchase Date</span>
+        <input
+          type="date"
+          [ngModel]="coin().purchaseDate"
+          (ngModelChange)="updateSelectedCoin('purchaseDate', $event)"
+        />
+      </label>
+      <label class="detail-field detail-field--party">
+        <span>Purchased from</span>
+        <input
+          type="text"
+          maxlength="200"
+          placeholder="e.g. Heritage, eBay, a show"
+          [ngModel]="coin().purchasedFrom ?? ''"
+          (ngModelChange)="updateSelectedCoin('purchasedFrom', $event)"
+        />
+      </label>
+    </div>
+
+    <div class="detail-transactions__row">
+      <!-- Sold price and Sold date are the SAME columns the grid and the
+           status rules already read (SoldPrice / SoldDate). They were never
+           editable anywhere before; the sale half of the deal record is
+           where they belong, and "Sold to" is meaningless without them. -->
+      <label class="detail-field detail-field--money">
+        <span>Sold for</span>
+        <input
+          [appNumericField]="coin().soldPrice"
+          [decimals]="2"
+          prefix="$"
+          [group]="true"
+          (numericValueChange)="updateNumericField('soldPrice', $event)"
+        />
+      </label>
+      <label class="detail-field">
+        <span>Sold Date</span>
+        <input
+          type="date"
+          [ngModel]="coin().soldDate ?? ''"
+          (ngModelChange)="updateSelectedCoin('soldDate', $event)"
+        />
+      </label>
+      <label class="detail-field detail-field--party">
+        <span>Sold to</span>
+        <input
+          type="text"
+          maxlength="200"
+          placeholder="e.g. a dealer, an auction, a collector"
+          [ngModel]="coin().soldTo ?? ''"
+          (ngModelChange)="updateSelectedCoin('soldTo', $event)"
+        />
+      </label>
+    </div>
+
+    <label class="detail-transaction-notes">
+      <span class="detail-transaction-notes-label">Notes about this purchase or sale</span>
+      <small class="detail-transaction-notes-hint">
+        Terms, premiums, instalments, who was involved — anything about the deal.
+      </small>
+      <textarea
+        [ngModel]="coin().transactionNotes ?? ''"
+        (ngModelChange)="updateSelectedCoin('transactionNotes', $event)"
+      ></textarea>
+    </label>
+  </section>
+}
+
+<!-- THE COIN'S OWN NOTE. Not the deal's — see the block above, which is
+     rendered before this one on purpose. -->
 <div class="detail-notes">
-  <label><span class="detail-notes-label">Notes</span><textarea [ngModel]="coin().notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea></label>
+  <label>
+    <span class="detail-notes-label">Notes about the coin itself</span>
+    <small class="detail-notes-hint">Strike, toning, provenance, where it sits in the collection.</small>
+    <textarea [ngModel]="coin().notes" (ngModelChange)="updateSelectedCoin('notes', $event)"></textarea>
+  </label>
 </div>

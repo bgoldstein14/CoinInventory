@@ -176,8 +176,8 @@ describe('planImport reports how many rows linked', () => {
     );
 
     expect(result.perSheet).toEqual([
-      { sheetName: 'US', accepted: 2, rejected: 0, linkedDenominations: 2 },
-      { sheetName: 'World', accepted: 1, rejected: 0, linkedDenominations: 0 }
+      { sheetName: 'US', accepted: 2, rejected: 0, linkedDenominations: 2, excludedAsSold: 0 },
+      { sheetName: 'World', accepted: 1, rejected: 0, linkedDenominations: 0, excludedAsSold: 0 }
     ]);
   });
 

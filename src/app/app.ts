@@ -7,6 +7,7 @@ import { CoinDetailPanel } from './components/coin-detail-panel/coin-detail-pane
 import { CoinImageGallery } from './components/coin-image-gallery/coin-image-gallery';
 import { CoinPhotoViewer } from './components/coin-photo-viewer/coin-photo-viewer';
 import { CsvImportModal } from './components/csv-import-modal/csv-import-modal';
+import { HelpModal } from './components/help-modal/help-modal';
 import { ImageImportModal } from './components/image-import-modal/image-import-modal';
 import { InventoryFilterBar } from './components/inventory-filter-bar/inventory-filter-bar';
 import { InventoryTable } from './components/inventory-table/inventory-table';
@@ -33,6 +34,7 @@ import { CsvService } from './services/csv.service';
 import { InventoryService } from './services/inventory.service';
 import { StorageKeys, StorageService } from './services/storage.service';
 import { CoinRecord } from './types/coin.model';
+import { APP_VERSION } from './version';
 
 /**
  * App — the application shell.
@@ -64,7 +66,7 @@ import { CoinRecord } from './types/coin.model';
   selector: 'app-root',
   imports: [
     AppToolbar, BulkEditBar, CategoryModal, CoinDetailPanel, CoinImageGallery,
-    CoinPhotoViewer, CsvImportModal, ImageImportModal, InventoryFilterBar,
+    CoinPhotoViewer, CsvImportModal, HelpModal, ImageImportModal, InventoryFilterBar,
     InventoryTable, NotificationToast, QuickenImportModal, ReportModal,
     SettingsModal, SpotPriceModalComponent, StatisticsModal, SupportModal
   ],
@@ -73,6 +75,9 @@ import { CoinRecord } from './types/coin.model';
 })
 export class App {
   protected get inv() { return this.inventoryService; }
+
+  /** Shown under the title, and reported with every support bundle. */
+  protected readonly appVersion = APP_VERSION;
 
   // --- Shared state, owned here and handed to the child components ---
   protected readonly filters: InventoryFilterStore;
@@ -95,6 +100,9 @@ export class App {
   protected readonly showImageImportModal = signal(false);
   protected readonly showCategoryModal = signal(false);
   protected readonly showCsvImportModal = signal(false);
+  /** Which Import menu entry opened the spreadsheet dialog — see its `mode`
+   *  input. One dialog, two doors; this is which door. */
+  protected readonly csvImportMode = signal<'excel' | 'csv'>('excel');
   protected readonly showReportModal = signal(false);
   protected readonly showSpotPriceModal = signal(false);
   protected readonly showStatisticsModal = signal(false);
@@ -108,6 +116,14 @@ export class App {
    * goes missing, not the component.
    */
   protected readonly showSupportModal = signal(false);
+
+  /*
+   * The Help screen (components/help-modal) — what the toolbar's help icon
+   * now opens. The icon used to open showSupportModal directly; "Report a
+   * problem" is the first control on the Help screen, so that route is one
+   * click longer and no harder to find.
+   */
+  protected readonly showHelpModal = signal(false);
 
   /*
    * "SOME OF YOUR COINS HAVE NO DENOMINATION" — THE PROMPT
@@ -212,7 +228,10 @@ export class App {
     this.showCategoryModal.set(true);
   }
   protected closeCategoryModal(): void { this.showCategoryModal.set(false); }
-  protected openCsvImportModal(): void { this.showCsvImportModal.set(true); }
+  protected openCsvImportModal(mode: 'excel' | 'csv' = 'excel'): void {
+    this.csvImportMode.set(mode);
+    this.showCsvImportModal.set(true);
+  }
   protected closeCsvImportModal(): void { this.showCsvImportModal.set(false); }
   protected openReportModal(): void { this.showReportModal.set(true); }
   protected closeReportModal(): void { this.showReportModal.set(false); }
@@ -222,26 +241,30 @@ export class App {
   protected closeStatisticsModal(): void { this.showStatisticsModal.set(false); }
   protected openSupportModal(): void { this.showSupportModal.set(true); }
   protected closeSupportModal(): void { this.showSupportModal.set(false); }
+  protected openHelpModal(): void { this.showHelpModal.set(true); }
+  protected closeHelpModal(): void { this.showHelpModal.set(false); }
+
+  /**
+   * Help > "Report a problem". HELP CLOSES FIRST, and that is the whole
+   * reason this is a method rather than two bindings in the template: two
+   * dialogs open at once would stack two backdrops and two × buttons, and
+   * the user would have to close the reporter twice to get back to work.
+   */
+  protected openSupportModalFromHelp(): void {
+    this.showHelpModal.set(false);
+    this.showSupportModal.set(true);
+  }
   protected openSettingsModal(): void { this.showSettingsModal.set(true); }
   protected closeSettingsModal(): void { this.showSettingsModal.set(false); }
 
-  /**
-   * Settings > "Open Reference Data".
-   *
-   * The reference lists used to be edited inside Settings; the button that
-   * raises this is the one route left to where they live now, so a user who
-   * knew the old address is taken there rather than told to go and find it.
-   *
-   * Settings CLOSES. Both are backdrop modals, and leaving this one behind
-   * the other would dim the screen twice and put a Cancel button under a
-   * dialog the user is still working in. `openCategoryModal()` is reused
-   * rather than setting the signals here, so this opens on the default pane
-   * exactly like every other non-banner caller.
+  /*
+   * `openReferenceDataFromSettings()` lived here, raised by an "Open
+   * Reference Data" button inside the Settings dialog. Both are gone: the
+   * owner judged the button redundant because the toolbar already carries an
+   * obvious route to the reference lists. The method went with it rather
+   * than being left behind — an unreferenced handler is how a deleted
+   * button grows back.
    */
-  protected openReferenceDataFromSettings(): void {
-    this.closeSettingsModal();
-    this.openCategoryModal();
-  }
 
   protected onQuickenImported(coins: CoinRecord[]): void {
     this.inv.addCoins(coins);
@@ -254,8 +277,13 @@ export class App {
 
   protected handleImportSelection(kind: ImportKind): void {
     if (kind === 'qif') this.openQuickenModal();
-    if (kind === 'csv') this.openCsvImportModal();
-    if (kind === 'json') this.io.triggerJsonImport();
+    // Two menu entries, ONE dialog, told which door it was opened through.
+    // See `mode` in csv-import-modal.ts for why the modal is shared and the
+    // menu is not.
+    if (kind === 'excel') this.openCsvImportModal('excel');
+    if (kind === 'csv') this.openCsvImportModal('csv');
+    // There is deliberately no 'json' branch: importing an inventory JSON
+    // was removed from the Import menu. Export -> JSON is untouched.
     // Photos rather than coin records -- see ImportKind. This line was the
     // missing one: the modal, its signal and its open/close methods all
     // existed, but nothing ever called openImageImportModal(), so the batch

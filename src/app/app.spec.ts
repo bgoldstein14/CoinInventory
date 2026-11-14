@@ -1,6 +1,8 @@
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
 import '@angular/compiler';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Injector, runInInjectionContext } from '@angular/core';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
@@ -45,8 +47,8 @@ function createApp(): App {
 
 /**
  * Creates a CoinDetailPanel wired to the same InventoryService an App is using,
- * so tests can drive detail-panel behaviour (transactions) against the same
- * inventory the App sees.
+ * so tests can drive detail-panel behaviour against the same inventory the
+ * App sees.
  *
  * The panel uses inject(), so it must be constructed inside an injection
  * context — the same pattern the other component specs use.
@@ -867,14 +869,8 @@ describe('App', () => {
   // for a long time while the batch image import was unreachable from the UI:
   // the modal, its signal and both methods existed, but nothing ever called
   // the open method, so there was no way in. Testing the method rather than
-  // the route is what hid it. These go through handleImportSelection(), which
-  // is what the toolbar actually emits into.
-
-  it('opens the image import modal from the Import menu', () => {
-    const app = createApp();
-    app['handleImportSelection']('images');
-    expect(app['showImageImportModal']()).toBe(true);
-  });
+  // the route is what hid it. This goes through handleImportSelection(),
+  // which is what the toolbar actually emits into.
 
   it('routes every Import menu choice somewhere', () => {
     // Guards the whole menu rather than one entry, so a future addition that
@@ -900,32 +896,26 @@ describe('App', () => {
     expect(app['showCategoryModal']()).toBe(false);
   });
 
-  it('takes the user from Settings to Reference Data, closing Settings', () => {
-    /* The reference lists used to be edited inside Settings. This is the
-     * one route left to where they live now, so it has to actually ARRIVE:
-     * emitting and leaving Settings on screen would dim the page twice and
-     * put this dialog's Cancel button under the one the user has moved on
-     * to. */
+  it('no longer routes from Settings to Reference Data', async () => {
+    /* REMOVED 2026-11-14 at the owner's request: the Settings dialog carried
+     * a "Reference data" notice and an "Open Reference Data" button for one
+     * day, and he judged it redundant because the toolbar already has an
+     * obvious button. The handler went with the button — an unreferenced
+     * handler is how a deleted button grows back — so this asserts its
+     * ABSENCE, and the template binding's absence with it. */
     const app = createApp();
-    app['openSettingsModal']();
 
-    app['openReferenceDataFromSettings']();
+    expect(app['openReferenceDataFromSettings']).toBeUndefined();
 
-    expect(app['showCategoryModal']()).toBe(true);
-    expect(app['showSettingsModal']()).toBe(false);
-  });
-
-  it('lands on the default Reference Data pane, even after the unlinked banner', () => {
-    // Same trap `openCategoryModal` already guards: using the banner once
-    // would otherwise make the Settings route open the unlinked-coins pane
-    // from then on.
-    const app = createApp();
-    app['openUnlinkedCoins']();
-    app['closeCategoryModal']();
-
-    app['openReferenceDataFromSettings']();
-
-    expect(app['categoryModalSection']()).toBe('categories');
+    /* The binding too. An output that no longer exists on the component is
+     * not a compile error — Angular would quietly treat it as a DOM event
+     * listener — so the markup has to be checked by hand. Imported here
+     * rather than at the top of this shared file to keep the edit to one
+     * test. */
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const template = readFileSync(join(__dirname, 'app.html'), 'utf8');
+    expect(template.replace(/<!--[\s\S]*?-->/g, '')).not.toContain('referenceDataRequested');
   });
 
   it('opens and closes the CSV import modal', () => {
@@ -1539,38 +1529,25 @@ describe('App', () => {
   });
 
   // --- Transactions ---
-
-  // Adding/deleting a single transaction now belongs to CoinDetailPanel, which
-  // owns that part of the UI — the panel is driven directly here.
-  it('adds and deletes transactions for a coin', () => {
+  //
+  // Two cases lived here and both drove CoinDetailPanel's
+  // addTransactionForSelectedCoin / deleteTransaction against a Transactions
+  // table: one added and deleted a transaction, one checked deleting a coin
+  // took its transactions with it. Table, routes, client service and panel
+  // methods are all gone, so neither case has a subject any more; a coin's
+  // purchase and sale are fields on the coin and go with it by definition.
+  //
+  // The ONE thing worth keeping is that the panel no longer offers those
+  // entry points at all — a surviving method would be calling an endpoint
+  // that answers index.html.
+  it('no longer offers transaction entry points on the detail panel', () => {
     const app = createApp();
-    const panel = createDetailPanelFor(app['inv']);
-    const coin = addTestCoin(app, { denomination: 'Eagle', coinType: 'Gold' });
-    app['selectCoin'](coin.id);
+    const panel = createDetailPanelFor(app['inv']) as unknown as Record<string, unknown>;
 
-    panel.addTransactionForSelectedCoin('purchase', 150, 'Heritage Auctions', '2024-01-15', 'Great deal');
-
-    const txns = app['inv'].selectedCoinTransactions();
-    expect(txns).toHaveLength(1);
-    expect(txns[0].type).toBe('purchase');
-    expect(txns[0].amount).toBe(150);
-    expect(txns[0].dealer).toBe('Heritage Auctions');
-
-    panel.deleteTransaction(txns[0].id);
-    expect(app['inv'].selectedCoinTransactions()).toHaveLength(0);
-  });
-
-  it('deleting a coin also removes its transactions', () => {
-    const app = createApp();
-    const panel = createDetailPanelFor(app['inv']);
-    const coin = addTestCoin(app, { denomination: 'Quarter', coinType: 'Washington' });
-    app['selectCoin'](coin.id);
-
-    panel.addTransactionForSelectedCoin('purchase', 100, '', '', '');
-    expect(app['inv'].transactions()).toHaveLength(1);
-
-    app['deleteSelectedCoin']();
-    expect(app['inv'].transactions()).toHaveLength(0);
+    expect(panel['addTransactionForSelectedCoin']).toBeUndefined();
+    expect(panel['deleteTransaction']).toBeUndefined();
+    expect((app['inv'] as unknown as Record<string, unknown>)['addTransaction']).toBeUndefined();
+    expect((app['inv'] as unknown as Record<string, unknown>)['transactions']).toBeUndefined();
   });
 
   // --- Column formatting ---
@@ -1612,3 +1589,141 @@ describe('App', () => {
     expect(app['inv'].inventory()[0].coinType).toBe('Roosevelt');
   });
 });
+
+/*
+ * THE SHELL'S LAZY-LOADING CONTRACT (app.html)
+ *
+ * Every dialog, and the detail sidebar, are fetched on demand with @defer so
+ * that none of them sits in the initial bundle. Two things about that are
+ * easy to break silently, and invisible to the rest of this file: these
+ * specs run without a DOM and never render the shell template at all, so
+ * the only way to hold the contract is to read the template as text.
+ *
+ * 1. A @defer BLOCK NEVER REVERTS. Once its `when` condition has been true
+ *    once, the block stays rendered for the life of the page. The original
+ *    `@if` therefore has to survive INSIDE the block — it is what still
+ *    closes the dialog. Delete it as a redundant-looking duplicate of the
+ *    trigger and every dialog in the app becomes impossible to close, with
+ *    nothing anywhere failing to say so.
+ *
+ * 2. THE ALWAYS-VISIBLE FURNITURE MUST NOT BE DEFERRED. Deferring the
+ *    toolbar or the table would buy a smaller bundle with a blank screen on
+ *    start-up, which is the opposite of the point.
+ */
+describe('the deferred screens in the shell template', () => {
+  const TEMPLATE = readFileSync(join(__dirname, 'app.html'), 'utf8')
+    .replace(/<!--[\s\S]*?-->/g, '');
+
+  /*
+   * Each @defer header, parsed. The condition is read by splitting the
+   * header on `;` rather than by a regex that stops at the first `)`:
+   * every trigger here ends in a call, `when showDetailPanel()`, and a
+   * character class excluding `)` captures `showDetailPanel(` instead.
+   */
+  const deferBlocks = [...TEMPLATE.matchAll(/@defer\s*\((.*?)\)\s*\{/g)].map(match => {
+    const [trigger, ...modifiers] = match[1].split(';').map(part => part.trim());
+    return {
+      condition: trigger.replace(/^when\s+/, ''),
+      prefetched: modifiers.includes('prefetch on idle')
+    };
+  });
+
+  const conditions = deferBlocks.map(block => block.condition);
+
+  it('defers every dialog and the detail panel', () => {
+    expect([...conditions].sort()).toEqual([
+      'images.showImageGallery()',
+      'images.showPhotoViewer()',
+      'showCategoryModal()',
+      'showCsvImportModal()',
+      'showDetailPanel()',
+      'showHelpModal()',
+      'showImageImportModal()',
+      'showQuickenModal()',
+      'showReportModal()',
+      'showSettingsModal()',
+      'showSpotPriceModal()',
+      'showStatisticsModal()',
+      'showSupportModal()'
+    ]);
+  });
+
+  it('keeps the @if inside every block, so the dialogs can still be closed', () => {
+    // The trigger decides when the CODE arrives. The @if still decides when
+    // the dialog is on SCREEN. Without the second one, nothing ever closes.
+    for (const condition of conditions) {
+      expect(TEMPLATE, `@defer (when ${condition}) has no @if to close it again`)
+        .toContain(`@if (${condition}`);
+    }
+  });
+
+  it('prefetches the hot path, and only the hot path', () => {
+    // A row click opens the detail panel, the photo button opens the
+    // gallery, a thumbnail opens the viewer: all routine, all expected to
+    // feel instant, so their chunks are fetched while the app is idle
+    // instead of when the user clicks.
+    const prefetched = deferBlocks.filter(b => b.prefetched).map(b => b.condition).sort();
+
+    expect(prefetched).toEqual([
+      'images.showImageGallery()',
+      'images.showPhotoViewer()',
+      'showDetailPanel()'
+    ]);
+
+    // Everything else — reports, statistics, spot prices, Reference Data,
+    // the three import dialogs, settings, help, support — is opened
+    // deliberately and rarely. Downloading all of it at start-up for a user
+    // who opens none of it would hand the bundle saving straight back.
+    expect(prefetched).toHaveLength(3);
+  });
+
+  it('shows nothing at all for the first 100ms of a load', () => {
+    // No @placeholder anywhere, so until a trigger fires the shell renders
+    // exactly what the bare @if used to: nothing. And the loading state
+    // waits 100ms, so on a normal open — a few milliseconds from local
+    // disk — nothing is drawn there either. A backdrop that flashes up and
+    // vanishes is worse than no backdrop at all.
+    expect(TEMPLATE).not.toContain('@placeholder');
+    expect(TEMPLATE.match(/@loading \(after 100ms\)/g) ?? []).toHaveLength(deferBlocks.length);
+  });
+
+  it('leaves the always-visible furniture eagerly loaded', () => {
+    // Walks each block to its matching close brace rather than matching a
+    // lazy regex between the opener and a tag: that would happily run out
+    // of one block and into a later one, and report a tag as deferred
+    // because something else further down the file was.
+    const deferredMarkup = deferBlockBodies(TEMPLATE).join('\n');
+
+    for (const tag of ['app-toolbar', 'app-inventory-filter-bar', 'app-inventory-table',
+                       'app-notification-toast', 'app-bulk-edit-bar']) {
+      expect(TEMPLATE, `<${tag}> has gone missing from the shell`).toContain(`<${tag}`);
+      expect(deferredMarkup, `<${tag}> is on screen from the first paint and must not be deferred`)
+        .not.toContain(`<${tag}`);
+    }
+  });
+});
+
+/**
+ * The body of every @defer block in a template, located by counting braces
+ * from each block's opening `{`. Nested @if blocks are included; the
+ * @loading block that follows the closing brace is not.
+ */
+function deferBlockBodies(template: string): string[] {
+  const bodies: string[] = [];
+
+  for (const opener of template.matchAll(/@defer\s*\((.*?)\)\s*\{/g)) {
+    const start = (opener.index ?? 0) + opener[0].length;
+    let depth = 1;
+    let i = start;
+
+    while (i < template.length && depth > 0) {
+      if (template[i] === '{') depth++;
+      else if (template[i] === '}') depth--;
+      i++;
+    }
+
+    bodies.push(template.slice(start, i - 1));
+  }
+
+  return bodies;
+}

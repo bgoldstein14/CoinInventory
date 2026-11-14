@@ -1,17 +1,18 @@
 // A labelled form field: a small caption sitting directly above its control.
 //
 // WHY THIS PARTIAL EXISTS
-// Two components render `.detail-field`: the coin editor form
-// (CoinEditorForm) and the add-transaction row in the detail sidebar
-// (CoinDetailPanel). Angular scopes component styles, so a rule written in
-// one component's .scss cannot reach the other's template — each has to
-// `@use` the rule itself. Same reasoning as `_panel.scss`.
+// `.detail-field` is rendered by more than one component, and Angular scopes
+// component styles, so a rule written in one component's .scss cannot reach
+// another's template — each has to `@use` the rule itself. Same reasoning as
+// `_panel.scss`.
 //
-// It was promoted out of coin-editor-form.scss when the transaction row was
-// given real labels. That row previously used `placeholder` text as its only
-// label ("Amount", "Dealer", "Notes"), which disappears the moment you start
-// typing and is skipped by some screen readers. Sharing this rule is what
-// makes the two field groups look like the same application.
+// It was promoted out of coin-editor-form.scss when the detail sidebar's
+// add-transaction row was given real labels. That row has since gone (the
+// Transactions table was dropped), but the rule stays shared: it is the one
+// definition of what a labelled field looks like, and EVERY caption in the
+// app is a real <span> because of it. Never use `placeholder` as a field's
+// only label — it disappears the moment you type and some screen readers
+// skip it.
 //
 // Component-specific width/layout modifiers (--narrow, --money, --cert and
 // friends) deliberately stay in the component that uses them; only the base

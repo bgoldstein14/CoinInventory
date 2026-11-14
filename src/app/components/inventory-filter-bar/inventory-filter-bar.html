@@ -68,21 +68,49 @@
           }
         </select>
       </label>
-      <!-- Collection status. Sits with the other closed-set dropdowns rather
+      <!-- Collection status. Sits with the other closed-set controls rather
            than in the always-visible toolbar row: narrowing to the want list
            is a deliberate act, not something to do by accident, and the
            toolbar has no room left. The options come from the store (which
            re-exports COLLECTION_STATUS_OPTIONS) so this list, the editor's
-           dropdown and the grid can never offer different values. -->
-      <label>
-        <span>Status</span>
-        <select [ngModel]="filters().collectionStatusFilter()" (ngModelChange)="filters().collectionStatusFilter.set($event)">
-          <option value="">All statuses</option>
+           dropdown and the grid can never offer different values.
+
+           TICK BOXES, NOT A DROPDOWN, AND NO "All statuses" ENTRY. The
+           dropdown could ask for one status or for all five, so "owned and
+           for sale but not the want list" was unaskable. All five start
+           ticked, which is what "All statuses" used to mean, so the entry
+           had nothing left to say. See collectionStatusFilter in
+           inventory-filter.store.ts — including the deliberate choice that
+           NONE ticked shows NO coins. -->
+      <div class="status-filter" role="group" aria-label="Filter by status">
+        <div class="status-filter__head">
+          <span>Status</span>
+          <span class="status-filter__actions">
+            <button type="button" class="link-button" (click)="filters().selectAllCollectionStatuses()">All</button>
+            <button type="button" class="link-button" (click)="filters().clearCollectionStatuses()">None</button>
+          </span>
+        </div>
+        <div class="status-filter__options">
           @for (option of filters().collectionStatusOptions; track option.value) {
-            <option [value]="option.value">{{ option.label }}</option>
+            <label class="status-filter__option">
+              <input
+                type="checkbox"
+                [checked]="filters().isCollectionStatusSelected(option.value)"
+                (change)="filters().toggleCollectionStatus(option.value)"
+              />
+              <span>{{ option.label }}</span>
+            </label>
           }
-        </select>
-      </label>
+        </div>
+        <!-- Says out loud what an empty grid means, next to the thing that
+             caused it. Without this the screen is simply blank and the
+             user's first guess is that his coins have gone. -->
+        @if (filters().collectionStatusFilter().length === 0) {
+          <p class="status-filter__empty">
+            No statuses ticked, so no coins are shown. Tick at least one, or press All.
+          </p>
+        }
+      </div>
       <label>
         <span>Set</span>
         <select [ngModel]="filters().coinSetFilter()" (ngModelChange)="filters().coinSetFilter.set($event)">

@@ -173,8 +173,8 @@ describe('planImport', () => {
     // assertion is exhaustive on purpose: a tally that grew a field nobody
     // noticed is how the preview and the import came to disagree before.
     expect(plan.perSheet).toEqual([
-      { sheetName: 'Silver', accepted: 1, rejected: 1, linkedDenominations: 0 },
-      { sheetName: 'Junk', accepted: 0, rejected: 2, linkedDenominations: 0 }
+      { sheetName: 'Silver', accepted: 1, rejected: 1, linkedDenominations: 0, excludedAsSold: 0 },
+      { sheetName: 'Junk', accepted: 0, rejected: 2, linkedDenominations: 0, excludedAsSold: 0 }
     ]);
   });
 

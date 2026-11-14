@@ -25,12 +25,32 @@
  *   POST /api/coins/:id/images   -> body.images / body.image / body.imageData
  *   POST /api/coins              -> body.imagePaths
  *   PUT  /api/coins/:id          -> body.imagePaths
+ *
+ * SINCE THE TWO STORAGE MODES there is a third thing an entry can be: a
+ * REFERENCE, meaning "the picture stays on disk, record only where it is".
+ * It arrives as this server's own `/api/images/file?path=…` URL (that string
+ * is what the client's `<img src>` is bound to) or as an entry with a
+ * sourcePath and no imageData, and it normalises to `imageData: null`. See
+ * routes/images/reference-url.ts.
  */
+
+import { isImageReferenceUrl, sourcePathFromReferenceUrl } from '../images/reference-url';
 
 /** One image, after normalisation — the only shape the insert code sees. */
 export interface NormalizedImage {
-  /** The base64 data URL that gets stored in CoinImages.ImageData. */
-  imageData: string;
+  /**
+   * The base64 data URL that gets stored in CoinImages.ImageData, or NULL for
+   * a REFERENCED photograph.
+   *
+   * *** NULL IS NOT "MISSING". IT IS THE REFERENCED STORAGE MODE. ***
+   * Settings lets the user choose whether an imported photograph puts the
+   * picture in the database ('stored') or only its location ('referenced').
+   * A referenced row writes SourcePath and leaves ImageData NULL — the
+   * database deliberately does not carry the picture. An entry with neither
+   * a picture nor a path is still nothing at all and is still dropped; see
+   * normalizeImageEntry.
+   */
+  imageData: string | null;
   /**
    * CoinImages.SourcePath, or null when the caller did not tell us where the
    * original lives. Null is a completely normal value: every image imported
@@ -77,7 +97,16 @@ export const SOURCE_PATH_MAX_LENGTH = 400;
 export function normalizeImageEntry(entry: unknown): NormalizedImage | null {
   // ----- The compatibility path: a bare base64 string --------------------
   if (typeof entry === 'string') {
-    return entry.length > 0 ? { imageData: entry, sourcePath: null } : null;
+    if (entry.length === 0) return null;
+
+    // A reference URL is not image data even though it arrives as a string:
+    // it is the referenced storage mode, which stores the path and no
+    // picture. See the REFERENCED PHOTOGRAPHS block below.
+    const referenced = sourcePathFromReferenceUrl(entry);
+    if (referenced) return { imageData: null, sourcePath: referenced };
+    if (isImageReferenceUrl(entry)) return null;
+
+    return { imageData: entry, sourcePath: null };
   }
 
   // ----- The object form: { imageData, sourcePath } ----------------------
@@ -88,9 +117,41 @@ export function normalizeImageEntry(entry: unknown): NormalizedImage | null {
     // gradually might reasonably send `image` or `data` instead of `imageData`.
     // Accepting the aliases costs nothing and avoids a confusing silent skip.
     const rawData = record['imageData'] ?? record['image'] ?? record['data'];
-    if (typeof rawData !== 'string' || rawData.length === 0) return null;
+    const suppliedPath = normalizeSourcePath(record['sourcePath']);
 
-    return { imageData: rawData, sourcePath: normalizeSourcePath(record['sourcePath']) };
+     /*
+     * ----- REFERENCED PHOTOGRAPHS -------------------------------------
+     *
+     * Two ways the client says "store the path, not the picture":
+     *
+     *   { imageData: "http://host/api/images/file?path=C%3A%5C…",
+     *     sourcePath: "C:\\pics\\a.jpg" }   <- what the app sends, because
+     *                                          that string is also what its
+     *                                          <img src> is bound to
+     *   { imageData: null, sourcePath: "C:\\pics\\a.jpg" }
+     *
+     * Either way ImageData is left NULL and only SourcePath is written. The
+     * path inside the URL is used when the entry carries none of its own, so
+     * a round trip through a client that lost its path registry still writes
+     * the right row instead of a row pointing nowhere.
+     *
+     * A reference with no path anywhere is NOT stored as an empty row: it
+     * would be a photograph with neither a picture nor a location, which is
+     * a photograph thrown away. It returns null and the caller skips it,
+     * exactly as it does for every other unusable entry.
+      */
+    if (isImageReferenceUrl(rawData)) {
+      const sourcePath = suppliedPath ?? sourcePathFromReferenceUrl(rawData);
+      return sourcePath ? { imageData: null, sourcePath } : null;
+    }
+
+    if (typeof rawData !== 'string' || rawData.length === 0) {
+      // No picture. A path on its own is a legitimate referenced photograph;
+      // nothing at all is still nothing.
+      return suppliedPath ? { imageData: null, sourcePath: suppliedPath } : null;
+    }
+
+    return { imageData: rawData, sourcePath: suppliedPath };
   }
 
   // ----- Anything else is not an image ----------------------------------

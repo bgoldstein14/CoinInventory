@@ -31,8 +31,13 @@ describe('openTarget', () => {
     // so "what we intend to read" cannot drift away from db/schema.sql.
     const opened = openTarget(':memory:');
 
-    expect(targetColumns(opened.database, 'Coins')).toHaveLength(30);
+    // 33: the 30 that were here, plus PurchasedFrom, SoldTo and
+    // TransactionNotes, which replaced the Transactions table.
+    expect(targetColumns(opened.database, 'Coins')).toHaveLength(33);
     expect(targetColumns(opened.database, 'Coins')).toContain('CollectionStatus');
+    expect(targetColumns(opened.database, 'Coins')).toContain('PurchasedFrom');
+    expect(targetColumns(opened.database, 'Coins')).toContain('SoldTo');
+    expect(targetColumns(opened.database, 'Coins')).toContain('TransactionNotes');
     expect(targetColumns(opened.database, 'CoinImages')).toEqual([
       'ImageId',
       'CoinId',
@@ -137,12 +142,12 @@ describe('--force', () => {
       .run();
     opened.database
       .prepare(
-        "INSERT INTO Transactions (TransactionId, CoinId, TransactionType, TransactionDate, Amount) " +
-          "VALUES ('t1', 'c1', 'purchase', '2020-01-01', 1)"
+        "INSERT INTO CoinImages (CoinId, ImageData, SortOrder) VALUES ('c1', 'data:x', 0)"
       )
       .run();
 
     expect(() => clearOwnerData(opened.database)).not.toThrow();
-    expect(targetCount(opened.database, 'Transactions')).toBe(0);
+    expect(targetCount(opened.database, 'CoinImages')).toBe(0);
+    expect(targetCount(opened.database, 'Coins')).toBe(0);
   });
 });

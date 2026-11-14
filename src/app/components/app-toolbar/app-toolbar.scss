@@ -97,6 +97,85 @@
   padding-top: 10px;
 }
 
+// ---- Help button ----
+//
+// The only icon-only control in this row, so it is sized as a square rather
+// than inheriting the text buttons' horizontal padding.
+//
+// IT IS 36px, NOT THE 32px IT WAS. The owner asked for a bigger help
+// control, and the answer to that is the HIT AREA and not only the glyph: a
+// 24px icon inside a 32px box is a bigger thing to look at and the same
+// thing to hit. 36px is the whole target — the square is the button, the
+// padding is zero, and there is no inner wrapper swallowing the press. It
+// now stands 4px taller than the split buttons' 32px min-height; the row is
+// centre-aligned, so that reads as the icon control sitting slightly proud
+// of the text buttons rather than as a broken baseline.
+//
+// THE FOCUS RING IS SPELLED OUT HERE ON PURPOSE. Nothing in this project
+// removes the browser's default outline, so the other buttons get one for
+// free — but they also carry a word, and a keyboard user who overshoots a
+// labelled button can still read where they are. This one cannot be read,
+// so its focus state has to be unmistakable rather than merely present.
+//
+// The ring stays BROWN, not blue. It marks "you are here", which is a
+// property of this application's chrome and is the same on every control;
+// making it match the icon would say the help button has a different kind
+// of focus from its neighbours, which it does not.
+
+.help-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+
+  &:focus-visible {
+    outline: 2px solid #8e5b2d;
+    outline-offset: 2px;
+  }
+}
+
+// THE ONE HEX THAT DECIDES WHAT THE HELP BUTTON LOOKS LIKE.
+//
+// #1565c0 is the blue help affordances conventionally use, and conventional
+// is the requirement — the owner asked for "a standard Help icon", which
+// means instantly recognisable rather than designed. The SVG fills its disc
+// with `currentColor`, so this declaration is the colour; the question mark
+// on top of it is #fff in the markup.
+//
+// CONTRAST, because this is a filled shape carrying meaning and therefore a
+// non-text UI component under WCAG 1.4.11 (3:1):
+//
+//   #1565c0 on #f0e8dc  (the .secondary button face it sits on)  4.73:1
+//   #1565c0 on #f6f3ec  (the page behind the toolbar)            5.19:1
+//   #ffffff on #1565c0  (the question mark on the disc)          5.75:1
+//
+// All three clear 4.5:1, which is the text threshold and stricter than the
+// one that applies — so the glyph survives a user darkening the toolbar or
+// the disc being seen against the page at the row's edge.
+//
+// IT MUST NOT READ AS A SECOND PRIMARY ACTION. The app's primary buttons are
+// the warm #8e5b2d -> #b98748 brown gradient, filling a wide pill behind a
+// word. This is a 24px circle of a colour that appears nowhere else in the
+// application: different hue, different shape, a tenth of the area, and no
+// label. Blue is doing the opposite of competing here — it is what stops the
+// one icon-only control in the row from being mistaken for another of the
+// brown ones.
+
+.help-icon {
+  display: block;
+  color: #1565c0;
+}
+
+// Hover follows the button's own hover, one step darker. #0d47a1 against the
+// #e8dece the .secondary face moves to on hover is 6.48:1. (The unhovered
+// blue would still have cleared it at 4.32:1 — this is depth of press, not
+// a rescue.)
+.help-button:hover:not(:disabled) .help-icon {
+  color: #0d47a1;
+}
+
 // ---- Settings button ----
 
 .settings-button {

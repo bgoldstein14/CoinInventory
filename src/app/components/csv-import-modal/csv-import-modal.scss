@@ -347,3 +347,24 @@
 
   summary { cursor: pointer; color: #8a5a22; }
 }
+
+// "Import only coins I still own" -- the same control, and the same look,
+// as the one on the Quicken dialog. Two dialogs offering one option should
+// not make it look like two different options.
+.csv-sold-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+  cursor: pointer;
+
+  input { accent-color: #8e5b2d; }
+}
+
+.hint-text {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: #7a6a53;
+  line-height: 1.4;
+}

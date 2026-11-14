@@ -57,6 +57,24 @@ export class CoinEditorForm {
   /** The coin being edited. */
   readonly coin = input.required<CoinRecord>();
 
+  /**
+   * Settings > "Show transactions section in details". Passed down from the
+   * panel, which gets it from the App shell.
+   *
+   * THE SECTION LIVES IN THIS COMPONENT, NOT IN THE PANEL, AND THAT IS THE
+   * POINT OF THIS INPUT. Its fields are ordinary coin fields now
+   * (purchasePrice, purchaseDate, purchasedFrom, soldPrice, soldDate,
+   * soldTo, transactionNotes), written through the same
+   * `updateSelectedCoin` as every other control, and it has to render
+   * IMMEDIATELY ABOVE the coin's Notes box — which is in this template. A
+   * section in the parent could not be placed between two of this
+   * component's own children.
+   *
+   * NOT `input.required`: several specs build this form from a bare
+   * injector and pass only `coin`.
+   */
+  readonly showTransactions = input(false);
+
   /** The Metal dropdown's options, kept in sync with the database lookup list. */
   protected readonly metalContentOptions = this.inventoryService.metalContents;
 
