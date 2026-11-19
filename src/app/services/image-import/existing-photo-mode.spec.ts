@@ -1,15 +1,9 @@
  /*
  * existing-photo-mode.spec.ts
  *
- * The three-way question the review screen asks when some of the matched
- * coins already have photos, and the counts inside it.
- *
- * WHY THE COUNTS ARE TESTED THIS HARD
- * The question reads "38 of these 112 coins already have photos ... Their 94
- * current photos are deleted first." Those numbers are the only thing standing
- * between the user and deleting photos he may have no other copy of. A count
- * that is approximate, stale, or quietly counts the wrong set is worse than no
- * count at all, because it reads exactly as authoritative either way.
+ * The three-way question asked when matched coins already have photos, and
+ * its counts. The counts ("Their 94 current photos are deleted first") are
+ * what the user relies on before deleting photos, so they must be exact.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -43,9 +37,7 @@ function row(fileName: string, coinId: string | null, overrides: Partial<BatchIm
 
 describe('DEFAULT_EXISTING_PHOTO_MODE', () => {
   it('is "leave" — the only option that can neither delete nor duplicate', () => {
-    // Defaulting to "replace" risks deleting photos with no other copy;
-    // defaulting to "add" is the duplicate-everything bug this feature is
-    // fixing. "Leave them alone" is the one answer that cannot lose anything.
+    // "replace" can delete photos and "add" can duplicate them.
     expect(DEFAULT_EXISTING_PHOTO_MODE).toBe('leave');
   });
 });
@@ -69,8 +61,7 @@ describe('countExistingPhotos', () => {
   });
 
   it('counts a coin once however many photos are being imported for it', () => {
-    // The sentence is about COINS ("38 of these 112 coins"), not files. Eight
-    // shots of one coin is one coin.
+    // The counts are of coins, not files.
     const inventory = [coin('a', 1)];
     const rows = [row('1.jpg', 'a'), row('2.jpg', 'a'), row('3.jpg', 'a')];
 
@@ -80,9 +71,7 @@ describe('countExistingPhotos', () => {
   });
 
   it('counts only the photos of the coins this import actually touches', () => {
-    // "Their 94 current photos are deleted first" must mean the photos of the
-    // 38 coins in this run, not every photo in the inventory. Counting the
-    // whole library would overstate the damage and make the warning noise.
+    // Only photos of coins in this run, not the whole inventory.
     const inventory = [coin('a', 3), coin('untouched', 99)];
     const rows = [row('a1.jpg', 'a')];
 
@@ -90,8 +79,7 @@ describe('countExistingPhotos', () => {
   });
 
   it('ignores rows that will not be written', () => {
-    // Unticked, skipped and unresolved rows are not part of this import, so
-    // their coins are not part of the question.
+    // Unticked, skipped and unresolved rows are not part of this import.
     const inventory = [coin('a', 2), coin('b', 2), coin('c', 2)];
     const rows = [
       row('a1.jpg', 'a'),
@@ -139,7 +127,7 @@ describe('rowsWrittenUnderMode', () => {
   const rows = [row('has.jpg', 'has'), row('empty.jpg', 'empty')];
 
   it('drops rows for coins that already have photos under "leave"', () => {
-    // THE DEFAULT. "Import only for the 74 coins with no photos yet."
+    // The default: import only for coins with no photos yet.
     expect(rowsWrittenUnderMode(rows, inventory, 'leave').map(r => r.fileName))
       .toEqual(['empty.jpg']);
   });
@@ -172,16 +160,12 @@ describe('replaceConfirmationMessage', () => {
   const counts = { matchedCoins: 112, coinsWithPhotos: 38, coinsWithoutPhotos: 74, existingPhotos: 94 };
 
   it('names the exact number of photos about to be deleted', () => {
-    // "Make the count unmissable." A confirmation that says "are you sure?"
-    // teaches the user to press OK; one that says 94 makes him stop and read.
     const message = replaceConfirmationMessage(counts);
     expect(message).toContain('94');
     expect(message).toContain('38');
   });
 
   it('says deleted, in those words', () => {
-    // Not "replaced", not "overwritten". The rows are removed from the
-    // database and the originals may not exist anywhere else.
     expect(replaceConfirmationMessage(counts).toLowerCase()).toContain('delete');
   });
 

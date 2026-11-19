@@ -1,25 +1,7 @@
  /*
- * text-tokens.ts
- *
- * WHAT THIS FILE OWNS
- *   The low-level TOKEN PLUMBING that both parsers stand on:
- *     - turning a string into a clean list of tokens (`tokenize`,
- *       `singularize`, `meaningfulTokens`),
- *     - finding and removing runs of tokens (`indexOfSequence`, `removeRange`,
- *       `findDenomination`, `removeDenominationTokens`),
- *     - and a handful of tiny string / number helpers used for display
- *       (`baseName`, `stripExtension`, `titleCase`, `capitalize`, `round`)
- *       plus the year sanity check (`isPlausibleYear`).
- *
- * WHY IT IS ITS OWN FILE
- *   These functions know nothing about coins OR about matching -- they just
- *   chop text up. Both the filename parser and the coin-record parser need
- *   exactly the same chopping, and if the two ever drifted apart the matcher
- *   would start comparing apples to oranges (a filename token that was
- *   singularized against a record token that was not, for example). Having
- *   one shared home guarantees both sides speak the identical token language.
- *
- *   Every function here is pure: same input, same output, no state.
+ * Pure token helpers shared by the filename parser and the coin-record parser,
+ * so both sides tokenize identically: tokenizing, finding/removing token
+ * runs, denomination lookup, and small string/number utilities.
   */
 
 import { MIN_COIN_YEAR } from './matching-thresholds';
@@ -30,15 +12,9 @@ import {
   STOP_WORDS
 } from './reference-tables';
 
- /*
- * PARSING HELPERS
-  */
-
 /**
- * Split text into normalized tokens.
- *
- * Everything downstream compares WHOLE tokens, which is what stops the cert
- * number "2599001" from ever equalling "25".
+ * Split text into normalized tokens. Downstream code compares whole tokens,
+ * so a cert number "2599001" never equals "25".
  */
 export function tokenize(value: string): string[] {
   return value
@@ -52,14 +28,8 @@ export function tokenize(value: string): string[] {
 /**
  * Very light plural stripping so "dollars" == "dollar" and "cents" == "cent".
  * Only applied to words longer than 3 characters that do not end in "ss",
- * so mint marks ("s") and shorthand ("ms") survive untouched.
- *
- * ACRONYM EXCEPTION: the grading services are not plurals. Without this guard
- * "pcgs" became "pcg", "anacs" became "anac" and "segs" became "seg" -- none
- * of which are in CERT_COMPANIES, so the company went unrecognised AND the
- * mangled leftover survived as fake "coin type" evidence, making any two
- * PCGS-graded coins look slightly alike. Real filenames hit this constantly:
- * "1870 $1 - PCGS PF62CAM- Obverse.jpg".
+ * so mint marks ("s") and shorthand ("ms") survive untouched. Grading-service
+ * acronyms ("pcgs", "anacs") are left alone.
  */
 export function singularize(token: string): string {
   if (CERT_COMPANIES.has(token)) return token;
@@ -118,49 +88,19 @@ export function findDenomination(
 /** Options for {@link findDenomination}. */
 export interface FindDenominationOptions {
   /**
-   * Let a bare "cent" preceded by a count still answer ONE CENT.
-   *
-   * Exactly one caller sets this, and not to get an answer. filename-parser.ts
-   * has to tell the face-value reader whether THE WORDS ALREADY NAMED A COIN,
-   * because that is how "$50" in "1881-S Morgan Dollar $50.jpg" is recognised
-   * as a price rather than a second face value. For that question "50 cent" in
-   * "1913 50-Cent Canadian $20" counts as the words naming a coin, even though
-   * the key it produces ('cent') is the wrong one to publish. So the parser
-   * asks twice: once normally for the ANSWER, and once with this flag for the
-   * CONTEXT. See the guard below for what is being suppressed and why.
+   * Let a bare "cent" preceded by a count still answer ONE CENT. Used only by
+   * filename-parser.ts for a context read (did the words name a coin at all?),
+   * never for the published denomination.
    */
   allowCountedCent?: boolean;
 }
 
 /**
- * "3 CENT" IS NOT A ONE-CENT COIN -- the trap this guard closes.
- *
- * The bare word "cent" is listed (correctly) as a spelling of the ONE CENT
- * piece, and it is matched anywhere in the token list. That is fine for
- * "Indian Head Cent" and fatal for a face value written with a space:
- *
- *     1864 2 cent - Obverse.jpg          -> ['1864','2','cent']
- *     1866 3 cent silver - Obverse.jpg   -> ['1866','3','cent','silver']
- *     1875 20 cent - Obverse.jpg         -> ['1875','20','cent']
- *
- * Every one of those would otherwise be read as a ONE CENT piece. That is not
- * merely a weak guess, it is an actively harmful one: a wrong denomination is
- * a HARD VETO, so the photo is disqualified from its own coin record and
- * vanishes from the import with a skip reason blaming the coin.
- *
- * Why the fix is to read NOTHING rather than to read "two cent".
- *   Reading "2 cent" as the Two Cent piece would be the generous choice, and
- *   it is probably what the name means. But denomination-units.ts refuses the
- *   spaced form on purpose -- the hyphen in "20-cent" is its whole defence
- *   against "Stamp - 11 - 3 cent.jpg" -- and widening that here, in the
- *   shared table used by coin RECORDS as well as filenames, would undo a
- *   deliberate guard on an inference. So this guard only DELETES a wrong
- *   answer. The attribute ends up absent, the scorer leaves it out of both
- *   numerator and denominator, and nothing is vetoed on a misreading.
- *
- * A preceding four-digit YEAR is not a count. "1870 Cent - Obverse.jpg" is a
- * one-cent coin struck in 1870 and must go on reading as one, which is why
- * `isPlausibleYear` is consulted rather than "is it a number".
+ * True when a bare "cent" follows a count ("1875 20 cent" -> ['20','cent']),
+ * which must not read as a One Cent piece: a wrong denomination is a hard
+ * veto. The match is dropped rather than reinterpreted; spaced face values
+ * are read by denomination-units.ts. A preceding year is not a count
+ * ("1870 Cent" is still a one-cent coin).
  */
 function isCountedCentTrap(tokens: string[], pattern: string[], start: number): boolean {
   // Only the bare one-word spelling is at risk; ['one','cent'] and ['1c']
@@ -211,10 +151,6 @@ export function isPlausibleYear(value: number): boolean {
   const maxYear = new Date().getFullYear() + 1;
   return Number.isInteger(value) && value >= MIN_COIN_YEAR && value <= maxYear;
 }
-
- /*
- * SMALL UTILITIES
-  */
 
 export function baseName(path: string): string {
   const parts = String(path ?? '').split(/[\\/]/);

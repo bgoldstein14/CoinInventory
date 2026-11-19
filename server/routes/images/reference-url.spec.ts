@@ -1,18 +1,10 @@
 /**
- * routes/images/reference-url.spec.ts
+ * The reference URL used for referenced photos:
  *
- * The reference URL is the whole of the wire format for the REFERENCED
- * storage mode: a photograph the database holds the location of and not the
- * picture of. Two properties matter and both are pinned here.
- *
- *   1. A ROUND TRIP IS LOSSLESS. Whatever path goes in comes back out —
- *      Windows backslashes, spaces, UNC prefixes, `&` and `#` in filenames.
- *      A lossy round trip would re-point a photograph at a file that does
- *      not exist, on an ordinary coin save.
- *   2. THE ORIGIN IS NOT PART OF THE IDENTITY. The client builds the
- *      absolute form (a relative URL would 404 under `ng serve`), older
- *      payloads carry the relative one, and both have to be understood as
- *      the same reference.
+ *   1. round trips are lossless (backslashes, spaces, UNC, `&` and `#`);
+ *      otherwise a save would re-point a photo at a missing file;
+ *   2. the origin doesn't matter: absolute and relative forms are the same
+ *      reference.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -28,7 +20,7 @@ describe('referenceUrlFor', () => {
   it('encodes a Windows path so nothing truncates the query string', () => {
     const url = referenceUrlFor('C:\\Coin Pictures\\1921 morgan & friends#2.jpg');
 
-    // The raw characters that would break a query string must not survive.
+    // Characters that would break a query string are encoded.
     expect(url.startsWith(IMAGE_REFERENCE_ROUTE)).toBe(true);
     expect(url).not.toContain('\\');
     expect(url).not.toContain(' ');
@@ -71,8 +63,7 @@ describe('sourcePathFromReferenceUrl', () => {
   it('is null for a reference with an empty or malformed path', () => {
     expect(sourcePathFromReferenceUrl(`${IMAGE_REFERENCE_ROUTE}`)).toBeNull();
     expect(sourcePathFromReferenceUrl(`${IMAGE_REFERENCE_ROUTE}%20%20`)).toBeNull();
-    // A lone '%' is not a valid escape; decodeURIComponent throws on it, and
-    // a throw here would become a 500 in the middle of saving a coin.
+    // A malformed escape must give null, not a throw (a 500 during a save).
     expect(sourcePathFromReferenceUrl(`${IMAGE_REFERENCE_ROUTE}%zz`)).toBeNull();
   });
 });
@@ -96,8 +87,7 @@ describe('originFromRequest', () => {
   });
 
   it('falls back to the relative form when there is no Host header', () => {
-    // http/1.1 forbids it, but a hand-rolled client can still omit it, and a
-    // reference of "undefined/api/…" would be worse than a relative one.
+    // No Host header: relative form rather than "undefined/api/...".
     expect(originFromRequest({ protocol: 'http', get: () => undefined })).toBe('');
     expect(originFromRequest({})).toBe('');
   });

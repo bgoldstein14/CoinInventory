@@ -1,18 +1,6 @@
 /**
- * recent-errors.service.spec.ts
- *
- * ---- WHY A RING BUFFER AND NOT "READ THE LOG" ----
- * The owner's requirement names "recent errors" separately from "the log",
- * and they are genuinely different things. The log is what the SERVER saw.
- * This is what the USER saw: the toasts, the failed saves, the unhandled
- * exceptions Angular caught. Plenty of those never reach the backend at all
- * — LoggingService deliberately backs off for thirty seconds after a failed
- * POST, and the most interesting errors are exactly the ones that happen
- * when the backend is unreachable.
- *
- * So the browser keeps its own short tail. Capped, because this runs for the
- * whole session and an unbounded array in a long-lived desktop app is a
- * memory leak with extra steps.
+ * Tests for the browser-side recent-errors buffer: capped, collapses
+ * immediate repeats, and hands out copies.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -46,12 +34,7 @@ describe('RecentErrorsService', () => {
     expect(service.snapshot().map(e => e.message)).toEqual(['first', 'second']);
   });
 
-  /**
-   * A retry loop or a broken render can throw the same error hundreds of
-   * times a second. Without collapsing, the ring buffer fills with one
-   * message and every other error the user saw is pushed out — losing
-   * exactly the context that makes the report useful.
-   */
+  /** A repeating error must not push every other error out of the buffer. */
   it('collapses an immediately repeated error into a count', () => {
     const service = new RecentErrorsService();
     service.record('connection lost');
@@ -102,11 +85,7 @@ describe('RecentErrorsService', () => {
     expect(service.errors()).toHaveLength(1);
   });
 
-  /**
-   * The snapshot is handed to JSON.stringify and posted. Returning the live
-   * array would let a later record() mutate a payload that is already in
-   * flight — and would let a caller mutate the service's state by accident.
-   */
+  /** The snapshot is serialised and posted; later records must not mutate it. */
   it('returns a copy, not the live array', () => {
     const service = new RecentErrorsService();
     service.record('x');

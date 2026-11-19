@@ -1,67 +1,22 @@
 /**
- * routes/support/index.ts — "Help → Report a problem", server side.
+ * "Help -> Report a problem", server side:
  *
- * THREE ENDPOINTS, AND THE LINE BETWEEN THEM IS CONSENT
- *   GET  /api/support/config    where issues are filed and where the report
- *                               will be written. Reads nothing, writes
- *                               nothing. The dialog needs this on the FIRST
- *                               screen so it can offer the repository as a
- *                               real clickable link before anything is built.
+ *   GET  /api/support/config    repository URL and output folder, for the
+ *                               dialog's first screen. Reads and writes nothing.
+ *   POST /api/support/preview   builds the report and returns it. Writes nothing.
+ *   POST /api/support/report    writes the report as a `.md` on the Desktop,
+ *                               plus an optional redacted `.txt` log.
  *
- *   POST /api/support/preview   builds the report and returns it. Touches no
- *                               disk. The user has agreed to nothing yet, so
- *                               nothing exists yet.
+ * Preview and write are separate so nothing exists on disk until the user has
+ * seen the report and pressed the button. No zip and no in-app attachments:
+ * the user drags the files into the GitHub issue themselves. Nothing here
+ * talks to GitHub; the frontend opens a pre-filled issue URL in the browser.
  *
- *   POST /api/support/report    takes that text and writes a plain `.md`
- *                               file to the Desktop — plus, if the reporter
- *                               asked for it, a plain `.txt` of the recent
- *                               log beside it.
+ * `includeLog` off means no log content at all (no file, no tail in the body).
+ * Both files share one Redactor (see prepareSupportFiles).
  *
- * Splitting preview from write is the whole design: a single call that
- * generated and wrote in one step would mean the artefact exists the moment
- * the dialog wants to display anything. The dialog builds the report to show
- * the user what is in it — in summary always, in full on request — and only
- * writes when they press the button.
- *
- * NO ZIP, AND NO ATTACHMENTS
- * The write endpoint produces plain files, not an archive. Zipping a report
- * that is already text gains nothing, and zipping a JPG actively hides it:
- * GitHub renders a dragged-in image inline, where the same image inside a zip
- * is invisible until someone extracts it. Two draggable files is still not an
- * archive; it is two draggable files.
- *
- * `includeLog` IS A SAFETY FEATURE, NOT A CONVENIENCE
- * Removing the zip removed the only REDACTED log a user could share, leaving
- * the raw `app.log` — account name, machine name, photo paths — as the only
- * thing to hand for a PUBLIC issue. Ticking the box writes a redacted 2,000
- * line `.txt` beside the report instead. Unticking it means NO LOG CONTENT AT
- * ALL: no second file, and no log tail in the report body either, because
- * leaving 150 lines behind would make the unticked state a half-truth.
- *
- * Both files go through ONE `Redactor` instance (`prepareSupportFiles`). Two
- * independent passes would assign different placeholders to the same path and
- * the pair would mislead a reader about how many accounts were involved.
- *
- * The in-app file picker went with the zip. The app cannot upload to GitHub —
- * there is no official attachment API, only undocumented routes that disagree
- * about whether a token even works — so with no archive there was nowhere for
- * a staged file to go. Collecting files and then dropping them is worse than
- * not offering. The user attaches their own files by dragging them into the
- * issue, and the dialog says so with a clickable link.
- *
- * Consequently there are NO SIZE CAPS here. They bounded an archive that is
- * no longer built; GitHub enforces its own 25 MB on what the user drags in.
- *
- * NOTHING HERE TALKS TO GITHUB
- * No token is shipped, no request is made. The frontend opens a pre-filled
- * issue URL in the user's own browser and the user presses Submit there.
- *
- * IT MUST WORK WHEN EVERYTHING ELSE DOES NOT
- * The collection counts come from the database, and the database being
- * unreachable is one of the likeliest reasons somebody is filing a report.
- * So the count query is best-effort: a failure becomes "could not be read"
- * in the report and changes nothing else. This router never returns an error
- * because the database is down.
+ * Must work when the database doesn't: the collection counts are
+ * best-effort, and a failure only shows as "could not be read".
  */
 
 import { Router, Request, Response } from 'express';
@@ -89,20 +44,12 @@ import {
 
 const router = Router();
 
-/**
- * Overrides where the report is written.
- *
- * Exists for the tests — no test may write to the developer's real Desktop —
- * and for the packaged build, which puts user-writable files under
- * %LOCALAPPDATA% and may want to be explicit about it.
- */
+/** Overrides where the report is written (tests; the packaged build). */
 const OUTPUT_DIR_ENV_VAR = 'COIN_SUPPORT_OUTPUT_DIR';
 
 /**
- * Where issues are filed. The default below is a PLACEHOLDER and the response
- * says so explicitly via `repositoryConfigured`, because the one thing worse
- * than no support button is one that links to a 404 and leaves the user
- * believing they have been heard.
+ * Where issues are filed. The default is a placeholder, flagged by
+ * `repositoryConfigured` so the dialog doesn't link to a 404.
  */
 const REPO_URL_ENV_VAR = 'SUPPORT_REPO_URL';
 const PLACEHOLDER_REPO_URL = 'https://github.com/OWNER/coin-inventory';
@@ -120,13 +67,8 @@ function outputDirectory(): string {
 }
 
 /**
- * Read a `version` out of a package.json, without letting a missing or
- * malformed file break the report.
- *
- * Resolved by walking up from this module rather than from `process.cwd()`,
- * for the tsx-vs-compiled-dist reason routes/app-info.ts documents: this file
- * runs from `server/routes/support` under tsx and `server/dist/routes/support`
- * when compiled.
+ * Reads `version` from a package.json without failing the report. Found by
+ * walking up from this module, since the depth differs under tsx and dist.
  */
 function readVersion(relativeFromServerRoot: string): string {
   const candidates = [
@@ -142,42 +84,28 @@ function readVersion(relativeFromServerRoot: string): string {
       };
       if (typeof parsed.version !== 'string') continue;
 
-      /*
-       * Report the same four-part string the title bar shows.
-       *
-       * `buildNumber` is a separate field because `1.0.0.0` is not valid
-       * semver and npm rejects it. Only the root package.json carries one;
-       * the server's does not, and appends nothing — so a report reads
-       * `1.0.0.0` for the app and `1.0.0` for the server, which is honest
-       * about where each number came from.
-       *
-       * Until 2026-11-14 the root package.json still said `0.0.0`, so every
-       * support report ever written claimed to come from version 0.0.0.
-       * src/app/version.spec.ts is what stops that recurring.
-       */
+      // The four-part version the title bar shows. `buildNumber` is separate
+      // because `1.0.0.0` isn't valid semver; only the root package.json has
+      // one, so the server reads as `1.0.0`.
       return typeof parsed.buildNumber === 'number'
         ? `${parsed.version}.${parsed.buildNumber}`
         : parsed.version;
     } catch {
-      // Not there, or not JSON. Try the next layout.
+      // Missing or not JSON: try the next layout.
     }
   }
   return 'unknown';
 }
 
 /**
- * How big the collection is. COUNTS ONLY — this is the only database access
- * the whole feature makes, and the query is written so that it CANNOT return
- * content even if someone later edits it carelessly: there is no column list
- * to accidentally widen.
+ * Collection size, counts only. The only database access in this feature;
+ * the query has no column list that could be widened to return content.
  */
 async function readCounts(): Promise<{ counts: SupportCounts | null; error?: string }> {
   try {
     const result = await withDb(async (db) =>
       db.request().query(
-        // `soldCoins` replaced the old `transactions` count when the
-        // Transactions table was dropped. It is still a pure COUNT(*) with
-        // no column list, so it cannot leak content.
+        // Pure COUNT(*)s, so no content can leak.
         `SELECT
            (SELECT COUNT(*) FROM Coins)        AS coins,
            (SELECT COUNT(*) FROM CoinImages)   AS photos,
@@ -197,7 +125,7 @@ async function readCounts(): Promise<{ counts: SupportCounts | null; error?: str
       }
     };
   } catch (err) {
-    // Deliberately NOT an error response. See the module header.
+    // Not an error response (see the module header).
     return { counts: null, error: err instanceof Error ? err.message : String(err) };
   }
 }
@@ -208,21 +136,14 @@ function currentIdentity() {
 }
 
 /**
- * Did the caller ask for the log?
- *
- * DEFAULTS TO TRUE, matching the checkbox's own default, because one named
- * field that means different things on two endpoints of the same feature is a
- * worse trap than either default. The dialog always sends the value
- * explicitly, so the unticked state can never be lost in transit — and the
- * write endpoint reports back what it ACTUALLY wrote, so even a caller that
- * got this wrong cannot leave the user misinformed about what is on their
- * Desktop.
+ * Did the caller ask for the log? Defaults to true, like the checkbox. The
+ * write response reports what was actually written.
  */
 function wantsLog(body: Record<string, unknown>): boolean {
   return body['includeLog'] !== false;
 }
 
-/** Defensive coercion — this body comes from the renderer, so it is input. */
+/** Defensive coercion; this body comes from the renderer. */
 function asClientErrors(value: unknown): ClientError[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -238,18 +159,9 @@ function asClientErrors(value: unknown): ClientError[] {
 // GET /api/support/config
 
 /**
- * Everything the dialog needs before it has built anything.
- *
- * THE CLICKABLE LINK IS WHY THIS EXISTS. The repository URL has to be on the
- * FIRST screen — the user is told there that attaching is a GitHub-side
- * action, and telling them that without handing them the link is telling them
- * to go and find it. Getting the URL out of the preview response instead
- * would mean building the whole report (which reads the log and queries the
- * database) just to render a hyperlink.
- *
- * `repositoryConfigured` is load-bearing: while the URL is still the shipped
- * placeholder the dialog must say the repository is not configured rather
- * than render a link to a 404.
+ * Everything the dialog needs before building anything, chiefly the
+ * repository link for the first screen. `repositoryConfigured` is false while
+ * the URL is still the placeholder.
  */
 router.get('/support/config', (_req: Request, res: Response) => {
   res.json({
@@ -279,9 +191,7 @@ router.post('/support/preview', async (req: Request, res: Response) => {
         counts,
         countsError: error,
         clientErrors: asClientErrors(body['clientErrors']),
-        // Not even READ when the box is unticked. The renderer would drop
-        // them, but there is no reason to lift a user's unredacted log lines
-        // into memory to decide not to use them.
+        // Not even read when unticked.
         logLines: includeLog ? readRecentLogLines(REPORT_LIMITS.maxLogLines) : [],
         logFiles: listLogFiles(),
         includeLog,
@@ -293,8 +203,7 @@ router.post('/support/preview', async (req: Request, res: Response) => {
 
     res.json({ markdown, receipt });
   } catch (err) {
-    // A failure here must not be silent: the user pressed a button and is
-    // waiting. Log it and say so plainly rather than hanging the dialog.
+    // Log and report the failure rather than leaving the dialog hanging.
     logError('Support preview failed', err);
     res.status(500).json({ error: 'Could not build the problem report.' });
   }
@@ -316,15 +225,12 @@ router.post('/support/report', (req: Request, res: Response) => {
     const directory = outputDirectory();
     const includeLog = wantsLog(body);
 
-    // ONE instant for both files, so the pair is obviously a pair on a
-    // Desktop that may already hold three of them.
+    // One timestamp for both files.
     const when = new Date();
     const reportName = reportFileName(when);
 
-    // Read the log HERE, not from the request. The 2,000 lines never go near
-    // the renderer: they are raw and unredacted until the pass below, and
-    // round-tripping them through the browser would create exactly the
-    // unredacted artefact this feature exists to avoid.
+    // Read the log here, not from the request, so unredacted lines never
+    // round-trip through the browser.
     const rawLog = includeLog
       ? renderLogFile(readRecentLogLines(LOG_FILE_LIMITS.maxLines), {
           generatedAt: when,
@@ -332,8 +238,7 @@ router.post('/support/report', (req: Request, res: Response) => {
         })
       : null;
 
-    // ONE redactor for both. See prepareSupportFiles: separate passes would
-    // give the same path different placeholders in the two files.
+    // One redactor for both files.
     const prepared = prepareSupportFiles(markdown, rawLog, identity);
 
     const written = writeSupportFile(directory, reportName, prepared.reportText);
@@ -342,10 +247,7 @@ router.post('/support/report', (req: Request, res: Response) => {
         ? null
         : writeSupportFile(directory, logFileName(when), prepared.logText);
 
-    // THE FULL PATH, not the bare file name. The server can be running on a
-    // different machine from the person looking for the file, and "Support
-    // report written: coin-inventory-problem-report-….md" cannot answer the
-    // only question anybody asks of this line, which is where it went.
+    // The full path, since the server may be on a different machine from the user.
     logInfo(`Support report written: ${written.path} (${written.bytes} bytes)`);
     if (writtenLog) {
       logInfo(`Support log written: ${writtenLog.path} (${writtenLog.bytes} bytes)`);
@@ -353,17 +255,12 @@ router.post('/support/report', (req: Request, res: Response) => {
 
     res.json({
       path: written.path,
-      // For the issue body, which is public. See redactReportPath.
+      // For the public issue body (see redactReportPath).
       redactedPath: redactReportPath(written.path, identity),
       fileName: written.fileName,
       directory: written.directory,
       bytes: written.bytes,
-      /**
-       * null when no log was asked for. WHAT WAS ACTUALLY WRITTEN, never what
-       * was requested: the dialog builds its "a log file was written and here
-       * it is" note and the issue body from this, so the user is told the
-       * truth about their own Desktop even if the flag were ever mishandled.
-       */
+      /** What was actually written (null if no log); the dialog and issue body use this. */
       log: writtenLog
         ? {
             path: writtenLog.path,

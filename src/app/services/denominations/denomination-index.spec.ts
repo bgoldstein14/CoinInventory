@@ -1,16 +1,6 @@
  /*
- * denomination-index.spec.ts
- *
- * The index exists for ONE reason: `resolveDenomination` filters the whole
- * lookup table through `denominationKey` on every call, and an import asks
- * it the question once per row. 2,000 rows x 1,161 labels is 2.3 million
- * alias folds for one spreadsheet.
- *
- * So the thing this spec has to prove is not that the index is fast. It is
- * that THE SHORTCUT CHANGES NO ANSWER -- swept over the real authored seed,
- * against the resolver called the long way. A fast resolver that resolves
- * differently from the editor and the migration is the exact failure design
- * §5 spends a page warning about.
+  * The index must change no answer: swept over the real seed and compared with
+  * `resolveDenomination` called directly.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -32,9 +22,7 @@ function allCandidates(rows: readonly IndexableDenomination[]): ResolverDenomina
 
 describe('denominationIndexFor', () => {
   it('is built once per lookup array, because the importer asks per row', () => {
-    // Array IDENTITY, which is what InventoryService's denominations signal
-    // hands out per fetch. Without this, a 2,000-row import rebuilds the
-    // index 2,000 times and the shortcut is slower than the long way.
+    // Cached by array identity, so an import doesn't rebuild it per row.
     const first = denominationIndexFor(SEED_DENOMINATIONS);
     const second = denominationIndexFor(SEED_DENOMINATIONS);
     expect(second).toBe(first);
@@ -46,8 +34,7 @@ describe('denominationIndexFor', () => {
 
     // A two-letter value is an ISO code: Denominations.Country = 'MX'.
     expect(byName.get('Mexico')?.isoCode).toBe('MX');
-    // Anything longer is the issuer's own name -- every ancient, which has
-    // no ISO code to be filled in with.
+    // Anything longer is the issuer's own name (e.g. ancients with no ISO code).
     expect(byName.get('Roman Empire')?.isoCode).toBeNull();
   });
 
@@ -67,15 +54,9 @@ describe('denominationIndexFor', () => {
   });
 });
 
- /*
- * THE PROPERTY THE SHORTCUT STANDS ON
-  */
-
 describe('the indexed resolution is the same resolution', () => {
-  /* The spellings swept. Every 17th seeded label (so the sweep crosses every
-   * issuer rather than camping in the United States), plus the spellings
-   * this collection is known to produce -- the QIF parser's '5s' and '3CS',
-   * the ones the design names, and the ones that MUST stay unresolved. */
+  /* Every 17th seeded label (to cross every issuer), plus spellings the QIF
+   * parser produces ('5s', '3CS') and ones that must stay unresolved. */
   const SPELLINGS = [
     ...SEED_DENOMINATIONS.filter((_row, i) => i % 17 === 0).map(row => row.label),
     '8 Reales', 'Crown', 'Sovereign', 'Penny', 'Trade Dollar', 'Pillar Dollar',
@@ -119,8 +100,7 @@ describe('the indexed resolution is the same resolution', () => {
       }
     }
 
-    // Non-vacuity: a sweep in which nothing resolves would agree perfectly
-    // and prove nothing at all.
+    // Non-vacuity: enough pairs must resolve for the sweep to mean something.
     expect(resolvedPairs).toBeGreaterThan(200);
     expect(disagreements.slice(0, 20)).toEqual([]);
   });
@@ -134,29 +114,19 @@ describe('the indexed resolution is the same resolution', () => {
     expect(resolveIndexedDenomination('8 Reales', 'Mexico', index).denominationId)
       .toBe(mexican!.denominationId);
 
-    // Six issuers struck one, so a coin filed under the United States has no
-    // right answer and the id stays null. See the long note in
-    // sql-denomination-resolution-parity.spec.ts: this is correct, not a
-    // shortfall.
+    // Six issuers struck one, so a coin filed under the United States stays unlinked.
     expect(resolveIndexedDenomination('8 Reales', 'United States', index).outcome)
       .toBe('ambiguous');
 
-    // Nothing in the table names it. Normal, and not an error.
+    // Nothing in the table names it; normal, not an error.
     expect(resolveIndexedDenomination('Pillar Dollar', 'United States', index).outcome)
       .toBe('unknown');
   });
 
   it('does not let a country vocabulary rename an issuer on top of another', () => {
-    /* THE DEFECT THIS LOCKS DOWN, WHICH COST 52 OF 457 CORPUS COINS THEIR
-     * LINK. `Denominations.Country` holds 'Confederate States of America'
-     * for the Confederate issuer, and `countryDisplayName` answers 'United
-     * States' for that string — it resolves a place to the modern country
-     * containing it. Two issuers then shared one name, an ordinary '1¢'
-     * matched both of them in-country, and rule 3 nulled the id.
-     *
-     * Note what is NOT asserted: that the two issuers are distinguishable
-     * by some clever rule. They are distinguishable because the seed wrote
-     * the name down and this index leaves it alone. */
+    /* `Denominations.Country` holds 'Confederate States of America' for that
+     * issuer. Mapping it to 'United States' (as countryDisplayName would) makes an
+     * ordinary '1¢' ambiguous in-country. The index must keep the seed's name. */
     const index = denominationIndexFor(SEED_DENOMINATIONS);
     const names = index.issuers.map(issuer => issuer.name);
     expect(names).toContain('Confederate States of America');
@@ -171,7 +141,7 @@ describe('the indexed resolution is the same resolution', () => {
     expect(resolveDenominationId('50¢', 'United States', SEED_DENOMINATIONS))
       .toBe(usHalf!.denominationId);
 
-    // And the Confederate rows are still reachable by their own name.
+    // The Confederate rows are still reachable by their own name.
     const csaCent = seedDenomination('Confederate States of America', '1¢');
     expect(csaCent, 'the seed should carry a Confederate 1¢').toBeTruthy();
     expect(resolveDenominationId('1¢', 'Confederate States of America', SEED_DENOMINATIONS))
@@ -179,9 +149,7 @@ describe('the indexed resolution is the same resolution', () => {
   });
 
   it('widens past the coin\'s country rather than giving up', () => {
-    // The rule the whole design turns on. '100 Soles' is Peruvian; a coin
-    // the QIF importer filed under the United States must still find it,
-    // because only one issuer struck one.
+    // Only Peru struck a 100 Soles, so a coin filed under the United States still finds it.
     const peruvian = seedDenomination('Peru', '100 Soles');
     expect(peruvian, 'the seed should carry a Peruvian 100 Soles').toBeTruthy();
 
@@ -197,15 +165,12 @@ describe('the indexed resolution is the same resolution', () => {
 
 describe('resolveDenominationId', () => {
   it('answers null for an empty lookup, so an import before the list arrives links nothing', () => {
-    // NOT an error, and specifically not a reason to refuse the import. A
-    // coin with text and no id is a correct, recoverable outcome (§4.1).
+    // No lookup: null, which is not a reason to refuse the import.
     expect(resolveDenominationId('$1', 'United States', [])).toBeNull();
   });
 
   it('folds the spellings the QIF importer actually writes', () => {
-    // '5s' is what the parser emits for a British crown, and the alias
-    // table already folds it onto '5/- (Crown)'. If this stops working the
-    // importers quietly stop linking every British coin.
+    // '5s' is what the parser emits for a British crown; the alias table folds it.
     const crown = seedDenomination('Great Britain', '5/- (Crown)');
     expect(crown, 'the seed should carry a British crown').toBeTruthy();
     expect(resolveDenominationId('5s', 'Great Britain', SEED_DENOMINATIONS))

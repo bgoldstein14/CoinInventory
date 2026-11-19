@@ -1,24 +1,13 @@
 /**
- * Tests that adding or removing a Set / Album reaches the DATABASE.
- *
- * THE BUG THESE EXIST FOR
- *
- * `LookupManager.addCoinSet` and `removeCoinSet` used to update the in-memory
- * signal and stop there. A comment claimed that was deliberate — "a coin set
- * exists because some coin references it" — but the app has a CoinSets table,
- * `/api/coin-sets` routes, and hydration that READS from them. Only the write
- * half was missing.
- *
- * The user-visible result: add a set, see it in the picker, reload, and it is
- * gone, because hydration replaced the local list with the database's copy
- * which had never been told. A set created before any coin was filed into it
- * could never survive at all.
+ * Adding or removing a Set / Album must reach the database (CoinSets table,
+ * `/api/coin-sets`). Hydration reads from it, so a set only updated locally
+ * would vanish on reload.
  */
 import { describe, expect, it } from 'vitest';
 import { throwError } from 'rxjs';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-/** Let the fire-and-forget `.then()/.catch()` on the API call settle. */
+/** Lets the fire-and-forget `.then()/.catch()` on the API call settle. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
 describe('coin set persistence', () => {
@@ -44,8 +33,7 @@ describe('coin set persistence', () => {
   });
 
   it('does not post a duplicate, which the backend would reject', async () => {
-    // CoinSets is keyed on the name, so a second POST of the same value is a
-    // primary-key clash rather than a harmless no-op.
+    // CoinSets is keyed on the name, so a duplicate POST would be a primary-key clash.
     const { inv, mockApiService } = createTestInventoryService();
     inv.coinSets.set(['Morgan Set']);
 
@@ -88,24 +76,18 @@ describe('coin set persistence', () => {
   });
 
   it('tells the user when the save fails instead of diverging silently', async () => {
-    // The local signal is updated optimistically, so a failed write would
-    // otherwise leave the UI showing a set the database does not have.
+    // The signal updates optimistically, so a failed write must be reported.
     const { inv, mockApiService, mockNotification } = createTestInventoryService();
 
-    // A failing REQUEST, not a synchronous throw: the error has to arrive
-    // through the observable so it lands in the `.catch()` on firstValueFrom,
-    // which is the path the real backend failure takes.
-    // Cast because the shared mock object types this as a plain function
-    // rather than a vi.Mock; the same `as any` appears on the other mocks in
-    // this suite for the same reason.
+    // Fail through the observable (not a synchronous throw), as a real backend does.
+    // `as any` because the shared mock types this as a plain function.
     (mockApiService.createCoinSet as any).mockReturnValue(throwError(() => new Error('network down')));
 
     expect(() => inv.addCoinSet('Morgan Set')).not.toThrow();
     await settle();
 
     expect(mockNotification.showError).toHaveBeenCalled();
-    // The optimistic local add stands; the notification is what tells the user
-    // the two are out of step.
+    // The optimistic add stands; the notification reports the mismatch.
     expect(inv.coinSets()).toContain('Morgan Set');
   });
 });

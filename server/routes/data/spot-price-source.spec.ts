@@ -1,13 +1,7 @@
 /**
- * Tests for the COMEX/NYMEX spot-price fetcher.
- *
- * `fetch` is stubbed throughout — these tests never touch the network.
- *
- * The case that matters most is the copper unit conversion. COMEX quotes
- * copper in dollars per POUND while the other three metals are per TROY
- * OUNCE, and the frontend's melt-value maths assumes every price is per troy
- * ounce. Getting that wrong overstates copper melt values by ~14.6x, and it
- * is the sort of error nobody notices because the number still looks
+ * The COMEX/NYMEX spot-price fetcher, with `fetch` stubbed. The key case is
+ * copper: quoted per pound, but the frontend assumes per troy ounce, so a
+ * missed conversion overstates copper melt values ~14.6x while still looking
  * plausible.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -18,13 +12,9 @@ function chartPayload(price: unknown) {
   return { chart: { result: [{ meta: { regularMarketPrice: price } }] } };
 }
 
-/**
- * Installs a fake `fetch` that answers per symbol.
- * `prices` maps a Yahoo symbol to either a number, or 'http-error' / 'throw'.
- */
+/** Installs a fake `fetch`; `prices` maps a symbol to a number, 'http-error' or 'throw'. */
 function stubFetch(prices: Record<string, number | 'http-error' | 'throw'>) {
-  // The second parameter is declared even though the stub ignores it, so the
-  // test below can assert on the RequestInit that was passed.
+  // Second parameter declared so a test can assert on the RequestInit.
   const impl = vi.fn(async (url: string | URL, _init?: RequestInit) => {
     const href = typeof url === 'string' ? url : url.toString();
     const match = Object.keys(prices).find(sym => href.includes(encodeURIComponent(sym)));
@@ -66,8 +56,7 @@ describe('fetchSpotPrices', () => {
     const expected = 6.766 / (453.59237 / 31.1034768);
     expect(prices.copper).toBeCloseTo(expected, 4);
 
-    // Guard the specific failure this conversion prevents: copper must NOT be
-    // passed through as the raw per-pound quote.
+    // Copper must not pass through as the raw per-pound quote.
     expect(prices.copper).not.toBeCloseTo(6.766, 2);
     expect(prices.copper).toBeLessThan(1);
   });
@@ -79,8 +68,7 @@ describe('fetchSpotPrices', () => {
     expect(prices.gold).toBe(4321.2);
     expect(failed).toContain('silver');
     expect(failed).toContain('platinum');
-    // Failed metals stay at 0, but the caller is told, so a 0 is never
-    // mistaken for a real price.
+    // Failed metals stay 0 and are reported.
     expect(prices.silver).toBe(0);
     expect(prices.platinum).toBe(0);
   });

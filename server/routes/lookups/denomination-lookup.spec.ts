@@ -1,19 +1,8 @@
 /*
- * routes/lookups/denomination-lookup.spec.ts — every way the lookup fails,
- * exercised.
- *
- * *** THIS FILE IS THE REASON THE FEATURE COULD BE BUILT AT ALL. *** The
- * note that used to sit at the bottom of category-modal.ts refused to build
- * this lookup, and the decisive reason was that "a lookup whose correct
- * behaviour is 'returns nothing, and that is not an error' is
- * indistinguishable from one that is broken, or one that was never wired
- * up". It is distinguishable if the failing paths are tested, which is what
- * `setLookupFetch` is for: no network is reached here, and the suite does
- * not depend on a third party being up while it runs.
- *
- * WHAT IS NOT TESTED HERE, DELIBERATELY: that Wikidata has good data. It
- * does not, for ancients, and the measured hit rate is written down in
- * wikidata-denominations.ts. That is why nothing is auto-inserted.
+ * Every failure path of the denomination lookup, with fetch stubbed via
+ * setLookupFetch so no network is used. A lookup that correctly finds nothing
+ * looks like a broken one unless these paths are tested. Wikidata's data
+ * quality is not tested here.
  */
 
 import { describe, expect, it, afterEach } from 'vitest';
@@ -25,7 +14,7 @@ import { LOOKUP_USER_AGENT } from './wikidata-denominations';
 
 type Fetched = { url: string; headers: Record<string, string> };
 
-/** Install a fetch that records its call and answers however the test says. */
+/** Installs a fetch that records its call and answers as the test says. */
 function stubFetch(answer: (call: Fetched) => unknown): { calls: Fetched[]; restore: () => void } {
   const calls: Fetched[] = [];
   const previous = setLookupFetch(async (url, init) => {
@@ -84,14 +73,13 @@ describe('GET /api/denomination-lookup', () => {
     expect(decodeURIComponent(call.url)).toContain('"Burma"');
     expect(call.headers['User-Agent']).toBe(LOOKUP_USER_AGENT);
 
-    // Nothing resembling a path, a user name or a machine name travels.
+    // No path, user name or machine name is sent.
     expect(call.url).not.toMatch(/%5C|\\/);
     expect(JSON.stringify(call.headers)).not.toMatch(/@/);
   });
 
   it('calls a well-formed empty answer "none", not an error', async () => {
-    // THE COMMONEST OUTCOME for an ancient issuer. A 500 here would put an
-    // error dialog in front of the normal case.
+    // The commonest outcome for an ancient issuer: not an error.
     const stub = stubFetch(() => okResponse([]));
     restore = stub.restore;
 
@@ -112,8 +100,7 @@ describe('GET /api/denomination-lookup', () => {
   });
 
   it('answers 200 with outcome "unavailable" when the endpoint says 504', async () => {
-    // Measured: the endpoint really does answer 504 for an expensive
-    // query, and it took 65 seconds to do it.
+    // The endpoint really does answer 504 for expensive queries.
     const stub = stubFetch(() => ({ ok: false, status: 504, json: async () => ({}) }));
     restore = stub.restore;
 
@@ -123,9 +110,7 @@ describe('GET /api/denomination-lookup', () => {
   });
 
   it('gives up rather than leaving the user in front of a stalled form', async () => {
-    // The abort fires on the route's own timer. Simulated by throwing what
-    // an aborted fetch throws, so the branch that distinguishes a timeout
-    // from a dead network is the one under test.
+    // Simulates a timeout abort, distinct from a dead network.
     const stub = stubFetch(() => Object.assign(new Error('aborted'), { name: 'AbortError' }));
     restore = stub.restore;
 
@@ -159,8 +144,7 @@ describe('GET /api/denomination-lookup', () => {
   });
 
   it('refuses a missing name with a 400, and makes no request', async () => {
-    // The caller being broken IS an error, unlike the world being
-    // unhelpful. And no packet leaves for an empty name.
+    // A missing name is the caller's error; nothing is sent.
     const stub = stubFetch(() => okResponse([]));
     restore = stub.restore;
 
@@ -173,48 +157,24 @@ describe('GET /api/denomination-lookup', () => {
     const stub = stubFetch(() => okResponse([]));
     restore = stub.restore;
 
-    // A genuinely repeated parameter still arrives as an ARRAY, and still
-    // collapses to the first value.
+    // A repeated parameter arrives as an array; the first value is used.
     await request(app).get('/api/denomination-lookup?name=Burma&name=Siam').expect(200);
     expect(decodeURIComponent(stub.calls[0].url)).toContain('"Burma"');
 
-    /*
-     * `?name[0]=x` USED to arrive as an array under `name`, because Express 4
-     * parsed query strings with `qs` ("extended"). Express 5 defaults to the
-     * plain `querystring` parser, so the key is the literal string
-     * `name[0]` and there is no `name` parameter at all — hence 400, the
-     * same answer as omitting it.
-     *
-     * This is stricter, and better: the route never wanted a nested
-     * structure, and nothing in this server does (five `req.query` reads,
-     * every one a plain scalar). Asserted here so the change is recorded
-     * rather than rediscovered, and so that restoring
-     * `app.set('query parser', 'extended')` to make something else work
-     * fails this test and gets argued about first.
-     */
+    // Express 5's default query parser treats `name[0]` as a literal key, so
+    // there is no `name` and the answer is 400. Fails if the 'extended'
+    // parser is turned back on.
     await request(app).get('/api/denomination-lookup?name[0]=Siam').expect(400);
     expect(stub.calls).toHaveLength(1);
 
-    /*
-     * `?name[key]=x` was an OBJECT under Express 4's `qs` parser, and
-     * calling `.trim()` on it would have been a TypeError inside the handler
-     * and a 500 for the caller — which is why the defensive collapse in
-     * `toSingleValue` exists.
-     *
-     * Under Express 5 it is simply the literal key `name[key]`, so there is
-     * no `name` and the answer is 400 for the ordinary reason. Same status,
-     * reached a safer way. The defence stays because a genuinely repeated
-     * parameter still produces an array (asserted above) and because the
-     * parser is a setting someone could change back.
-     */
+    // Likewise `name[key]` is a literal key under Express 5 (an object under
+    // the old parser, which toSingleValue still defends against).
     await request(app).get('/api/denomination-lookup?name[key]=Burma').expect(400);
     expect(stub.calls).toHaveLength(1);
   });
 
   it('writes nothing to the database, whatever comes back', async () => {
-    // The route holds no database handle at all, which is the strongest
-    // form of this guarantee. Asserted on the module's text so that adding
-    // one is a deliberate act somebody has to also delete this test for.
+    // Checked on the module's source: it must have no database access.
     const fs = await import('fs');
     const path = await import('path');
     const source = fs.readFileSync(path.join(__dirname, 'denomination-lookup.ts'), 'utf8');

@@ -1,17 +1,5 @@
-/*
- * The grid's keyboard model.
- *
- * The rules themselves are pure (features/inventory/grid-keyboard.ts), which
- * is the only reason they can be tested at all: this suite runs under Node
- * with NO jsdom, so there is no element to dispatch a key at. Every "event"
- * below is a plain object, which is exactly the shape the module promises to
- * accept.
- *
- * What is NOT tested here, because it cannot be: that the component binds
- * `(keydown)` to the row and that `.focus()` lands on the right element.
- * `inventory-table-keyboard.spec.ts` greps the template for the bindings;
- * the `.focus()` call is three lines in `focusRowElement`.
- */
+// The grid's keyboard model. Events are plain objects (no DOM); template
+// bindings are checked in inventory-table-keyboard.spec.ts.
 import { describe, expect, it, vi } from 'vitest';
 import {
   gridRowKeyAction,
@@ -51,9 +39,6 @@ describe('which keys the grid claims', () => {
 
 describe('keys inside a control belong to the control', () => {
   it('ignores Space in the row selection checkbox, so the box still toggles', () => {
-    // THE regression this guard exists for. Every row carries a selection
-    // checkbox; if the row swallowed Space the box could not be ticked from
-    // the keyboard at all, and ticking it would throw the sidebar open.
     expect(gridRowKeyAction(keyOn(' ', 'INPUT'))).toEqual({ kind: 'none' });
   });
 
@@ -144,8 +129,6 @@ describe('where an arrow key lands', () => {
   });
 
   it('stops at the ends rather than wrapping round', () => {
-    // Wrapping would jump the viewport the whole length of a 105-row grid
-    // for a key press the user expected to do nothing.
     expect(nextFocusedIndex(0, -1, 10)).toBe(0);
     expect(nextFocusedIndex(9, 1, 10)).toBe(9);
   });
@@ -165,8 +148,6 @@ describe('the roving tabindex', () => {
   const rows = ['a', 'b', 'c'];
 
   it('puts exactly one row in the tab order', () => {
-    // The point of the whole mechanism: `tabindex` on all 105 rows would
-    // mean 105 presses of Tab to get past the table.
     const chosen = tabbableRowId(rows, 'b', 'c');
     const tabbable = rows.filter(id => rowTabIndex(id === chosen) === 0);
     expect(tabbable).toEqual(['b']);
@@ -193,8 +174,6 @@ describe('the roving tabindex', () => {
   });
 
   it('keeps every other row focusable programmatically, not unfocusable', () => {
-    // -1 rather than no attribute: the arrow keys have to be able to move
-    // real focus onto a row that is not in the tab order.
     expect(rowTabIndex(false)).toBe(-1);
     expect(rowTabIndex(true)).toBe(0);
   });

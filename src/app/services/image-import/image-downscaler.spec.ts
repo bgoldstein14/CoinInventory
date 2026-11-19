@@ -6,11 +6,7 @@ import {
   MAX_LONG_EDGE
 } from './image-downscaler';
 
-/**
- * These tests cover the RESIZE MATHS, which is the part that decides how much
- * data ends up in SQL Server. The canvas drawing itself needs a real browser
- * and is verified by eye; the maths is pure and is pinned down here.
- */
+/** Resize maths only; the canvas drawing needs a real browser. */
 describe('computeScaledSize', () => {
   it('caps the long edge at 1600px for a landscape photo', () => {
     // 4000x3000 -> scale 0.4 -> 1600x1200, aspect ratio preserved.
@@ -56,8 +52,7 @@ describe('computeScaledSize', () => {
   });
 
   it('survives a failed decode reporting zero or NaN dimensions', () => {
-    // A 1x1 keeps canvas.toDataURL() from throwing; the caller records the
-    // file as a failure rather than taking the whole batch down.
+    // A 1x1 keeps canvas.toDataURL() from throwing.
     expect(computeScaledSize(0, 0)).toEqual({ width: 1, height: 1, resized: false });
     expect(computeScaledSize(Number.NaN, 100)).toEqual({ width: 1, height: 1, resized: false });
     expect(computeScaledSize(-5, 10)).toEqual({ width: 1, height: 1, resized: false });

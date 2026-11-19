@@ -1,24 +1,9 @@
 /**
- * services/backup/backup-messages.ts — WHAT THE USER READS, as pure
- * functions over the server's answers.
- *
- * *** WHY THIS IS A MODULE AND NOT TEMPLATE EXPRESSIONS. ***
- * Two reasons, and the second is the one that decided it.
- *
- * 1. The suite runs under Node with NO jsdom, so nothing here can be
- *    tested through a rendered component. Logic that lives in a template
- *    is logic with no test.
- * 2. These sentences are the safety feature. Everything the server does
- *    to protect a collection — refusing a newer schema, moving the old
- *    database aside, warning that photographs will not follow — only
- *    protects anybody if the user UNDERSTANDS it at the moment they are
- *    about to press a button. "Verdict: newer-schema" protects nobody.
- *    So the wording is code, and it is held still by backup-messages.spec.ts.
- *
- * Nothing here talks to the network, holds state or touches the DOM.
+ * User-facing backup and restore wording, as pure functions over the server's
+ * responses. Kept out of templates so it can be tested under Node (no jsdom).
  */
 
-/* ===================== The server's shapes ===================== */
+/* Server response shapes */
 
 export type BackupJobState = 'running' | 'done' | 'cancelled' | 'failed';
 
@@ -89,12 +74,8 @@ export interface BackupInspection {
 }
 
 /**
- * One `*.db` file the SERVER found in a folder the user named.
- *
- * The browser cannot read a folder, so this is the only way the restore
- * box can offer a choice instead of demanding an exact path. See
- * server/backup/list-db-files.ts for what the endpoint will and will not
- * tell us.
+ * One `*.db` file the server found in the named folder, letting the restore
+ * box offer a choice (see server/backup/list-db-files.ts).
  */
 export interface BackupFileEntry {
   readonly name: string;
@@ -120,13 +101,9 @@ export interface RestoreResult {
   readonly serverRestartRequired: boolean;
 }
 
-/* ===================== Formatting ===================== */
+/* Formatting */
 
-/**
- * `612.3 MB`. Decimal units, because that is what Windows Explorer shows
- * and a user comparing this figure with the one in their folder should
- * not have to wonder why they disagree.
- */
+/** `612.3 MB`. Decimal units, matching Windows Explorer. */
 export function formatBytes(bytes: number | null | undefined): string {
   if (bytes === null || bytes === undefined || !Number.isFinite(bytes) || bytes < 0) {
     return 'unknown size';
@@ -143,15 +120,7 @@ export function formatBytes(bytes: number | null | undefined): string {
   return `${value.toFixed(1)} ${units[unit]}`;
 }
 
-/**
- * `14 Nov 2026, 15:04` in the user's own timezone, or "unknown" when the
- * file carries no stamp.
- *
- * LOCAL, not the ISO string the file holds. The stamp is UTC because a
- * machine reads it; this is the human reading it, and the question they
- * are answering — "is this the one I took this morning?" — is about their
- * morning, not Greenwich's.
- */
+/** `14 Nov 2026, 15:04` in local time (the file stamp is UTC), or "unknown". */
 export function formatTakenAt(iso: string | null | undefined): string {
   if (!iso) return 'unknown';
   const when = new Date(iso);
@@ -177,16 +146,9 @@ export function describeCoinCount(count: number | null | undefined): string {
   return count === 1 ? '1 coin' : `${count} coins`;
 }
 
-/* ===================== The backup panel ===================== */
+/* Backup panel */
 
-/**
- * The status line under the progress bar.
- *
- * *** IT NAMES THE FILE ON SUCCESS, EVERY TIME. *** §16 asks for the path
- * to be reported afterwards, and it is the single most useful thing on the
- * screen: a user who cannot find the file they just made does not have a
- * backup, whatever the application believes.
- */
+/** The status line under the progress bar; names the file on success. */
 export function describeBackupStatus(status: BackupJobStatus | null): string {
   if (!status) return '';
 
@@ -201,28 +163,22 @@ export function describeBackupStatus(status: BackupJobStatus | null): string {
         `${formatBytes(status.result?.fileSizeBytes ?? null)}.`
       );
     case 'cancelled':
-      // Said explicitly, because an unfinished file WOULD be dangerous and
-      // the user needs to know one was not left behind.
       return 'Backup cancelled. No file was left behind.';
     case 'failed':
       return status.error ?? 'The backup did not finish.';
   }
 }
 
-/** Should the Cancel button be on screen? */
+/** Whether the Cancel button is shown. */
 export function canCancelBackup(status: BackupJobStatus | null): boolean {
   return status?.state === 'running';
 }
 
-/* ===================== The restore panel ===================== */
+/* Restore panel */
 
 /**
- * The lines describing what is IN a candidate file, so the user can tell
- * one backup from another before replacing a collection with it.
- *
- * Empty for a file that was refused: there is nothing in it worth
- * summarising, and listing "0 coins" next to "that is not a Coin Inventory
- * backup" reads as though we looked and found it empty.
+ * Lines describing what is in a candidate backup, so backups can be told
+ * apart. Empty for a refused file.
  */
 export function describeBackupContents(inspection: BackupInspection | null): string[] {
   if (!inspection || !inspection.decision.acceptable) return [];
@@ -244,22 +200,10 @@ export function describeBackupContents(inspection: BackupInspection | null): str
 }
 
 /**
- * *** CONSEQUENCE OF PORTABILITY #1, SAID OUT LOUD. ***
- *
- * In 'referenced' mode the database holds only a path into a folder on the
- * machine the import ran on. Carried to another PC that folder is not
- * there, and the user gets a grid of empty picture frames with nothing to
- * explain it — and no way to tell whether the backup is bad, the restore
- * went wrong, or the app is broken.
- *
- * So it is said BEFORE the restore, in terms of what will actually be
- * missing. It does NOT pretend there is a fix: the photo-relocation tool
- * (design §4.4) is not built, and promising one would be worse than the
- * silence. What it does say is the part that stops the panic — the COINS
- * are all there; it is the link to the picture files that does not travel.
- *
- * Returns null when there is nothing to warn about, which is the common
- * case and must not produce an empty yellow box.
+ * Warning about photos before a restore. In 'referenced' mode the database
+ * holds only paths to image folders on the original machine, so on another PC
+ * the photos will be missing although all coins restore. Null when there is
+ * nothing to warn about.
  */
 export function describePhotoWarning(
   referencedOnlyImageCount: number | null | undefined,
@@ -272,9 +216,7 @@ export function describePhotoWarning(
   const folders = missingFolders ?? [];
 
   if (folders.length === 0) {
-    // Referenced photos, but every folder is here. Still worth a word,
-    // because it is true today and may not be tomorrow — a USB drive with
-    // a different letter next time is the same problem.
+    // All folders are present now, but a drive letter can change next time.
     return (
       `${photos} in this backup are links to picture files on disk rather than copies ` +
       `kept inside it. Those folders are on this computer at the moment, so the photos ` +
@@ -292,12 +234,7 @@ export function describePhotoWarning(
   );
 }
 
-/**
- * The one-line answer to "what will happen if I press Restore?".
- *
- * Deliberately blunt about the two facts that matter and that a user will
- * not infer: their current collection is REPLACED, and it is KEPT.
- */
+/** "What happens if I press Restore?": the current collection is replaced, and kept. */
 export function describeRestoreConsequence(inspection: BackupInspection | null): string | null {
   if (!inspection || !inspection.decision.acceptable) return null;
   return (
@@ -308,13 +245,7 @@ export function describeRestoreConsequence(inspection: BackupInspection | null):
   );
 }
 
-/**
- * What to say after a restore has succeeded.
- *
- * *** THE LOCATION OF THE OLD COLLECTION IS THE WHOLE MESSAGE. *** It is
- * the undo button, and a user who has just realised they picked the wrong
- * file needs it on screen, in full, not in a log.
- */
+/** Message after a successful restore, including where the old collection was kept. */
 export function describeRestoreOutcome(result: RestoreResult): string[] {
   const lines = [
     `Restored ${describeCoinCount(result.coinCount)} from ${result.restoredFrom}.`,
@@ -333,47 +264,19 @@ export function describeRestoreOutcome(result: RestoreResult): string[] {
   return lines;
 }
 
-/* ===================== Choosing a file instead of typing one =====================
- *
- * Everything below exists because of one sentence of feedback after the
- * feature was first tested: *"It wasn't intuitive how to do the restore
- * because the watermarked restore field looked like it was filled in text
- * and it could leave the user bewildered why the buttons weren't
- * enabled."*
- *
- * Two separate faults in that sentence, and they compound:
- *
- *   1. A grey example path inside an empty box READS AS A VALUE. The user
- *      believed the field was set.
- *   2. A disabled button gives no reason. Believing the field was set,
- *      there was nothing on screen that could correct the belief.
- *
- * So a disabled control here owes the user a sentence, and that sentence
- * is written HERE rather than in the template for the reason the header
- * of this file gives: the suite has no jsdom, so wording that lives in a
- * template is wording with no test.
+/*
+ * Choosing a file, and explaining disabled buttons. An empty box showing a grey
+ * example path can look filled in, so every disabled control gives a reason.
  */
 
-/**
- * `612.3 MB · 14 Nov 2026, 16:20` — enough to tell two backups apart.
- *
- * Size AND date, because a folder of near-identically named files is
- * precisely the situation the chooser exists for, and the two questions
- * being asked are "which is the newest" and "which is the full one".
- */
+/** `612.3 MB · 14 Nov 2026, 16:20`: size and date, to tell backups apart. */
 export function describeBackupFile(entry: BackupFileEntry): string {
   return `${formatBytes(entry.sizeBytes)} · ${formatTakenAt(entry.modifiedAt)}`;
 }
 
 /**
- * The line above the list of files.
- *
- * *** AN EMPTY FOLDER IS A NORMAL OUTCOME AND MUST SAY SO. *** It is what
- * the user gets for guessing a folder, for a fresh install, and — the one
- * that matters — for a folder picker that narrowed the guess to the wrong
- * parent. "No backups in that folder" sends them to check the path;
- * silence, or a bare empty box, sends them to wonder whether their
- * backups are gone.
+ * The line above the file list. An empty folder is a normal outcome (a guessed
+ * or wrong folder, a fresh install) and gets a sentence naming the folder.
  */
 export function describeFolderListing(listing: BackupDirectoryListing | null): string | null {
   if (!listing) return null;
@@ -391,13 +294,7 @@ export function describeFolderListing(listing: BackupDirectoryListing | null): s
   return listing.truncated ? `${head} Only the first 200 are shown.` : head;
 }
 
-/**
- * *** WHY "BACK UP NOW" IS OFF. *** Null when it is not off.
- *
- * `running` is deliberately NOT a reason: while a backup is running there
- * is a progress bar and a Cancel button directly above, which say it
- * better than a sentence would.
- */
+/** Why "Back up now" is disabled, or null. Not given while running (the progress bar explains it). */
 export function describeBackupBlock(directory: string, running: boolean): string | null {
   if (running) return null;
   if (directory.trim().length === 0) {
@@ -410,13 +307,7 @@ export function describeBackupBlock(directory: string, running: boolean): string
   return null;
 }
 
-/**
- * *** WHY "CHECK THIS FILE" IS OFF. *** Null when it is not off.
- *
- * The one that caused the real confusion, so it names the grey text
- * explicitly: the user's belief was that the box was filled in, and
- * nothing short of contradicting that belief will shift it.
- */
+/** Why "Check this file" is disabled, or null; mentions that the grey text is only an example. */
 export function describeRestoreBlock(
   chosenPath: string,
   inspecting: boolean,

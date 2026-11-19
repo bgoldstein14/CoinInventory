@@ -1,19 +1,11 @@
 /**
- * routes/data/settings.ts — the AppSettings key/value store.
+ * The AppSettings key/value store for UI preferences. Mounted at /api:
  *
- * This is where the Angular app persists UI preferences (which table columns
- * are visible, the chosen theme, and so on). Mounted (via routes/data/index.ts)
- * at /api:
+ *   GET /settings/:key  { key, value }, 404 if never saved
+ *   PUT /settings/:key  upsert, always 200
  *
- *   GET /settings/:key  -> { key, value }, 404 if the key was never saved
- *   PUT /settings/:key  -> upsert (ON CONFLICT ... DO UPDATE), always 200
- *
- * SettingValue is NVARCHAR(MAX) text. Anything that is not already a string is
- * stored as JSON on the way in, and we try to JSON.parse on the way out —
- * falling back to the raw text if it does not parse, so a plain value like
- * "dark" still comes back as "dark" rather than blowing up.
- *
- * Database calls go through `withDb()`; parameter types come from DB_BINDINGS.
+ * Non-string values are stored as JSON; reads try JSON.parse and fall back to
+ * the raw text (so "dark" comes back as "dark").
  */
 
 import { Router, Request, Response } from 'express';
@@ -67,9 +59,7 @@ router.put('/settings/:key', async (req: Request, res: Response) => {
       await db.request()
         .input('key', DB_BINDINGS.settingKey, key)
         .input('value', DB_BINDINGS.settingValue, serialized)
-        // Upsert. `excluded` is SQLite's name for the row the INSERT was
-        // trying to add, so the UPDATE branch writes the same value the
-        // INSERT branch would have — one place to change it, not two.
+        // Upsert; `excluded` is the row the INSERT tried to add.
         .query(`
           INSERT INTO AppSettings (SettingKey, SettingValue)
           VALUES (@key, @value)

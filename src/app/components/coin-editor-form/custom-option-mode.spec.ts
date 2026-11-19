@@ -1,14 +1,6 @@
 /**
- * Tests for the "the user picked Other" state behind the Denomination and
- * Mint mark selects.
- *
- * WHY THESE TESTS AND NOT TEMPLATE TESTS
- * The visible symptom — "only one letter can be typed and then the box goes
- * away" — is a rendering outcome, and this project's suite runs under plain
- * Node with no jsdom, so no template can be rendered here. What CAN be tested
- * is the state machine that decides whether the box is open, which is where
- * the bug actually lived: the old code used the coin's denomination VALUE as
- * that state, so writing a value closed the box.
+ * Tests for the "Other" (custom) state behind the Denomination and Mint mark selects. The
+ * box's visibility must not depend on the field value, or typing closes it.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -22,7 +14,7 @@ import {
 /** The real active US denomination labels, as seeded in setup-database.sql. */
 const DENOMINATIONS = ['½¢', '1¢', '5¢', '10¢', '25¢', '50¢', '$1', '$20', '2/6 (Half Crown)'];
 
-/** The real active mint mark labels. Note the blank one, and the literal "Other". */
+/** The real active mint mark labels, including a blank one and a literal "Other". */
 const MINT_MARKS = ['', 'P', 'D', 'S', 'W', 'O', 'CC', 'C', 'Other'];
 
 describe('isCustomOptionValue', () => {
@@ -42,14 +34,12 @@ describe('isCustomOptionValue', () => {
   });
 
   it('is false for the sentinel itself', () => {
-    // Defensive: if a legacy row in the database really does hold "__OTHER__"
-    // (the old code could save it), that is a broken value, not a custom one.
+    // A stored "__OTHER__" is a broken value, not a custom one.
     expect(isCustomOptionValue(CUSTOM_OPTION_SENTINEL, DENOMINATIONS)).toBe(false);
   });
 
   it('treats the real "Other" mint mark as a known option, not custom mode', () => {
-    // The mint mark lookup table genuinely contains a mark labelled "Other"
-    // (the catch-all for oddities like O/S). It must select normally.
+    // A real mint mark is labelled "Other"; it must select normally.
     expect(isCustomOptionValue('Other', MINT_MARKS)).toBe(false);
     expect(isKnownOptionValue('Other', MINT_MARKS)).toBe(true);
   });
@@ -57,7 +47,6 @@ describe('isCustomOptionValue', () => {
 
 describe('stripCustomSentinel', () => {
   it('is the last line of defence against persisting the sentinel', () => {
-    // "__OTHER__" must never reach the database as a denomination.
     expect(stripCustomSentinel(CUSTOM_OPTION_SENTINEL)).toBe('');
   });
 
@@ -74,15 +63,14 @@ describe('CustomOptionMode', () => {
   });
 
   it('opens when the user picks Other and stays open while they type', () => {
-    // The headline bug: "only one letter/number can be typed and then the box
-    // goes away". Typing used to change the value, and the value was the state.
+    // Typing must not close the box.
     const mode = new CustomOptionMode();
     mode.syncForCoin('coin-1', '$20', DENOMINATIONS);
 
     mode.enterCustomMode();
     expect(mode.isCustom()).toBe(true);
 
-    // Each of these is "the coin signal changed because a keystroke was saved".
+    // Each call simulates a saved keystroke.
     for (const partial of ['T', 'Tr', 'Tra', 'Trad', 'Trade']) {
       mode.syncForCoin('coin-1', partial, DENOMINATIONS);
       expect(mode.isCustom(), `after typing "${partial}"`).toBe(true);
@@ -90,8 +78,7 @@ describe('CustomOptionMode', () => {
   });
 
   it('does not close when the typed text happens to match a real option', () => {
-    // The nasty edge case. Typing "$1" on the way to "$1 Trade" must not yank
-    // the box away just because "$1" is a denomination in the list.
+    // Typing "$1" on the way to "$1 Trade" must not close the box.
     const mode = new CustomOptionMode();
     mode.syncForCoin('coin-1', '', DENOMINATIONS);
     mode.enterCustomMode();
@@ -101,14 +88,12 @@ describe('CustomOptionMode', () => {
   });
 
   it('reopens, populated, when a coin with a saved custom value is loaded', () => {
-    // "Even if I force an entry into there and bring the coin back up, it's not
-    // coming up as Other with the Other text box showing the value."
+    // A saved custom value reopens in custom mode.
     const mode = new CustomOptionMode();
     mode.syncForCoin('coin-7', 'Trade Dollar', DENOMINATIONS);
 
     expect(mode.isCustom()).toBe(true);
-    // The box is bound straight to the coin field, so "populated" simply means
-    // the select reports Other while the field still holds the real text.
+    // The select reports Other while the field keeps the real text.
     expect(mode.selectValue('Trade Dollar')).toBe(CUSTOM_OPTION_SENTINEL);
   });
 
@@ -133,10 +118,7 @@ describe('CustomOptionMode', () => {
   });
 
   it('waits for the lookup list before deciding anything', () => {
-    // The denominations come from the server. If a coin is opened before they
-    // arrive, every value looks "not in the list" and every coin would wrongly
-    // flip into custom mode. The empty list must be ignored, AND the decision
-    // must still happen once the list does arrive.
+    // Ignore the empty list before lookups load, then derive once they arrive.
     const mode = new CustomOptionMode();
 
     mode.syncForCoin('coin-1', '$20', []);
@@ -163,8 +145,7 @@ describe('CustomOptionMode', () => {
   });
 
   it('shows Other in the select while the field holds the custom text', () => {
-    // The select has no <option> matching "Trade Dollar", so without this
-    // substitution it would render as blank and look like nothing is chosen.
+    // Without the sentinel the select would render blank.
     const mode = new CustomOptionMode();
     mode.enterCustomMode();
     expect(mode.selectValue('Trade Dollar')).toBe(CUSTOM_OPTION_SENTINEL);

@@ -5,20 +5,8 @@ import { parsedChips, searchCoins } from './row-decisions';
 import { BatchImageRow, CoinRecord } from '../../types/coin.model';
 
 /**
- * CoinLookup — "which coin is this?", for the batch import review screen.
- *
- * WHY THIS FILE EXISTS
- * When the matcher cannot place a photo, the user has to find the coin
- * himself. That needs three things which have nothing to do with the rest of
- * the import flow:
- *
- *   1. a display label for a coin id ("Morgan Dollar 1881-S"),
- *   2. a free-text search over the inventory,
- *   3. one search box PER unresolved photo, each with its own text.
- *
- * Point 3 is the reason this is a class and not three loose functions: the
- * search text is per-file state that has to survive re-renders. Keeping it
- * here leaves BatchImportSession to worry only about the import itself.
+ * CoinLookup — manual coin search for the batch import review screen: coin
+ * labels by id, inventory search, and per-photo search box text.
  */
 export class CoinLookup {
   /** Per-file search text ("filename" -> "search text"). */
@@ -54,9 +42,8 @@ export class CoinLookup {
   }
 
   /**
-   * Display label for a coin id.
-   * 'None' for no selection, 'Unknown' for an id that is no longer in the
-   * inventory (possible if another tab deleted the coin mid-review).
+   * Display label for a coin id. 'None' for no selection, 'Unknown' for an id
+   * no longer in the inventory (e.g. deleted in another tab mid-review).
    */
   nameById(coinId: string | null): string {
     if (!coinId) return 'None';

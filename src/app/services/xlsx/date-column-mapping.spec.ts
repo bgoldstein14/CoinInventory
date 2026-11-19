@@ -1,21 +1,8 @@
 /**
- * End-to-end: a real `.xlsx` with a `Date` column, through the reader, into
- * the auto-mapping.
- *
- * WHY THIS TEST IS NOT REDUNDANT WITH date-column-shape.spec.ts
- *
- * That spec proves the classifier. This one proves the WIRING, which is
- * where the signal is easiest to lose: `toWorkbookSheets` flattens every
- * cell to a string before anything downstream sees it (that flattening is
- * the entire point of services/xlsx/ -- nothing below the mapping grid is
- * allowed to know a workbook was involved). A `Date` object becomes the text
- * `2024-03-15` and its TYPE is gone. If the samples are built from the
- * flattened text instead of from the parsed cells, this file still passes on
- * the pattern alone and the typed-cell guarantee is silently not there --
- * so the assertions below check `typedDate` explicitly, not just the verdict.
- *
- * The fixtures are built by src/app/testing/xlsx-fixture.ts, which emits
- * SpreadsheetML by hand and shares no code with the reader.
+ * End-to-end: a real `.xlsx` with a `Date` column, through the reader, into the
+ * auto-mapping. Checks that each sample's `typedDate` survives, since
+ * `toWorkbookSheets` flattens cells to text and would otherwise lose the type.
+ * Fixtures come from src/app/testing/xlsx-fixture.ts, which shares no code with the reader.
  */
 import { describe, expect, it } from 'vitest';
 import { buildSimpleXlsx, buildXlsxWorkbook } from '../../testing/xlsx-fixture';
@@ -47,8 +34,8 @@ describe('a `Date` column in a real workbook', () => {
   });
 
   it('is left unmapped when the cells are real Excel date cells', async () => {
-    // Serial 45678 is 21 January 2025; 45000 is 4 April 2023. Both carry the
-    // built-in m/d/yy number format, so the parser hands back `Date`s.
+    // Serial 45678 is 21 Jan 2025 and 45000 is 4 Apr 2023, both with the built-in
+    // m/d/yy format, so the parser returns `Date`s.
     const [sheet] = await readWorkbook(asArrayBuffer(buildSimpleXlsx(
       'Silver',
       ['Coin Type', 'Date', 'Grade'],
@@ -58,15 +45,13 @@ describe('a `Date` column in a real workbook', () => {
       ]
     )));
 
-    // The cell TYPE survived the flattening to text. This is the assertion
-    // that fails if the samples are rebuilt from `sheet.rows`.
+    // The cell type survived flattening; fails if samples are built from `sheet.rows`.
     expect(sheet.valueSamples['Date'].map(cell => cell.typedDate)).toEqual([true, true]);
     expect(mapHeadersToFields(sheet.headers, sheet.valueSamples)['Date']).toBeUndefined();
   });
 
   it('is left unmapped for a date cell that happens to fall on 1 January', async () => {
-    // The hardest case for a text-only rule: serial 29587 is 1 January 1981,
-    // which renders as `1981-01-01`. The type says full date regardless.
+    // Serial 29587 is 1 Jan 1981 ("1981-01-01"); the type marks it as a full date.
     const [sheet] = await readWorkbook(asArrayBuffer(buildSimpleXlsx(
       'Silver',
       ['Coin Type', 'Date'],
@@ -79,8 +64,7 @@ describe('a `Date` column in a real workbook', () => {
   });
 
   it('is left unmapped when the dates were typed as text rather than formatted', async () => {
-    // Plenty of sheets hold dates as strings. No type to lean on, so the
-    // pattern has to carry it.
+    // Dates stored as strings: no type, so the pattern decides.
     const [sheet] = await readWorkbook(asArrayBuffer(buildSimpleXlsx(
       'Silver',
       ['Coin Type', 'Date'],
@@ -92,8 +76,7 @@ describe('a `Date` column in a real workbook', () => {
   });
 
   it('does not count an unmappable Date column towards recognisedColumns', async () => {
-    // recognisedColumns decides which tabs are ticked by default. A column we
-    // have decided not to map is not a column we recognised.
+    // recognisedColumns sets default ticks; an unmapped column isn't "recognised".
     const [years, dates] = await readWorkbook(asArrayBuffer(buildXlsxWorkbook([
       { name: 'Coins', rows: [['Coin Type', 'Date'], ['Morgan Dollar', 1881]] },
       {
@@ -107,8 +90,7 @@ describe('a `Date` column in a real workbook', () => {
   });
 
   it('skips the blank spacer rows a collector leaves at the top of a tab', async () => {
-    // Sampling "the first two data rows" verbatim reads nothing here and
-    // would fall back to the heading, mapping a purchase ledger onto Year.
+    // Sampling the first two data rows verbatim would read nothing here.
     const [sheet] = await readWorkbook(asArrayBuffer(buildXlsxWorkbook([{
       name: 'Silver',
       rows: [
@@ -140,9 +122,8 @@ describe('a `Date` column in a real workbook', () => {
   });
 
   it('pools the evidence across every selected worksheet', async () => {
-    // One mapping covers all the ticked tabs, so the decision about a `Date`
-    // column has to be made on all of their values. A tab whose Date column
-    // happens to be empty must not out-vote the tab that shows what it is.
+    // One mapping covers all ticked tabs, so a tab with an empty Date column must
+    // not out-vote the tab that shows what it holds.
     const sheets = await readWorkbook(asArrayBuffer(buildXlsxWorkbook([
       { name: 'Gold', rows: [['Coin Type', 'Date'], ['Saint-Gaudens', null]] },
       {

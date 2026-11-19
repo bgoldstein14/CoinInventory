@@ -1,15 +1,4 @@
-/**
- * backup-messages.spec.ts — the wording IS the safety feature.
- *
- * Everything the server does to protect a collection only protects
- * anybody if the user understands it at the moment they are about to
- * press a button. "Verdict: newer-schema" protects nobody. So these
- * assertions are about meaning, not formatting — does the sentence
- * actually say the thing the user has to know?
- *
- * Pure functions, no DOM, no Angular: the suite runs under Node with no
- * jsdom, which is exactly why this logic is not in the template.
- */
+/** Tests that the backup/restore wording tells the user what they need to know. */
 
 import { describe, expect, it } from 'vitest';
 
@@ -66,8 +55,6 @@ function inspection(overrides: Partial<BackupInspection> = {}): BackupInspection
 
 describe('formatBytes', () => {
   it('uses the decimal units Windows Explorer shows', () => {
-    // So a user comparing this with their folder does not wonder why the
-    // two disagree.
     expect(formatBytes(612_300_000)).toBe('612.3 MB');
     expect(formatBytes(4_000_000_000)).toBe('4.0 GB');
     expect(formatBytes(1500)).toBe('1.5 kB');
@@ -92,8 +79,7 @@ describe('formatTakenAt', () => {
   });
 
   it('shows the LOCAL time, because the user is comparing it to their day', () => {
-    // The stamp in the file is UTC so a machine can read it. This is the
-    // human reading it, answering "is this the one I took this morning?"
+    // The file stamp is UTC; the display is local time.
     const local = new Date(2026, 10, 14, 8, 30);
     expect(formatTakenAt(local.toISOString())).toContain('08:30');
   });
@@ -123,7 +109,7 @@ describe('describeBackupStatus', () => {
   });
 
   it('does not show 0% before the page count is known', () => {
-    // 0/0 is not "nothing has happened yet", it is "we have not asked".
+    // 0/0 means the server hasn't reported progress yet.
     expect(describeBackupStatus(job({ totalPages: 0, percent: 0 }))).toMatch(/starting/i);
   });
 
@@ -145,9 +131,7 @@ describe('describeBackupStatus', () => {
   });
 
   it('says explicitly that a cancelled backup left nothing behind', () => {
-    // An unfinished .db in the user's backup folder WOULD be dangerous —
-    // they would try to restore from it one day — so the absence of one
-    // is worth stating rather than leaving them to wonder.
+    // Say explicitly that no partial .db was left behind.
     expect(describeBackupStatus(job({ state: 'cancelled' }))).toMatch(
       /no file was left behind/i
     );
@@ -187,8 +171,7 @@ describe('describeBackupContents — telling one backup from another', () => {
   });
 
   it('says nothing at all about a file that was refused', () => {
-    // "0 coins" under "that is not a Coin Inventory backup" reads as
-    // though we looked inside and found it empty.
+    // No "0 coins" under a refusal; it would read as an empty backup.
     const refused = inspection({
       decision: {
         verdict: 'not-sqlite',
@@ -207,7 +190,7 @@ describe('describeRestoreConsequence', () => {
     const text = describeRestoreConsequence(inspection())!;
     // 1. the current collection is replaced
     expect(text).toMatch(/replace the collection you are using now/i);
-    // 2. ...and it is kept
+    // 2. ...and kept
     expect(text).toMatch(/not deleted/i);
     expect(text).toContain('412 coins');
   });
@@ -223,10 +206,9 @@ describe('describeRestoreConsequence', () => {
   });
 });
 
-/* *** CONSEQUENCE OF PORTABILITY #1. *** */
 describe('describePhotoWarning', () => {
   it('says nothing when every photograph is inside the file', () => {
-    // The common case. An empty yellow panel is worse than no panel.
+    // Common case: no panel at all.
     expect(describePhotoWarning(0, [])).toBeNull();
     expect(describePhotoWarning(null, null)).toBeNull();
   });
@@ -237,8 +219,7 @@ describe('describePhotoWarning', () => {
     expect(text).toContain('37 photographs');
     expect(text).toContain('Z:\\OtherPC\\Coins');
     expect(text).toMatch(/not on this computer/i);
-    // THE PART THAT STOPS THE PANIC: it is the link to the picture files
-    // that does not travel, not the collection.
+    // Reassure: only the link to the picture files doesn't travel, not the collection.
     expect(text).toMatch(/restore completely/i);
     expect(text).toMatch(/every detail, price and note/i);
   });
@@ -257,8 +238,7 @@ describe('describePhotoWarning', () => {
   });
 
   it('does not promise a repair tool that does not exist', () => {
-    // The photo-relocation tool (design §4.4) is not built. Promising one
-    // would be worse than the silence.
+    // The photo-relocation tool isn't built, so nothing promises one.
     const text = describePhotoWarning(37, ['Z:\\OtherPC\\Coins'])!;
     expect(text).not.toMatch(/relocat|repair|re-?link|fix the/i);
   });
@@ -278,14 +258,12 @@ describe('describeRestoreOutcome — the undo button', () => {
   };
 
   it('*** NAMES WHERE THE OLD COLLECTION WENT, IN FULL ***', () => {
-    // This is the entire recovery procedure for the most likely mistake
-    // in the feature. It has to be on screen, not in a log.
+    // The recovery steps must be on screen, not in a log.
     const lines = describeRestoreOutcome(outcome);
     const text = lines.join(' ');
 
     expect(text).toContain(outcome.previousCollectionMovedTo!);
     expect(text).toMatch(/not deleted/i);
-    // ...and what to DO with it.
     expect(text).toMatch(/copy that file back/i);
     expect(text).toContain(outcome.databasePath);
   });
@@ -303,13 +281,7 @@ describe('describeRestoreOutcome — the undo button', () => {
   });
 });
 
-/* ===================== Choosing instead of typing =====================
- *
- * The three sentences added after the owner tested the feature and found
- * the restore panel unusable. The one that matters most is the last:
- * he believed the grey example path was a value and had nothing on
- * screen to tell him why the buttons were dead.
- */
+// Messages for choosing a backup file and explaining disabled buttons.
 
 describe('describeBackupFile', () => {
   it('gives the two things that tell two backups apart', () => {
@@ -329,11 +301,7 @@ describe('describeFolderListing', () => {
   const base = { directory: 'C:\Users\You\Desktop', truncated: false };
 
   it('says plainly when a folder holds no backups', () => {
-    // *** A NORMAL OUTCOME. *** It is what a guessed folder, a fresh
-    // install, and a folder picker that narrowed to the wrong parent all
-    // produce. An uncaptioned empty space reads as "your backups are
-    // gone", so the sentence has to name the folder and offer the two
-    // explanations that are actually likely.
+    // An empty folder is a normal outcome; the sentence names the folder and likely causes.
     const text = describeFolderListing({ ...base, files: [] })!;
 
     expect(text).toContain('C:\Users\You\Desktop');
@@ -382,24 +350,19 @@ describe('describeBackupBlock', () => {
   });
 
   it('says nothing while a backup is running', () => {
-    // There is a progress bar and a Cancel button directly above, which
-    // explain the disabled button better than a sentence would.
+    // While running, the progress bar and Cancel button explain the disabled button.
     expect(describeBackupBlock('', true)).toBeNull();
   });
 });
 
 describe('describeRestoreBlock', () => {
   it('*** contradicts the belief that the box is filled in ***', () => {
-    // THE BUG, in the owner's words: "the watermarked restore field
-    // looked like it was filled in text and it could leave the user
-    // bewildered why the buttons weren't enabled." Styling the empty
-    // state fixes half of it; this is the other half, and it has to
-    // name the grey text, because the grey text is what he believed.
+    // An empty box showing grey placeholder text can look filled in; the reason
+    // must say that the grey text is only an example.
     const reason = describeRestoreBlock('', false, false)!;
 
     expect(reason).toMatch(/no backup file is chosen yet/i);
     expect(reason).toMatch(/grey text in the box is an example, not a value/i);
-    // And it says what to do about it, both ways.
     expect(reason).toMatch(/pick one from the list/i);
     expect(reason).toMatch(/paste the full path/i);
   });

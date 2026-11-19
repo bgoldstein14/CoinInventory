@@ -11,9 +11,7 @@ import { ReportModal } from './report-modal';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
 function createModal() {
-  // InventoryService uses inject() so must be created in an injection
-  // context. ApiService is here for the per-coin image fetch and
-  // NotificationService for the blocked-pop-up warning.
+  // InventoryService uses inject(), so it must be created in an injection context.
   const { inv } = createTestInventoryService();
   const api = { getCoinImages: vi.fn(() => of([])) } as unknown as ApiService;
   const notifications = {
@@ -43,20 +41,10 @@ describe('ReportModal', () => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  /**
-   * A coin the user is hunting for, entered at the price he expects to pay,
-   * must not be folded into the value of a collection he does not own — not
-   * least because the insurance schedule printed from this same modal leaves
-   * want-list coins out, and one number on a page disagreeing with another is
-   * how a reader learns to distrust both.
-   *
-   * Note for anyone adding cases here: a coin with no status reads as
-   * `owned`, so a fixture that omits it exercises none of this.
-   */
+  // A coin with no collectionStatus reads as `owned`.
   it('leaves coins the user does not own out of the collection totals', () => {
     const { modal, inv } = createModal();
     addCoin(inv, { coinType: 'Morgan', category: 'Silver', purchasePrice: 100, currentValue: 150 });
-    // On the want list: not bought, not owned, not in the collection's value.
     addCoin(inv, {
       coinType: '1893-S Morgan', category: 'Silver',
       purchasePrice: 5000, currentValue: 6000,
@@ -68,17 +56,9 @@ describe('ReportModal', () => {
     expect(stats.totalCoins).toBe(1);
     expect(stats.totalCost).toBe(100);
     expect(stats.totalValue).toBe(150);
-    // And the breakdowns must agree with the headline, or the page contradicts
-    // itself a second time further down.
     expect(stats.byCategory).toEqual([['Silver', { count: 1, value: 150 }]]);
   });
 
-  /**
-   * The exception, and it is load-bearing. A sold coin is by definition not
-   * held, so computing the sold figures from the held list would make them
-   * permanently zero — a plausible number that is always a lie. "What have I
-   * sold" is a different question from "what do I have".
-   */
   it('still counts sold coins in the sold figures, though they are not held', () => {
     const { modal, inv } = createModal();
     addCoin(inv, { coinType: 'Morgan', purchasePrice: 100, currentValue: 150 });
@@ -91,7 +71,6 @@ describe('ReportModal', () => {
 
     expect(stats.soldCount).toBe(1);
     expect(stats.totalSold).toBe(120);
-    // ...but it is gone, so it is not part of what the collection is worth.
     expect(stats.totalCoins).toBe(1);
     expect(stats.totalValue).toBe(150);
   });
@@ -112,8 +91,6 @@ describe('ReportModal', () => {
   });
 
   it('tells the user how many coins each report will print', () => {
-    // These two counts are the only thing on the screen that distinguishes
-    // the two reports BEFORE producing one, so they have to be right.
     const { modal, inv } = createModal();
     addCoin(inv, { coinType: 'Morgan' });
     addCoin(inv, { coinType: 'Wish List Coin', collectionStatus: 'wanted' });
@@ -129,8 +106,6 @@ describe('ReportModal', () => {
   });
 
   it('is constructible without the filter and column stores', () => {
-    // Both are optional inputs: a report must still be producible if the
-    // shell has not handed them over.
     const { modal } = createModal();
     expect(modal['filters']()).toBeNull();
     expect(modal['columns']()).toBeNull();

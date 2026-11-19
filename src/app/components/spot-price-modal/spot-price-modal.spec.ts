@@ -52,11 +52,8 @@ describe('SpotPriceModalComponent', () => {
     expect(inv.spotPrices().silver).toBe(0);
   });
 
-  // THE HISTORY-ROW TRAP
-  //
-  // POST /api/spot-prices INSERTS A NEW ROW every time. The price inputs are
-  // bound with (ngModelChange), which fires per keystroke. These tests are the
-  // guard rail against anyone "simplifying" the save back into the setter.
+  // POST /api/spot-prices inserts a row per call, and the inputs fire per
+  // keystroke, so saving must not happen in the price setter.
 
   describe('saving only on deliberate actions', () => {
     it('writes nothing while the user is typing', () => {
@@ -143,8 +140,7 @@ describe('SpotPriceModalComponent', () => {
       expect(modal['spotPriceError']()).toContain('No price available');
       // A ZERO IS NOT A PRICE: the zeroed result is not adopted...
       expect(inv.spotPrices()).toEqual({ gold: 0, silver: 0, platinum: 0, copper: 0 });
-      // ...and above all it is not written to the history table, where it
-      // would be read back on every future launch.
+      // ...and not saved to the history table.
       expect(mockApiService.saveSpotPrices).not.toHaveBeenCalled();
     });
   });

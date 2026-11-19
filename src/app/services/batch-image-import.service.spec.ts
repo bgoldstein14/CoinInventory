@@ -6,7 +6,7 @@ import { ImageMatchingService } from './image-matching.service';
 import { ImageDownscaleService } from './image-import/image-downscaler';
 import { BatchImageRow, CoinRecord } from '../types/coin.model';
 
-/** The real matcher, a stub downscaler (there is no <canvas> in Node). */
+/** The real matcher with a stub downscaler (no <canvas> in Node). */
 function createService(downscale?: ImageDownscaleService) {
   const injector = Injector.create({
     providers: [
@@ -29,12 +29,12 @@ function coin(overrides: Partial<CoinRecord>): CoinRecord {
 
 function file(name: string, size = 2_500_000): File {
   const f = new File(['x'], name, { type: 'image/jpeg' });
-  // File.size is read-only, so redefine it to simulate a big photo.
+  // File.size is read-only; redefine it to simulate a big photo.
   Object.defineProperty(f, 'size', { value: size });
   return f;
 }
 
-/** A fake encoder that always succeeds, so tests never need a canvas. */
+/** Fake encoder that always succeeds. */
 const okEncoder = (f: File) => Promise.resolve({
   dataUrl: `data:image/jpeg;base64,SHRUNK-${f.name}`,
   originalBytes: f.size,
@@ -47,8 +47,7 @@ describe('BatchImageImportService.buildRows', () => {
     const morgan = coin({ id: 'morgan', coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'S' });
 
     const big = file('1881-S Morgan Dollar - Obverse.jpg', 46 * 1024 * 1024);
-    // Spy on every way of getting at the bytes. If matching touched any of
-    // them, reading the 4.2 GB share would hang the browser.
+    // Matching must not touch file bytes.
     const arrayBuffer = vi.spyOn(big, 'arrayBuffer');
     const slice = vi.spyOn(big, 'slice');
     const text = vi.spyOn(big, 'text');
@@ -178,12 +177,8 @@ describe('BatchImageImportService.attachSelected', () => {
   });
 
   it('appends to a coin that already has photos instead of replacing them', async () => {
-    // `existingPhotoMode: 'add'` is now required to get this. It used to be
-    // unconditional, and that is the bug that was reported: re-importing a
-    // folder re-attached every photo in it. The DEFAULT is 'leave', which
-    // would not touch this coin at all — so the behaviour this test describes
-    // is still exactly right, it is just no longer what happens unasked. See
-    // services/image-import/existing-photo-mode.ts.
+    // Requires `existingPhotoMode: 'add'`; the default 'leave' would not touch
+    // this coin (see image-import/existing-photo-mode.ts).
     const { service, rows, files } = await plan();
     const existing = { ...morgan, imagePaths: ['data:image/jpeg;base64,ALREADY-HERE'] };
     const attach = vi.fn();
@@ -265,14 +260,8 @@ describe('BatchImageImportService.attachSelected', () => {
   });
 
   /**
-   * The leading 0 is not noise, it is the fix for the reported freeze.
-   *
-   * This used to read `[1, 2, 3, 3]`: the first report came only AFTER the
-   * first file had been read off the share, decoded and downscaled. For a
-   * 46 MB JPEG over SMB that is seconds with no progress bar and — because
-   * the screen's `busy()` is derived from the progress object — with the Save
-   * button still live, so a second click ran the whole import again. The
-   * runner now announces 0-of-n before it touches anything.
+   * The leading 0 is reported before any file is read, so the progress bar and
+   * the busy state (which disables Save) appear immediately.
    */
   it('reports progress before the first file, after every file, and finishes in the done phase', async () => {
     const { service, rows, files } = await plan();
@@ -302,15 +291,9 @@ describe('BatchImageImportService.attachSelected', () => {
   });
 
   it('does not duplicate a photo that is already attached', async () => {
-    // This is the WITHIN-RUN de-duplication: two entries that are the same
-    // data URL collapse to one. It needs `existingPhotoMode: 'add'` now,
-    // because the default no longer writes to a coin that has photos at all.
-    //
-    // Worth being clear about what this does NOT cover, since the names are
-    // so close: a real second import produces freshly encoded strings, so the
-    // old entry and the new one are different strings for the same
-    // photograph and this Set sees nothing wrong. Recognising THAT is the
-    // source-path skip in already-attached.ts.
+    // Within-run de-duplication: identical data URLs collapse to one. A re-import
+    // produces different encoded strings; that case is handled by the source-path
+    // skip in already-attached.ts.
     const { service, rows, files } = await plan();
     const attach = vi.fn();
     // Pretend the obverse was imported on a previous run.

@@ -1,9 +1,4 @@
-/*
- * Where the caret goes when Add Coin opens the panel.
- *
- * No jsdom here, so the elements below are plain objects — which is exactly
- * why the choice lives in a pure module instead of inline in the component.
- */
+/* Where the caret goes when Add Coin opens the panel. Elements are plain objects (no jsdom). */
 import { describe, expect, it } from 'vitest';
 import { firstEditableField, isEditableField } from './first-editable-field';
 

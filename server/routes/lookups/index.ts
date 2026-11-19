@@ -1,40 +1,19 @@
 /**
- * routes/lookups/index.ts — assembles the reference-table ("lookup") router.
+ * The lookup router, mounted at /api by server.ts. These tables fill the coin
+ * form's dropdowns:
  *
- * Mounted by server.ts as `app.use('/api', lookupsRouter)`. These are the
- * small tables that fill the dropdowns in the coin edit form:
+ *   categories.ts          /api/categories           plain name list
+ *   metal-contents.ts      /api/metalcontents        plain name list, read-only
+ *   coin-sets.ts           /api/coin-sets            plain name list
+ *   issuers.ts             /api/issuers              soft delete
+ *   denominations.ts       /api/denominations        soft delete
+ *   mint-marks.ts          /api/mintmarks            soft delete
+ *   catalogs.ts            /api/catalogs             soft delete
+ *   reference-usage.ts     /api/reference-usage      coin counts per entry
+ *   denomination-lookup.ts /api/denomination-lookup  Wikidata proposals (an
+ *                                                    outbound request)
  *
- *   categories.ts      /api/categories      plain name list
- *   metal-contents.ts  /api/metalcontents   plain name list, read-only
- *   coin-sets.ts       /api/coin-sets       plain name list
- *   issuers.ts         /api/issuers         who struck the coin,     soft delete
- *   denominations.ts   /api/denominations   id + issuer + country,   soft delete
- *   mint-marks.ts      /api/mintmarks       id + description,        soft delete
- *   catalogs.ts        /api/catalogs        id + sort order,         soft delete
- *
- * ...plus one endpoint that is not a table:
- *
- *   reference-usage.ts /api/reference-usage how many coins use each entry of
- *                                           all five of the above. Read-only,
- *                                           and the number the maintenance
- *                                           screen shows before it offers to
- *                                           delete something.
- *
- * ...plus one endpoint that is not a table and not even a database read:
- *
- *   denomination-lookup.ts /api/denomination-lookup
- *                                           asks Wikidata what denominations
- *                                           an issuer struck, so a newly
- *                                           added issuer does not start
- *                                           empty and silent. PROPOSES ONLY;
- *                                           nothing is written without the
- *                                           user confirming it. The app's
- *                                           only outbound request, and the
- *                                           issuer form has a checkbox to
- *                                           refuse it.
- *
- * All nine paths are distinct literal prefixes, so mount order cannot change
- * which handler answers a request.
+ * All paths are distinct literal prefixes, so mount order doesn't matter.
  */
 
 import { Router } from 'express';

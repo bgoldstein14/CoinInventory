@@ -1,13 +1,9 @@
  /*
- * denomination-resolution.spec.ts
- *
- * The four rules of design §5, one describe block each:
- *
- *   1. the coin's country is a PREFERENCE, not a filter;
- *   2. an ambiguous match leaves the id null rather than guessing;
- *   3. the spellings fold through denomination-aliases.ts and nothing else;
- *   4. an inactive or unmatched row resolves to nothing, loudly enough to be
- *      counted in a report.
+  * The resolution rules of design §5:
+  *   1. the coin's country is a preference, not a filter;
+  *   2. an ambiguous match leaves the id null;
+  *   3. spellings fold through denomination-aliases.ts only;
+  *   4. inactive or unmatched rows resolve to nothing, with an outcome a report can count.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -19,10 +15,8 @@ import {
 } from './denomination-resolution';
 
  /*
- * A small world, shaped like the real one: the United States and Great
- * Britain as the seed already has them, Mexico as the 8-Reales case needs
- * it, Australia as a second Crown, and the Roman Empire as an issuer with no
- * ISO code at all.
+  * A small world: the United States and Great Britain, Mexico for the 8 Reales
+  * case, Australia as a second Crown, and the Roman Empire with no ISO code.
   */
 
 const ISSUERS: ResolverIssuer[] = [
@@ -48,17 +42,12 @@ function resolve(text: string | null | undefined, country: string | null | undef
   return resolveDenomination(text, country, DENOMINATIONS, ISSUERS);
 }
 
- /*
- * 1. THE COUNTRY IS A PREFERENCE
-  */
+ /* 1. The country is a preference */
 
 describe('the coin country narrows the search but never limits it', () => {
   it('resolves 8 Reales on a coin whose country says United States', () => {
-    // THE CASE THAT PROMPTED THE WHOLE CHANGE. The QIF parser never set a
-    // country, so every imported coin says 'United States' — including the
-    // Mexican ones. A country-scoped-only match resolves nothing here, which
-    // would leave the headline example of the design unfixed by the migration
-    // that exists to fix it.
+    // QIF-imported coins all say 'United States', including Mexican ones, so a
+    // country-only match would resolve nothing here.
     const match = resolve('8 Reales', 'United States');
     expect(match.denominationId).toBe(30);
     expect(match.outcome).toBe('any-issuer');
@@ -71,16 +60,13 @@ describe('the coin country narrows the search but never limits it', () => {
   });
 
   it('matches a country written as an ISO code against the issuer code', () => {
-    // Denominations.Country holds 'US'/'GB' and Coins.Country holds
-    // 'United States'. Both spellings have to reach the same issuer.
+    // Coins say 'United States', denominations 'US'/'GB'; both reach the same issuer.
     expect(resolve('Crown', 'GB').denominationId).toBe(20);
     expect(resolve('50 Cents', 'US').denominationId).toBe(11);
   });
 
   it('matches an issuer that has no ISO code at all, by name', () => {
-    // Ancients are first-class (design §4.2) and none of them has an ISO
-    // code. Matching on the code alone would make every ancient issuer
-    // unreachable by country.
+    // Ancients have no ISO code, so matching must also work on the Name.
     const match = resolve('Denarius', 'Roman Empire');
     expect(match.denominationId).toBe(50);
     expect(match.outcome).toBe('in-country');
@@ -92,14 +78,11 @@ describe('the coin country narrows the search but never limits it', () => {
   });
 });
 
- /*
- * 2. AMBIGUITY IS ANSWERED WITH NULL
-  */
+ /* 2. Ambiguity is answered with null */
 
 describe('an ambiguous match leaves the id null', () => {
   it('refuses to choose between two issuers when the country helps with neither', () => {
-    // 'Other (Crown)' is honest. The wrong country is not, and nothing in the
-    // UI would ever reveal it.
+    // 'Other (Crown)' rather than a guessed issuer.
     const match = resolve('Crown', 'United States');
     expect(match.denominationId).toBeNull();
     expect(match.outcome).toBe('ambiguous');
@@ -107,9 +90,7 @@ describe('an ambiguous match leaves the id null', () => {
   });
 
   it('refuses to choose between two rows of the SAME issuer', () => {
-    // The Settings dialog lets the user add rows, so two US labels that fold
-    // to one key are reachable. Picking "the first one" would be a coin flip
-    // the user never sees.
+    // Two US labels folding to one key (possible via Settings): no coin flip.
     const withDuplicate = [
       ...DENOMINATIONS,
       { denominationId: 13, issuerId: 1, label: 'Half Dollar' },
@@ -120,19 +101,9 @@ describe('an ambiguous match leaves the id null', () => {
   });
 
   it('resolves a term that is ambiguous in GENERAL but unique within the country', () => {
-    /* THE ORDER OF THE TWO RULES, STATED AS A TEST.
-     *
-     * 'Penny' is deliberately NOT an alias — it means the US cent to an
-     * American and 1d to everyone else, and denomination-aliases.ts refuses
-     * to choose. But it IS a real label under Australia, New Zealand and
-     * Ireland, which all struck a coin called exactly that.
-     *
-     * So the word is ambiguous across issuers and unambiguous within one,
-     * and that is precisely the thing the flat model could not express.
-     * Ambiguity must be answered AFTER the country has had its say, never
-     * before: checking "is this word ambiguous anywhere?" first would null
-     * every one of these.
-     */
+    /* 'Penny' is not an alias (US cent vs 1d), but is a real label under
+     * Australia, New Zealand and Ireland: ambiguous across issuers, unambiguous
+     * within one. So ambiguity is judged after the country, never before. */
     const pennyIssuers: ResolverIssuer[] = [
       { issuerId: 1, name: 'Australia', isoCode: 'AU' },
       { issuerId: 2, name: 'New Zealand', isoCode: 'NZ' },
@@ -157,17 +128,9 @@ describe('an ambiguous match leaves the id null', () => {
   });
 
   it('prefers an issuer the country names exactly over one a pattern recognises', () => {
-    /* The coin's country is compared two ways: exactly against the
-     * issuer's Name and IsoCode, and then -- only if that found nothing --
-     * through isSameCountry, which knows that 'GB' is Great Britain and
-     * that 'British' probably is too.
-     *
-     * Exact must win, for two reasons. It is the better answer: a name the
-     * user typed character for character outranks a regular expression's
-     * opinion. And it is what makes migration 014 safe, because T-SQL can
-     * only do the exact comparison -- so the migration's rule has to be a
-     * special case of this one rather than a rival to it.
-     */
+    /* The country is compared exactly against Name/IsoCode first, then via
+     * isSameCountry only if that found nothing. Exact must win: it is the better
+     * answer, and migration 014 can only do the exact comparison. */
     const colonial: ResolverIssuer[] = [
       { issuerId: 1, name: 'Great Britain', isoCode: 'GB' },
       { issuerId: 2, name: 'British Colonial', isoCode: null },
@@ -191,24 +154,18 @@ describe('an ambiguous match leaves the id null', () => {
   });
 });
 
- /*
- * 3. ONE ALIAS TABLE, THE EXISTING ONE
-  */
+ /* 3. One alias table, the existing one */
 
 describe('spellings fold through denomination-aliases.ts', () => {
   it('folds the three-cent-silver spellings onto one row', () => {
-    // Exactly the spellings denomination-aliases.ts knows. '3¢ Silver' is
-    // NOT among them and is not added here: extending that table changes the
-    // editor's dropdown, which is a different piece of work with its own
-    // tests. This module reuses the vocabulary, it does not grow it.
+    // Exactly the spellings denomination-aliases.ts knows; this module doesn't extend it.
     for (const spelling of ['3CS', '3cs', 'Three Cent Silver', 'Trime']) {
       expect(resolve(spelling, 'United States').denominationId, spelling).toBe(10);
     }
   });
 
   it("folds the QIF importer's own British spellings", () => {
-    // quicken-import.service.ts writes '5s' for a crown and '1s' for a
-    // shilling; the lookup spells them '5/- (Crown)' and '1/-'.
+    // The QIF importer writes '5s' and '1s'; the lookup spells them '5/- (Crown)' and '1/-'.
     expect(resolve('5s', 'Great Britain').denominationId).toBe(20);
     expect(resolve('1s', 'Great Britain').denominationId).toBe(21);
   });
@@ -220,19 +177,15 @@ describe('spellings fold through denomination-aliases.ts', () => {
   });
 
   it('leaves alone the spellings the alias table deliberately omits', () => {
-    // 'Trade Dollar' is a distinct issue, not the lookup's '$1'. 'Penny' and
-    // 'Eagle' are ambiguous by country and by series. Those omissions are
-    // decisions made in denomination-aliases.ts and this module must not
-    // quietly undo them.
+    // 'Trade Dollar' is a distinct issue; 'Penny' and 'Eagle' are ambiguous.
+    // These omissions are decided in denomination-aliases.ts.
     expect(resolve('Trade Dollar', 'United States').denominationId).toBeNull();
     expect(resolve('Penny', 'United States').denominationId).toBeNull();
     expect(resolve('Eagle', 'United States').denominationId).toBeNull();
   });
 });
 
- /*
- * 4. NOTHING MATCHED IS A RESULT, NOT A FAILURE
-  */
+ /* 4. No match is a result, not a failure */
 
 describe('values with no row', () => {
   it('answers unknown for text no seeded denomination names', () => {
@@ -243,9 +196,7 @@ describe('values with no row', () => {
   });
 
   it('answers empty for a blank value, distinct from unknown', () => {
-    // A coin with no denomination recorded is not the same thing as a coin
-    // whose denomination could not be resolved, and the migration's report
-    // must not list hundreds of blanks as if they needed review.
+    // "Nothing recorded" is not "couldn't resolve"; blanks stay out of the review report.
     for (const blank of [null, undefined, '', '   ']) {
       const match = resolve(blank, 'United States');
       expect(match.denominationId).toBeNull();
@@ -254,8 +205,7 @@ describe('values with no row', () => {
   });
 
   it('ignores inactive rows', () => {
-    // Soft-deleted rows (design §4.4) must not pull coins back onto a
-    // denomination the user removed.
+    // Soft-deleted rows (§4.4) must not be matched.
     const retired: ResolverDenomination[] = [
       { denominationId: 30, issuerId: 3, label: '8 Reales', isActive: false },
     ];
@@ -265,9 +215,8 @@ describe('values with no row', () => {
   });
 
   it('treats a row with no issuer as reachable only by the fallback', () => {
-    // Denominations.IssuerId is nullable through the migration window, so
-    // rows with no issuer exist. They can still be resolved — they just
-    // cannot be preferred by country, because they belong to no country.
+    // Denominations.IssuerId is nullable for now; such rows still resolve, but
+    // can't be preferred by country.
     const orphan: ResolverDenomination[] = [
       { denominationId: 99, issuerId: null, label: 'Guinea' },
     ];

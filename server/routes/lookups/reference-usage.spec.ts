@@ -1,22 +1,8 @@
 /**
- * routes/lookups/reference-usage.spec.ts — "how many coins use this?"
- *
- * A visible in-use count per entry means the consequence
- * of removing something is known BEFORE the confirmation appears. Delete then
- * requires the denomination delete to null those coins' DenominationId.
- *
- * Both are tested here together on purpose: the number the screen shows and
- * the number of rows the delete touches have to be the same number, and the
- * only way to guarantee that is for both to come out of the same column of
- * the same table. A count derived from Coins.Denomination TEXT while the
- * delete unlinks Coins.DenominationId would be two different questions
- * wearing one label.
- *
- * *** THE COUNTS BELOW ARE COUNTED, NOT QUEUED. *** The coins are inserted
- * into the real in-memory SQLite database and the six GROUP BYs really run
- * over them, so "counts the DenominationId column, not the Denomination
- * text" is now proved by giving a coin a denomination TEXT that must not be
- * counted — rather than by looking for the column's name in the SQL.
+ * Reference usage counts and the denomination delete, tested together: the
+ * count shown must be the number of coins the delete unlinks, so both use
+ * Coins.DenominationId (not the Denomination text). Counts run over real rows
+ * in the in-memory database.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -32,13 +18,12 @@ import {
 } from '../../test-support/sqlite-test-db';
 import { app } from '../../server';
 
-// The DELETE tests deactivate a seeded Denominations row and the POST tests
-// add one; both are reference data the ordinary per-test reset leaves alone.
+// These tests change seeded Denominations rows, which the per-test reset leaves alone.
 beforeEach(async () => {
   await rebuildTestDatabase();
 });
 
-/** The seeded denomination's real id — AUTOINCREMENT picked it, not the seed file. */
+/** The seeded denomination's id as assigned in this database. */
 async function denominationId(issuer: string, label: string): Promise<number> {
   const rows = await queryRows(
     'SELECT d.DenominationId FROM Denominations d JOIN Issuers i ON i.IssuerId = d.IssuerId ' +
@@ -55,14 +40,7 @@ async function catalogId(name: string): Promise<number> {
   return Number(rows[0]['CatalogId']);
 }
 
-/**
- * The coins the six GROUP BYs are counted from.
- *
- * One fixture rather than six, because that is the real shape of the
- * problem: every one of these counts comes off the SAME Coins rows, so a
- * coin contributing to the category index contributes to the mint-mark
- * index too.
- */
+/** The coins all six counts come from (one shared fixture, as in real data). */
 async function arrangeUsage(): Promise<{
   reales: number;
   cent: number;
@@ -102,23 +80,32 @@ describe('GET /api/reference-usage', () => {
       denominations: { [String(reales)]: 2, [String(cent)]: 1 },
       mintMarks: { D: 2 },
       catalogs: { [String(sear)]: 1, [String(ric)]: 1 },
-      // Coins.MetalContent is TEXT, like Category — the coin names the metal
-      // rather than pointing at a MetalContents row. 'Silver' therefore
-      // appears here as a metal (two coins) and in `categories` as a
-      // category (one coin), which are two different questions about two
-      // different columns.
+      // MetalContent is text on Coins; 'Silver' here is a different column
+      // from the 'Silver' category.
       metalContents: { Silver: 2, Gold: 1 },
     });
   });
 
+  it('counts a coin once per catalogue however many of its references use it', async () => {
+    const sear = await catalogId('Sear');
+    const ric = await catalogId('RIC');
+    await insertCoin({ CoinId: 'multi' });
+    await withTestDb((database) => {
+      const add = database.prepare(
+        "INSERT INTO CoinCatalogRefs (CoinId, CatalogId, CatalogNumber, SortOrder) VALUES ('multi', @id, @n, @o)"
+      );
+      add.run({ id: sear, n: '1', o: 0 });
+      add.run({ id: sear, n: '2', o: 1 });
+      add.run({ id: ric, n: '3', o: 2 });
+    });
+    const res = await request(app).get('/api/reference-usage');
+    expect(res.body.catalogs).toEqual({ [String(sear)]: 1, [String(ric)]: 1 });
+  });
+
   it('keys denominations and catalogues by id, and the text lookups by text', async () => {
-    // Coins reference a denomination and a catalogue BY ID, and a category,
-    // set and mint mark BY TEXT. Keying either one the other way produces an
-    // index that never matches anything and therefore reports zero for
-    // everything — which looks exactly like "nothing is in use".
-    // Sorted, because JavaScript reorders integer-like object keys and the
-    // order they come back in is neither stable nor meaningful. What matters
-    // is WHICH keys exist and that they are strings.
+    // Denominations and catalogues are keyed by id, the rest by text; the
+    // wrong key type would report zero everywhere. Sorted because JS reorders
+    // integer-like keys; what matters is which keys exist and that they're strings.
     const { reales, cent, sear, ric } = await arrangeUsage();
 
     const res = await request(app).get('/api/reference-usage');
@@ -128,10 +115,7 @@ describe('GET /api/reference-usage', () => {
   });
 
   it('counts the DenominationId column, not the Denomination text', async () => {
-    // Coins.Denomination is what the SOURCE said and is never a link. A
-    // count taken from it would key the index by '8 Reales' instead of by
-    // the id the screen looks up, and would also count the coin below that
-    // has a label and NO link at all.
+    // Counted by id, not by the Denomination text (which isn't a link).
     const reales = await denominationId('Mexico', '8 Reales');
     await insertCoin({ CoinId: 'd-linked', Denomination: '8 Reales', DenominationId: reales });
     await insertCoin({ CoinId: 'd-unlinked', Denomination: 'Half Dollar', DenominationId: null });
@@ -141,9 +125,7 @@ describe('GET /api/reference-usage', () => {
   });
 
   it('ignores blank text values instead of offering an unnamed bucket', async () => {
-    // Coins.Category is nullable and years of imports have left ''
-    // in it. A '' bucket would appear in the screen as a nameless entry with
-    // a count beside it.
+    // Blank values left by imports are excluded.
     await insertCoin({ CoinId: 'b-1', Category: 'Gold' });
     await insertCoin({ CoinId: 'b-2', Category: '' });
     await insertCoin({ CoinId: 'b-3', Category: '   ' });
@@ -167,10 +149,7 @@ describe('GET /api/reference-usage', () => {
   });
 
   it('counts the metal a coin records, ignoring the blanks', async () => {
-    // The Metal Content pane shows this beside every entry and the Remove
-    // confirmation quotes it, so the same blank-filtering the text lookups
-    // already do has to apply: '' and '   ' are what years of imports left
-    // behind, and a nameless bucket matches no entry in the list.
+    // Same blank filtering for metal content.
     await insertCoin({ CoinId: 'm-1', MetalContent: '90% Silver' });
     await insertCoin({ CoinId: 'm-2', MetalContent: '90% Silver' });
     await insertCoin({ CoinId: 'm-3', MetalContent: '' });
@@ -184,10 +163,7 @@ describe('GET /api/reference-usage', () => {
 
 describe('DELETE /api/denominations/:id — design §4.4', () => {
   it('nulls the DenominationId of every coin using it', async () => {
-    // Step 2. Without this the coins keep pointing at a soft-deleted row,
-    // which no longer resolves to a label, so they read as unresolved
-    // anyway — but by accident, and a reactivation would not bring them
-    // back in any predictable state.
+    // Coins are unlinked rather than left pointing at an inactive row.
     const reales = await denominationId('Mexico', '8 Reales');
     for (const id of ['x-1', 'x-2', 'x-3']) {
       await insertCoin({ CoinId: id, Denomination: '8 Reales', DenominationId: reales });
@@ -202,11 +178,7 @@ describe('DELETE /api/denominations/:id — design §4.4', () => {
   });
 
   it('NEVER writes Coins.Denomination', async () => {
-    // *** THE ONE RULE THAT MAKES ALL OF THIS RECOVERABLE. ***
-    // Coins.Denomination is never written. It is what the
-    // source said, it is the only record of what the coin was, and it is
-    // what lets the user recognise the row and re-link it afterwards. A
-    // DELETE that blanked it would turn a reversible unlink into data loss.
+    // Coins.Denomination is never written, so the unlink is reversible.
     const reales = await denominationId('Mexico', '8 Reales');
     await insertCoin({ CoinId: 'x-1', Denomination: '8 Reales', DenominationId: reales });
 
@@ -221,8 +193,7 @@ describe('DELETE /api/denominations/:id — design §4.4', () => {
 
     await request(app).delete(`/api/denominations/${reales}`);
 
-    // The row is still there, deactivated. A hard DELETE also answers 200
-    // and nothing in the response distinguishes the two.
+    // Soft delete: the row is still there, inactive.
     const [stored] = await queryRows('SELECT IsActive, Label FROM Denominations WHERE DenominationId = @id', {
       id: reales,
     });
@@ -232,14 +203,9 @@ describe('DELETE /api/denominations/:id — design §4.4', () => {
   });
 
   it('unlinks the coins BEFORE deactivating the row', async () => {
-    // Order matters and it is not arbitrary. FK_Coins_Denomination means no
-    // coin can point at a denomination that does not exist, so unlinking
-    // first is always safe; deactivating first would leave a window — and,
-    // if the second statement failed, a permanent state — in which coins
-    // point at a row the API no longer returns.
-    //
-    // Order of EXECUTION is the one thing the finished rows cannot show, so
-    // this reads the recorded statements rather than the table.
+    // Coins must be unlinked before the denomination is deactivated (see the
+    // route). Execution order isn't visible in the final rows, so this reads
+    // the recorded statements.
     const reales = await denominationId('Mexico', '8 Reales');
     await insertCoin({ CoinId: 'x-1', DenominationId: reales });
 
@@ -253,14 +219,7 @@ describe('DELETE /api/denominations/:id — design §4.4', () => {
   });
 
   it('does both in one transaction, so a failure cannot leave half of it done', async () => {
-    // *** THIS USED TO SAY "IN ONE BATCH" AND COULD NOT STAY THAT WAY. ***
-    // The T-SQL version was a single four-statement batch carrying the row
-    // counts in a @@ROWCOUNT local. SQLite's prepare() compiles the FIRST
-    // statement of a multi-statement string and discards the rest silently,
-    // so db/sql-api.ts refuses a multi-statement query outright and the
-    // route uses an explicit transaction instead. The guarantee is the
-    // same — both UPDATEs commit or neither does — so what is asserted is
-    // that both ran inside one transaction, not that there was one call.
+    // Both UPDATEs run in one transaction (multi-statement queries are refused).
     const reales = await denominationId('Mexico', '8 Reales');
     await insertCoin({ CoinId: 'x-1', DenominationId: reales });
 
@@ -304,9 +263,7 @@ describe('GET and POST /api/denominations — the issuer link', () => {
   });
 
   it('keeps a null issuer null rather than dropping the row', async () => {
-    // Denominations.IssuerId is nullable through the migration window. A
-    // row with no issuer must still reach the screen — it is the only place
-    // it can be given one. The LEFT JOIN in the route is what keeps it.
+    // A denomination with no issuer must still be listed (LEFT JOIN).
     await withTestDb((database) => {
       database
         .prepare(
@@ -317,9 +274,7 @@ describe('GET and POST /api/denominations — the issuer link', () => {
     });
 
     const res = await request(app).get('/api/denominations');
-    // Filtered on the null issuer, not on the label: the seed already files
-    // a 'Crown' under Great Britain and under Ireland, and the row this
-    // test cares about is the one belonging to nobody.
+    // Filter on the null issuer; the seed has 'Crown' under more than one issuer.
     const orphans = res.body.filter((d: { issuerId: number | null }) => d.issuerId === null);
     expect(orphans).toHaveLength(1);
     expect(orphans[0].label).toBe('Crown');
@@ -327,9 +282,7 @@ describe('GET and POST /api/denominations — the issuer link', () => {
   });
 
   it('stores the issuer a new denomination was added under', async () => {
-    // Adding one requires choosing an issuer. Dropping the id here
-    // would file every user-added denomination under "No issuer yet", which
-    // is the flat list this rebuild exists to end.
+    // The issuer id must be stored, not dropped.
     const burma = await request(app).post('/api/issuers').send({ name: 'Burma', kind: 'modern', isoCode: 'MM' });
     const issuerId = burma.body.issuerId;
 
@@ -340,11 +293,8 @@ describe('GET and POST /api/denominations — the issuer link', () => {
     expect(res.status).toBe(201);
     expect(res.body.issuerId).toBe(issuerId);
 
-    // The STORED row, not just the echoed response. Asserting only on the
-    // body passes even when the INSERT binds null, because the body is
-    // built from the parsed request rather than from what went to SQL —
-    // verified by mutation: stubbing the binding to null left this test
-    // green until this line existed.
+    // Check the stored row: the response body is built from the request and
+    // would pass even if the INSERT bound null.
     const [stored] = await queryRows('SELECT IssuerId FROM Denominations WHERE DenominationId = @id', {
       id: res.body.denominationId,
     });
@@ -352,11 +302,8 @@ describe('GET and POST /api/denominations — the issuer link', () => {
   });
 
   it('binds a null issuer when none was sent, rather than a zero or a NaN', async () => {
-    // The older editor add path sends no issuer, and the column is
-    // nullable. Binding Number(undefined) would put NaN into an INT
-    // parameter — db/bind-values.ts now refuses that outright — and binding
-    // 0 would point at an issuer id that does not exist and fail
-    // FK_Denominations_Issuer, which SQLite really does enforce here.
+    // The older add path sends no issuer; it must bind NULL (not NaN, and
+    // not 0, which would fail FK_Denominations_Issuer).
     const res = await request(app).post('/api/denominations').send({ label: 'Crown', country: 'GB' });
     expect(res.status).toBe(201);
 

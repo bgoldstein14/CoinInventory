@@ -1,20 +1,6 @@
 /*
- * help-modal.spec.ts — the Help screen, and the three things about it that
- * are promises rather than preferences.
- *
- * WHY THE TEMPLATE AND THE STYLESHEET ARE READ AS TEXT. There is no jsdom in
- * this project's frontend suite, so nothing here can be rendered. What this
- * screen SAYS and HOW LOUDLY it says it are nonetheless the whole point of
- * the item — the owner asked twice for the support note to be humble — and a
- * decision that lives only in markup and a font-size is a decision nothing is
- * holding. So the files are read and asserted against, the same way
- * app-toolbar.spec.ts holds the Import menu's ordering.
- *
- * *** COMMENTS ARE STRIPPED FIRST. *** Both files explain at length why the
- * note is small, why it is not a button and why the author block sits at the
- * bottom. Every one of those sentences contains the words an assertion would
- * look for. Asserting against the raw text would match the explanation and
- * pass with the markup deleted.
+ * The Help screen. No jsdom, so the template and stylesheet are read as text,
+ * with comments stripped first so assertions match markup, not explanations.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -22,12 +8,8 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * The template with comments removed, and `&#64;` turned back into `@`.
- *
- * The entity is not decoration: a bare `@` in an Angular template starts a
- * control-flow block, so `@bgoldstein14` is a compile error and the handle
- * has to be written escaped. Decoding it here means the assertions below can
- * talk about the handle the user actually sees.
+ * The template with comments removed and `&#64;` decoded to `@` (a bare `@`
+ * starts an Angular control-flow block, so the handle is written escaped).
  */
 function template(): string {
   return readFileSync(join(__dirname, 'help-modal.html'), 'utf8')
@@ -69,27 +51,12 @@ function element(tag: string, className: string): string {
 
 describe('HelpModal — help first, bug form second', () => {
   it('offers "Report a problem", because that is what the help icon used to do', () => {
-    /* The icon opened the problem reporter directly before this screen
-     * existed. Anyone who learned that route presses the same icon and must
-     * find the reporter in what opens — otherwise this change took a
-     * working path away and gave back a page of prose. It is no longer the
-     * first thing on the screen (see below), but it is still ON it, one
-     * rule down, with nothing to expand and nowhere to scroll. */
+    /* The help icon must still lead to the problem reporter. */
     expect(template()).toMatch(/\(click\)="reportProblem\(\)"[\s\S]*?>\s*Report a problem\s*</);
   });
 
   it('puts the guide above the report section, with a rule between them', () => {
-    /* THE REVERSAL THIS PINS, AND IT IS A REVERSAL. The report section
-     * shipped at the top of this screen on the argument that it is the most
-     * useful control here. The owner looked at it and decided otherwise:
-     * "Don't put the report issue on the top of the Help box; give some
-     * space below the guide information; maybe a line or dashes and then
-     * the report issue part."
-     *
-     * So the direction of this assertion is the whole point. An innocent
-     * tidy-up that moves the reporter back to the top — and the old
-     * reasoning is still a persuasive comment in the git history — is the
-     * failure this catches. */
+    /* The guide comes first, the report section after it. */
     const markup = template();
     const guide = markup.indexOf('The buttons along the top');
     const separator = markup.indexOf('help-separator');
@@ -103,12 +70,7 @@ describe('HelpModal — help first, bug form second', () => {
   });
 
   it('draws that separator as a real rule with real space around it', () => {
-    /* "Maybe a line or dashes and then the report issue part", plus "give
-     * some space below the guide information" — two requirements, and the
-     * second is the one a hairline tucked against the next heading would
-     * miss. The rule has to be visible AND to have air on both sides of it,
-     * otherwise it reads as a border on the report section rather than as
-     * the end of the guide. */
+    /* A visible separator with space on both sides. */
     expect(template(), 'an <hr>, not a styled border on the section below')
       .toMatch(/<hr\b[^>]*class="[^"]*\bhelp-separator\b/);
 
@@ -119,9 +81,7 @@ describe('HelpModal — help first, bug form second', () => {
   });
 
   it('keeps the author block and the support note below everything functional', () => {
-    /* Unchanged by the reorder, and worth re-asserting because of it: who
-     * wrote this and the fact that it is free stay at the very bottom, under
-     * the report section wherever the report section ends up. */
+    /* Author and support note stay at the very bottom. */
     const markup = template();
     const report = markup.indexOf('reportProblem()');
     const author = markup.indexOf('Author: Bruce Goldstein');
@@ -135,9 +95,6 @@ describe('HelpModal — help first, bug form second', () => {
 
 describe('HelpModal — the author block', () => {
   it('names the author and the ANA number, both of them', () => {
-    /* Two lines, and the second is the one that would quietly go missing in
-     * a tidy-up: it looks like a reference number rather than content. It is
-     * the credential that means something to the people this app is for. */
     const about = element('section', 'help-about');
 
     expect(about).toContain('Author: Bruce Goldstein');
@@ -145,7 +102,6 @@ describe('HelpModal — the author block', () => {
   });
 
   it('states it plainly, with no byline styling', () => {
-    // Plain paragraphs. Not a heading, not an accent colour, not a badge.
     const about = element('section', 'help-about');
     expect(about).not.toMatch(/<h[1-6]\b/);
     expect(fontSizeRem('.help-author')).toBeLessThanOrEqual(0.9);
@@ -154,9 +110,7 @@ describe('HelpModal — the author block', () => {
 
 describe('HelpModal — the support note is a footnote, not a pitch', () => {
   it('says the app is free first, and says it without a condition', () => {
-    /* THE REQUIREMENT THIS PINS. Nobody should close this screen wondering
-     * whether some feature is behind a payment, so "free" is not allowed to
-     * arrive after the handle, or hedged with a "but". */
+    /* "Free" comes before the handle, without conditions. */
     const note = element('p', 'help-support-note');
     const free = note.indexOf('free for everyone');
     const handle = note.indexOf('@bgoldstein14');
@@ -167,15 +121,6 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
   });
 
   it('closes warmly rather than with a shrug', () => {
-    /* THE WORDING THIS PINS. The sentence used to end "...if not, enjoy it
-     * anyway". The owner: "sounds a bit snide. Maybe something like
-     * 'regardless...enjoy!' or something to that effect."
-     *
-     * He is right, and the word doing the damage is "anyway" — it concedes
-     * something rather than offering it. The replacement has to let the
-     * reader off the hook (that part was always correct) without sounding
-     * resigned about it, and without reaching for an exclamation mark,
-     * which the test below rules out for the whole note. */
     const note = element('p', 'help-support-note');
 
     expect(note, 'the shrug is gone').not.toMatch(/\banyway\b/i);
@@ -183,9 +128,7 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
   });
 
   it('is set smaller than the smallest explanatory text on the screen', () => {
-    /* "Small type" was asked for twice and is not a stylistic preference.
-     * `.hint-text` is 0.82rem in styles/_modal.scss; the note must be below
-     * it, so it reads as a footnote and not as another paragraph. */
+    /* Smaller than `.hint-text` (0.82rem), so it reads as a footnote. */
     expect(fontSizeRem('.help-support-note')).toBeLessThan(0.82);
   });
 
@@ -199,10 +142,7 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
   });
 
   it('is not a button, a link, or anything else that can be pressed', () => {
-    /* "No button styled like a primary action" is the line in the item. The
-     * strongest version of that is that the note contains no control at
-     * all: it is a sentence, and the only thing you can do with it is read
-     * it and copy the handle. */
+    /* The note contains no control at all. */
     const note = element('p', 'help-support-note');
 
     expect(note).not.toMatch(/<button\b/);
@@ -213,8 +153,7 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
   it('carries no emoji and no exhortation', () => {
     const note = element('p', 'help-support-note');
 
-    // Anything outside the Basic Multilingual Plane, plus the dingbat and
-    // miscellaneous-symbol ranges emoji are drawn from.
+    // Characters outside the BMP plus the dingbat/symbol ranges used by emoji.
     expect(note).not.toMatch(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/u);
     expect(note).not.toMatch(/support my work/i);
     expect(note).not.toMatch(/donate/i);
@@ -222,9 +161,7 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
   });
 
   it('leaves the handle as selectable text so it can be copied', () => {
-    /* It is text rather than a link on purpose — there is no URL here to go
-     * stale, and nothing sends the user anywhere they did not ask to go. So
-     * copying is the only way to act on it, and it has to work. */
+    /* Plain text, so it must be selectable. */
     expect(element('p', 'help-support-note')).toContain('@bgoldstein14');
     expect(ruleBody('.help-handle')).toMatch(/user-select:\s*text/);
   });
@@ -232,10 +169,7 @@ describe('HelpModal — the support note is a footnote, not a pitch', () => {
 
 describe('HelpModal — the note is never a prompt', () => {
   it('appears on this screen and nowhere else in the application', () => {
-    /* "Never a prompt, never a modal, never on a timer." The way that gets
-     * broken later is not by someone adding a timer: it is by the handle
-     * being pasted into a toast, a zero state or a first-run banner. One
-     * occurrence in the whole of src/ is the shape of that promise. */
+    /* The handle appears exactly once in src/, so it is never reused as a prompt. */
     const appRoot = join(__dirname, '..', '..');
     const hits = filesContaining(appRoot, 'bgoldstein14');
 
@@ -243,8 +177,6 @@ describe('HelpModal — the note is never a prompt', () => {
   });
 
   it('is reached only from the help icon, not raised by the shell on its own', () => {
-    /* The shell shows this screen behind one flag and one flag only, and the
-     * only thing that sets it is the toolbar's help icon. */
     const shell = readFileSync(join(__dirname, '..', '..', 'app.ts'), 'utf8')
       .replace(/\/\*[\s\S]*?\*\//g, '')
       .replace(/^\s*\/\/.*$/gm, '');
@@ -257,9 +189,6 @@ describe('HelpModal — the note is never a prompt', () => {
   });
 
   it('is wired to the toolbar icon in the shell', () => {
-    /* The join is the part that goes missing, not the component — the batch
-     * image import once had a modal, a signal and an open/close pair with
-     * nothing calling the opener. */
     const shellTemplate = readFileSync(join(__dirname, '..', '..', 'app.html'), 'utf8')
       .replace(/<!--[\s\S]*?-->/g, '');
 

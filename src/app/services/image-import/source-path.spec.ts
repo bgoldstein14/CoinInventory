@@ -1,11 +1,7 @@
 /**
- * Tests for rebuilding an original file's ABSOLUTE path from the two halves we
- * actually have: the base folder the user typed, and the relative path the
- * browser gave us.
- *
- * These are the rules that decide what ends up in CoinImages.SourcePath for
- * ~1,700 rows, and a wrong join is invisible until every link in the app says
- * "file is missing" — so they are pinned down carefully here.
+ * Tests for rebuilding an original file's absolute path (stored in
+ * CoinImages.SourcePath) from the user's base folder and the browser's
+ * relative path. A wrong join only shows up later as "file is missing".
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -16,11 +12,7 @@ import {
   sourcePathForFile
 } from './source-path';
 
-/**
- * Builds a File with a `webkitRelativePath`, which is what a directory picker
- * produces. Node's File has no such property, so it is defined here — it is
- * read-only in the browser, hence defineProperty rather than assignment.
- */
+/** A File with a `webkitRelativePath`, as a directory picker produces it. */
 function pickedFile(name: string, webkitRelativePath = ''): File {
   const file = new File(['x'], name, { type: 'image/jpeg' });
   Object.defineProperty(file, 'webkitRelativePath', { value: webkitRelativePath });
@@ -34,24 +26,20 @@ describe('joinWindowsPath', () => {
   });
 
   it('normalises the forward slashes webkitRelativePath uses', () => {
-    // This is the real shape of the input: the browser ALWAYS uses forward
-    // slashes, even on Windows.
+    // The browser always uses forward slashes, even on Windows.
     expect(joinWindowsPath('\\\\NAS\\Coin Pictures', 'Business Strikes/1865 3CN - Obverse.jpg'))
       .toBe('\\\\NAS\\Coin Pictures\\Business Strikes\\1865 3CN - Obverse.jpg');
   });
 
   it('tolerates a trailing separator on the base folder', () => {
-    // Explorer's address bar sometimes copies a trailing slash, and the user
-    // may well type one. Either way there must be exactly one separator at the
-    // seam, not two.
+    // Exactly one separator at the seam.
     expect(joinWindowsPath('C:\\Pics\\', 'Sub/a.jpg')).toBe('C:\\Pics\\Sub\\a.jpg');
     expect(joinWindowsPath('C:\\Pics/', 'Sub/a.jpg')).toBe('C:\\Pics\\Sub\\a.jpg');
     expect(joinWindowsPath('C:\\Pics\\\\', 'Sub/a.jpg')).toBe('C:\\Pics\\Sub\\a.jpg');
   });
 
   it('does not eat the leading \\\\ of a UNC base folder', () => {
-    // Only TRAILING separators are stripped; a UNC path's leading pair is what
-    // makes it a UNC path at all.
+    // Only trailing separators are stripped.
     expect(joinWindowsPath('\\\\host\\share\\', 'a.jpg')).toBe('\\\\host\\share\\a.jpg');
   });
 
@@ -64,10 +52,8 @@ describe('joinWindowsPath', () => {
   });
 
   it('collapses a folder name repeated at the seam', () => {
-    // webkitRelativePath INCLUDES the picked folder's own name. So pointing the
-    // picker at the share root while the base folder names that same share
-    // would otherwise produce ...\Coin Pictures\Coin Pictures\... — a folder
-    // that does not exist, which would mark every imported image as missing.
+    // webkitRelativePath includes the picked folder's own name, which would
+    // otherwise give ...\Coin Pictures\Coin Pictures\...
     expect(joinWindowsPath('\\\\NAS\\Coin Pictures', 'Coin Pictures/Business Strikes/a.jpg'))
       .toBe('\\\\NAS\\Coin Pictures\\Business Strikes\\a.jpg');
   });
@@ -77,8 +63,7 @@ describe('joinWindowsPath', () => {
   });
 
   it('keeps a repeated name when the relative path is only a filename', () => {
-    // "Pics\Pics.jpg" is a file called Pics.jpg, not a doubled folder — there
-    // is no folder segment to collapse, so nothing is dropped.
+    // No folder segment to collapse.
     expect(joinWindowsPath('C:\\Pics', 'Pics')).toBe('C:\\Pics\\Pics');
   });
 
@@ -88,7 +73,6 @@ describe('joinWindowsPath', () => {
   });
 
   it('returns just the base folder when the relative path is empty', () => {
-    // No stray separator on the end.
     expect(joinWindowsPath('C:\\Pics', '')).toBe('C:\\Pics');
   });
 });
@@ -101,39 +85,24 @@ describe('sourcePathForFile', () => {
   });
 
   it('falls back to the file name for individually picked files', () => {
-    // A plain multi-file picker leaves webkitRelativePath empty, so all we have
-    // to go on is the name — which is correct if those files sit directly in
-    // the base folder.
+    // A plain multi-file picker leaves webkitRelativePath empty.
     const file = pickedFile('1921 Morgan - Obverse.jpg', '');
     expect(sourcePathForFile('C:\\Pics', file)).toBe('C:\\Pics\\1921 Morgan - Obverse.jpg');
   });
 
   it('returns null when there is no base folder to anchor the name to', () => {
-    // Null means "no path recorded", which the viewer renders as no link at
-    // all — deliberately NOT a bare filename that could never be reopened.
+    // Null means "no path recorded", not a bare filename.
     expect(sourcePathForFile('', pickedFile('a.jpg', ''))).toBe(null);
   });
 
   it('offers a drive-letter path as an illustration, never as a value', () => {
-    // The example is placeholder/hint text only. It must look like a host-local
-    // path so the user copies the right SHAPE -- the host keeps the photo
-    // library on a local drive, not behind the UNC path a developer workstation
-    // reaches it by.
-    //
-    // It is NOT a default and must never become one: a wrong base folder fails
-    // silently, stamping every row with an unreachable location that only
-    // surfaces later as ~1,700 images all reporting "file is missing". The real
-    // prefill comes from the server (GET /api/app-info) and is described in
-    // import-base-folder.ts.
+    // Placeholder text only, never a default value (see import-base-folder.ts).
+    // A host-local drive path, since the host keeps the photos on a local drive.
     expect(EXAMPLE_IMPORT_BASE_FOLDER).toBe('D:\\Coin Pictures');
   });
 });
 
-/**
- * The host runs the app from a local drive, so drive-letter bases are the normal
- * case rather than an exotic one. These pin down the two places a drive letter
- * behaves differently from any other path fragment.
- */
+/** Drive-letter bases are the normal case on the host. */
 describe('joinWindowsPath with drive-letter bases', () => {
   it('joins a plain drive-letter folder', () => {
     expect(joinWindowsPath('D:\\Coin Pictures', 'Business Strikes/1865 3CN.jpg'))
@@ -141,55 +110,37 @@ describe('joinWindowsPath with drive-letter bases', () => {
   });
 
   it('collapses the repeated folder name for a drive-letter base too', () => {
-    // Same trap as the UNC case: webkitRelativePath includes the picked folder's
-    // own name, so pointing the picker at D:\Coin Pictures would otherwise give
-    // D:\Coin Pictures\Coin Pictures\...
     expect(joinWindowsPath('D:\\Coin Pictures', 'Coin Pictures/Proofs/a.jpg'))
       .toBe('D:\\Coin Pictures\\Proofs\\a.jpg');
   });
 
   it('keeps a drive root absolute when the trailing separator is stripped', () => {
-    // The subtle one. Stripping the trailing separator from "D:\" leaves "D:",
-    // and in Windows a bare "D:" means "the current directory on drive D", NOT
-    // the root of D. The separator we add back at the seam is what keeps the
-    // result absolute -- so this must be D:\a.jpg and never D:a.jpg.
+    // A bare "D:" means the current directory on D, not its root, so the
+    // result must be D:\a.jpg, never D:a.jpg.
     expect(joinWindowsPath('D:\\', 'a.jpg')).toBe('D:\\a.jpg');
     expect(joinWindowsPath('D:\\', 'Proofs/a.jpg')).toBe('D:\\Proofs\\a.jpg');
   });
 
   it('treats a bare drive letter as that drive s root', () => {
-    // If the user types just "D:", the only sane reading is the root -- and
-    // that is what the added separator produces.
     expect(joinWindowsPath('D:', 'a.jpg')).toBe('D:\\a.jpg');
   });
 
   it('does not confuse the drive letter with a repeatable folder name', () => {
-    // "D:" is a path segment like any other to segmentsOf(), so guard against a
-    // relative path whose first segment happens to look similar.
     expect(joinWindowsPath('D:\\', 'D/a.jpg')).toBe('D:\\D\\a.jpg');
   });
 });
 
  /*
- * normalizeSourcePathForComparison
- *
- * These rules decide whether a file the user just picked is ALREADY attached
- * to the coin. Get them too strict and a re-imported folder duplicates every
- * photo in it (the bug this was written for); get them too loose and a photo
- * the user genuinely wants is silently skipped.
+ * Decides whether a picked file is already attached to the coin: too strict
+ * duplicates photos, too loose silently skips wanted ones.
   */
 describe('normalizeSourcePathForComparison', () => {
   it('is case-insensitive, because Windows paths are', () => {
-    // The same file reached by two code paths: the import builds the path from
-    // the base-folder box (whatever the user typed) while the database holds
-    // whatever was stored months ago. Neither casing is more correct.
     expect(normalizeSourcePathForComparison('D:\\Coin Pictures\\A.JPG'))
       .toBe(normalizeSourcePathForComparison('d:\\coin pictures\\a.jpg'));
   });
 
   it('treats forward and back slashes as the same separator', () => {
-    // webkitRelativePath always uses forward slashes; the stored value is
-    // whatever joinWindowsPath produced, which is backslashes.
     expect(normalizeSourcePathForComparison('D:/Coin Pictures/a.jpg'))
       .toBe(normalizeSourcePathForComparison('D:\\Coin Pictures\\a.jpg'));
   });
@@ -205,8 +156,7 @@ describe('normalizeSourcePathForComparison', () => {
   });
 
   it('keeps the leading double separator of a UNC path', () => {
-    // \\NAS\pics\a.jpg and \NAS\pics\a.jpg are NOT the same location, so the
-    // collapse rule must not eat the UNC prefix.
+    // \\NAS\pics\a.jpg and \NAS\pics\a.jpg are different locations.
     expect(normalizeSourcePathForComparison('\\\\NAS\\pics\\a.jpg'))
       .not.toBe(normalizeSourcePathForComparison('\\NAS\\pics\\a.jpg'));
     expect(normalizeSourcePathForComparison('//NAS/pics/a.jpg'))
@@ -216,16 +166,13 @@ describe('normalizeSourcePathForComparison', () => {
   it('still distinguishes genuinely different files', () => {
     expect(normalizeSourcePathForComparison('D:\\pics\\a.jpg'))
       .not.toBe(normalizeSourcePathForComparison('D:\\pics\\b.jpg'));
-    // Same filename, different folder: a very common shape in this library,
-    // where every denomination has its own "Obverse.jpg".
+    // Same filename, different folder.
     expect(normalizeSourcePathForComparison('D:\\pics\\Halves\\Obverse.jpg'))
       .not.toBe(normalizeSourcePathForComparison('D:\\pics\\Dimes\\Obverse.jpg'));
   });
 
   it('returns an empty string for nothing at all', () => {
-    // Null is what every image imported before the SourcePath column existed
-    // has. An empty normal form is the one value that must never match another
-    // empty one as "already attached" — the callers check for that explicitly.
+    // Callers must never treat two empty forms as a match.
     expect(normalizeSourcePathForComparison(null)).toBe('');
     expect(normalizeSourcePathForComparison(undefined)).toBe('');
     expect(normalizeSourcePathForComparison('   ')).toBe('');

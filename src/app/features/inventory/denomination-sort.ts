@@ -1,14 +1,6 @@
 /**
- * Sorting comparators for the inventory table.
- *
- * WHY THIS FILE EXISTS
- * Sorting a coin collection is not plain alphabetical sorting. "½¢" has to come
- * before "1¢", "2/-" (two shillings) has to come before "5/-", and "Dollar" has
- * to come after "Quarter". That knowledge is a lookup table, and it is kept
- * out of the components that use it.
- *
- * These are pure functions — no signals, no Angular, no state — so they are
- * trivial to reason about and to unit test on their own.
+ * Sorting comparators for the inventory table. Denominations sort by face
+ * value ("½¢" before "1¢", "Quarter" before "Dollar"), not alphabetically.
  */
 
 /**
@@ -44,12 +36,8 @@ export function compareDenominationValues(left: string, right: string): number {
 }
 
 /**
- * Turns a free-text denomination label ("Half Dollar", "2/-", "£5", "3cs")
- * into a number we can sort on.
- *
- * Empty labels sort first (NEGATIVE_INFINITY) and labels we cannot interpret
- * at all sort last (MAX_SAFE_INTEGER), so unknown values never scatter
- * themselves through the middle of the list.
+ * Converts a free-text denomination label ("Half Dollar", "2/-", "£5", "3cs")
+ * to a sortable number. Empty labels sort first; unrecognised labels sort last.
  */
 export function parseDenominationValue(value: string): number {
   let normalized = (value ?? '').trim().toLowerCase();
@@ -81,26 +69,11 @@ export function parseDenominationValue(value: string): number {
     ['100 dollar', 100], ['100 dollars', 100], ['$100', 100], ['£100', 100]
   ];
 
-  // The modern bullion face values, alongside the classic series.
+  // Modern bullion face values.
   directMatches.push(['25 dollar', 25], ['25 dollars', 25], ['$25', 25], ['£25', 25]);
 
-  /* MATCH THE LONGEST PATTERN, NOT THE FIRST ONE LISTED
-   *
-   * Taking the first entry whose text appears ANYWHERE in the label lets a
-   * short pattern shadow a longer one that starts the same way, and the
-   * result is silently wrong sorting:
-   *
-   *     "$10"   contains "$1"   -> one dollar
-   *     "$2.50" contains "$2"   -> two dollars
-   *     "25¢"   contains "5¢"   -> five cents
-   *
-   * Two passes avoid it without having to hand-order the table:
-   *   1. an EXACT match wins outright -- "$5" is five dollars, full stop;
-   *   2. otherwise the LONGEST matching pattern wins, so "$10" prefers "$10"
-   *      over "$1" no matter where either sits in the list.
-   *
-   * Keeping the table in ascending face-value order is therefore purely for
-   * human readability; reordering it cannot change any answer. */
+  // An exact match wins; otherwise the longest contained pattern wins, so
+  // "$10" isn't read as "$1" and "25¢" isn't read as "5¢". Table order doesn't matter.
   for (const [pattern, amount] of directMatches) {
     if (normalized === pattern) return amount;
   }

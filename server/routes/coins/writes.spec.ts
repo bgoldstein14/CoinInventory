@@ -1,39 +1,9 @@
 /**
- * routes/coins/writes.spec.ts — HTTP tests for creating, updating and deleting
- * a coin (routes/coins/writes.ts) plus the transaction unwinding in
- * routes/coins/write-helpers.ts.
- *
- * Three of the tests below are regression guards, not ordinary coverage:
- *
- *   - "sends max-length ... without truncation" — parameter lengths must match
- *     the schema exactly, or the user's data is silently trimmed.
- *   - "updates only the supplied fields ..."    — the partial-update rule.
- *     Writing every column on every save blanks out the user's data.
- *   - "reports the ORIGINAL error even when rollback() itself throws" — a
- *     failing rollback must not hide the error that actually caused the save
- *     to fail.
- *
- * *** WHAT CHANGED WHEN THE SUITE MOVED ONTO A REAL DATABASE. ***
- *
- * Every assertion that used to read "the handler bound @sourcePath to X" can
- * now read "the row in CoinImages has SourcePath X", and most of them do. The
- * difference is not stylistic: the old form proved the route asked for the
- * right thing, and the new form proves the right thing happened. Under the
- * mock a handler could bind a perfect set of parameters into a statement with
- * a typo'd column name and every test here would still pass.
- *
- * Statement-text assertions survive in exactly two places, and both are
- * things a row cannot show:
- *
- *   - "updates only the supplied fields" — a column MISSING from a generated
- *     UPDATE produces a 200, no error, and a value that is gone on the next
- *     reload. The absence is the bug, and an absence leaves no row to read.
- *   - "skips the preservation read" — the point is that an expensive query
- *     did NOT run. A query that does not run changes nothing to look at.
- *
- * The rollback tests are the other place real behaviour had to be arranged
- * rather than asserted on a spy: `mockTransaction.rollback` proved only that a
- * function was called. See the last describe.
+ * HTTP tests for creating, updating and deleting a coin (writes.ts) and the
+ * transaction unwinding in write-helpers.ts, against the in-memory database.
+ * Assertions read the stored rows. Statement text is asserted only where a row
+ * can't show the bug: a column missing from a generated UPDATE, and an
+ * expensive query that must not run.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -90,8 +60,6 @@ async function giveImages(
 }
 
 describe('PUT /api/coins/:id parameter binding', () => {
-  // Was '...Year, Grade, Dealer and CoinSet...'. The coin-level Dealer column
-  // was removed, so there is no longer a dealer parameter to check here.
   it('sends max-length Year, Grade and CoinSet values through without truncation', async () => {
     const longYear = 'Y'.repeat(50);
     const longGrade = 'G'.repeat(50);
@@ -105,10 +73,7 @@ describe('PUT /api/coins/:id parameter binding', () => {
 
     expect(res.status).toBe(200);
 
-    // THE REAL ASSERTION, which the mock could not make: the characters are
-    // in the table. Under `mssql` an under-declared parameter trimmed the
-    // value before it ever left the process; under SQLite an over-declared
-    // one lets too much through. Only the stored row settles it.
+    // The characters are actually stored.
     const [stored] = await queryRows('SELECT Year, Grade, CoinSet FROM Coins WHERE CoinId = @id', {
       id: 'abc-123',
     });
@@ -116,9 +81,7 @@ describe('PUT /api/coins/:id parameter binding', () => {
     expect(stored['Grade']).toBe(longGrade);
     expect(stored['CoinSet']).toBe(longCoinSet);
 
-    // The declared widths are what db/bind-values.ts enforces, so they are
-    // still worth pinning: they are now the only thing that refuses a 51st
-    // character rather than storing it.
+    // These declared widths are what db/bind-values.ts enforces.
     const byName = new Map(capturedInputs().map((entry) => [entry.name, entry]));
     expect(byName.get('year')?.type).toMatchObject({ declared: 'NVARCHAR(50)' });
     expect(byName.get('grade')?.type).toMatchObject({ declared: 'NVARCHAR(50)' });
@@ -126,12 +89,8 @@ describe('PUT /api/coins/:id parameter binding', () => {
   });
 
   it('refuses a value one character past the declared width, rather than trimming it', async () => {
-    // The other half of the test above, and a NEW behaviour worth pinning.
-    // `mssql` silently cut the 51st character off and reported success, so a
-    // grade the user typed came back shorter with nothing to explain it.
-    // SQLite enforces nothing at all, so db/bind-values.ts refuses the value
-    // and routes/db-error-response.ts answers 400. The stored row must be
-    // untouched: a rejected edit must not be a partial edit.
+    // A 51st character is refused with a 400 (not truncated), and the stored
+    // row is untouched.
     await existingCoin();
 
     const res = await request(app)
@@ -151,7 +110,7 @@ describe('POST /api/coins', () => {
       .send({ coinType: 'Washington' });
     expect(res.status).toBe(400);
     expect(res.body.error).toContain('denomination');
-    // Nothing reached the database: the guard runs before the transaction.
+    // The guard runs before any database work.
     expect(executedSql()).toEqual([]);
   });
 
@@ -173,7 +132,7 @@ describe('POST /api/coins', () => {
     expect(coin['Denomination']).toBe('Quarter');
     expect(coin['CoinType']).toBe('Washington');
     expect(coin['Year']).toBe('2024');
-    // The documented INSERT defaults, which the mock never applied.
+    // The documented INSERT defaults.
     expect(coin['Source']).toBe('manual');
     expect(coin['HasCacSticker']).toBe(0);
     expect(coin['CollectionStatus']).toBe('owned');
@@ -184,9 +143,7 @@ describe('POST /api/coins', () => {
   });
 
   it('ignores a stray tags key from an out-of-date client', async () => {
-    // Tags were removed, table and all. An older client (or a replayed request)
-    // could still send the key; it must be silently ignored rather than
-    // producing an INSERT against a table that no longer exists.
+    // CoinTags was removed; an old client's `tags` key must be ignored.
     const res = await request(app)
       .post('/api/coins')
       .send({
@@ -202,9 +159,7 @@ describe('POST /api/coins', () => {
   });
 
   it('ignores a stray coin-level dealer key from an out-of-date client', async () => {
-    // Coins.Dealer was dropped (migration 006). An older client could still
-    // send the key; naming the column in the generated INSERT would make the
-    // statement fail outright, so it has to be dropped silently.
+    // Coins.Dealer was dropped (migration 006); the key must be ignored.
     const res = await request(app)
       .post('/api/coins')
       .send({
@@ -216,24 +171,20 @@ describe('POST /api/coins', () => {
     expect(res.status).toBe(201);
     expect(capturedInputs().some((entry) => entry.name === 'dealer')).toBe(false);
     for (const statement of executedSql()) {
-      // The INSERT targets Coins, so a bare "Dealer" here could only be the
-      // dropped coin column. There is no Dealer column anywhere any more:
-      // the deal's counterparty is PurchasedFrom / SoldTo.
+      // No Dealer column exists any more (PurchasedFrom / SoldTo replaced it).
       expect(statement).not.toContain('Dealer');
     }
   });
 
   it('refuses a second coin with the same id, and leaves the first one alone', async () => {
-    // Could not be tested at all against the mock, which had no primary key.
-    // It matters because POST accepts a client-supplied id: a replayed import
-    // must not overwrite a coin the user has since edited.
+    // POST accepts a client id, so a replayed import must not overwrite a coin.
     await insertCoin({ CoinId: 'dup-id', Denomination: '$1', CoinType: 'Morgan' });
 
     const res = await request(app)
       .post('/api/coins')
       .send({ id: 'dup-id', denomination: 'Quarter', coinType: 'Washington' });
 
-    // 2627 (duplicate key) -> 409 Conflict. See routes/db-error-response.ts.
+    // 2627 -> 409.
     expect(res.status).toBe(409);
 
     const [coin] = await queryRows('SELECT CoinType FROM Coins WHERE CoinId = @id', { id: 'dup-id' });
@@ -243,11 +194,8 @@ describe('POST /api/coins', () => {
 
 // imagePaths and the SourcePath column
 //
-// `imagePaths` is polymorphic by design (see the header of writes.ts): each
-// element may be the bare base64 string it has always been, or an object
-// `{ imageData, sourcePath }`. The mixed-array test below is the one that
-// matters — it proves a half-migrated client works, which is the actual state
-// of the frontend today.
+// Each element may be a bare base64 string or `{ imageData, sourcePath }`;
+// the mixed-array test covers both together.
 
 describe('imagePaths carries sourcePath through POST /api/coins', () => {
   it('accepts a mix of bare strings and { imageData, sourcePath } objects', async () => {
@@ -257,9 +205,9 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
         id: 'mixed-id',
         denomination: 'Dollar',
         imagePaths: [
-          // The legacy form: no idea where the original lives -> SQL NULL.
+          // Legacy form: SourcePath NULL.
           'data:image/png;base64,legacy',
-          // The new form.
+          // Object form.
           { imageData: 'data:image/png;base64,new', sourcePath: 'C:\\Coin Pictures\\b.jpg' },
         ],
       });
@@ -276,9 +224,7 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
   });
 
   it('binds sourcePath as NVARCHAR(400), matching db/schema.sql', async () => {
-    // A path at exactly the column length must survive untruncated; declaring
-    // the parameter shorter than the column would make db/bind-values.ts
-    // refuse a path the schema allows.
+    // A path at exactly the column length is stored untruncated.
     const maxLengthPath = 'C:\\' + 'p'.repeat(397);
 
     const res = await request(app)
@@ -297,10 +243,7 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
   });
 
   it('refuses a path past 400 characters rather than cutting it in half', async () => {
-    // db/bindings.ts says this surfaces as an HTTP 400 "rather than being
-    // quietly cut in half". Against the mock that claim was untestable, and
-    // against SQLite alone it would be false — nothing but the binding layer
-    // enforces it.
+    // One character over is a 400, enforced by the binding layer.
     const res = await request(app)
       .post('/api/coins')
       .send({
@@ -310,15 +253,13 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
       });
 
     expect(res.status).toBe(400);
-    // The whole save is a transaction, so the coin is not left behind either.
+    // The whole save is one transaction, so no coin is left behind.
     expect(await queryRows('SELECT CoinId FROM Coins WHERE CoinId = @id', { id: 'longpath-id' })).toEqual([]);
   });
 
   it('keeps SortOrder gap-free when an entry carries nothing usable', async () => {
-    /* NOTE what is and is not dropped now that photographs can be REFERENCED.
-     * An entry with a path and no picture used to be dropped; it is now a
-     * referenced photograph and is stored (with ImageData NULL) — see the
-     * test below. Only entries with neither a picture nor a path go. */
+    // Entries with a path but no picture are now referenced photos and are
+    // stored; only entries with neither are dropped.
     await request(app)
       .post('/api/coins')
       .send({
@@ -342,10 +283,7 @@ describe('imagePaths carries sourcePath through POST /api/coins', () => {
   });
 
   it('writes a REFERENCED photograph as a path with no picture', async () => {
-    /* The second storage mode (Settings > Photographs). The user chose to
-     * keep the picture on disk, so the row records where it is and the
-     * database deliberately does not carry it. SortOrder still has no gaps:
-     * a referenced entry is a real photograph, not a dropped one. */
+    // Referenced mode: SourcePath stored, ImageData NULL, SortOrder gap-free.
     await request(app)
       .post('/api/coins')
       .send({
@@ -381,16 +319,14 @@ describe('imagePaths replacement on PUT /api/coins/:id', () => {
       });
 
     expect(res.status).toBe(200);
-    // Replacement semantics, proved by the contents rather than by the verbs:
-    // the old row is gone and only the new one is there.
+    // Replacement: the old row is gone, only the new one remains.
     expect(await imagesOf()).toEqual([
       { ImageData: 'data:image/png;base64,a', SortOrder: 0, SourcePath: 'C:\\pics\\a.png' },
     ]);
   });
 
   it('does not touch the images when imagePaths is absent from the body', async () => {
-    // The partial-update rule, restated for images: a PUT that does not mention
-    // imagePaths must leave every photo alone.
+    // A PUT without imagePaths leaves every photo alone.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,keep', sourcePath: 'C:\\pics\\keep.png' },
@@ -405,35 +341,16 @@ describe('imagePaths replacement on PUT /api/coins/:id', () => {
   });
 });
 
-// SourcePath PRESERVATION across the PUT delete/re-insert
+// SourcePath preservation across the PUT delete/re-insert
 //
-// THE BUG THESE TESTS GUARD — read before changing any of them.
-//
-// PUT /api/coins/:id with an `imagePaths` key deletes every CoinImages row for
-// the coin and re-inserts the array it was given. An entry that arrives as a
-// bare base64 string carries no source path, so before the fix it came back as
-// `SourcePath NULL`. That meant re-ordering one photo, deleting one photo, or
-// an ordinary edit that happened to round-trip the array silently erased the
-// recorded original-file location of EVERY other photo on the coin — and the
-// user then found the "open the original" links had stopped working, with no
-// error anywhere to explain it.
-//
-// The server now reads the existing (ImageData -> SourcePath) pairs inside the
-// same transaction, just before the DELETE, and carries a known path forward
-// onto any incoming entry that does not supply one of its own.
-//
-// *** THESE ARE NOW END-TO-END TESTS. *** The previous version arranged the
-// "existing" rows by teaching a mock to answer one particular SELECT with one
-// particular recordset, which meant the test and the handler had to agree on
-// the text of that query. The rows below are really in CoinImages, the DELETE
-// really deletes them, and the assertion reads what really survived — so the
-// test now fails if the preservation read's WHERE clause is wrong, which the
-// mock version could not detect.
+// PUT with `imagePaths` deletes all CoinImages rows and re-inserts the array.
+// Bare base64 entries carry no path, so without preservation every other
+// photo's recorded original location would be erased. The server reads the
+// existing (ImageData -> SourcePath) pairs in the same transaction, before the
+// DELETE, and carries them onto entries without a path.
 describe('PUT /api/coins/:id preserves SourcePath across the image replacement', () => {
   it('carries a stored SourcePath forward when the entry comes back as a bare string', async () => {
-    // The end-to-end repro. The coin has one photo whose original file is
-    // recorded. The client re-sends it as a plain base64 string — exactly what
-    // a browser session that never opened this coin in the viewer does.
+    // One recorded photo, re-sent as a bare string.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\Coin Pictures\\alpha.jpg' },
@@ -444,19 +361,13 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
       .send({ imagePaths: ['data:image/png;base64,alpha'] });
 
     expect(res.status).toBe(200);
-    // Before the fix this was [null] — the path was gone and nothing said so.
+    // Without preservation this would be [null].
     expect(await storedSourcePaths()).toEqual(['C:\\Coin Pictures\\alpha.jpg']);
   });
 
   it('carries it forward when the entry arrives as { imageData, sourcePath: null }', async () => {
-    // This is the shape the SHIPPED Angular client actually sends for a photo
-    // it has no path for: CoinEditor.withSourcePaths() enriches the whole array
-    // as soon as ONE image is known, and ImageSourcePathRegistry.enrich() fills
-    // every unknown entry with an explicit `sourcePath: null`.
-    //
-    // So on this wire an explicit null means "I do not know", NOT "clear it".
-    // Reading it as "clear it" would wipe the other seven photos of a coin the
-    // moment the user attached an eighth — the exact failure being fixed.
+    // The shipped client sends explicit `sourcePath: null` for unknown entries
+    // once any entry has a path, so null must mean "unknown", not "clear".
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\Coin Pictures\\alpha.jpg' },
@@ -480,15 +391,9 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
   });
 
   it('lets an explicitly supplied path win over the stored one', async () => {
-    // Preservation only ever FILLS A GAP. A caller that knows where the file is
-    // is the authority — this is how a moved or re-imported photo gets its new
-    // location recorded.
-    //
-    // The SECOND entry is not decoration. The handler skips the preservation
-    // read entirely when every entry already supplies a path, so an array of
-    // one would never consult the stored values and the test would pass even
-    // if the precedence were inverted. The unpathed entry forces the read to
-    // happen, which is the only state in which precedence is observable.
+    // A supplied path wins. The second, unpathed entry forces the preservation
+    // read (it is skipped when every entry has a path), so precedence is
+    // actually exercised.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\old\\alpha.jpg' },
@@ -508,8 +413,7 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
   });
 
   it('leaves an image with no stored and no supplied path as NULL', async () => {
-    // "Unknown" must stay unknown. Preservation must not invent a path, and in
-    // particular must not borrow a different image's path.
+    // Unknown stays unknown; no borrowing another image's path.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\pics\\alpha.jpg' },
@@ -525,8 +429,7 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
   });
 
   it('survives a photo being deleted and the rest re-ordered', async () => {
-    // The two operations that provoked the bug in real use. Both send the FULL
-    // array, as bare strings, with one entry missing and the order changed.
+    // Reorder and delete both re-send the full array as bare strings.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\pics\\alpha.jpg' },
@@ -538,21 +441,17 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
       .put('/api/coins/abc-123')
       .send({ imagePaths: ['data:image/png;base64,gamma', 'data:image/png;base64,alpha'] });
 
-    // Matching is by image data, so the surviving two keep THEIR OWN paths in
-    // their new positions — a positional scheme would have swapped them.
+    // Matched by image data, so each keeps its own path in its new position.
     expect(await imagesOf()).toEqual([
       { ImageData: 'data:image/png;base64,gamma', SortOrder: 0, SourcePath: 'C:\\pics\\gamma.jpg' },
       { ImageData: 'data:image/png;base64,alpha', SortOrder: 1, SourcePath: 'C:\\pics\\alpha.jpg' },
     ]);
-    // Beta really is gone, which is the half of "replacement" the old
-    // bound-parameter assertion never looked at.
+    // Beta really is gone.
     expect((await imagesOf()).length).toBe(2);
   });
 
   it('reads the existing paths BEFORE the DELETE, inside the same transaction', async () => {
-    // Ordering is the whole fix: once the rows are deleted the paths are gone
-    // and there is nothing left to read. Doing the read outside the transaction
-    // would also let a concurrent write land between the read and the delete.
+    // The read must come before the DELETE and inside the transaction.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,alpha', sourcePath: 'C:\\pics\\alpha.jpg' },
@@ -573,25 +472,19 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
     expect(deleteIndex).toBeGreaterThanOrEqual(0);
     expect(readIndex).toBeLessThan(deleteIndex);
 
-    // *** AND BOTH ARE INSIDE THE TRANSACTION. *** The old version asserted
-    // that `begin()` and `commit()` had been called on a mock, which proves a
-    // function ran, not that these two statements were enclosed by it.
-    // `inTransaction` is recorded per statement, so it says the thing the
-    // comment above claims. The existence check, by design, is outside.
+    // Both inside the transaction (recorded per statement); the existence
+    // check is outside by design.
     expect(executedQueries[readIndex].inTransaction).toBe(true);
     expect(executedQueries[deleteIndex].inTransaction).toBe(true);
     expect(executedQueries[0].sql).toContain('SELECT CoinId FROM Coins');
     expect(executedQueries[0].inTransaction).toBe(false);
 
-    // Committed, not rolled back: the row survives the request.
+    // Committed: the row survives.
     expect(await storedSourcePaths()).toEqual(['C:\\pics\\alpha.jpg']);
   });
 
   it('gives every copy of a duplicated image the first stored path', async () => {
-    // The same photo can legitimately be attached to a coin twice. ImageData is
-    // the only identity an incoming bare string has, so the duplicates are
-    // indistinguishable; the documented rule is "lowest SortOrder wins, and
-    // every copy gets it". Keeping a real path on both beats nulling both.
+    // Duplicate images are indistinguishable; lowest SortOrder's path wins for all.
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,dup', sourcePath: 'C:\\pics\\first.jpg' },
@@ -606,10 +499,8 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
   });
 
   it('skips the preservation read when every entry already supplies a path', async () => {
-    // ImageData is an unbounded text blob, so the read is the most expensive
-    // thing in this handler. When there is no gap to fill it must not run.
-    // A query that does not run leaves no row to inspect, so this stays a
-    // statement-text assertion.
+    // The blob read must not run when there's no gap to fill (asserted on
+    // statement text, since a query that doesn't run leaves no row).
     await existingCoin();
 
     await request(app)
@@ -637,14 +528,12 @@ describe('PUT /api/coins/:id preserves SourcePath across the image replacement',
     const statements = executedSql();
     expect(statements.some((s) => s.includes('ImageData, SourcePath FROM CoinImages'))).toBe(false);
     expect(statements.some((s) => s.includes('DELETE FROM CoinImages'))).toBe(true);
-    // An empty array really does mean "delete them all".
+    // An empty array means "delete them all".
     expect(await imagesOf()).toEqual([]);
   });
 
   it('does not run a preservation read on POST /api/coins', async () => {
-    // Create has nothing to preserve: the coin's id is brand new, and a request
-    // that re-uses an existing id is rejected by the primary key before any
-    // image is written. Reading blobs that cannot exist would be pure cost.
+    // Create has nothing to preserve.
     const res = await request(app)
       .post('/api/coins')
       .send({
@@ -694,16 +583,13 @@ describe('PUT /api/coins/:id', () => {
       .put('/api/coins/abc-123')
       .send({ coinType: 'Updated Morgan' });
 
-    // A column MISSING from the generated statement is the bug, and an
-    // absence leaves nothing to read — so the statement text is still the
-    // right thing to assert here.
+    // A column missing from the statement leaves nothing to read, so assert the text.
     const sqlText = executedSql().at(-1) as string;
     expect(sqlText).toContain('CoinType = @coinType');
     expect(sqlText).not.toContain('Denomination = @denomination');
     expect(sqlText).not.toContain('Year = @year');
 
-    // And the consequence, which the mock could not show: everything else
-    // really is still there.
+    // ...and everything else is still there.
     const [coin] = await queryRows('SELECT * FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
     expect(coin['CoinType']).toBe('Updated Morgan');
     expect(coin['Denomination']).toBe('$1');
@@ -712,13 +598,8 @@ describe('PUT /api/coins/:id', () => {
   });
 
   /*
-   * THE DEAL RECORD, WHICH USED TO BE A TABLE.
-   *
-   * These replace the POST /api/transactions coverage deleted from
-   * routes/data/data.spec.ts. The property they protect is not "a field can
-   * be saved" — it is that the two NOTES columns stay two columns. A single
-   * wrong `column:` in db/coin-fields.ts would make one overwrite the other
-   * with a 200 response and nothing visible until the user reopened the coin.
+   * Purchase/sale fields on Coins. The key property: Notes and
+   * TransactionNotes stay separate columns.
    */
   it('writes the purchase and sale counterparties and the deal note', async () => {
     await existingCoin();
@@ -752,7 +633,7 @@ describe('PUT /api/coins/:id', () => {
       .send({ transactionNotes: "18% buyer's premium" });
 
     const [coin] = await queryRows('SELECT * FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
-    // The coin's own note is UNTOUCHED by a write to the deal's note.
+    // The coin's own note is untouched by a write to the deal note.
     expect(coin['Notes']).toBe('Lovely cartwheel lustre');
     expect(coin['TransactionNotes']).toBe("18% buyer's premium");
 
@@ -765,10 +646,8 @@ describe('PUT /api/coins/:id', () => {
   });
 
   it('ignores a stray tags key and still writes the real fields normally', async () => {
-    // Removing the tag delete/re-insert from this transaction must not disturb
-    // the partial-update behaviour around it. A body carrying BOTH a real field
-    // and a leftover `tags` key should update the real field and touch nothing
-    // else — in particular, no DELETE against the dropped CoinTags table.
+    // A body with a real field and a leftover `tags` key updates only the
+    // field, with no DELETE against the removed CoinTags table.
     await existingCoin();
 
     const res = await request(app)
@@ -801,10 +680,7 @@ describe('DELETE /api/coins/:id', () => {
   });
 
   it('takes the coin\'s photographs with it', async () => {
-    // routes/coins/writes.ts says "images cascade" and never deletes them
-    // itself. Against the mock that was an unverified claim about a database
-    // nobody had; ON DELETE CASCADE is now declared in db/schema.sql and
-    // foreign keys are genuinely enforced, so it can be proved.
+    // Images go via ON DELETE CASCADE (foreign keys are enforced).
     await existingCoin();
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,a', sourcePath: null },
@@ -820,9 +696,8 @@ describe('DELETE /api/coins/:id', () => {
 
 describe('transaction rollback', () => {
   it('rolls the whole save back when one statement in it fails', async () => {
-    // The guarantee the previous version of this file could only take on
-    // trust. The UPDATE succeeds and the image replacement then fails on an
-    // over-long SourcePath; the coin's type must NOT be left changed.
+    // The UPDATE succeeds, then the image replacement fails on an over-long
+    // SourcePath; the coin's type must not stay changed.
     await insertCoin({ CoinId: 'abc-123', Denomination: '$1', CoinType: 'Morgan' });
     await giveImages('abc-123', [
       { imageData: 'data:image/png;base64,keep', sourcePath: 'C:\\pics\\keep.png' },
@@ -839,25 +714,16 @@ describe('transaction rollback', () => {
 
     const [coin] = await queryRows('SELECT CoinType FROM Coins WHERE CoinId = @id', { id: 'abc-123' });
     expect(coin['CoinType']).toBe('Morgan');
-    // The DELETE that had already run inside the transaction is undone too.
+    // The image DELETE is undone too.
     expect(await imagesOf()).toEqual([
       { ImageData: 'data:image/png;base64,keep', SortOrder: 0, SourcePath: 'C:\\pics\\keep.png' },
     ]);
   });
 
   it('reports the ORIGINAL error even when rollback() itself throws', async () => {
-    // safeRollback() in write-helpers.ts exists because `rollback()` throws
-    // surprisingly often — if the connection already died, or if the engine
-    // already aborted the transaction itself. The old code rethrew the
-    // rollback error and lost the real cause, in exactly the cases where the
-    // real cause matters most.
-    //
-    // The previous version arranged this by telling `mockTransaction.rollback`
-    // to reject, which proved only that a spy had been called. Here the
-    // transaction is REAL: the stub rolls back properly first — so the lock is
-    // released and the data is genuinely unwound — and then rolls back a
-    // second time, which is what actually produces "No transaction is active."
-    // in production.
+    // safeRollback() must report the original error even when rollback()
+    // throws. The stub rolls back properly (releasing the lock), then again,
+    // which produces the real "No transaction is active." error.
     await insertCoin({ CoinId: 'abc-123', Denomination: '$1', CoinType: 'Morgan' });
 
     const realRollback = DbTransaction.prototype.rollback;
@@ -865,31 +731,28 @@ describe('transaction rollback', () => {
       .spyOn(DbTransaction.prototype, 'rollback')
       .mockImplementation(async function (this: DbTransaction) {
         await realRollback.call(this);
-        // The transaction is finished now, so this throws for real.
+        // The transaction is finished, so this throws for real.
         await realRollback.call(this);
       });
 
     try {
-      // A foreign key that does not resolve: FK_Coins_Catalog has no cascade
-      // and no SET NULL, so this is a genuine 547 from the engine.
+      // An unresolvable foreign key (FK_CoinCatalogRefs_Catalog): a genuine 547.
       const res = await request(app)
         .put('/api/coins/abc-123')
-        .send({ catalogId: 999999 });
+        .send({ coinType: 'Peace', catalogRefs: [{ catalogId: 999999, catalogNumber: '1' }] });
 
       expect(spy).toHaveBeenCalled();
-      // 547 -> 409. If the rollback's own error had replaced it, this would
-      // be a 500.
+      // 547 -> 409. Had the rollback error replaced it, this would be a 500.
       expect(res.status).toBe(409);
     } finally {
       spy.mockRestore();
     }
 
-    // The failed save left nothing behind, and the connection is usable: the
-    // next request works, which it would not if the lock had leaked.
-    const [coin] = await queryRows('SELECT CatalogId, CoinType FROM Coins WHERE CoinId = @id', {
+    // Nothing left behind, and the next request works (the lock didn't leak).
+    const [coin] = await queryRows('SELECT CoinType FROM Coins WHERE CoinId = @id', {
       id: 'abc-123',
     });
-    expect(coin['CatalogId']).toBeNull();
     expect(coin['CoinType']).toBe('Morgan');
+    expect(await queryRows("SELECT RefId FROM CoinCatalogRefs WHERE CoinId = 'abc-123'")).toEqual([]);
   });
 });

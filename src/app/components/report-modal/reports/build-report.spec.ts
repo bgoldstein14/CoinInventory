@@ -1,12 +1,4 @@
-/**
- * build-report.spec.ts
- *
- * The report CONTENT lives in these pure builders precisely so it can be
- * tested here. This suite runs under Node with no jsdom, so nothing below
- * renders anything — it asserts on which rows, which columns, which totals,
- * and what has been left out and why. The template that turns a
- * ReportDocument into a printable page is deliberately thin (report-html.ts).
- */
+/** Tests for the pure report builders: rows, columns, totals and exclusions. */
 import { describe, expect, it } from 'vitest';
 import { CoinRecord, SpotPrices } from '../../../types/coin.model';
 import { buildInsuranceReport, buildInventoryReport } from './build-report';
@@ -44,8 +36,6 @@ describe('buildInsuranceReport', () => {
     expect(doc.title).toContain('Insurance');
     expect(doc.generatedAt).toContain('2026');
     expect(doc.generatedAt).toContain('November');
-    // A non-technical reader has to be able to tell what the document is for
-    // without asking anybody.
     expect(doc.purpose.length).toBeGreaterThan(20);
   });
 
@@ -67,14 +57,6 @@ describe('buildInsuranceReport', () => {
   });
 
   it('lists only the coins actually in the collection, and says what it dropped', () => {
-    // Possession, not title. A want-list coin is not in the house, and a
-    // schedule that insures it buys cover on property the owner does not own.
-    // The rule is isHeldInCollection() in types/collection-status.ts — the
-    // SAME one exportInsuranceCsv uses, so the two schedules cannot disagree
-    // about what "my collection" means.
-    //
-    // Dropping them silently would be its own bug: the owner counts 4 coins
-    // on screen and 2 on the schedule with no way to find out why.
     const doc = buildInsuranceReport({
       coins: [
         coin({ id: 'c1', collectionStatus: 'owned' }),
@@ -95,9 +77,7 @@ describe('buildInsuranceReport', () => {
   });
 
   it('keeps a coin with an old sold PRICE whose status still says owned', () => {
-    // collection-status.ts is explicit that nothing derives the status from
-    // soldDate — a sale can fall through. The schedule must follow the
-    // owner's dropdown and not second-guess it from a stale number.
+    // Status is never derived from soldPrice/soldDate; a sale can fall through.
     const doc = buildInsuranceReport({
       coins: [coin({ id: 'c1', soldPrice: 900, soldDate: '2025-02-01' })],
       generatedAt: GENERATED_AT
@@ -107,9 +87,6 @@ describe('buildInsuranceReport', () => {
   });
 
   it('treats a coin with no status at all as owned', () => {
-    // A coin with no collection status reads as owned. If those dropped
-    // out, the schedule would empty itself for anyone who has never touched
-    // the field.
     const withoutStatus = coin({ id: 'c1' });
     delete (withoutStatus as unknown as Record<string, unknown>)['collectionStatus'];
     const doc = buildInsuranceReport({ coins: [withoutStatus], generatedAt: GENERATED_AT });
@@ -122,8 +99,7 @@ describe('buildInsuranceReport', () => {
   });
 
   it('totals the stated values and EXCLUDES the coins with none', () => {
-    // The whole reason this feature exists. 1400 + 600, with two unvalued
-    // coins reported as unknown rather than quietly added as $0.00.
+    // 1400 + 600; the two unvalued coins are reported as unknown, not as $0.00.
     const doc = buildInsuranceReport({
       coins: [
         coin({ id: 'c1', currentValue: 1400 }),
@@ -161,15 +137,13 @@ describe('buildInsuranceReport', () => {
     expect(melt).toBeDefined();
     expect(melt!.amount.counted).toBe(1);
     expect(melt!.amount.unknown).toBe(1);
-    // A melt value is CALCULATED, never recorded. Saying "not recorded"
-    // would send the reader looking for a field that does not exist.
+    // Melt is calculated, never entered, so the caveat must not say "recorded".
     expect(melt!.caveat).toContain('calculable');
     expect(melt!.caveat).not.toContain('recorded');
     expect(melt!.amount.total).toBeCloseTo((24.06 / 31.1035) * 30, 6);
   });
 
   it('omits the melt total altogether when no spot price has ever been loaded', () => {
-    // A melt column of nothing but dashes is noise on a printed page.
     const doc = buildInsuranceReport({ coins: [coin()], generatedAt: GENERATED_AT });
     expect(doc.totals.some(entry => /melt/i.test(entry.label))).toBe(false);
     expect(doc.columns.some(column => column.key === 'meltValue')).toBe(false);
@@ -201,9 +175,6 @@ describe('buildInsuranceReport', () => {
 
 describe('buildInventoryReport', () => {
   it('keeps the order it is given, because that is the user current sort', () => {
-    // The caller hands over filters.filteredInventory(), which is already
-    // filtered and sorted. Re-sorting here would quietly contradict the screen
-    // the user is looking at.
     const doc = buildInventoryReport({
       coins: [coin({ id: 'c3' }), coin({ id: 'c1' }), coin({ id: 'c2' })],
       generatedAt: GENERATED_AT
@@ -246,8 +217,6 @@ describe('buildInventoryReport', () => {
   });
 
   it('includes coins the insurance schedule would drop', () => {
-    // This one is a listing of what is on record, not of what is insurable.
-    // A want list and a sold coin are both part of the record.
     const doc = buildInventoryReport({
       coins: [coin(), coin({ id: 'c2', collectionStatus: 'sold' }), coin({ id: 'c3', collectionStatus: 'wanted' })],
       generatedAt: GENERATED_AT
@@ -264,16 +233,6 @@ describe('buildInventoryReport', () => {
     expect(doc.purpose.length).toBeGreaterThan(20);
   });
 });
-
-/*
- * THE LOOKUPS A DOCUMENT NEEDS
- *
- * A printed report has to say the same thing the screen says. Two of its
- * columns cannot be produced from the coin record alone — the catalogue
- * reference needs the Catalogs lookup and the denomination needs the
- * Denominations lookup — so both have to reach the row builder. They stay
- * optional: without them the document prints the bare stored values.
- */
 
 describe('report documents carry the screen\u2019s denomination and catalogue', () => {
   it('prints the denomination the grid shows on an insurance schedule', () => {
@@ -296,10 +255,8 @@ describe('report documents carry the screen\u2019s denomination and catalogue', 
   });
 
   it('prints the catalogue name beside the number when the listing shows it', () => {
-    // Without the lookup reaching formatReportCell the grid prints "Sear
-    // 6819" and the report prints "6819".
     const doc = buildInventoryReport({
-      coins: [coin({ catalogId: 1, catalogNumber: '6819' })],
+      coins: [coin({ catalogRefs: [{ catalogId: 1, catalogNumber: '6819' }] })],
       generatedAt: GENERATED_AT,
       fields: ['catalogReference'],
       catalogs: [{ catalogId: 1, name: 'Sear', sortOrder: 1, isActive: true }]

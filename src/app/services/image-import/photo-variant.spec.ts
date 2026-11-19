@@ -31,7 +31,6 @@ describe('describePhoto - reading the side out of real share filenames', () => {
   });
 
   it('is not fooled by "rev" inside a longer word', () => {
-    // "67-68 CE 1st Revolt - Obverse - Sharpened.jpg" is an OBVERSE.
     expect(describePhoto('67-68 CE 1st Revolt - Obverse - Sharpened.jpg').side).toBe('obverse');
   });
 });
@@ -58,8 +57,7 @@ describe('describePhoto - variants and retakes', () => {
   });
 
   it('does not mistake a coin type containing "Small" for a file variant', () => {
-    // "1795 $5 Small Eagle - Obverse.jpg": "Small" is part of the design name,
-    // and sits in the middle of the name rather than at the end.
+    // "Small" here is part of the design name, mid-filename.
     const row = describePhoto('1795 $5 Small Eagle - Obverse.jpg');
     expect(row.variant).toBeNull();
     expect(row.isRetake).toBe(false);

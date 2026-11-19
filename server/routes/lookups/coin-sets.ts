@@ -1,21 +1,13 @@
 /**
- * routes/lookups/coin-sets.ts — the CoinSets reference table.
+ * The CoinSets reference table: named groupings ("1964 Proof Set") referenced
+ * by Coins.CoinSet. Mounted at /api:
  *
- * A coin set is a named grouping ("1964 Proof Set") that a coin can belong to
- * via Coins.CoinSet. Like Categories it is a plain list of names
- * (CoinSets.SetName NVARCHAR(100)). Mounted (via routes/lookups/index.ts)
- * at /api:
+ *   GET    /coin-sets        list every set name
+ *   POST   /coin-sets        add one (exact-match duplicate check)
+ *   DELETE /coin-sets/:name  remove one
  *
- *   GET    /coin-sets        -> list every set name
- *   POST   /coin-sets        -> add one (exact-match duplicate check)
- *   DELETE /coin-sets/:name  -> remove one
- *
- * Note the duplicate check here is an exact SetName match, whereas Categories
- * compares case- and whitespace-insensitively. The two differ; do not assume
- * one from the other.
- *
- * Every database call runs inside `withDb()` and every parameter type comes
- * from DB_BINDINGS so it matches setup-database.sql.
+ * Note the duplicate check is exact here, unlike Categories (case- and
+ * whitespace-insensitive).
  */
 
 import { Router, Request, Response } from 'express';
@@ -57,8 +49,7 @@ router.post('/coin-sets', async (req: Request, res: Response) => {
     await withDb(async (db) => {
       await db.request()
         .input('name', DB_BINDINGS.setName, trimmedName)
-        // One statement rather than T-SQL's `IF NOT EXISTS ... INSERT`;
-        // see the note on the same query in categories.ts.
+        // Single-statement insert-if-missing (see categories.ts).
         .query(`
           INSERT INTO CoinSets (SetName)
           SELECT @name

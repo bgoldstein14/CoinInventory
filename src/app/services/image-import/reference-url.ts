@@ -1,33 +1,17 @@
 /*
- * reference-url.ts — the one string shape that means "this photo is a
- * REFERENCE to a file on disk, not a picture kept in the database".
+ * reference-url.ts — the string form of a referenced photo (a file on disk,
+ * not a picture kept in the database).
  *
- * WHY A URL AND NOT A NEW FIELD
+ * `CoinRecord.imagePaths` is `string[]` bound directly to `<img [src]>`, so a
+ * referenced photo is represented by the URL that serves the original,
+ * `GET /api/images/file?path=…`. It is a transport form only: the database
+ * stores just `SourcePath` (ImageData is NULL); the server converts between
+ * the two in server/routes/coins/image-payload.ts and images.ts.
  *
- * `CoinRecord.imagePaths` is `string[]` and every `<img [src]>` in the app
- * binds straight to it (see types/coin-image.model.ts for why it was never
- * widened to objects). Referenced storage therefore needs a STRING that a
- * browser can render. The backend already serves originals off disk at
- * `GET /api/images/file?path=…`, so that URL is exactly such a string: it
- * displays, it can be put in an `href`, and it carries the path inside it.
- *
- * WHAT IS AND IS NOT STORED
- *
- * This URL is a TRANSPORT form. It is never written into the database:
- * `CoinImages.ImageData` is left NULL for a referenced photo and only
- * `SourcePath` is written (server/routes/coins/image-payload.ts turns the URL
- * back into "referenced" on the way in, and server/routes/coins/images.ts
- * builds it again on the way out). That is the whole point of the referenced
- * mode — the database does not carry the picture.
- *
- * THE ORIGIN IS DELIBERATELY NOT BAKED IN HERE
- *
- * Under `ng serve` the page is on :4200 and the API on :3000, so a relative
- * URL would 404 in development. Callers that can supply an absolute base
- * (ApiService.imageFileUrl) should; `referenceUrlForPath` produces the
- * relative form, which is correct in the packaged app where the page and the
- * API share an origin. Both forms are recognised by `isImageReferenceUrl`,
- * which matches on the ROUTE, not on the host.
+ * `referenceUrlForPath` builds the relative form (correct when page and API
+ * share an origin). Under `ng serve` they don't (:4200 vs :3000), so callers
+ * that can should use ApiService.imageFileUrl. Both forms are recognised,
+ * since matching is on the route, not the host.
  */
 
 /** The route that serves an original file, as it appears inside a reference. */
@@ -35,24 +19,15 @@ export const IMAGE_REFERENCE_ROUTE = '/api/images/file?path=';
 
 /**
  * The reference string for one original file, relative to the API origin.
- *
- * The path is URL-encoded for the same reasons as ApiService.imageFileUrl: it
- * is a Windows path full of backslashes and spaces, and an `&` or `#` in a
- * filename would otherwise truncate the query string.
+ * The path is URL-encoded; an `&` or `#` would otherwise truncate the query.
  */
 export function referenceUrlForPath(sourcePath: string): string {
   return `${IMAGE_REFERENCE_ROUTE}${encodeURIComponent(sourcePath)}`;
 }
 
 /**
- * Is this entry a reference rather than a picture?
- *
- * Matches with or without an origin in front (`http://localhost:3000/api/…`
- * and `/api/…` are both references), because the client builds the absolute
- * form and the packaged app can legitimately produce either.
- *
- * A `data:` URL — the stored mode — never contains this route, so the two
- * forms cannot be confused.
+ * Is this entry a reference rather than a picture? Matches with or without an
+ * origin. A stored `data:` URL never contains the route.
  */
 export function isImageReferenceUrl(value: unknown): value is string {
   return typeof value === 'string' && value.includes(IMAGE_REFERENCE_ROUTE);
@@ -60,11 +35,8 @@ export function isImageReferenceUrl(value: unknown): value is string {
 
 /**
  * The absolute file path a reference points at, or null if this is not a
- * reference (or carries an empty path).
- *
- * Decoding can throw on a malformed `%` sequence — a path the user typed by
- * hand and mangled, for instance — so it is caught: an unreadable reference
- * is "no path known", never an exception in the middle of a save.
+ * reference or carries no path. A malformed `%` escape also yields null
+ * rather than throwing mid-save.
  */
 export function sourcePathFromReferenceUrl(value: unknown): string | null {
   if (!isImageReferenceUrl(value)) return null;

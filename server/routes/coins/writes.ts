@@ -1,45 +1,19 @@
 /**
- * routes/coins/writes.ts — creating, updating and deleting a coin.
+ * Creating, updating and deleting a coin. Mounted at /api/coins:
  *
- * Mounted (via routes/coins/index.ts) at /api/coins, so the paths below are
- * relative to that:
+ *   POST   /      create a coin (+ images, catalogue references)
+ *   PUT    /:id   partial update of a coin
+ *   DELETE /:id   delete a coin (images and references cascade)
  *
- *   POST   /      -> POST   /api/coins       create a coin (+ images)
- *   PUT    /:id   -> PUT    /api/coins/:id   partial update of a coin
- *   DELETE /:id   -> DELETE /api/coins/:id   delete a coin (cascades)
+ * - PUT builds its UPDATE from only the keys present in the body; writing
+ *   every column would blank the user's data.
+ * - PUT with `imagePaths` replaces the image set but keeps recorded
+ *   SourcePaths (see replaceImages() in write-helpers.ts).
  *
- * Three things in here are load-bearing; please read before editing.
- *
- * 1. Every handler runs its database work inside `withDb(async (db) => ...)`.
- *    withDb hands over a healthy pool and, if the *connection* dies mid-call,
- *    rebuilds the pool and retries exactly once. It does NOT retry ordinary
- *    query errors. There must be no resetPool() calls in this file:
- *    resetPool() destroys the pool shared by the entire process, so one
- *    validation error or constraint violation would break every other request
- *    in flight. See db/index.ts.
- *
- * 2. PUT /:id builds its UPDATE statement from ONLY the keys actually present
- *    in the request body. Writing every column on every save blanks out the
- *    user's data. Do not "simplify" that filter.
- *
- * 3. PUT /:id REPLACES the image set, but does NOT throw away the SourcePath
- *    values the database already held. An incoming entry that supplies no path
- *    inherits the one recorded for the same image data; a supplied path wins.
- *    Without that, re-ordering or deleting a single photo — both of which
- *    re-send the whole array, usually as bare strings — wipes the recorded
- *    original-file location of every other photo on the coin. The rescue lives
- *    in replaceImages() in write-helpers.ts, which also documents the rules
- *    (absent vs explicit null, duplicate image data).
- *
- * `imagePaths` is a historical misnomer: it holds the base64 IMAGE DATA, not
- * paths. It is POLYMORPHIC — each element is either a bare base64 string or an
- * object `{ imageData, sourcePath }` — and deliberately NOT split into a
- * second parallel `imageSourcePaths` array: two parallel arrays can fall out
- * of alignment (different lengths, a skipped empty entry shifting every path
- * by one) and silently attach the wrong path to the wrong photo. Keeping one
- * array also keeps one replacement semantic, with no second key that could be
- * present or absent independently. Per-element normalisation lives in
- * image-payload.ts; insertImages() in write-helpers.ts is its only consumer.
+ * `imagePaths` is a historical name: it holds image data, each element either
+ * a bare base64 string or `{ imageData, sourcePath }` (see image-payload.ts).
+ * It is one array rather than two parallel ones so a path can never shift
+ * onto the wrong photo.
  */
 
 import { Router, Request, Response } from 'express';
@@ -49,6 +23,7 @@ import { withDb, COIN_FIELDS, DB_BINDINGS, normalizeCoinValue, DbRequest, DbTran
 import { sendDbError } from '../db-error-response';
 import { toSingleValue } from '../param-utils';
 import { safeRollback, insertImages, replaceImages } from './write-helpers';
+import { insertCatalogRefs, replaceCatalogRefs } from './catalog-refs';
 
 const router = Router();
 
@@ -56,8 +31,7 @@ const router = Router();
 router.post('/', async (req: Request, res: Response) => {
   const body = req.body ?? {};
 
-  // Validate before we touch the database so a bad request never opens a
-  // transaction (and never reaches the generic error classifier).
+  // Validate before opening a transaction.
   if (!body.denomination) {
     res.status(400).json({ error: 'denomination is required' });
     return;
@@ -71,16 +45,14 @@ router.post('/', async (req: Request, res: Response) => {
     await withDb(async (db) => {
       const transaction = new DbTransaction(db);
 
-      // `began` tracks whether begin() actually succeeded, so we never try to
-      // roll back a transaction that was never started.
+      // Only roll back a transaction that actually began.
       let began = false;
 
       try {
         await transaction.begin();
         began = true;
 
-        // Build the INSERT from the shared COIN_FIELDS map so it can never
-        // drift away from the UPDATE in PUT /:id or from setup-database.sql.
+        // Built from COIN_FIELDS, shared with the UPDATE in PUT /:id.
         const insertRequest = new DbRequest(transaction)
           .input('id', DB_BINDINGS.coinId, id);
 
@@ -88,9 +60,7 @@ router.post('/', async (req: Request, res: Response) => {
         const parameterNames: string[] = ['@id'];
 
         for (const [key, binding] of Object.entries(COIN_FIELDS)) {
-          // On create we write every column: either the supplied value or the
-          // field's documented default (null for most, 0 for the BIT column,
-          // 'manual' for Source).
+          // Create writes every column: the supplied value or the field's default.
           const rawValue = Object.prototype.hasOwnProperty.call(body, key)
             ? body[key]
             : binding.insertDefault;
@@ -105,10 +75,10 @@ router.post('/', async (req: Request, res: Response) => {
         );
 
         await insertImages(transaction, id, body.imagePaths ?? []);
+        await insertCatalogRefs(transaction, id, body.catalogRefs ?? []);
 
         await transaction.commit();
       } catch (innerErr) {
-        // Roll back WITHOUT letting a rollback failure mask the real cause.
         await safeRollback(began ? transaction : null, 'POST /api/coins');
         throw innerErr;
       }
@@ -134,8 +104,7 @@ router.put('/:id', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT CoinId FROM Coins WHERE CoinId = @id');
 
-      // Signal "not found" with a return value so the 404 stays out of the
-      // error classifier below.
+      // A return value keeps the 404 out of the error classifier.
       if (existing.recordset.length === 0) return false;
 
       const transaction = new DbTransaction(db);
@@ -145,11 +114,8 @@ router.put('/:id', async (req: Request, res: Response) => {
         await transaction.begin();
         began = true;
 
-        // *** PARTIAL-UPDATE SEMANTICS — DO NOT SIMPLIFY ***
-        // Only columns whose key is actually present in the request body are
-        // written. A body of { coinType: 'Morgan' } must emit
-        // `UPDATE Coins SET CoinType = @coinType`, NOT a statement that also
-        // sets Denomination, Year, Notes, ... to null.
+        // Partial update: only keys present in the body are written, so
+        // { coinType: 'Morgan' } must update CoinType alone.
         const updateEntries = Object.entries(COIN_FIELDS)
           .filter(([key]) => Object.prototype.hasOwnProperty.call(body, key))
           .map(([key, binding]) => ({ key, ...binding }));
@@ -169,17 +135,16 @@ router.put('/:id', async (req: Request, res: Response) => {
           await updateRequest.query(`UPDATE Coins SET ${clauseText} WHERE CoinId = @id`);
         }
 
-        // Images are replaced (delete-then-insert), so this block must ONLY
-        // run when the caller explicitly sent an imagePaths key. Running it
-        // unconditionally would delete every image on a partial edit.
-        //
-        // replaceImages() does the read, the delete AND the re-insert. The
-        // read has to happen before the DELETE on this same transaction, and
-        // keeping the three steps in one function is what makes that
-        // impossible to get wrong — see write-helpers.ts for the data-loss
-        // bug it prevents.
+        // Only when the body has an imagePaths key; otherwise a partial edit
+        // would delete every image. replaceImages() keeps the read-delete-insert
+        // order on one transaction.
         if (Object.prototype.hasOwnProperty.call(body, 'imagePaths')) {
           await replaceImages(transaction, id, body.imagePaths ?? []);
+        }
+
+        // Same rule for references: only replaced when the key is present.
+        if (Object.prototype.hasOwnProperty.call(body, 'catalogRefs')) {
+          await replaceCatalogRefs(transaction, id, body.catalogRefs ?? []);
         }
 
         await transaction.commit();

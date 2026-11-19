@@ -1,14 +1,8 @@
 @use '../../styles/modal' as *;
 
-/* The reference-data maintenance screen.
- *
- * There are no inline styles in the template and there must not be: every
- * piece of spacing on this screen is here, so it can be changed in one place
- * and cannot drift between panes. */
+/* Reference-data maintenance screen. */
 
-/* The two-column shell: sidebar + pane. Grid rather than flex so the sidebar
-   keeps its width while the pane takes everything else, and so the narrow
-   layout at the bottom of this file is a one-property change. */
+/* Two-column shell: sidebar + pane. */
 .reference-layout {
   display: grid;
   grid-template-columns: 170px 1fr;
@@ -48,17 +42,14 @@
   background: #fff;
   color: #2c1c0e;
   font-weight: 600;
-  /* The marker is a border rather than a background change so the active
-     entry still reads as active in a high-contrast or forced-colours mode,
-     where background colours are discarded. */
+  /* Inset border rather than background so the active item survives forced-colours mode. */
   box-shadow: inset 3px 0 0 #b07d3a;
 }
 
 /* ----- The pane --------------------------------------------------------- */
 .reference-pane {
   padding: 16px 20px 24px;
-  /* The pane scrolls, not the dialog. A thousand denominations behind a
-     sidebar that scrolled away with them would leave no way back. */
+  /* The pane scrolls, not the dialog, so the sidebar stays in view. */
   max-height: calc(100vh - 220px);
   overflow-y: auto;
 }
@@ -98,8 +89,7 @@
   font: inherit;
 }
 
-/* Sized to their content rather than to the column, so the form reads as a
-   sentence instead of five identical boxes. */
+/* Fixed-width inputs sized to their content. */
 .reference-input--iso   { flex: 0 0 56px; text-transform: uppercase; }
 .reference-input--year  { flex: 0 0 72px; }
 .reference-input--mark  { flex: 0 0 90px; }
@@ -121,10 +111,7 @@
   color: #8a7a63;
 }
 
-/* ----- The rows -----
- * ROWS, NOT CHIPS: every entry carries a name, an in-use count and one or
- * two buttons, and three columns of varying width cannot wrap into a pill
- * without the count landing on its own line beside the wrong name. */
+/* ----- Rows: name, in-use count, buttons ----- */
 .reference-list {
   list-style: none;
   margin: 0 0 8px;
@@ -148,11 +135,7 @@
   }
 }
 
-/* The row while it is being EDITED.
-   It stops being a row of text and becomes a form, so the flex direction
-   flips: the fields wrap onto their own lines instead of being squeezed
-   into the one line a name and a badge fitted on. The tint is what tells
-   the user, at a glance down a list of seventy, which one is open. */
+/* Row in edit mode: becomes a wrapping form with a tint to mark it. */
 .reference-row--editing {
   display: block;
   padding: 8px 10px;
@@ -173,9 +156,7 @@
   flex-wrap: wrap;
 }
 
-/* The in-use count. Right-aligned and in a quieter colour than the name:
-   it is the thing to glance at before pressing Remove, not the thing to
-   read first. */
+/* In-use count, right-aligned and muted. */
 .reference-row__usage {
   flex: 0 0 auto;
   font-size: 0.78rem;
@@ -230,23 +211,8 @@
   }
 }
 
-/* COLLAPSED IS THE COMPACT STATE, AND IT HAS TO EARN ITS KEEP.
- *
- * Folding 70 issuer groups is only worth doing if what is left is shorter
- * than the thing it replaced. At the expanded metrics a shut group is still
- * a 10px-radius card with 7px of padding, a 1px bottom border under a
- * header with nothing under it, and 6px of air below — roughly 36px each,
- * so 70 of them is 2,500px of scrolling to look at a list of names.
- *
- * Shut, a group is a ROW IN A LIST and is styled like one: the border is
- * the hairline between neighbours, the radius and the gap go, and the
- * padding drops to what keeps the text legible. That is about 23px each,
- * and the whole reference list fits in roughly a page and a half. The
- * expanded group is untouched — it is content, and content keeps its card.
- *
- * The caret is the only thing that distinguishes the two states at a
- * glance, which is why it stays full strength while everything else
- * quietens down. */
+/* Collapsed group: styled as a compact list row (no radius, gap or padding)
+ * so many folded groups stay short. */
 .issuer-group--collapsed {
   margin-bottom: 0;
   border-radius: 0;
@@ -287,9 +253,7 @@
   white-space: nowrap;
 }
 
-/* ----- The fix panel on the unlinked-coins pane -----
- * Opens inside an .issuer-group, so it inherits the group's border and only
- * has to space its own rows. */
+/* ----- Fix panel on the unlinked-coins pane (inside an .issuer-group) ----- */
 .unlinked-fix {
   padding: 10px 12px 12px;
   background: #fffdf9;
@@ -323,10 +287,7 @@
   }
 }
 
-/* ----- Narrow viewports -----
- * The sidebar becomes a horizontal strip above the pane — the tab layout,
- * chosen here as the FALLBACK rather than the default. See
- * reference-sections.ts. */
+/* ----- Narrow viewports: the sidebar becomes a horizontal strip ----- */
 @media (max-width: 680px) {
   .reference-layout {
     grid-template-columns: 1fr;
@@ -349,19 +310,15 @@
   }
 }
 
-/* ----- The derived kind, and the consent to look denominations up ------- */
+/* ----- Derived kind tag and lookup consent ------- */
 
-/* The kind the year boxes imply. A TAG and not a control: the user reads
- * it, they do not set it. Dimmer than the stored tags on the list below so
- * it does not read as something waiting to be filled in. */
+/* Read-only tag for the kind implied by the years. */
 .reference-row__tag--derived {
   align-self: center;
   background: #fdf8ef;
 }
 
-/* The only place this application offers to send anything anywhere, so the
- * label is given a whole line of its own rather than being squeezed in
- * beside the inputs. */
+/* Consent checkbox for the online lookup, on its own line. */
 .reference-consent {
   display: flex;
   align-items: flex-start;
@@ -379,11 +336,7 @@
   }
 }
 
-/* ----- What happened to the new issuer's denominations ------------------ */
-
-/* Sits above the pane body and OUTSIDE the pane switch, because the
- * offline path moves the user to the Denominations pane and the sentence
- * explaining why has to travel with them. */
+/* ----- Lookup result banner ------------------ */
 .lookup-result {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -434,8 +387,7 @@
   flex-wrap: wrap;
 }
 
-/* A button that reads as a link: for the secondary choices beside a real
- * button, where a second bordered button would compete with it. */
+/* Link-styled button for secondary actions beside a real button. */
 .link-button {
   appearance: none;
   background: none;

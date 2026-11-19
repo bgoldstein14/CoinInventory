@@ -1,24 +1,10 @@
 /*
  * storage-mode-wiring.spec.ts
  *
- * image-storage-settings.spec.ts proves the SETTING is read and written
- * correctly. referenced-encoder.spec.ts proves one photo turns into the
- * right thing. This file proves the setting is actually WIRED to the import
- * — that `applyConfirmedMatches` consults it, and that what reaches
- * `updateCoin` differs between the two modes.
- *
- * That separation is the same one base-folder-guard-wiring.spec.ts makes,
- * and for the same reason: a correctly-read setting that nothing acts on
- * looks exactly like a working feature until someone opens the database.
- *
- * WHAT IS BEING PROTECTED
- *   - referenced mode must not put a picture in the database;
- *   - referenced mode must not READ the files either (that is the speed, and
- *     the only observable difference on a 4 GB share);
- *   - stored mode must still store, and must pass the user's size budget to
- *     the downscaler;
- *   - a referenced import with no folder to point at must be refused
- *     outright rather than writing rows that point nowhere.
+ * The storage-mode setting wired into `applyConfirmedMatches`:
+ *   - referenced mode stores no picture and reads no files;
+ *   - stored mode stores, passing the user's size budget to the downscaler;
+ *   - a referenced import with no folder is refused before writing anything.
  */
 
 import 'fake-indexeddb/auto';
@@ -91,8 +77,7 @@ async function createSession(settings: Partial<AppSettings>) {
 
   const api = {
     getAppFolder: () => of(''),
-    // Every path this import would record resolves, so the base-folder guard
-    // is not the thing refusing anything below.
+    // Every path resolves, so the base-folder guard never refuses.
     checkImagesExist: (paths: string[]) =>
       of({ results: Object.fromEntries(paths.map(p => [p, true])) }),
     imageFileUrl: (path: string) =>
@@ -148,13 +133,12 @@ describe('applyConfirmedMatches — the storage mode', () => {
     const [, changes] = updateCoin.mock.calls[0]!;
     const attached = (changes as { imagePaths: string[] }).imagePaths;
 
-    // THE MUTATION THIS CATCHES: storing the downscaled picture anyway.
     expect(attached[0]).not.toContain('base64');
     expect(sourcePathFromReferenceUrl(attached[0]!)).toBe(
       `D:\\Coin Pictures\\Dollars\\${MORGAN_FILE}`
     );
 
-    // And the file was never read, which is the whole point of the mode.
+    // The file was never read.
     expect(downscaler.downscaleWithin).not.toHaveBeenCalled();
     expect(session.summary()?.storedBytes).toBe(0);
   });
@@ -171,12 +155,11 @@ describe('applyConfirmedMatches — the storage mode', () => {
 
     const [, changes] = updateCoin.mock.calls[0]!;
     expect((changes as { imagePaths: string[] }).imagePaths[0]).toContain('base64');
-    // The Settings value reached the encoder rather than a hardcoded one.
+    // The Settings value reached the encoder.
     expect(budgets).toEqual([400 * 1024]);
   });
 
   it('defaults to storing the picture when nothing has ever been chosen', async () => {
-    // A fresh install must behave exactly as the app always has.
     const { session, inv } = await createSession({});
     const updateCoin = vi.spyOn(inv, 'updateCoin');
     session.folder.set('D:\\Coin Pictures');
@@ -188,9 +171,6 @@ describe('applyConfirmedMatches — the storage mode', () => {
   });
 
   it('refuses a referenced import that has nowhere to point', async () => {
-    /* A referenced row with no path is a photograph with neither a picture
-     * nor a location — thrown away. The run is refused before any coin is
-     * touched, and the screen says why. */
     const { session, inv } = await createSession({
       imageStorageMode: 'referenced' as ImageStorageMode
     });
@@ -201,7 +181,7 @@ describe('applyConfirmedMatches — the storage mode', () => {
 
     expect(updateCoin).not.toHaveBeenCalled();
     expect(session.blockedReason()).toContain('folder');
-    // ...and the screen is usable again rather than stuck busy.
+    // ...and the screen is usable again.
     expect(session.busy()).toBe(false);
   });
 });

@@ -1,21 +1,7 @@
 /*
- * The inventory grid as the user operates it: the keyboard on the rows, and
- * the drag (and Alt+Arrow) on the group headings.
- *
- * FOLDED IN FROM, and replacing, two files that are now deleted:
- *   - inventory-table-keyboard.spec.ts     (rows, roving tabindex, markup)
- *   - inventory-table-group-order.spec.ts  (dragging a group heading)
- *
- * Each of their headers is carried below verbatim, as a banner above the
- * block it came from. Every test and every assertion is the original.
- *
- * TWO BUILDERS AND TWO EVENT FACTORIES, DELIBERATELY. The two files each had
- * a `createTable` and a `keyEvent` with different signatures and different
- * behaviour, so they are kept apart as `createKeyboardTable`/`createDragTable`
- * and `rowKeyEvent(key, tagName)`/`groupKeyEvent(key, modifiers)`.
- *
- * LAYOUT. Row behaviour first, then the one TEMPLATE constant, then the group
- * heading suites, then the keyboard file's template-text suites.
+ * The inventory grid as the user operates it: keyboard on the rows, and drag
+ * (or Alt+Arrow) on the group headings. No jsdom: decisions are tested as
+ * component methods, bindings against the template text.
  */
 import '@angular/compiler';
 import { readFileSync } from 'node:fs';
@@ -30,24 +16,6 @@ import { CoinRecord } from '../../types/coin.model';
 import { CoinGroup } from '../../features/inventory/grid-grouping';
 import { createMockDependencies } from '../../testing/test-helpers';
 import { InventoryTable } from './inventory-table';
-
-/* ===== header carried verbatim from inventory-table-keyboard.spec.ts ===== */
-/*
- * The grid is operated by the row, and the row is operated by the keyboard.
- *
- * TWO CHANGES, ONE TEST FILE, BECAUSE THEY ARE ONE CHANGE. The per-row
- * "Details" button is gone — the row itself opens the panel now — and a
- * <tr> with a (click) handler is not reachable by keyboard at all. Removing
- * the button without the keyboard work would have been a straight
- * accessibility regression, so the two are tested together.
- *
- * NO JSDOM. The decisions are plain methods on the component and pure
- * functions in features/inventory/grid-keyboard.ts (tested exhaustively in
- * grid-keyboard.spec.ts). The BINDINGS — which only exist in the template —
- * are asserted against the template text, with its comments stripped first:
- * several tests in this project were historically satisfied by the comment
- * explaining the rule rather than by the code implementing it.
- */
 
 interface KeyboardTable {
   rowTabIndex(coinId: string): number;
@@ -65,21 +33,12 @@ interface TableHarness {
 }
 
 /**
- * Builds the component and hands it the one input its keyboard code reads.
- *
- * The input is replaced with a plain function rather than driven through
- * TestBed: TestBed needs a DOM and there is none here. A signal input is an
- * ordinary configurable class field, so overwriting it is a seam, not a
- * trick — `this.filters()` is all the component ever does with it.
+ * Builds the component with a plain-function `filters` input (TestBed needs a
+ * DOM, and `this.filters()` is all the component does with it).
  */
 function createKeyboardTable(options: {
   coinIds?: string[];
-  /**
-   * The rows actually ON SCREEN, when that differs from the filtered list —
-   * i.e. when a grouping is active and some groups are collapsed. The
-   * arrow keys walk this list and not the filtered one; see
-   * `renderedInventory` in features/inventory/inventory-filter.store.ts.
-   */
+  /** Rows on screen when some groups are collapsed; defaults to coinIds. */
   renderedCoinIds?: string[];
   selectedCoinId?: string | null;
   draftIds?: string[];
@@ -124,12 +83,12 @@ function tabbableRows(table: KeyboardTable, coinIds: string[]): string[] {
   return coinIds.filter(id => table.rowTabIndex(id) === 0);
 }
 
-/** Was `keyEvent` in inventory-table-keyboard.spec.ts: second arg is a tagName. */
+/** Key event on a row; the second argument is the target's tagName. */
 function rowKeyEvent(key: string, tagName = 'TR') {
   return { key, target: { tagName }, preventDefault: vi.fn() };
 }
 
-/* --- row behaviour, from inventory-table-keyboard.spec.ts --- */
+/* --- row behaviour --- */
 describe('activating a row opens the Details panel', () => {
   it('reports the coin upwards when the row is clicked', () => {
     const { table, opened } = createKeyboardTable();
@@ -138,9 +97,7 @@ describe('activating a row opens the Details panel', () => {
   });
 
   it('does NOT toggle: activating the same row again keeps asking to open it', () => {
-    // The row is not a button. Clicking the row you are reading must not
-    // make the panel vanish; the shell's openCoinDetail is unconditional and
-    // app.spec.ts pins that down from the other end.
+    // Not a toggle: the panel's Close button closes it.
     const { table, opened } = createKeyboardTable();
     table.activateRow('b');
     table.activateRow('b');
@@ -166,8 +123,7 @@ describe('activating a row opens the Details panel', () => {
 
 describe('keys inside a row control stay with the control', () => {
   it('leaves Space in the selection checkbox alone, so the box still toggles', () => {
-    // Otherwise ticking a row for a bulk edit would throw the sidebar open
-    // and the checkbox would never toggle.
+    // Otherwise ticking a box would also open the panel.
     const { table, opened } = createKeyboardTable();
     const event = rowKeyEvent(' ', 'INPUT');
     table.onRowKeydown(event, 'a');
@@ -219,8 +175,7 @@ describe('arrow keys move between rows without opening anything', () => {
   });
 
   it('opens nothing on the way past', () => {
-    // Arrowing down a list to look for something must not open a detail
-    // panel on every row it crosses.
+    // Arrowing is looking, not choosing.
     const { table, opened } = createKeyboardTable();
     table.onRowKeydown(rowKeyEvent('ArrowDown'), 'a');
     table.onRowKeydown(rowKeyEvent('ArrowDown'), 'b');
@@ -276,8 +231,7 @@ describe('what an unsaved row says about itself', () => {
   });
 
   it('survives an InventoryService stub with no draftHint at all', () => {
-    // Several specs build this component from a minimal stub; a missing
-    // method must not turn a grid row into a crash.
+    // Some specs use a minimal InventoryService stub.
     const deps = createMockDependencies();
     const injector = Injector.create({
       providers: [
@@ -293,15 +247,10 @@ describe('what an unsaved row says about itself', () => {
 });
 
 describe('the arrow keys at a collapsed group boundary', () => {
-  // GROUPING INTERACTS WITH ARROW-KEY NAVIGATION, and this is the decision:
-  // the arrows walk the rows ON SCREEN. A coin inside a collapsed group
-  // passes every filter and is not rendered, so arrowing onto it would put
-  // the tab stop on an element that does not exist — invisible focus, and
-  // nothing to press to get out of it.
+  // The arrows walk only the rows on screen, skipping collapsed groups.
 
   it('steps over a collapsed group instead of into it', () => {
-    // Grouped by Country: [France: a, b] open, [Germany: hidden-1, hidden-2]
-    // collapsed, [Mexico: c] open. Down from `b` must land on `c`.
+    // [France: a, b] open, [Germany: hidden-1, hidden-2] collapsed, [Mexico: c] open.
     const { table } = createKeyboardTable({
       coinIds: ['a', 'b', 'hidden-1', 'hidden-2', 'c'],
       renderedCoinIds: ['a', 'b', 'c']
@@ -327,8 +276,7 @@ describe('the arrow keys at a collapsed group boundary', () => {
   });
 
   it('clamps at the last VISIBLE row, not the last filtered one', () => {
-    // `c` is the bottom of the screen even though two more coins match the
-    // filters inside a collapsed group below it.
+    // Two more coins match inside a collapsed group below `c`.
     const { table } = createKeyboardTable({
       coinIds: ['a', 'b', 'c', 'hidden-1', 'hidden-2'],
       renderedCoinIds: ['a', 'b', 'c']
@@ -341,8 +289,6 @@ describe('the arrow keys at a collapsed group boundary', () => {
   });
 
   it('keeps exactly one tab stop when every group is collapsed', () => {
-    // Nothing is rendered but headings. There is no row to tab to, and the
-    // grid must not claim there is.
     const { table } = createKeyboardTable({
       coinIds: ['a', 'b', 'c'],
       renderedCoinIds: []
@@ -352,9 +298,7 @@ describe('the arrow keys at a collapsed group boundary', () => {
   });
 
   it('hands the tab stop to a visible row when the focused one is folded away', () => {
-    // The user had `b` focused, then pressed Collapse all with `b` in a
-    // group that shut. tabbableRowId falls through rather than leaving the
-    // tab stop on a row nobody can see.
+    // `b` was focused, then its group was collapsed.
     const { table } = createKeyboardTable({
       coinIds: ['a', 'b', 'c'],
       renderedCoinIds: ['a', 'c']
@@ -367,35 +311,9 @@ describe('the arrow keys at a collapsed group boundary', () => {
   });
 });
 
-/* ==========================================================================
- * THE TEMPLATE, read once for the whole file, with its HTML comments
- * stripped. Both originals did this, for the same reason: several tests in
- * this project were historically satisfied by the comment explaining a rule
- * rather than by the markup implementing it. Everything below this point
- * that asserts on markup asserts on TEMPLATE.
- * ========================================================================== */
+/* The template with HTML comments stripped, so comment text cannot satisfy an assertion. */
 const TEMPLATE = readFileSync(join(__dirname, 'inventory-table.html'), 'utf8')
   .replace(/<!--[\s\S]*?-->/g, '');
-
-/* ===== header carried verbatim from inventory-table-group-order.spec.ts ===== */
-/*
- * Dragging a group heading into place, and doing it from the keyboard.
- *
- * "The grid groupings should be movable, so I could drag a grouping to the
- * top, or wherever I like."
- *
- * WHAT IS TESTED WHERE. Which heading ends up in which slot is a pure rule
- * and belongs to features/inventory/group-order.spec.ts; whether the saved
- * order survives the night belongs to inventory-ui-persistence.spec.ts. This
- * file covers the part in between that neither of them can see: the
- * component's handlers, and the BINDINGS, which exist only in the template.
- *
- * NO JSDOM, so the drag events are plain objects — which is exactly why the
- * handlers below hold no rules of their own. The template is asserted as
- * text, with its comments stripped first: several tests in this project have
- * historically been satisfied by the comment explaining a rule rather than by
- * the markup implementing it.
- */
 
 /** Enough of a CoinGroup for the heading to render and be dragged. */
 function group(label: string, isEmptyBucket = false): CoinGroup {
@@ -422,7 +340,7 @@ interface Recorded {
   moves: Array<[string, number]>;
 }
 
-/** Was `createTable` in inventory-table-group-order.spec.ts. */
+/** Builds the component with a recording `filters` stub for the drag handlers. */
 function createDragTable(options: { canReorder?: boolean } = {}) {
   const deps = createMockDependencies();
   const injector = Injector.create({
@@ -470,7 +388,7 @@ function dragEvent() {
   };
 }
 
-/** Was `keyEvent` in inventory-table-group-order.spec.ts: second arg is a modifier bag. */
+/** Key event on a group heading; the second argument holds modifier flags. */
 function groupKeyEvent(key: string, modifiers: Record<string, boolean> = {}) {
   return { key, preventDefault: vi.fn(), ...modifiers };
 }
@@ -479,13 +397,10 @@ const MEXICO = group('Mexico');
 const FRANCE = group('France');
 const EMPTY_BUCKET = group('(No Country)', true);
 
-/* --- group headings, from inventory-table-group-order.spec.ts --- */
+/* --- group headings --- */
 describe('the heading is a drag source — with the platform, not a library', () => {
   it('adds no drag-and-drop dependency to do it', () => {
-    /* THE BUNDLE IS THE REASON. The @defer work cut this app from 938 kB to
-     * 563 kB days ago, and @angular/cdk's drag-drop entry point would hand a
-     * slice of that back for one gesture on one list. The platform's own
-     * drag events cost nothing and draw the drag image for free. */
+    // Native HTML5 drag and drop keeps @angular/cdk out of the bundle.
     const packageJson = JSON.parse(
       readFileSync(join(__dirname, '../../../../package.json'), 'utf8')
     ) as { dependencies?: Record<string, string> };
@@ -505,7 +420,6 @@ describe('the heading is a drag source — with the platform, not a library', ()
   });
 
   it('still opens and closes the group on a plain click', () => {
-    // The drag must not have cost the heading what it was for.
     expect(TEMPLATE).toContain('(click)="filters().toggleGroupExpansion(group.label)"');
   });
 
@@ -520,7 +434,6 @@ describe('the heading is a drag source — with the platform, not a library', ()
     table.onGroupDragStart(event, MEXICO);
 
     expect(event.dataTransfer.effectAllowed).toBe('move');
-    // Firefox refuses to start a drag with no payload at all.
     expect(event.dataTransfer.setData).toHaveBeenCalledWith('text/plain', 'Mexico');
     expect(table.isGroupDropTarget(FRANCE)).toBe(true);
   });
@@ -584,11 +497,6 @@ describe('the heading is a drag source — with the platform, not a library', ()
 });
 
 describe('the empty bucket cannot be dragged out of last place', () => {
-  /* It is pinned deliberately: "no value recorded" is not a value, and on an
-   * imported collection it is routinely the biggest group there is, so one
-   * careless drag to the top would bury every real heading under a screenful
-   * of unattributed coins. */
-
   it('carries no draggable attribute at all', () => {
     const { table } = createDragTable();
     expect(table.canDragGroup(EMPTY_BUCKET)).toBe(false);
@@ -613,7 +521,6 @@ describe('the empty bucket cannot be dragged out of last place', () => {
     const over = dragEvent();
     table.onGroupDragOver(over, EMPTY_BUCKET);
 
-    // No preventDefault means the browser never fires `drop` here at all.
     expect(over.preventDefault).not.toHaveBeenCalled();
     expect(table.isGroupDropTarget(EMPTY_BUCKET)).toBe(false);
     expect(table.isGroupDropHighlight(EMPTY_BUCKET)).toBe(false);
@@ -677,9 +584,6 @@ describe('a keyboard user can reorder too — Alt+Arrow on a focused heading', (
   });
 
   it('is DISCOVERABLE: announced on the heading and printed next to the Group by menu', () => {
-    /* A gesture nobody can find is a gesture nobody has. The formal
-     * statement is `aria-keyshortcuts`, which a screen reader reads out; the
-     * tooltip and the toolbar hint are the same fact for everyone else. */
     expect(TEMPLATE).toContain('Alt+ArrowUp Alt+ArrowDown');
     expect(TEMPLATE).toContain('[title]="groupHeadingTitle(group)"');
     expect(TEMPLATE).toContain('to reorder');
@@ -706,7 +610,7 @@ describe('there is a way back to alphabetical', () => {
   });
 });
 
-/* --- template text, from inventory-table-keyboard.spec.ts --- */
+/* --- template text --- */
 describe('the row is wired up as the control', () => {
   it('opens the panel on click', () => {
     expect(TEMPLATE).toContain('(click)="activateRow(coin.id)"');
@@ -722,8 +626,7 @@ describe('the row is wired up as the control', () => {
   });
 
   it('tracks focus arriving from anywhere inside the row', () => {
-    // `focusin`, not `focus`: `focus` does not bubble, so clicking the row's
-    // checkbox would not count as being on that row.
+    // `focus` does not bubble from the row's checkbox; `focusin` does.
     expect(TEMPLATE).toContain('(focusin)="onRowFocused(coin.id)"');
   });
 
@@ -739,16 +642,11 @@ describe('the row is wired up as the control', () => {
 
 describe('the per-row Details button is gone', () => {
   it('no longer exists in the grid', () => {
-    // No element whose entire text is "Details" survives anywhere in the
-    // grid, and the template no longer emits the output directly — the row
-    // handler does.
     expect(TEMPLATE).not.toMatch(/>\s*Details\s*</);
     expect(TEMPLATE).not.toContain('detailRequested.emit(coin.id)');
   });
 
   it('took the row-click-only "coinSelected" output with it', () => {
-    // Selection and "show me this coin" were two gestures where the user
-    // only ever meant one.
     expect(TEMPLATE).not.toContain('coinSelected');
   });
 
@@ -760,9 +658,7 @@ describe('the per-row Details button is gone', () => {
 
 describe('controls that must not open the sidebar still stop the click', () => {
   it('the checkbox cell', () => {
-    // Before this change these calls only suppressed a harmless highlight.
-    // Now they are what stops ticking a box for a bulk edit throwing the
-    // sidebar open.
+    // Stops a checkbox click or the Images button from opening the panel.
     expect(TEMPLATE).toContain('(click)="$event.stopPropagation()"');
   });
 
@@ -783,9 +679,7 @@ describe('an unsaved row says what it needs where it can be seen', () => {
 });
 
 describe('the grouped grid is still one @for over the same row markup', () => {
-  // The whole reason gridRows() exists. A second @for inside an @if would
-  // mean two copies of the hundred-line coin row, and the day they stop
-  // matching is the day grouping quietly loses a column.
+  // gridRows() keeps a single copy of the coin row markup.
   it('draws rows from gridRows(), not from the filtered list directly', () => {
     expect(TEMPLATE).toContain('@for (row of filters().gridRows(); track row.key)');
     expect(TEMPLATE).not.toContain('@for (coin of filters().filteredInventory()');
@@ -798,51 +692,25 @@ describe('the grouped grid is still one @for over the same row markup', () => {
 
 describe('the group heading', () => {
   it('is a real button, so Tab reaches it and Enter opens it', () => {
-    // Not a <tr> with a click handler: that needs a tabindex of its own,
-    // and grid-keyboard.ts would then have to learn about headings. A
-    // BUTTON is already excluded from the row key handler.
+    // A button is ignored by the row key handler.
     expect(TEMPLATE).toContain('class="group-toggle"');
     expect(TEMPLATE).toContain('(click)="filters().toggleGroupExpansion(group.label)"');
     expect(TEMPLATE).toContain('[attr.aria-expanded]="filters().isGroupOpen(group.label)"');
   });
 
-  /*
-   * The owner asked for this explicitly: "Hitting space/enter on a grouping
-   * row should just open it, not show a coin detail."
-   *
-   * It is already true, but only by construction — the keydown handler is
-   * bound inside the coin-row block, so a heading never reaches it, and
-   * grid-keyboard.ts separately declines anything whose target is a BUTTON.
-   * Neither of those facts is visible from the heading markup, so a later
-   * edit that moved the handler up to the <tr> (the obvious way to make a
-   * whole row clickable) would break it with nothing going red.
-   *
-   * These assert the negative.
-   */
+  // Enter/Space on a heading must open the group, never a coin.
   it('carries nothing that could open a coin, so Enter there cannot show a detail', () => {
     const groupRow = /<tr class="group-row"[\s\S]*?<\/tr>/.exec(TEMPLATE)?.[0];
     expect(groupRow, 'group heading row not found').toBeTruthy();
     expect(groupRow).not.toContain('activateRow');
     expect(groupRow).not.toContain('detailRequested');
     expect(groupRow).not.toContain('tabindex');
-    // NOTHING ON THE <tr> ITSELF. Moving a key handler up to the row is the
-    // obvious way to make a whole row operable and is exactly what would
-    // break the owner's rule, so it is the thing asserted.
+    // Nothing on the <tr> itself.
     expect(groupRow).not.toMatch(/<tr[^>]*\(keydown\)/);
   });
 
   it('handles keys only on its button, and only to reorder', () => {
-    /* The heading gained ONE key handler when the groups became
-     * re-orderable: Alt+Up / Alt+Down moves the group. It sits on the
-     * <button>, it acts on nothing but Alt+Arrow, and it cannot open a coin
-     * — Enter and Space fall straight through it to the click handler, which
-     * is asserted in group-order.spec.ts and again in
-     * inventory-table-group-order.spec.ts. A keyboard user has to be able to
-     * reorder; what he must not be able to do is open a coin from a heading.
-     *
-     * The count still stands as the tripwire it always was: two handlers in
-     * this grid, both named here, and a third means something new started
-     * eating keys. */
+    // Exactly two key handlers: the row's and the heading's Alt+Arrow reorder.
     expect(TEMPLATE.match(/\(keydown\)/g) ?? []).toHaveLength(2);
     expect(TEMPLATE).toContain('(keydown)="onRowKeydown($event, coin.id)"');
     expect(TEMPLATE).toContain('(keydown)="onGroupHeadingKeydown($event, group)"');
@@ -862,8 +730,7 @@ describe('the group heading', () => {
   });
 
   it('adds no second tab stop of its own', () => {
-    // The roving tabindex is still exactly one ROW. A hard-coded tabindex
-    // anywhere in this template would break it.
+    // Exactly one row in the tab order.
     expect(TEMPLATE).not.toContain('tabindex="0"');
   });
 });
@@ -878,7 +745,6 @@ describe('the Group by control', () => {
     expect(TEMPLATE).toContain('@if (filters().isGrouped()) {');
     expect(TEMPLATE).toContain('(click)="filters().applyExpandAll()"');
     expect(TEMPLATE).toContain('{{ filters().expandAllControl().label }}');
-    // Two buttons would mean one of them is always a no-op.
     expect(TEMPLATE).not.toContain('>Collapse all<');
     expect(TEMPLATE).not.toContain('>Expand all<');
   });

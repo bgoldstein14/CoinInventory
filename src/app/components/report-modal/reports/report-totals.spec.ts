@@ -1,10 +1,4 @@
-/**
- * report-totals.spec.ts
- *
- * A report that totals unknowns as zero understates an insurance claim.
- * Every case below is a variation on that: a value we do not know must be
- * COUNTED AS UNKNOWN, never silently folded into a sum as a zero.
- */
+/** Tests that unknown values are counted as unknown, never summed as zero. */
 import { describe, expect, it } from 'vitest';
 import { CoinRecord, SpotPrices } from '../../../types/coin.model';
 import {
@@ -36,8 +30,6 @@ describe('sumKnown', () => {
   });
 
   it('leaves unknowns OUT of the total and counts them separately', () => {
-    // The headline behaviour. 1400 + unknown must not be 1400 + 0 reported as
-    // if it were the whole answer.
     expect(sumKnown([1400, null, null, 600])).toEqual({ total: 2000, counted: 2, unknown: 2 });
   });
 
@@ -50,9 +42,7 @@ describe('sumKnown', () => {
   });
 
   it('keeps a genuine zero that was passed as a number, not as null', () => {
-    // sumKnown itself takes no view on what "unknown" means — that is the
-    // caller's job (insuredValue/purchaseCost below). A 0 handed to it is a
-    // real 0 and must be counted.
+    // Deciding what is unknown is the caller's job (insuredValue/purchaseCost).
     expect(sumKnown([0, 10])).toEqual({ total: 10, counted: 2, unknown: 0 });
   });
 });
@@ -63,9 +53,7 @@ describe('insuredValue', () => {
   });
 
   it('is null — not 0 — when no value has been recorded', () => {
-    // This app stores "not recorded" as 0, so there is no way to tell a
-    // genuine zero from a blank. For an insurance schedule the honest answer
-    // is "unknown", because calling it $0 understates the claim.
+    // "Not recorded" is stored as 0.
     expect(insuredValue(coin({ currentValue: 0 }))).toBeNull();
   });
 
@@ -138,10 +126,7 @@ describe('formatHonestTotal', () => {
   });
 
   it('lets the caller say WHY a value is missing, not just that it is', () => {
-    // "no Melt Value recorded" is wrong: nobody records a melt value, it is
-    // calculated from the coin's metal and today's spot price. Telling the
-    // reader to go and fill in a field that does not exist would send them
-    // looking for a box that is not there.
+    // Melt value is calculated, not entered, so the caveat must not say "recorded".
     const line = formatHonestTotal({ total: 10, counted: 1, unknown: 2 }, 'Melt Value', 'calculable for');
     expect(line.caveat).toContain('Melt Value');
     expect(line.caveat).toContain('calculable');

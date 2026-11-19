@@ -10,26 +10,11 @@ import { createBlankCoin, normalizeImportedCoins } from './coin-factory';
 import { firstValueFrom } from 'rxjs';
 
  /*
- * CoinCollection
- *
- * WHAT THIS FILE OWNS
- *   Whole-coin operations — the ones that add a coin to the list or take one
- *   away, and the selection that follows from them:
- *     addBlankCoin, addCoins, deleteCoin, importInventoryData,
- *     selectCoin, ensureSelectedCoin, replaceAll.
- *
- *   Field-level EDITS are not here; they live in CoinEditor, because they
- *   have completely different rules (optimistic paint, debounce, minimal
- *   diff) from "create this record" / "delete this record".
- *
- * WHY IT IS ITS OWN FILE
- *   Each of these operations has to keep four things in step — the on-screen
- *   list, the selected coin, the change tracker's baseline, and the database.
- *   Forgetting one of the four is the classic bug here, so they are grouped
- *   together where the pattern is visible.
- *
- * As with the other helpers, the signals belong to InventoryService; this
- * class is handed the same signal objects to read and write.
+  * Whole-coin operations and selection: addBlankCoin, addCoins, deleteCoin,
+  * importInventoryData, selectCoin, ensureSelectedCoin, replaceAll. (Field edits
+  * are in CoinEditor.) Each must keep four things in step: the on-screen list,
+  * the selection, the change tracker's baseline and the database. The signals
+  * belong to InventoryService.
   */
 
 export class CoinCollection {
@@ -37,7 +22,7 @@ export class CoinCollection {
     private readonly inventory: WritableSignal<CoinRecord[]>,
     private readonly selectedCoinId: WritableSignal<string | null>,
     private readonly tracker: CoinChangeTracker,
-    /** Which coins are still local-only drafts. See coin-draft-registry.ts. */
+    /** Which coins are still local-only drafts (see coin-draft-registry.ts). */
     private readonly drafts: CoinDraftRegistry,
     private readonly lookups: LookupManager,
     private readonly apiService: ApiService,
@@ -45,15 +30,15 @@ export class CoinCollection {
     private readonly notificationService: NotificationService
   ) {}
 
-  /* ---- Selection ---- */
+  /* Selection */
 
   selectCoin(coinId: string): void {
     this.selectedCoinId.set(coinId);
   }
 
   /**
-   * Make sure something sensible is selected: nothing when the list is empty,
-   * otherwise the first coin whenever the previous selection has gone away.
+   * Keeps a sensible selection: none for an empty list, otherwise the first coin
+   * when the previous selection is gone.
    */
   ensureSelectedCoin(): void {
     if (this.inventory().length === 0) { this.selectedCoinId.set(null); return; }
@@ -63,43 +48,24 @@ export class CoinCollection {
     }
   }
 
-  /* ---- Loading a fresh list ---- */
+  /* Loading a fresh list */
 
-  /**
-   * Replace the entire list with coins straight from the server and
-   * re-baseline the change tracking against them (they are, by definition,
-   * exactly what the server holds).
-   */
+  /** Replaces the list with coins from the server and re-baselines change tracking. */
   replaceAll(coins: CoinRecord[]): void {
     this.inventory.set(coins);
     this.tracker.reset(coins);
-    // Everything on screen now came from the server, so nothing is a local
-    // draft any more. (Any draft the user had not finished is discarded —
-    // that is intentional; see coin-draft-registry.ts.)
+    // Everything now came from the server, so unfinished drafts are discarded.
     this.drafts.clearAll();
     this.ensureSelectedCoin();
   }
 
-  /* ---- Creating coins ---- */
+  /* Creating coins */
 
   /**
-   * Add an empty row for the user to fill in — and send NOTHING to the
-   * server.
-   *
-   * SEND NOTHING TO THE SERVER. POSTing the blank record here gets
-   * `400 {"error":"denomination is required"}` back, so clicking "Add coin"
-   * produces a red error toast before the user has typed anything.
-   *
-   * A brand new coin is now a LOCAL DRAFT. It appears in the list and is
-   * selected exactly as before, but it only reaches the database once it
-   * carries enough detail to be a real coin (2 of Year / Coin Type /
-   * Denomination). CoinEditor watches for that and POSTs it automatically —
-   * see coin-draft-registry.ts for the whole state machine.
-   *
-   * Note what is deliberately absent: `tracker.seedConfirmed(coin)`. The
-   * change tracker records what the SERVER has confirmed, and the server has
-   * confirmed nothing here. Seeding it with a row of empty strings would
-   * make the first real save diff against fiction.
+   * Adds an empty row and sends nothing to the server (a blank POST gets
+   * `400 denomination is required`). The new coin is a local draft until it has
+   * enough detail, then CoinEditor POSTs it (see coin-draft-registry.ts). The
+   * change tracker isn't seeded: the server has confirmed nothing.
    */
   addBlankCoin(): CoinRecord {
     const coin = createBlankCoin();
@@ -114,27 +80,14 @@ export class CoinCollection {
   }
 
   /**
-   * Append a batch of coins (a Quicken/CSV/image import) and save them all.
-   *
-   * WHY IMPORTS BYPASS THE DRAFT MACHINERY
-   * Drafts exist to protect a row the user is still typing into. An import
-   * is the opposite: the records are complete when they arrive and the user
-   * has already reviewed them on a preview screen. The QIF importer in
-   * particular has ALREADY applied the identical 2-of-3 rule (both call
-   * `coin-completeness.ts`) and diverted anything short of it to its own
-   * "exceptions" list, so routing these through the draft path would just
-   * re-ask a question that has been answered. Batch imports also want the
-   * per-coin error reporting and single summary toast below, which the draft
-   * path has no notion of.
-   *
-   * Every coin is POSTed independently so one bad record cannot stop the
-   * rest, and the user gets a single summary toast at the end rather than one
-   * per coin.
+   * Appends a batch of imported coins (Quicken/CSV/image) and saves them all.
+   * Imports skip the draft path: the records are complete, already reviewed, and
+   * (for QIF) already filtered by the same 2-of-3 rule. Each coin is POSTed
+   * independently so one bad record doesn't stop the rest; one summary toast.
    */
   addCoins(coins: CoinRecord[]): void {
     this.inventory.set([...this.inventory(), ...coins]);
-    // Each coin is POSTed in full, so the record we send is the baseline the
-    // server will hold. Seed the confirmed snapshots from it.
+    // Each coin is POSTed in full, so what is sent becomes the confirmed baseline.
     for (const coin of coins) this.tracker.seedConfirmed(coin);
     this.ensureSelectedCoin();
 
@@ -172,29 +125,18 @@ export class CoinCollection {
   }
 
   /**
-   * Replace the whole inventory with the contents of an exported JSON file.
-   *
-   * Anything unparseable is reported and ignored — we never leave the app
-   * half-imported.
-   *
-   * WHY THIS ALSO BYPASSES THE DRAFT MACHINERY
-   * This is a whole-collection restore from a file the app itself exported,
-   * not a row being typed. It replaces everything and re-baselines the change
-   * tracker in one shot, which is precisely the "nothing here is local any
-   * more" situation drafts are the opposite of. Any unfinished draft the user
-   * had on screen is discarded along with the rest of the old list.
+   * Replaces the whole inventory from an exported JSON file. Unparseable input is
+   * reported and ignored, never half-imported. Also skips the draft path: it
+   * replaces everything (discarding unfinished drafts) and re-baselines tracking.
    */
   importInventoryData(json: string): void {
     try {
       const parsed = JSON.parse(json) as CoinRecord[];
       if (!Array.isArray(parsed) || parsed.length === 0) return;
 
-      /* A restore is an import, so the coins are linked to the
-       * denominations lookup on the way in, exactly as the QIF and
-       * spreadsheet paths do (design §4.1, §6). An id the backup already
-       * carried is kept; see normalizeImportedCoins. If the lookup has not
-       * loaded yet the list is empty, nothing links, and every coin still
-       * restores -- which is the right way round. */
+      /* Like other imports, coins are linked to the denominations lookup (design
+       * §4.1, §6); an id already in the backup is kept. If the lookup hasn't loaded,
+       * nothing links but every coin still restores. */
       const normalized = normalizeImportedCoins(parsed, this.lookups.denominationList());
 
       this.inventory.set(normalized);
@@ -228,27 +170,12 @@ export class CoinCollection {
   }
 
   /**
-   * A bulk create came back refused: stop the row pretending to be saved.
-   *
-   * ---- THE HOLE THIS CLOSES ----
-   * Both bulk paths above seed the change tracker with the record they are
-   * ABOUT to POST, because on success the server will hold exactly that. On
-   * failure that seeded snapshot was simply left in place, and the row was
-   * left in the grid with no mark on it at all. The consequences compound:
-   *
-   *   - the row looks identical to a saved one, so the user keeps editing it;
-   *   - every later edit takes the normal route and PUTs to a CoinId the
-   *     database does not have, which 404s (see
-   *     server/routes/coins/writes.ts) — forever, because a PUT never
-   *     creates;
-   *   - the grid requests a thumbnail for it, which 404s too.
-   *
-   * Forgetting the fictional baseline and marking the coin a draft puts it
-   * back on the one path that can actually rescue it: the next qualifying
-   * edit POSTs it again. The row and the user's data stay on screen — the
-   * alternative, deleting rows out from under an import, is the worse bug.
-   *
-   * Nothing is done for a row the user has already removed.
+   * A bulk create was refused: stop the row looking saved. The bulk paths seed
+   * the tracker with the record before POSTing; on failure that baseline is
+   * dropped and the coin marked a draft. Otherwise every later edit would PUT to
+   * a CoinId the database doesn't have (a PUT never creates) and its thumbnail
+   * would 404. As a draft, the next qualifying edit POSTs it again. Rows the user
+   * has already removed are ignored.
    */
   private markFailedCreateUnsaved(coinId: string, error: unknown): void {
     if (!this.inventory().some(c => c.id === coinId)) return;
@@ -258,16 +185,14 @@ export class CoinCollection {
     this.drafts.markDraft(coinId);
   }
 
-  /* ---- Deleting coins ---- */
+  /* Deleting coins */
 
   /**
-   * Remove a coin everywhere: from the list, from the change tracker (so no
-   * queued write fires for a coin that no longer exists), and finally from
-   * the database.
+   * Removes a coin from the list, the change tracker (so no queued write fires)
+   * and the database.
    */
   deleteCoin(coinId: string): void {
-    // Ask BEFORE we forget anything: an unsaved draft has no row in the
-    // database, so calling DELETE would 404 and pop a pointless error toast.
+    // Check first: an unsaved draft has no database row, so DELETE would 404.
     const wasUnsaved = this.drafts.isUnsaved(coinId);
 
     this.inventory.set(this.inventory().filter(c => c.id !== coinId));
@@ -276,9 +201,8 @@ export class CoinCollection {
     this.ensureSelectedCoin();
 
     if (wasUnsaved) {
-      // Nothing to delete on the server. (If a create happened to be in
-      // flight, CoinEditor notices the row has gone when the POST lands and
-      // removes the orphan itself.)
+      // Nothing to delete on the server. If a create is in flight, CoinEditor removes
+      // the orphan when the POST lands.
       this.logger.info(`Discarded unsaved draft coin ${coinId}`);
       return;
     }

@@ -1,32 +1,11 @@
 /**
- * routes/coins/thumbnail.spec.ts — tests for GET /api/coins/:id/thumbnail,
- * the endpoint the main grid's Photo column renders.
+ * GET /api/coins/:id/thumbnail, the grid's Photo column. Thumbnails come one
+ * binary response at a time so a collection's photos are never concatenated
+ * into one string. Checks: one image per response, binary (not base64), one
+ * row read (`ORDER BY SortOrder LIMIT 1`), and a bound coin id.
  *
- * WHAT IS BEING PROTECTED
- * Inlining every photograph of every coin into GET /api/coins makes
- * JSON.stringify throw "Invalid string length" once a collection is large
- * enough, and the app will not load. So thumbnails come one HTTP response at
- * a time, as BINARY, which is the property these tests pin:
- *
- *   - ONE image per response. No shape of this endpoint can concatenate a
- *     collection's photographs into a single string, which is what makes the
- *     outage unreachable from here.
- *   - BINARY, not base64 — a third smaller on the wire than the stored text.
- *   - ONE ROW READ. `ORDER BY SortOrder LIMIT 1`, so a coin with twenty
- *     photographs still costs one row, and the row it costs is the same one
- *     the gallery calls the main photo.
- *   - The coin id is BOUND, never interpolated.
- *
- * *** THE ROWS ARE REAL NOW. *** They are inserted into an in-memory SQLite
- * database built from db/schema.sql and read back through the query the route
- * actually runs. The previous version of this file queued one canned
- * recordset per `query()` call, so "reads the lowest SortOrder" could only be
- * asserted by reading the SQL text — the mock returned whatever row the test
- * handed it regardless of what the statement said. Here the row the route
- * gets back is the row the ORDER BY picked.
- *
- * CoinImages has a FOREIGN KEY to Coins and foreign keys are enforced, so
- * every test inserts its coin before its photographs.
+ * Rows are real; CoinImages has a foreign key to Coins, so each test inserts
+ * the coin first.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -76,9 +55,7 @@ describe('GET /api/coins/:id/thumbnail', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('image/jpeg');
-    // The DECODED bytes, not the base64 text. A response that still carried
-    // the `data:image/jpeg;base64,` prefix would fail here, which is the
-    // point: `<img src>` cannot display a text/plain base64 blob.
+    // Decoded bytes, not the base64 text: <img src> can't display the latter.
     expect(Buffer.from(res.body)).toEqual(JPEG_BYTES);
   });
 
@@ -93,13 +70,8 @@ describe('GET /api/coins/:id/thumbnail', () => {
   });
 
   it('reads exactly ONE row, the lowest SortOrder, and never the whole set', async () => {
-    /*
-     * THE ROW CHOICE IS NOW PROVED BY THE ROW THAT COMES BACK, not by the SQL
-     * text. The PNG is inserted FIRST (so it gets the lower ImageId) but sits
-     * at SortOrder 1; the JPEG is inserted second at SortOrder 0. A handler
-     * that dropped the ORDER BY, or ordered by ImageId, or took the last row,
-     * would serve the PNG. Only `ORDER BY SortOrder LIMIT 1` serves the JPEG.
-     */
+    // The PNG is inserted first (lower ImageId) at SortOrder 1, the JPEG second
+    // at SortOrder 0. Only ordering by SortOrder serves the JPEG.
     await givenCoinWithImages('c1', [
       { data: PNG_DATA_URL, sortOrder: 1 },
       { data: JPEG_DATA_URL, sortOrder: 0 },
@@ -111,11 +83,8 @@ describe('GET /api/coins/:id/thumbnail', () => {
     expect(res.headers['content-type']).toContain('image/jpeg');
     expect(Buffer.from(res.body)).toEqual(JPEG_BYTES);
 
-    // ONE statement, and it carries the cost control. LIMIT 1 is the SQLite
-    // spelling of what used to be TOP 1; without it a coin with twenty
-    // photographs drags twenty multi-hundred-kilobyte blobs out of the
-    // database to display one of them. A row cannot show that the other
-    // nineteen were left behind, so this stays a text assertion.
+    // One statement with LIMIT 1, so a coin with many photos reads one blob.
+    // A row can't show the others were skipped, so this checks the text.
     const statements = executedSql();
     expect(statements).toHaveLength(1);
     expect(statements[0]).toContain('LIMIT 1');
@@ -129,16 +98,14 @@ describe('GET /api/coins/:id/thumbnail', () => {
 
     const res = await request(app).get(`/api/coins/${encodeURIComponent(hostile)}/thumbnail`);
 
-    // The id is DATA, so it finds that coin's photograph...
+    // The id is data, so it finds that coin's photo...
     expect(res.status).toBe(200);
     expect(Buffer.from(res.body)).toEqual(JPEG_BYTES);
 
     const statements = executedSql();
     expect(statements[0]).not.toContain('DROP TABLE');
 
-    // ...and — the assertion the mock could never make — the Coins table is
-    // still there afterwards. Under the old fake nothing executed the SQL, so
-    // an injected statement would have been invisible.
+    // ...and the Coins table still exists afterwards.
     const survivors = await queryRows('SELECT CoinId FROM Coins');
     expect(survivors).toHaveLength(1);
   });
@@ -148,9 +115,7 @@ describe('GET /api/coins/:id/thumbnail', () => {
 
     const res = await request(app).get('/api/coins/no-photos/thumbnail');
 
-    // 404, not an empty 200: `<img>` needs to fail so the grid's broken-image
-    // fallback shows, and a zero-byte 200 renders as a broken icon anyway
-    // while costing a cache entry.
+    // 404, not an empty 200, so the grid's broken-image fallback shows.
     expect(res.status).toBe(404);
   });
 
@@ -159,23 +124,13 @@ describe('GET /api/coins/:id/thumbnail', () => {
 
     const res = await request(app).get('/api/coins/broken/thumbnail');
 
-    // An empty or corrupt ImageData is a gap in the data, not a server fault.
-    // A 500 here would light up the error log on every grid paint.
+    // Empty or corrupt ImageData is a gap in the data, not a 500.
     expect(res.status).toBe(404);
   });
 
   it('answers 404 when the stored row decodes to no bytes at all', async () => {
-    /*
-     * A SEPARATE CASE FROM THE EMPTY STRING ABOVE, and it needs its own test
-     * because it reaches a different guard.
-     *
-     * `Buffer.from(x, 'base64')` NEVER THROWS. Handed something that is not
-     * base64 it silently stops at the first unusable character and returns
-     * whatever it had — here, nothing. So "did this decode?" cannot be
-     * answered with a try/catch; it has to be answered by checking the
-     * length, and without that check this would be a 200 with a zero-byte
-     * body claiming to be a JPEG.
-      */
+    // A separate case: Buffer.from(x, 'base64') never throws, so non-base64
+    // decodes to zero bytes and only the length check catches it.
     await givenCoinWithImages('corrupt', [
       { data: 'data:image/jpeg;base64,!!!!', sortOrder: 0 },
     ]);
@@ -186,8 +141,7 @@ describe('GET /api/coins/:id/thumbnail', () => {
   });
 
   it('answers 404 for a non-string stored value', async () => {
-    // ImageData is NULLABLE in db/schema.sql, so this is a row the database
-    // genuinely permits rather than a driver quirk the mock imagined.
+    // ImageData is nullable in the schema.
     await givenCoinWithImages('null-data', [{ data: null, sortOrder: 0 }]);
 
     const res = await request(app).get('/api/coins/null-data/thumbnail');
@@ -196,7 +150,7 @@ describe('GET /api/coins/:id/thumbnail', () => {
   });
 
   it('accepts a bare base64 string with no data: prefix', async () => {
-    // Rows imported before the data-URL convention settled hold raw base64.
+    // Older rows hold raw base64 with no data-URL prefix.
     await givenCoinWithImages('legacy', [
       { data: JPEG_BYTES.toString('base64'), sortOrder: 0 },
     ]);
@@ -213,36 +167,23 @@ describe('GET /api/coins/:id/thumbnail', () => {
 
     const res = await request(app).get('/api/coins/c1/thumbnail');
 
-    // `no-cache` does NOT mean "do not cache": it means "cache it, but ask me
-    // before reusing it". With the ETag Express attaches, scrolling back up
-    // the grid costs a 304 with no body instead of the photograph again —
-    // while a photo the user just changed still updates immediately.
+    // no-cache means "revalidate": with the ETag, scrolling back is a 304,
+    // and a changed photo updates immediately.
     expect(res.headers['cache-control']).toContain('no-cache');
     expect(res.headers['etag']).toBeTruthy();
   });
 
   it('reports a database failure as a 500 without leaking internals', async () => {
-    /*
-     * THE FAULT IS INJECTED INTO THE DATABASE, not into a mock's promise.
-     * Dropping the table the handler reads makes the real statement fail with
-     * a real SQLite error, which db/sql-api.ts translates and
-     * routes/db-error-response.ts classifies — the whole path a canned
-     * `mockRejectedValueOnce` skipped. "No such table" carries no SQL Server
-     * error number, so it lands in the generic 500 branch.
-     *
-     * The schema has to be put back by hand: resetTestDatabase() only DELETEs
-     * from the tables, and would itself fail against a dropped one.
-     */
+    // A real database fault: dropping the table makes the query fail with a
+    // real SQLite error (no SQL Server number, so 500). The schema is rebuilt
+    // by hand afterwards, since resetTestDatabase() only clears tables.
     try {
       await withTestDb((database) => database.exec('DROP TABLE CoinImages'));
 
       const res = await request(app).get('/api/coins/c1/thumbnail');
 
       expect(res.status).toBe(500);
-      // The SENTENCE SHOWN TO THE USER names nothing internal. (The separate
-      // `detail` field deliberately does carry the technical line — see the
-      // DbErrorBody comment in routes/db-error-response.ts — so the check is
-      // on `error`, which is what the UI displays.)
+      // The user-facing `error` names nothing internal (`detail` carries the technical line).
       expect(res.body.error).toBe('Failed to retrieve thumbnail');
       expect(res.body.error).not.toContain('CoinImages');
     } finally {
@@ -252,16 +193,9 @@ describe('GET /api/coins/:id/thumbnail', () => {
 });
 
 /*
- * REFERENCED PHOTOGRAPHS — the second storage mode.
- *
- * When the user chooses, in Settings, to keep photos on disk rather than in
- * the database, CoinImages.ImageData is NULL and SourcePath is the whole of
- * what the row holds. The grid's Photo column must still work, so this route
- * streams the original file instead of decoding a stored copy.
- *
- * The file on disk here is a REAL file in a temp directory, not a mock: the
- * thing being tested is that the route reads the disk at all, and a stubbed
- * `fs` would pass whether or not it did.
+ * Referenced photos (ImageData NULL, SourcePath set): the route streams the
+ * original file. Uses a real temp file, since a stubbed fs would pass
+ * whether or not the disk was read.
  */
 describe('GET /api/coins/:id/thumbnail — referenced photographs', () => {
   let tempDir: string;
@@ -274,7 +208,7 @@ describe('GET /api/coins/:id/thumbnail — referenced photographs', () => {
     await fs.promises.rm(tempDir, { recursive: true, force: true });
   });
 
-  /** A coin whose one photograph is a path and nothing else. */
+  /** A coin whose one photo is a path only. */
   async function givenReferencedCoin(coinId: string, sourcePath: string | null): Promise<void> {
     await insertCoin({ CoinId: coinId, Denomination: '$1', Year: '1921' });
     await withTestDb((database) => {
@@ -300,9 +234,7 @@ describe('GET /api/coins/:id/thumbnail — referenced photographs', () => {
   });
 
   it('404s when the referenced original has been moved or deleted', async () => {
-    // The trade-off of the mode, stated: there is no copy in the database to
-    // fall back on. A 404 is what a coin with no photograph produces, so the
-    // grid shows its ordinary empty cell rather than a broken image.
+    // No stored copy to fall back on; a 404 shows the ordinary empty cell.
     await givenReferencedCoin('ref-2', join(tempDir, 'gone.jpg'));
 
     const res = await request(app).get('/api/coins/ref-2/thumbnail');
@@ -311,9 +243,7 @@ describe('GET /api/coins/:id/thumbnail — referenced photographs', () => {
   });
 
   it('refuses to serve a path that is not an image file', async () => {
-    // Same allow-list as GET /api/images/file. A SourcePath is only ever
-    // written by this app, but it is still a path out of the database going
-    // into fs.createReadStream.
+    // Same extension allow-list as GET /api/images/file.
     const notAnImage = join(tempDir, 'secrets.env');
     await fs.promises.writeFile(notAnImage, 'TOKEN=hunter2');
     await givenReferencedCoin('ref-3', notAnImage);

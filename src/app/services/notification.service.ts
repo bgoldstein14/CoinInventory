@@ -2,16 +2,9 @@ import { Injectable, signal } from '@angular/core';
 import { AppNotification } from '../types/coin.model';
 
 /**
- * User-facing toasts.
- *
- * Info and warning auto-dismiss; ERROR IS STICKY and must be dismissed by
- * hand. Several callers depend on that split — anything that fires by itself
- * rather than in response to a button press should avoid `showError`, or a
- * machine with no network greets the user with a permanent red toast on
- * every launch.
- *
- * The notification-toast component renders whatever is in the `notifications`
- * signal.
+ * User-facing toasts, rendered by the notification-toast component.
+ * Info and warning auto-dismiss; errors stay until dismissed, so avoid
+ * `showError` for background events that fire without a user action.
  */
 @Injectable({ providedIn: 'root' })
 export class NotificationService {

@@ -1,16 +1,9 @@
 /**
- * routes/lookups/categories.ts — the Categories reference table.
+ * The Categories reference table (a plain list of names). Mounted at /api:
  *
- * Categories is a plain list of names (Categories.CategoryName NVARCHAR(100)).
- * Mounted (via routes/lookups/index.ts) at /api:
- *
- *   GET    /categories        -> list every category name
- *   POST   /categories        -> add one, ignoring case/whitespace duplicates
- *   DELETE /categories/:name  -> remove one
- *
- * Every database call runs inside `withDb()` (one automatic retry on a dropped
- * connection, never a pool teardown on an ordinary query error) and every
- * parameter type comes from DB_BINDINGS so it matches setup-database.sql.
+ *   GET    /categories        list every category name
+ *   POST   /categories        add one, ignoring case/whitespace duplicates
+ *   DELETE /categories/:name  remove one
  */
 
 import { Router, Request, Response } from 'express';
@@ -52,9 +45,7 @@ router.post('/categories', async (req: Request, res: Response) => {
     await withDb(async (db) => {
       await db.request()
         .input('name', DB_BINDINGS.categoryName, trimmedName)
-        // `INSERT ... SELECT ... WHERE NOT EXISTS` rather than T-SQL's
-        // `IF NOT EXISTS ... INSERT`: one statement, so the check and the
-        // insert cannot be separated, and SQLite has no procedural IF.
+        // One statement, so the existence check and insert can't be separated.
         .query(`
           INSERT INTO Categories (CategoryName)
           SELECT @name

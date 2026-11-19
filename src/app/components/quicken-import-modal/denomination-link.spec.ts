@@ -1,21 +1,8 @@
 /*
- * The QIF import path, linking denominations.
- *
- * WHERE THE LINK IS MADE, AND WHY THERE. `QuickenImportService.parse` turns
- * a security name into a denomination STRING and must go on doing exactly
- * that: it is a pure text-in, records-out function, every one of its rules
- * (the 2-of-3 gate, the three-cent ladder, the alloy lookup) is keyed on
- * that string, and it has no business knowing what rows a database holds.
- *
- * The coin itself is built one layer up, in `importQuicken`, which is also
- * the only place with the lookup table. So that is where the text is
- * resolved to an id -- the text the parser produced, with the country the
- * parser worked out for THAT coin, through the one shared resolver.
- *
- * Linking must change nothing about WHICH coins import. The 2-of-3 rule, the
- * net-quantity rule and the deliberately absent "import anyway" override all
- * stand: a coin whose denomination resolves to nothing still imports, with
- * its text, and reads `Other (8 Reales)`.
+ * QIF import: denomination linking. The parser produces a denomination string;
+ * `importQuicken` resolves it to an id using the parsed country and the shared
+ * resolver. Linking never changes which coins import: an unresolved coin still
+ * imports with its text and reads `Other (...)`.
  */
 
 import 'fake-indexeddb/auto';
@@ -71,9 +58,7 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('links a denomination the parser spells its own way', () => {
-    // The parser writes '5¢' for a half dime and '3CS' for a trime; the
-    // alias layer already folds those onto the seeded labels. Nothing here
-    // re-states the spellings -- if it did, there would be two vocabularies.
+    // The shared alias layer folds the parser's spellings onto the seeded labels.
     expect(importSecurity('1853 US Half Dime').denomination).toBe('5¢');
     expect(importSecurity('1853 US Half Dime').denominationId)
       .toBe(seedDenomination('United States', '5¢')!.denominationId);
@@ -82,9 +67,7 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('links by widening past the country when only one issuer struck it', () => {
-    // Only Peru struck a 100 Soles, so this links whatever the country
-    // says. It is here for the widening, NOT as evidence about the
-    // country -- see the next two tests for that.
+    // Only Peru struck a 100 Soles, so this links by widening regardless of country.
     const coin = importSecurity('1967 Peru 100 Soles - PCGS MS65');
     expect(coin.country).toBe('Peru');
     expect(coin.denomination).toBe('100 Soles');
@@ -92,18 +75,8 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('passes the COUNTRY THE PARSER READ, not the collection default', () => {
-    /* THE ASSERTION THAT CATCHES A HARD-CODED 'United States'.
-     *
-     * The obvious candidate -- the Peruvian 100 Soles above -- does NOT
-     * catch it: only one issuer struck one, so it links by widening even if
-     * the country is thrown away. A mutation replacing `record.country`
-     * with the string 'United States' survives that test completely.
-     *
-     * This one cannot survive it. Six issuers struck an 8 Reales, so the
-     * value resolves ONLY when scoped to one of them: with Mexico it is the
-     * Mexican row, and with anything else it is null. The parser reads
-     * 'Mexico' out of this security name, so the link is proof that the
-     * real country reached the resolver. */
+    /* Six issuers struck an 8 Reales, so this links only if the parsed country
+         * ('Mexico') reaches the resolver, catching a hard-coded 'United States'. */
     const coin = importSecurity('1754 Mexico 8 Reales - PCGS VF30');
     expect(coin.country).toBe('Mexico');
     expect(coin.denomination).toBe('8 Reales');
@@ -111,10 +84,7 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('does not file a Canadian dollar under the United States', () => {
-    /* The same defect seen from the other side, and the more expensive one.
-     * Both countries seed a '$1', so a hard-coded country does not fail to
-     * link here -- it links to the WRONG issuer, silently, and the coin
-     * reads as a US dollar for ever after. */
+    /* Both countries seed a '$1', so a hard-coded country would link to the wrong issuer. */
     const coin = importSecurity('1935 Canada Dollar - PCGS MS64');
     expect(coin.country).toBe('Canada');
     expect(coin.denominationId).toBe(seedDenomination('Canada', '$1')!.denominationId);
@@ -123,9 +93,7 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('imports an ambiguous value with its text and no link', () => {
-    // Mexican pieces end up filed under the United States when the security
-    // name names no country, and six issuers struck an 8 Reales. The honest
-    // answer is no link, and the coin still imports.
+    // No country in the name defaults to the US; with six 8 Reales issuers, no link, but it still imports.
     const coin = importSecurity('1754 Mex. 8 Real');
     expect(coin.denomination).toBe('8 Reales');
     expect(coin.denominationId).toBeNull();
@@ -138,9 +106,7 @@ describe('QIF import links the denomination it parsed', () => {
   });
 
   it('links nothing when the parser read no denomination, and does not invent one', () => {
-    // '1909 Lincoln Cent Roll' style names reach the import with a year and
-    // a coin type and no denomination. Nothing recorded means nothing to
-    // resolve -- and nothing to report either.
+    // Names like '1909 Lincoln Cent Roll' have no denomination, so nothing to resolve or report.
     const { modal } = createModal();
     let emitted: CoinRecord[] = [];
     (modal['imported'] as { subscribe: (fn: (c: CoinRecord[]) => void) => void })

@@ -1,27 +1,7 @@
 /**
- * log-rotation.spec.ts — the rotation POLICY, tested without a logger.
- *
- * WHY THIS IS A SEPARATE FILE FROM logger.spec.ts
- * Every interesting decision in rotation is arithmetic on file NAMES —
- * "which day is this line for", "which file do I append to now that the
- * current one is full", "which of these may I delete". None of that needs a
- * filesystem, and testing it through the logger would mean writing megabytes
- * to disk to prove a comparison operator. So the policy is pure functions
- * here, and logger.spec.ts tests only that the logger actually obeys them.
- *
- * THE BUG THIS WHOLE MODULE PREVENTS
- * A single unbounded app.log reaches several megabytes and tens of thousands
- * of lines in ordinary use. That is two separate failures:
- *
- *   support  — nobody can attach a 200 MB log to a GitHub issue, so the one
- *              artefact that would explain their bug is the one artefact
- *              they cannot send.
- *   privacy  — every line carries absolute paths, and therefore the Windows
- *              username and the machine name. An unbounded file accumulates
- *              those forever, with no point at which they age out.
- *
- * Retention is the privacy control. Pruning is not housekeeping here, it is
- * the feature.
+ * The log rotation policy as pure functions on file names (which day, which
+ * file to append to, which may be deleted). logger.spec.ts checks the logger
+ * obeys it.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -59,11 +39,7 @@ describe('log file naming', () => {
     expect(parseLogFileName('app-2026-11-08.3.log')).toEqual({ dateKey: '2026-11-08', seq: 3 });
   });
 
-  /**
-   * The pruner deletes files. parseLogFileName is the ONLY thing standing
-   * between it and somebody's unrelated file that happened to be sitting in
-   * the log directory, so it has to be strict rather than forgiving.
-   */
+  /** The pruner deletes what this accepts, so it must be strict. */
   it('refuses to recognise anything that is not one of our own log files', () => {
     expect(parseLogFileName('app.log')).toBeNull();
     expect(parseLogFileName('app-2026-11-08.txt')).toBeNull();
@@ -76,9 +52,7 @@ describe('log file naming', () => {
   });
 
   it('derives the date key in UTC, matching the UTC timestamps inside the lines', () => {
-    // 2026-11-09T01:30Z is still 2026-11-08 in US local time. The lines in the
-    // file are stamped with toISOString(), i.e. UTC, so the file name has to
-    // agree with them or a log opened on its own reads as the wrong day.
+    // File names use UTC, matching the line timestamps.
     expect(formatLogDateKey(new Date('2026-11-09T01:30:00.000Z'))).toBe('2026-11-09');
     expect(formatLogDateKey(new Date('2026-01-02T00:00:00.000Z'))).toBe('2026-01-02');
   });
@@ -109,12 +83,7 @@ describe('selectExpiredLogs', () => {
     expect(expired).toContain('app-2026-09-01.log');
   });
 
-  /**
-   * "~14 days retained" is stated as a count of files-worth-of-days, so the
-   * 14th day back is still one of the fourteen. Off-by-one here is invisible
-   * in normal use and only shows up as a log somebody expected to still be
-   * there, so it is pinned explicitly.
-   */
+  /** With a 14-day window, the 14th day back is still kept. */
   it('treats the oldest day in the window as retained, not expired', () => {
     const expired = selectExpiredLogs(names, '2026-11-08', 14);
     expect(expired).not.toContain('app-2026-10-25.log');
@@ -141,8 +110,7 @@ describe('selectExpiredLogs', () => {
   });
 
   it('a future-dated file is never deleted', () => {
-    // Clock skew, or the user changing their system date. Deleting a log we
-    // cannot explain is worse than keeping it.
+    // Clock skew or a changed system date: keep rather than delete.
     expect(selectExpiredLogs(['app-2027-01-01.log'], '2026-11-08', 14)).toEqual([]);
   });
 });
@@ -152,10 +120,6 @@ describe('the shipped defaults', () => {
     expect(DEFAULT_RETENTION_DAYS).toBe(14);
   });
 
-  /**
-   * The cap exists so one runaway loop cannot produce a file too big to send.
-   * 5 MB is comfortably attachable and already larger than a normal day.
-   */
   it('caps a single file at 5 MB', () => {
     expect(DEFAULT_MAX_FILE_BYTES).toBe(5 * 1024 * 1024);
   });
@@ -235,12 +199,7 @@ describe('resolveActiveLogFile / pruneLogDirectory / adoptLegacyLog', () => {
     ]);
   });
 
-  /**
-   * If rotation simply stopped writing to an existing app.log, that file
-   * would sit there forever — outside retention, still full of the user's
-   * name and photo paths. Adoption renames it into the scheme so the
-   * ordinary 14-day rule finally applies to it.
-   */
+  /** A legacy app.log is renamed into the scheme so retention applies to it. */
   it('adopts a pre-rotation app.log into the dated scheme', () => {
     const legacy = path.join(dir, 'app.log');
     fs.writeFileSync(legacy, 'old lines');

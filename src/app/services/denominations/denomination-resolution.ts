@@ -1,68 +1,26 @@
  /*
- * denomination-resolution.ts — free text in, a DenominationId out (or null)
- *
- * WHAT THIS IS FOR
- *
- * Every denomination in this database arrived as a string: typed into the old
- * flat dropdown, written by the QIF importer, pasted into a CSV, or read off
- * a spreadsheet column. Migration 011 gives coins a `DenominationId`; this is
- * the one piece of logic that decides what that id should be for a given
- * string, and it is deliberately pure so it can be used by the migration's
- * review tooling, by the importers (design §6) and by the editor without any
- * of them re-deriving the rules.
- *
- * Background on why a coin carries two denomination fields, and why null is
- * a result rather than a failure, is in
- * docs/rationale/image-and-denominations.md.
- *
- * THE FOUR RULES, AND THE BUG EACH ONE PREVENTS
- *
- * 1. SPELLINGS FOLD THROUGH THE EXISTING ALIAS TABLE.
- *    `denominationKey` in components/coin-editor-form/denomination-aliases.ts
- *    already folds '3CS', 'Three Cent Silver' and 'Trime' onto one key, and
- *    already knows that the QIF importer writes '5s' where the lookup says
- *    '5/- (Crown)'. A second alias table here would be a second vocabulary to
- *    keep in step, and the two would diverge the first time either was
- *    edited — producing an editor and a migration that disagree about what
- *    the same coin is. It is reused, not copied, and it is NOT extended here:
- *    growing that table changes the editor's dropdown, which is a different
- *    piece of work with its own tests.
- *
- * 2. THE COIN'S COUNTRY IS A PREFERENCE, NOT A FILTER.
- *    The bug that prompted the whole design: the QIF parser never set a
- *    country, so Mexican 8-Reales coins are all stored as 'United States'.
- *    Scoping the search to the coin's country would resolve NOTHING for
- *    precisely the case this work exists to fix. So the country
- *    only breaks ties; when it matches nothing, the search widens to every
- *    issuer.
- *
- * 3. AMBIGUITY ANSWERS NULL.
- *    Great Britain and Australia both struck a Crown. A coin reading 'Crown'
- *    with a country that picks neither has no right answer, and inventing one
- *    files the coin under a country the owner never chose — invisibly, and
- *    for good. `Other (Crown)` is honest; the wrong issuer is not.
- *
- * 4. NOTHING MATCHED IS A RESULT, NOT A FAILURE.
- *    `outcome` distinguishes "nothing was recorded" from "something was
- *    recorded and no row names it", because migration 014's review report
- *    must list the second and must not drown the reader in the first.
- *
- * ON COMPARING COUNTRIES
- *
- * `Coins.Country` holds 'United States'; `Denominations.Country` holds 'US';
- * `Issuers` carries both a Name and an IsoCode. Rather than invent a third
- * vocabulary, this uses `isSameCountry` from services/coin-countries.ts,
- * which already resolves 'GB' and 'Great Britain' to one another and which
- * falls back to a plain text comparison for anything it has never heard of —
- * which is what makes 'Roman Empire' match 'Roman Empire' even though no
- * country list contains it.
- *
- * Note the asymmetry with migration 014, which is deliberate and documented
- * there: SQL cannot call this function, so the migration compares the coin's
- * country against the issuer's Name and IsoCode only. That is STRICTLY
- * NARROWER, so the migration can leave an id null that this function would
- * have set, and can never set one this function would not. Null is the
- * recoverable direction.
+  * Free text in, a DenominationId (or null) out. The single place the matching
+  * rules live, shared by the editor, the importers (design §6) and migration
+  * 014's review tooling. Pure. Background: docs/rationale/image-and-denominations.md.
+  *
+  * Rules:
+  * 1. Spellings fold through the existing alias table (`denominationKey` in
+  *    components/coin-editor-form/denomination-aliases.ts): '3CS', 'Three Cent
+  *    Silver' and 'Trime' share a key; '5s' matches '5/- (Crown)'. Reuse it; don't
+  *    add a second table (extending it changes the editor dropdown too).
+  * 2. The coin's country is a preference, not a filter. QIF-imported coins are
+  *    all 'United States' (including Mexican 8 Reales), so when the country
+  *    matches no candidate the search widens to every issuer.
+  * 3. Ambiguity answers null. 'Crown' with a country that picks neither GB nor
+  *    Australia stays unlinked and displays `Other (Crown)`.
+  * 4. No match is a result: `outcome` separates "nothing recorded" from
+  *    "recorded but no row names it" (the latter goes in the review report).
+  *
+  * Countries are compared with `isSameCountry` (coin-countries.ts), which maps
+  * 'GB' to 'Great Britain' and falls back to plain text ('Roman Empire').
+  * Migration 014 can only compare exactly against the issuer's Name and IsoCode,
+  * which is strictly narrower: it may leave an id null that this sets, never the
+  * reverse.
   */
 
 import { denominationKey } from '../../components/coin-editor-form/denomination-aliases';
@@ -71,32 +29,29 @@ import { isSameCountry } from '../coin-countries';
 /** One row of `Issuers`, reduced to what matching needs. */
 export interface ResolverIssuer {
   issuerId: number;
-  /** `Issuers.Name` — 'Mexico', 'Roman Empire', 'Great Britain'. */
+  /** `Issuers.Name`: 'Mexico', 'Roman Empire', 'Great Britain'. */
   name: string;
-  /** `Issuers.IsoCode` — 'MX'. Null for ancients and historical states. */
+  /** `Issuers.IsoCode`: 'MX'. Null for ancients and historical states. */
   isoCode?: string | null;
 }
 
 /** One row of `Denominations`, reduced to what matching needs. */
 export interface ResolverDenomination {
   denominationId: number;
-  /** Nullable: the column is nullable through the migration window (§4.2). */
+  /** Nullable during the migration window (§4.2). */
   issuerId: number | null;
   label: string;
-  /** Absent means active. Soft-deleted rows (§4.4) must not pull coins back. */
+  /** Absent means active. Soft-deleted rows (§4.4) are never matched. */
   isActive?: boolean;
 }
 
 /**
- * Why the resolution came out the way it did.
- *
- *   'in-country' — one row matched, under an issuer the coin's country names.
- *   'any-issuer' — the country matched no candidate, and widening the search
- *                  left exactly one. This is the 8-Reales case.
- *   'ambiguous'  — more than one row could be meant. Id is null by rule 3.
- *   'unknown'    — text was recorded and no row names it. Belongs in the
- *                  migration's review report.
- *   'empty'      — nothing was recorded. Does NOT belong in the report.
+ * Why the resolution came out as it did:
+ *   'in-country'  one row matched under an issuer the coin's country names
+ *   'any-issuer'  the country matched nothing; widening left exactly one (the 8 Reales case)
+ *   'ambiguous'   more than one row could be meant; id is null
+ *   'unknown'     text was recorded and no row names it (for the review report)
+ *   'empty'       nothing was recorded (not for the report)
  */
 export type DenominationMatchOutcome =
   | 'in-country'
@@ -110,9 +65,8 @@ export interface DenominationMatch {
   denominationId: number | null;
   outcome: DenominationMatchOutcome;
   /**
-   * Every active row whose label folds to the same key as the text, whatever
-   * the outcome. A report can say "ambiguous across 2 issuers" with this; a
-   * future maintenance screen can offer them as choices.
+   * Every active row whose label folds to the text's key, whatever the outcome
+   * (e.g. "ambiguous across 2 issuers").
    */
   candidateIds: readonly number[];
 }
@@ -123,15 +77,9 @@ function isActive(row: ResolverDenomination): boolean {
 }
 
 /**
- * Does the coin's country spell this issuer's Name or IsoCode EXACTLY?
- *
- * Both spellings are tried because both are in live use: `Coins.Country`
- * says 'United States' and the legacy `Denominations.Country` says 'US'.
- * An issuer with no IsoCode -- every ancient -- is matched on its Name
- * alone, which is the only thing it has.
- *
- * Case-insensitive, because SQL Server's default collation is and this has
- * to mean the same thing on both sides of the wire.
+ * Whether the coin's country spells this issuer's Name or IsoCode exactly
+ * ('United States' / 'US'). Issuers without an IsoCode (ancients) match on Name.
+ * Case-insensitive, matching SQL Server's default collation.
  */
 function issuerNamedExactly(issuer: ResolverIssuer, country: string): boolean {
   const folded = country.toLowerCase();
@@ -141,13 +89,9 @@ function issuerNamedExactly(issuer: ResolverIssuer, country: string): boolean {
 }
 
 /**
- * Does the coin's country MEAN this issuer, allowing for spelling?
- *
- * `isSameCountry` resolves 'GB' and 'Great Britain' to one another and
- * carries seventy-odd patterns built for the QIF importer, so 'U.S.A.' and
- * 'British' land somewhere sensible. It falls back to a plain text
- * comparison for anything it has never heard of, which is what lets 'Roman
- * Empire' match 'Roman Empire' even though no country list contains it.
+ * Whether the coin's country means this issuer, allowing for spelling, via
+ * `isSameCountry` ('GB' = 'Great Britain', 'U.S.A.', 'British'); unknown names
+ * compare as plain text.
  */
 function issuerMeansCountry(issuer: ResolverIssuer, country: string): boolean {
   if (isSameCountry(country, issuer.name)) return true;
@@ -156,13 +100,12 @@ function issuerMeansCountry(issuer: ResolverIssuer, country: string): boolean {
 }
 
 /**
- * Which denomination row, if any, is this stored string naming?
+ * Which denomination row, if any, a stored string names.
  *
- * @param recordedText `Coins.Denomination` exactly as stored
- * @param country      `Coins.Country` exactly as stored; may be absent
- * @param denominations every row of `Denominations` (inactive ones included;
- *                      they are filtered here so callers cannot forget to)
- * @param issuers       every row of `Issuers`
+ * @param recordedText `Coins.Denomination` as stored
+ * @param country      `Coins.Country` as stored; may be absent
+ * @param denominations every `Denominations` row (inactive ones are filtered here)
+ * @param issuers       every `Issuers` row
  */
 export function resolveDenomination(
   recordedText: string | null | undefined,
@@ -177,10 +120,8 @@ export function resolveDenomination(
 
   const key = denominationKey(text);
   if (!key) {
-    // denominationKey folds to '' only for text that was blank to begin
-    // with, which the guard above already caught. Kept so that a future
-    // change to the folding cannot turn "nothing recorded" into "no row
-    // names it" and flood the review report.
+    // Unreachable today (blank text is caught above); kept so a change to the
+    // folding can't turn "nothing recorded" into "unknown".
     return { denominationId: null, outcome: 'empty', candidateIds: [] };
   }
 
@@ -193,7 +134,7 @@ export function resolveDenomination(
     return { denominationId: null, outcome: 'unknown', candidateIds: [] };
   }
 
-  /* ---- rule 2: the country gets first refusal ------------------------- */
+  /* Rule 2: the country gets first refusal */
   const countryText = String(country ?? '').trim();
   if (countryText.length > 0) {
     const issuerById = new Map(issuers.map((issuer) => [issuer.issuerId, issuer]));
@@ -204,23 +145,10 @@ export function resolveDenomination(
         return issuer !== undefined && test(issuer);
       });
 
-    /* AN EXACT NAME OR CODE MATCH IS THE WHOLE ANSWER WHEN THERE IS ONE,
-     * and that is a deliberate ordering rather than an optimisation.
-     *
-     * Migration 014 has to answer this same question in T-SQL, which has no
-     * access to `isSameCountry` and compares the country against the
-     * issuer's Name and IsoCode and nothing else. Making the exact match
-     * take precedence here means the migration's narrower rule is a SPECIAL
-     * CASE of this one rather than a different rule: wherever the migration
-     * finds an exact match, this function is looking at the same set.
-     * Wherever it does not, this function may still find an issuer by
-     * pattern and the migration leaves the id NULL -- the recoverable
-     * direction. sql-denomination-resolution-parity.spec.ts sweeps the real
-     * seed and asserts the migration never sets an id this would not.
-     *
-     * It is also simply the better answer. An issuer the user named
-     * character for character outranks one a regular expression thinks it
-     * recognises. */
+    /* An exact Name/IsoCode match takes precedence. This makes migration 014's
+     * exact-only comparison a special case of this rule (see
+     * sql-denomination-resolution-parity.spec.ts), and a name typed exactly
+     * outranks a pattern match. */
     const exact = scope((issuer) => issuerNamedExactly(issuer, countryText));
     const inCountry = exact.length > 0 ? exact : scope((issuer) => issuerMeansCountry(issuer, countryText));
 
@@ -228,20 +156,17 @@ export function resolveDenomination(
       return { denominationId: inCountry[0].denominationId, outcome: 'in-country', candidateIds };
     }
     if (inCountry.length > 1) {
-      // Two rows under ONE issuer folding to one key. The Settings dialog can
-      // create this, and "take the first" would be a coin flip the user never
-      // sees. Rule 3 applies inside an issuer exactly as it does across them.
+      // Two rows under one issuer with the same key (possible via Settings): ambiguous.
       return { denominationId: null, outcome: 'ambiguous', candidateIds };
     }
-    // Zero. Fall through and widen — NOT return null. This is the 8-Reales
-    // case and it is the single most important line in the file.
+    // No in-country match: widen rather than return null (the 8 Reales case).
   }
 
-  /* ---- rule 2 continued: any issuer ----------------------------------- */
+  /* Rule 2 continued: any issuer */
   if (candidates.length === 1) {
     return { denominationId: candidates[0].denominationId, outcome: 'any-issuer', candidateIds };
   }
 
-  /* ---- rule 3 --------------------------------------------------------- */
+  /* Rule 3 */
   return { denominationId: null, outcome: 'ambiguous', candidateIds };
 }

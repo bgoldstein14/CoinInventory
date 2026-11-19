@@ -12,30 +12,8 @@
     </div>
     <div class="modal-body">
 
-      <!-- WHERE THE PHOTOS LIVE, and why this box has to exist at all.
-
-           A browser NEVER tells a web page where a file really is on disk —
-           that is a hard security rule, not an oversight. A directory picker
-           gives us only `File.webkitRelativePath`, e.g.
-           "Business Strikes/1865 3CN - Obverse.jpg": the path RELATIVE to the
-           folder that was picked. To record a path we can later re-open, we
-           need the missing front half, and the user is the only one who knows
-           it. So they confirm it once, here, and it is remembered afterwards.
-
-           The live example below is the important part: it is built from the
-           first file actually selected, so a wrong folder is obvious BEFORE
-           the import stamps hundreds of rows with an unreachable location.
-
-           WHAT IS PREFILLED, AND WHY IT IS ALMOST CERTAINLY WRONG. With
-           nothing remembered the box is seeded with the folder THIS APP is
-           installed in (GET /api/app-info). That is a starting point, not a
-           guess at where the photos are: its value is being a genuine path on
-           the machine that has to resolve these paths, with a drive letter
-           that machine really has, so it is easier to edit down than to type
-           from nothing. Whatever the user sets is saved and wins from then
-           on. The wording below has to stay honest about this — a prefilled
-           box that looks authoritative but points at the program folder is
-           worse than an empty one. -->
+      <!-- Photo folder. Browsers only expose paths relative to the picked folder,
+           so the user supplies the absolute base once; it is remembered afterwards. -->
       <label class="detail-field detail-field--full">
         <span>Folder these photos live in (on the machine hosting this app)</span>
         <input
@@ -47,12 +25,10 @@
         />
       </label>
       <p class="hint-text">
-        <strong>Change this to your photo folder.</strong> It starts out showing
-        where <em>this app</em> is installed &mdash; a real folder on the host, but
-        almost certainly <em>not</em> where your coin pictures are. It is only there
-        to give you the right drive and the right starting shape to edit, for
-        example <code>D:\Coin Pictures</code>. Whatever you set is remembered, so
-        you only do this once.
+        <strong>Change this to your photo folder</strong> if it isn't already. It
+        starts at your <em>Documents</em> folder; edit it to wherever your coin
+        pictures are, for example <code>D:\Coin Pictures</code>. Whatever you set is
+        remembered, so you only do this once.
       </p>
       <p class="hint-text">
         The folder is stored with each photo so you can click through to the
@@ -69,13 +45,7 @@
         </p>
       }
 
-      <!-- WHICH STORAGE MODE THIS IMPORT WILL USE.
-           Set in Settings, and consequential enough to state here rather
-           than leave to be discovered: in "referenced" the database is
-           handed the path and no picture, so the folder above stops being a
-           convenience and becomes the only copy of the photograph. Only
-           shown for the non-default mode — a banner on every ordinary
-           import is a banner nobody reads. -->
+      <!-- Storage mode notice, shown only for the non-default "referenced" mode. -->
       @if (session.storageSettings().mode === 'referenced') {
         <p class="hint-text hint-text--warn">
           <strong>Photos will be referenced, not copied.</strong> Only the location of
@@ -93,25 +63,12 @@
         </p>
       }
 
-      <!-- The base-folder guard's refusal.
-           This is the HARD stop that the preview above is not: the paths this
-           import would have written were checked against the disk and none of
-           them resolved, so nothing was imported. See base-folder-check.ts for
-           why an advisory preview turned out to be insufficient.
-           role="alert" because it appears in response to the user's click and
-           is the reason the thing they asked for did not happen. -->
+      <!-- Base-folder guard: none of the paths resolved on disk, so nothing was imported. -->
       @if (session.blockedReason(); as blocked) {
         <p class="import-blocked" role="alert">{{ blocked }}</p>
       }
 
-      <!-- PICK A FOLDER.
-           Both pickers are dead while a stage is running. A folder select can
-           take ten seconds or more before the review screen appears, and the
-           user's instinct when a screen looks frozen is to click the thing
-           they just clicked. Re-entering `handleDirectorySelection` mid-run
-           would interleave two matching passes into one review list. The
-           session refuses that anyway (see its `busy()` guard); disabling the
-           input is what makes the refusal visible rather than mysterious. -->
+      <!-- Folder pickers, disabled while a stage runs so a second selection cannot interleave. -->
       <div class="image-import-picker">
         <label class="file-picker" [class.file-picker--disabled]="session.busy()">
           <input
@@ -140,27 +97,7 @@
         saved &mdash; your original files are never modified.
       </p>
 
-      <!-- BUSY INDICATOR. Three parts, and each earns its place:
-
-             SPINNER   a CSS animation, so it keeps turning between the
-                       session's yields and tells the user the tab is alive
-                       even on the stages that have no countable progress.
-             LABEL     a real count wherever one exists ("Processing 42 of
-                       317…"), because the import is per-file and the user
-                       can see at a glance whether it is moving. The wording
-                       for every stage lives in
-                       services/image-import/import-progress.ts.
-             BAR       determinate for matching and attaching; for the two
-                       stages that cannot be counted (reading the folder,
-                       building the review list) the track animates instead,
-                       since a determinate bar stuck at 0% reads as hung.
-
-           `aria-live="polite"` rather than "assertive": the label changes
-           once per file and must not interrupt a screen reader mid-sentence.
-
-           Every one of these only ever appears because the session yields to
-           the event loop before each stage. Without those yields this markup
-           is written but never painted. -->
+      <!-- Progress. aria-live="polite" so per-file label updates do not interrupt a screen reader. -->
       @if (session.progress()) {
         <div class="import-progress" role="status" aria-live="polite" [attr.aria-busy]="session.busy()">
           <span class="import-progress-head">
@@ -179,9 +116,7 @@
         </div>
       }
 
-      <!-- SKIPPED-FILE REPORT.
-           Shown before anything else so the user can see that the 343 .dng
-           files were dropped on purpose, not lost. -->
+      <!-- Skipped-file report -->
       @if (session.filterResult(); as filter) {
         <div class="import-filter-report">
           <span class="filter-report-line">
@@ -198,7 +133,7 @@
         </div>
       }
 
-      <!-- SUMMARY (after the import ran) -->
+      <!-- Summary (after the import ran) -->
       @if (session.summary(); as done) {
         <div class="import-summary-panel">
           <h3>Import finished</h3>
@@ -229,14 +164,7 @@
 
       @if (session.imageReviews().length > 0 && !session.summary()) {
 
-        <!-- THE SHAPE OF THE WORK.
-             Shown BEFORE any of the three lists, and deliberately phrased as
-             a sentence rather than a row of numbers.
-
-             With 2,140 files this is the single most valuable thing on the
-             page: "47 need your attention, 1,890 attached, 203 skipped" tells
-             the user whether this is a two-minute job or an afternoon, before
-             they have scrolled anywhere. -->
+        <!-- Overall counts -->
         @if (session.tierSummary(); as tiers) {
           <div class="tier-summary" role="status">
             <p class="tier-summary-line">
@@ -257,12 +185,6 @@
                 in your inventory. All of them are listed at the bottom with the
                 reason &mdash; nothing is thrown away quietly.
               }
-              <!-- A photo pulled back out of the skipped list with "Attach anyway"
-                   has already been moved from `skipped` into `willAttach` by
-                   tierSummary(). Saying so out loud matters: this sentence is the
-                   only place that reports the shape of the run, and a rescued photo
-                   still counted as skipped would leave the Save button looking
-                   wrong. -->
               @if (tiers.rescued > 0) {
                 <strong>{{ tiers.rescued | number }}</strong> of the automatically
                 skipped {{ tiers.rescued === 1 ? 'photo has' : 'photos have' }} been
@@ -270,10 +192,6 @@
                 {{ tiers.rescued === 1 ? 'is' : 'are' }} counted above in
                 &ldquo;will be attached&rdquo;.
               }
-              <!-- Why the "will be attached" number can be lower than the
-                   number of ticked photos. Without this sentence the gap
-                   between a ticked review list and a smaller Save button
-                   count reads as a bug in one of them. -->
               @if (tiers.heldBack > 0) {
                 <strong>{{ tiers.heldBack | number }}</strong> ticked
                 {{ tiers.heldBack === 1 ? 'photo is' : 'photos are' }} not
@@ -284,22 +202,7 @@
           </div>
         }
 
-        <!-- COINS THAT ALREADY HAVE PHOTOS. Adding a few new files to a
-             folder that was imported before must not mean re-importing
-             everything in it.
-
-             Shown ONLY when at least one matched coin really does have photos
-             (see existingPhotoChoiceVisible). Asking what to do about existing
-             photos when there are none is a question with no meaning, and a
-             screen that asks those trains people to stop reading the ones that
-             do have meaning.
-
-             Placed here, above the review lists, because it is a decision
-             about the whole run — the user should make it before scrolling
-             into the per-coin detail, and every count below reflects it.
-
-             Every number in it is live and exact: see existingPhotoCounts()
-             and the header of existing-photo-mode.ts. -->
+        <!-- Existing photos choice, shown only when a matched coin already has photos. -->
         @if (session.existingPhotoChoiceVisible()) {
           @if (session.existingPhotoCounts(); as photos) {
             <fieldset class="existing-photos">
@@ -309,8 +212,6 @@
                 What should happen to them?
               </legend>
 
-              <!-- THE DEFAULT, and the only option that can neither delete nor
-                   duplicate. See DEFAULT_EXISTING_PHOTO_MODE. -->
               <label class="existing-photos-option">
                 <input
                   type="radio"
@@ -328,12 +229,7 @@
                 </span>
               </label>
 
-              <!-- THE DESTRUCTIVE ONE. The photo count is rendered large and
-                   in the danger colour because it is the only thing standing
-                   between the user and deleting photos they may have no other
-                   copy of, and there is a confirmation carrying the same
-                   number before anything is written. See
-                   replaceConfirmationMessage(). -->
+              <!-- Destructive option; a confirmation with the same count runs before saving. -->
               <label class="existing-photos-option existing-photos-destructive">
                 <input
                   type="radio"
@@ -368,9 +264,6 @@
                 </span>
               </label>
 
-              <!-- Only while the destructive answer is selected. role="alert"
-                   because it appears in response to the user's click and
-                   describes something irreversible. -->
               @if (session.existingPhotoMode() === 'replace') {
                 <p class="existing-photos-warning" role="alert">
                   <strong>{{ photos.existingPhotos | number }}</strong> existing
@@ -384,9 +277,6 @@
                 </p>
               }
 
-              <!-- Said out loud under "Keep both" because it is the whole
-                   reason that option is safe to pick on a folder that has
-                   been imported before. -->
               @if (session.existingPhotoMode() === 'add') {
                 <p class="existing-photos-note">
                   Photos already attached to a coin are recognised by the
@@ -398,7 +288,7 @@
           }
         }
 
-        <!-- 1. MATCHED COINS, GROUPED -->
+        <!-- 1. Matched coins, grouped -->
         @if (session.coinGroups().length > 0) {
           <div class="image-match-section">
             <h3>Matched coins</h3>
@@ -437,19 +327,7 @@
           </div>
         }
 
-        <!-- 2. NEAR MATCHES: ONE YES/NO EACH.
-
-             Every row here agrees with its coin on all four identifying
-             attributes -- year, coin type, denomination and grade -- so it IS
-             that coin; the matcher would not attach it only because something
-             else is off (a mint mark that disagrees, a variety, a cert number,
-             or two coins fitting equally well). That is a question with a
-             yes/no answer, and the whole section is built to let the user give
-             that answer and nothing more.
-
-             The unit is a COIN, not a file, because a coin here routinely has
-             obverse, reverse, label and a retake or two -- five files, one
-             question. See app-near-match-review. -->
+        <!-- 2. Near matches: one yes/no per coin -->
         @if (session.nearMatchGroups().length > 0) {
           <div class="image-match-section">
             <h3>
@@ -468,7 +346,6 @@
               is wrong.
             </p>
             <div class="image-match-list">
-              <!-- Paged: see PAGE_SIZE in the component for why. -->
               @for (group of visibleNearGroups(); track group.coinId) {
                 <app-near-match-review
                   [group]="group"
@@ -494,41 +371,16 @@
           </div>
         }
 
-        <!-- 3. NOT IMPORTED: READ-ONLY.
-             Deliberately modelled on the "Not imported - too little detail"
-             panel in the CSV importer and the "Exceptions - not imported"
-             table in the QIF importer, down to the columns: what the file was
-             called, what we managed to read out of it, and why it was left out.
-
-             THIS LIST IS STILL A REPORT, NOT A QUEUE. It is skipped already, and
-             the user is meant to be able to scroll past the whole thing and
-             press Save. Nothing in it prompts, expands or blocks.
-
-             THE ONE EXCEPTION, AND WHY IT IS OPT-IN.
-             The four-attribute near-match bar (year + type + denomination +
-             grade) stays strict and is NOT relaxed. But a census over the real
-             filenames showed what that costs: of 32 skipped files, 19 are
-             genuine single-coin photos and
-             only 2 of those are actually WRONG matches -- the other 17 failed
-             because something was ABSENT rather than contradictory. The starkest
-             is "1881 Morgan Dollar NGC 2599001.jpg", which the matcher scores at
-             97% and which the bar refuses only because the filename states no
-             grade. With no way back in, the right coin sits at the top of a
-             ranked list nobody can see.
-
-             So each row carries ONE unobtrusive action, "Attach anyway", and it
-             is opt-in in the strict sense: nothing is revealed, asked or changed
-             until that row's link is clicked. A row nobody touches stays skipped
-             and contributes nothing to the attach run. Once a coin is chosen the
-             row reads as a decision with an Undo, exactly like a resolved tier-2
-             row.
-
-             And nothing is DROPPED. Every single file is listed with its reason,
-             because "where did my 203 photos go?" is exactly the question a
-             silent importer leaves behind. -->
+        <!-- 3. Not imported: a read-only report. "Attach anyway" is an opt-in manual
+             override per row; nothing changes until it is clicked. -->
         @if (session.notImported().length > 0) {
           <div class="image-match-section">
-            <h3>Not imported &mdash; no apparent match ({{ session.notImported().length | number }})</h3>
+            <h3>
+              Not imported &mdash; no apparent match ({{ session.notImported().length | number }})
+              @if (session.notImportedSets().length !== session.notImported().length) {
+                &mdash; {{ session.notImportedSets().length | number }} coins/files
+              }
+            </h3>
             <p class="section-hint">
               These were <strong>skipped automatically</strong>. Either the file
               does not show a single coin (group shots like
@@ -540,8 +392,10 @@
               whole list and press Save; it asks you nothing.
             </p>
             <p class="section-hint">
-              If one of them <em>is</em> a coin you can place, use
-              <strong>Attach anyway</strong> on that row. It stays out of your way
+              Photos of the same coin (obverse, reverse, label, numbered extras)
+              share one row. If one of them <em>is</em> a coin you can place, use
+              <strong>Attach anyway</strong> on that row &mdash; it attaches every
+              photo listed on it. It stays out of your way
               until you click it, and then shows the closest coins the matcher
               found (with their scores) plus a search box for anything else. The
               matching rule itself is unchanged &mdash; this is a manual override
@@ -555,17 +409,27 @@
                     <th>File</th>
                     <th>What we read from the name</th>
                     <th>Why it was skipped</th>
-                    <!-- Last, narrow and unemphasised, so the table still reads as
-                         three columns of report with an afterthought on the end,
-                         rather than as a list of things to do. -->
                     <th class="skipped-action-head">&nbsp;</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <!-- Paged, like the tier above: there can be hundreds. -->
-                  @for (row of visibleNotImported(); track row.fileName) {
-                    <tr [class.skipped-row--rescued]="!!rescuedLabels()[row.fileName]">
-                      <td><code>{{ row.fileName }}</code></td>
+                  <!-- One row per photo set (all shots of one coin); see services/image-import/photo-sets.ts. -->
+                  @for (set of visibleNotImported(); track set.key) {
+                    @let row = set.rows[0];
+                    <tr [class.skipped-row--rescued]="!!setRescue()[row.fileName]">
+                      <td>
+                        @if (set.rows.length > 1) {
+                          <span class="photo-set-name">{{ set.descriptor }}</span>
+                          <span class="photo-set-count">{{ set.rows.length | number }} photos</span>
+                          <span class="photo-set-shots">
+                            @for (shot of shotChips()[row.fileName]; track shot.fileName) {
+                              <span class="photo-set-shot" [title]="shot.fileName">{{ shot.label }}</span>
+                            }
+                          </span>
+                        } @else {
+                          <code>{{ row.fileName }}</code>
+                        }
+                      </td>
                       <td>
                         @if (skippedChips()[row.fileName]; as chips) {
                           @if (chips.length > 0) {
@@ -581,18 +445,19 @@
                       </td>
                       <td class="skipped-reason">{{ row.result.skipReason }}</td>
 
-                      <!-- THE ESCAPE HATCH, closed state: one quiet link, styled as
-                           text rather than as a button, so a screenful of these still
-                           looks like a report and not like a queue of work. -->
                       <td class="skipped-action">
-                        @if (rescuedLabels()[row.fileName]; as coinLabel) {
-                          <!-- Resolved. Reads exactly like a settled tier-2 row: the
-                               decision in words, and a way to take it back. -->
-                          <span class="skipped-badge">Will attach to {{ coinLabel }}</span>
+                        @if (setRescue()[row.fileName]; as rescue) {
+                          <span class="skipped-badge">
+                            Will attach
+                            @if (set.rows.length > 1) {
+                              {{ rescue.count === set.rows.length ? 'all ' + set.rows.length : rescue.count + ' of ' + set.rows.length }}
+                            }
+                            to {{ rescue.label }}
+                          </span>
                           <button
                             type="button"
                             class="rescue-link"
-                            (click)="session.resetDecision(row.fileName)"
+                            (click)="session.resetPhotoSet(row.fileName)"
                           >Undo</button>
                         } @else if (session.isRescueOpen(row.fileName)) {
                           <button
@@ -601,20 +466,7 @@
                             (click)="session.closeRescue(row.fileName)"
                           >Cancel</button>
                         } @else if (!session.canRescue(row.fileName)) {
-                          <!-- THE ONE ROW WITH NO ESCAPE HATCH.
-
-                               A counterfeit ("FAKE - 1860 3CS - VF - Obverse.jpg")
-                               or a shot of several coins at once ("20¢ Collage.jpg").
-                               The policy for both: never automatically attach, and
-                               never OFFER as attachable in the automated import. So
-                               there is no "Attach anyway" link on these rows.
-
-                               The ROW is still here, with its reason beside it,
-                               because a photo that simply vanished leaves the user
-                               asking where it went. The file is not off limits to
-                               anything - a manual attach from the coin's own gallery
-                               is always allowed, and this note names that route so
-                               the row reads as a decision rather than a dead end. -->
+                          <!-- Rows that cannot be rescued (e.g. multi-coin shots); manual attach is still possible. -->
                           <span class="skipped-manual-only">
                             Attach by hand from the coin's gallery
                           </span>
@@ -622,31 +474,22 @@
                           <button
                             type="button"
                             class="rescue-link"
-                            [attr.aria-label]="'Attach ' + row.fileName + ' anyway'"
+                            [attr.aria-label]="set.rows.length > 1
+                              ? 'Attach all ' + set.rows.length + ' photos of ' + set.descriptor + ' anyway'
+                              : 'Attach ' + row.fileName + ' anyway'"
                             (click)="session.openRescue(row.fileName)"
                           >Attach anyway&hellip;</button>
                         }
                       </td>
                     </tr>
 
-                    <!-- ...and the open state, on a row of its own so the report
-                         above keeps its column alignment.
-
-                         This exists in the DOM ONLY while the user has this one row
-                         open. That is what "opt-in" buys: tier 3 can run to several
-                         hundred rows, and a candidate list plus a live search box on
-                         every one of them would be both slow and an implicit demand
-                         for attention, which is the one thing this tier must not
-                         make. -->
-                    @if (session.isRescueOpen(row.fileName) && !rescuedLabels()[row.fileName]) {
+                    <!-- Rescue panel, rendered only for the open row to keep long lists cheap. -->
+                    @if (session.isRescueOpen(row.fileName) && !setRescue()[row.fileName]) {
                       <tr class="skipped-rescue-row">
                         <td colspan="4">
                           <div class="rescue-panel">
 
-                            <!-- SOURCE 1: the matcher's own ranked candidates. These are
-                                 usually populated even here, and for a row that failed the
-                                 bar only on a MISSING detail the right coin is normally
-                                 the first entry - the 97% Morgan case. -->
+                            <!-- Matcher's ranked candidates -->
                             @if (row.result.candidates.length > 0) {
                               <p class="rescue-panel-label">
                                 Closest coins the matcher found for this name &mdash; it would
@@ -670,10 +513,7 @@
                               </ul>
                             }
 
-                            <!-- SOURCE 2: free text, for the rows with no candidates at all
-                                 (an ancient with no year, a camera-default name). This is
-                                 CoinLookup - the same per-row search box the importer has
-                                 always had, setTerm / results - and not a second one. -->
+                            <!-- Free-text coin search -->
                             <label class="rescue-search">
                               <span>
                                 @if (row.result.candidates.length > 0) {
@@ -720,15 +560,15 @@
                 </tbody>
               </table>
             </div>
-            @if (visibleNotImported().length < session.notImported().length) {
+            @if (visibleNotImported().length < session.notImportedSets().length) {
               <button type="button" class="secondary" (click)="showMoreSkipped()">
-                Show more ({{ session.notImported().length - visibleNotImported().length | number }} left)
+                Show more ({{ session.notImportedSets().length - visibleNotImported().length | number }} left)
               </button>
             }
           </div>
         }
 
-        <!-- CONFIRM -->
+        <!-- Confirm -->
         <div class="modal-actions">
           <button type="button" class="secondary" (click)="close()" [disabled]="session.busy()">Cancel</button>
           <button
@@ -736,10 +576,7 @@
             (click)="session.applyConfirmedMatches()"
             [disabled]="session.attachCount() === 0 || session.busy()"
           >
-            <!-- The label carries the live count while saving. The progress
-                 bar at the top of this dialog is several screens away once
-                 the review list is long, so the button has to report for
-                 itself. See saveButtonLabel() in import-progress.ts. -->
+            <!-- The button shows the live count because the progress bar may be scrolled out of view. -->
             {{ session.saveButtonLabel() }}
           </button>
         </div>

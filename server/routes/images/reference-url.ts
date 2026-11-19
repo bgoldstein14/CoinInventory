@@ -1,45 +1,28 @@
 /**
- * routes/images/reference-url.ts — the string that means "this photograph is
- * a REFERENCE to a file on disk, not a picture in the database".
+ * The URL that marks a photo as referenced (a file on disk) rather than stored.
  *
- * THE TWO STORAGE MODES (Settings > Photographs; design §4.4 and §4.9)
+ *   stored      ImageData holds a downscaled base64 copy; SourcePath records
+ *               where the original came from.
+ *   referenced  ImageData is NULL; the file at SourcePath is the only copy.
  *
- *   stored      CoinImages.ImageData holds a downscaled base64 copy, and
- *               SourcePath records where the original came from. The picture
- *               survives the original being moved or deleted.
- *   referenced  ImageData is NULL. SourcePath is all there is, and the file
- *               on disk is the only copy of the photograph.
+ * The client displays images from an array of strings bound to <img src>, so a
+ * referenced row is sent out as this server's file-streaming URL (GET
+ * /api/coins/:id/images) and recognised again on save (image-payload.ts). The
+ * URL is never stored in ImageData.
  *
- * A referenced row still has to be DISPLAYABLE, and the client's whole image
- * pipeline is an array of strings bound to `<img [src]>`. So on the way out
- * (GET /api/coins/:id/images) a referenced row is rendered as the URL of this
- * server's own file-streaming route, and on the way in
- * (routes/coins/image-payload.ts) that URL is recognised and turned back into
- * "referenced, path only". The URL is a transport form and is NEVER stored:
- * if one ever appears in ImageData, the mode has leaked and the database is
- * carrying something it should not.
- *
- * ABSOLUTE, NOT RELATIVE, when we know the host. Under `ng serve` the page is
- * on :4200 while this API is on :3000, so a relative `/api/images/file?path=`
- * would be fetched from the dev server and 404. The origin is taken from the
- * request that asked, which is correct in both that case and the packaged
- * app, where page and API share an origin.
- *
- * The matching half is origin-INSENSITIVE on purpose: the client builds the
- * absolute form through ApiService.imageFileUrl, older payloads may carry the
- * relative form, and both must be understood as the same thing.
+ * Built absolute from the request's origin, since under `ng serve` the page
+ * (:4200) and API (:3000) differ. Matching accepts both absolute and relative
+ * forms.
  */
 
 /** The route that serves an original file, as it appears inside a reference. */
 export const IMAGE_REFERENCE_ROUTE = '/api/images/file?path=';
 
 /**
- * Build the reference for one original file.
+ * Builds the reference URL for one original file.
  *
- * @param sourcePath absolute path of the original on the host machine
- * @param origin     e.g. `http://localhost:3000`. Empty (the default) yields
- *                   the relative form, which is all that can be built when
- *                   the request carried no Host header.
+ * @param sourcePath absolute path of the original on the host
+ * @param origin     e.g. `http://localhost:3000`; empty gives the relative form
  */
 export function referenceUrlFor(sourcePath: string, origin = ''): string {
   return `${origin}${IMAGE_REFERENCE_ROUTE}${encodeURIComponent(sourcePath)}`;
@@ -51,12 +34,8 @@ export function isImageReferenceUrl(value: unknown): value is string {
 }
 
 /**
- * The absolute file path a reference points at, or null when it is not a
- * reference or carries no usable path.
- *
- * `decodeURIComponent` throws on a malformed `%` escape, so it is caught: a
- * mangled reference means "no path known", never a 500 in the middle of a
- * save.
+ * The file path a reference points at, or null if it isn't one or has no
+ * usable path (a malformed % escape is caught rather than failing the save).
  */
 export function sourcePathFromReferenceUrl(value: unknown): string | null {
   if (!isImageReferenceUrl(value)) return null;
@@ -73,12 +52,8 @@ export function sourcePathFromReferenceUrl(value: unknown): string | null {
 }
 
 /**
- * `http://host:port` for the request we are answering, or '' if the client
- * sent no Host header (which http/1.1 forbids, but a hand-rolled test client
- * can still do).
- *
- * Typed structurally rather than as an Express `Request` so this module stays
- * importable by a unit test that has no Express request to hand.
+ * `http://host:port` for the current request, or '' without a Host header.
+ * Typed structurally so unit tests don't need an Express request.
  */
 export function originFromRequest(req: {
   protocol?: string;

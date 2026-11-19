@@ -11,22 +11,14 @@ import { BatchImportSession } from '../../services/image-import/batch-import-ses
 import { ImageImportModal } from './image-import-modal';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-/**
- * There is no <canvas> in the Node test environment, so the session's encoder
- * seam is stubbed with something that returns a predictable data URL. The
- * resize maths itself is covered in image-downscaler.spec.ts.
- */
+/** Node has no <canvas>, so the encoder is stubbed with a predictable data URL. */
 const stubEncoder = (file: File) => Promise.resolve({
   dataUrl: `data:image/jpeg;base64,SHRUNK-${file.name}`,
   originalBytes: file.size,
   storedBytes: 250_000
 });
 
-/**
- * The modal keeps all of its state in a BatchImportSession. The session is
- * `protected` (it is only meant for the template), so the tests reach it
- * through a cast rather than making it public just for their benefit.
- */
+/** Reaches the protected session through a cast. */
 function sess(modal: ImageImportModal): BatchImportSession {
   return (modal as unknown as { session: BatchImportSession }).session;
 }
@@ -101,14 +93,11 @@ describe('ImageImportModal', () => {
     expect(rowFor(modal, 'mercury_dime_1945.jpg').selectedCoinId).toBe(merc.id);
     expect(rowFor(modal, 'mercury_dime_1945.jpg').decision).toBe('auto');
 
-    // A file with no apparent match is skipped by the importer itself rather
-    // than queued: with ~2,140 files, a question whose only honest answer is
-    // "yes, skip it" is hundreds of pointless clicks.
+    // A file with no apparent match is skipped rather than queued.
     const skipped = rowFor(modal, 'IMG_2024.jpg');
     expect(skipped.selectedCoinId).toBeNull();
     expect(skipped.decision).toBe('skipped');
     expect(skipped.selected).toBe(false);
-    // ...and it is reported, not dropped.
     expect(skipped.result.skipReason).toBeTruthy();
   });
 
@@ -238,22 +227,15 @@ describe('ImageImportModal', () => {
 
     await selectFiles(modal, ['mercury_dime_1945.jpg', 'IMG_2024.jpg', 'IMG_2025.jpg']);
 
-    // The confident one is attached; the two camera files have no apparent
-    // match, so they are skipped automatically rather than queued. This is
-    // the whole point of the three tiers: with ~2,140 files, a queue entry
-    // the user can only answer one way is not a question, it is a chore.
+    // The two camera files have no apparent match, so they are skipped, not queued.
     expect(sess(modal).outstandingCount()).toBe(0);
     expect(sess(modal).notImported()).toHaveLength(2);
   });
 
   /*
-   * TIER 2: the near-match queue.
-   *
-   * Two 1881 Morgan Dollars that differ only by mint mark, both PCGS MS63.
-   * The filenames agree with both on year, coin type, denomination and
-   * grade, so they are near matches; the mint mark the records disagree on
-   * is what stops the matcher attaching them unasked.
-   */
+     * Tier 2 fixture: two 1881 Morgan Dollars, both PCGS MS63, differing only by
+     * mint mark, so the filenames are near matches for both.
+     */
   function addAmbiguousMorgans(inv: InventoryService) {
     return {
       morganS: addCoin(inv, {
@@ -267,8 +249,6 @@ describe('ImageImportModal', () => {
     };
   }
 
-  /* The "- Obverse" name is verbatim from the share survey; the others follow
-   * the Obverse / Reverse / Label convention the survey shows everywhere. */
   const MORGAN_SIDES = [
     '1881 Morgan Dollar PCGS MS63 - Obverse.jpg',
     '1881 Morgan Dollar PCGS MS63 - Reverse.jpg',
@@ -306,7 +286,6 @@ describe('ImageImportModal', () => {
     // matched coin groups use.
     expect(groups[0].rows.map(r => r.photo.side)).toEqual(['obverse', 'reverse', 'label']);
 
-    // ...and one click settles all three.
     sess(modal).acceptNearMatchGroup(groups[0].coinId);
 
     expect(sess(modal).outstandingCount()).toBe(0);
@@ -414,7 +393,6 @@ describe('ImageImportModal', () => {
     expect(summary.skippedNotACoin).toBe(1);
     expect(summary.skippedNoMatch).toBe(1);
 
-    // Answering the question moves it from "needs attention" to "will attach".
     sess(modal).acceptNearMatch(MORGAN_SIDES[0]);
     expect(sess(modal).tierSummary().needsAttention).toBe(0);
     expect(sess(modal).tierSummary().willAttach).toBe(2);
@@ -449,8 +427,7 @@ describe('ImageImportModal', () => {
 
     sess(modal).skipCoinGroup(morgan.id);
 
-    // Unlike the "None" bulk button, Skip is a decision: the group leaves the
-    // screen rather than sitting there reading "0 of 2 selected".
+    // Skip removes the group, unlike the "None" bulk button.
     expect(sess(modal).coinGroups()).toHaveLength(0);
     expect(sess(modal).attachCount()).toBe(0);
     expect(sess(modal).imageReviews().every(r => r.decision === 'skipped')).toBe(true);
@@ -464,15 +441,10 @@ describe('ImageImportModal', () => {
 
     const row = rowFor(modal, 'Gold Coins.JPG');
     expect(row.decision).toBe('skipped');
-    /* Tier 3 carries exactly one control, "Attach anyway", and it is opt-in:
-     * nothing is revealed and nothing is decided until that row's link is
-     * clicked. See tier3-rescue.spec.ts for the escape hatch itself; what
-     * matters here is that an untouched row behaves exactly as it always
-     * did. */
+    // An untouched tier-3 row behaves as before; see tier3-rescue.spec.ts for "Attach anyway".
     expect(sess(modal).rescueOpen().size).toBe(0);
     expect(sess(modal).isRescueOpen('Gold Coins.JPG')).toBe(false);
-    // "Undo" on a row the IMPORTER skipped must put it straight back to
-    // skipped - it has no apparent match, so there is nothing to offer.
+    // Undo on an importer-skipped row puts it straight back to skipped.
     sess(modal).resetDecision('Gold Coins.JPG');
     expect(rowFor(modal, 'Gold Coins.JPG').decision).toBe('skipped');
     expect(rowFor(modal, 'Gold Coins.JPG').selectedCoinId).toBeNull();
@@ -520,7 +492,7 @@ describe('ImageImportModal', () => {
     expect(sess(modal).coins.nameById('nonexistent')).toBe('Unknown');
   });
 
-  /* BATCH IMPORT: filtering, selection, bulk controls, confirmation */
+  /* Batch import: filtering, selection, bulk controls, confirmation */
 
   it('filters out non-displayable files and counts them with a reason', async () => {
     const { modal, inv } = createModal();
@@ -536,7 +508,6 @@ describe('ImageImportModal', () => {
     ];
     await sess(modal).handleDirectorySelection({ target: { files, value: '' } } as unknown as Event);
 
-    // Only the JPEG made it into the review screen.
     expect(sess(modal).imageReviews().map(r => r.fileName))
       .toEqual(['mercury_dime_1945 - Obverse.jpg']);
 
@@ -681,18 +652,8 @@ describe('ImageImportModal', () => {
     const morgan = addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'S' });
     addCoin(inv, { coinType: 'Mercury', denomination: 'Dime', year: '1945' });
 
-    /* EACH COIN NEEDS A PHOTO OF THE COIN, not just of its slab label.
-     *
-     * A label shot may identify a coin only alongside a coin photo -- a
-     * photograph of the paperwork never names a coin by itself (see the
-     * LABEL gate in match-decider.ts). So a batch of nothing but label shots
-     * attaches nothing at all, and this test, which is about bulk rules
-     * being scoped to ONE coin, would be testing an empty list.
-     *
-     * Adding the obverse of each coin restores what the test is actually
-     * about, and incidentally exercises the ride-along: each label is placed
-     * by sibling-inference.ts because the obverse beside it shares the same
-     * identifying text. */
+    // Label shots only attach alongside a coin photo (match-decider.ts), so each
+        // coin also gets an obverse.
     await selectFiles(modal, [
       '1881-S Morgan Dollar - Obverse.jpg',
       '1881-S Morgan Dollar - Label.jpg',
@@ -765,8 +726,7 @@ describe('ImageImportModal', () => {
 
     await selectFiles(modal, ['1881-S Morgan Dollar - Obverse - Photo.jpg']);
 
-    // No object URLs exist until a group is opened - 1,700 of them would mean
-    // 1,700 image decodes.
+    // No object URLs exist until a group is opened.
     expect(sess(modal).thumbnailUrls()).toEqual({});
     expect(sess(modal).isCoinGroupExpanded(morgan.id)).toBe(false);
 
@@ -812,8 +772,7 @@ describe('ImageImportModal', () => {
     const { modal, inv } = createModal();
     addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'S' });
 
-    // A share-sized batch. This is the responsiveness guarantee: matching is
-    // filename-only, so it is fast and allocates nothing per file beyond a row.
+    // Matching is filename-only, so a large batch stays fast.
     const names = Array.from({ length: 1700 }, (_, i) => `IMG_${1000 + i}.jpg`);
     names.push('1881-S Morgan Dollar - Obverse.jpg');
 
@@ -825,10 +784,8 @@ describe('ImageImportModal', () => {
     );
 
     expect(sess(modal).imageReviews()).toHaveLength(1701);
-    // The one real coin photo matched; nothing was read off disk.
     expect(sess(modal).attachCount()).toBe(1);
     expect(readSpies.every(spy => spy.mock.calls.length === 0)).toBe(true);
-    // And no previews were generated for 1,700 files.
     expect(sess(modal).thumbnailUrls()).toEqual({});
   });
 });

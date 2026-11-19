@@ -1,16 +1,6 @@
 /**
- * Tests for choosing and remembering the photo base folder.
- *
- * Three things matter here:
- *
- *  - the PRIORITY ORDER, which is now simply: saved value -> ''. There used to
- *    be a rung between them (the app's own install folder, from the server);
- *    it was removed after causing a real data bug, and the block comment
- *    further down explains why in full.
- *  - that the value comes back next time at all (otherwise the user retypes a
- *    long path on every import) — and that a CLEARED value stays cleared.
- *  - that saving it does not clobber the other preferences sharing the same
- *    storage key — a bug that would silently reset the user's settings.
+ * Tests for remembering the photo base folder: saved value or '', a cleared
+ * value stays cleared, and saving doesn't clobber other preferences.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -24,8 +14,7 @@ describe('import base folder persistence', () => {
   let storage: StorageService;
 
   beforeEach(() => {
-    // A fresh in-memory IndexedDB per test, and a fresh StorageService so it
-    // does not hold a connection to the previous one.
+    // Fresh in-memory IndexedDB and StorageService per test.
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
     storage = new StorageService();
   });
@@ -33,16 +22,13 @@ describe('import base folder persistence', () => {
   it('persists the base folder and reloads it', async () => {
     await saveImportBaseFolder(storage, '\\\\nas\\Photos\\Coins');
 
-    // A second StorageService instance, to prove the value really went to
-    // storage rather than being held in a field somewhere.
+    // A second StorageService proves the value was persisted.
     await expect(loadImportBaseFolder(new StorageService()))
       .resolves.toBe('\\\\nas\\Photos\\Coins');
   });
 
   it('leaves the other app settings alone when saving', async () => {
-    // StorageKeys.AppSettings is ONE shared object. Writing a freshly built
-    // object rather than merging is how the user's "show transactions" choice
-    // would silently disappear the first time he ran an import.
+    // StorageKeys.AppSettings is one shared object; writes must merge.
     await storage.set<AppSettings>(StorageKeys.AppSettings, {
       showTransactionsInDetails: true
     });
@@ -60,37 +46,16 @@ describe('import base folder persistence', () => {
       imageImportBaseFolder: '   '
     });
 
-    // Whitespace would silently mean "record no paths at all", so it is treated
-    // as absent rather than honoured.
+    // Whitespace is treated as absent.
     await expect(loadImportBaseFolder(storage)).resolves.toBe('');
   });
 
-   /*
-   * THERE IS NO APP-FOLDER FALLBACK ANY MORE, AND THAT IS THE POINT
-   *
-   * The original requirement was "start out from the app folder and then
-   * memorize subsequent choices". It was removed after it caused a real data
-   * bug: an import stamped every row under the development directory,
-   * because the box was still holding that seed. A plausible-looking path
-   * that is never correct is worse than a blank one, because nobody checks
-   * it.
-   *
-   * The tests below pin the REPLACEMENT behaviour, including the sneaky
-   * second-order bug the old fallback caused.
-    */
+  // No fallback to the app folder (see import-base-folder.ts).
 
   it('starts empty when nothing has ever been saved', async () => {
     await expect(loadImportBaseFolder(storage)).resolves.toBe('');
   });
 
-  /**
-   * *** The regression test for the "it keeps coming back" complaint. ***
-   *
-   * An empty saved value used to be read as "nothing saved", which fell
-   * through to the app folder. So CLEARING THE BOX — exactly what a user does
-   * on noticing the path is wrong — brought the wrong path straight back on
-   * the next open. A cleared box must stay cleared.
-   */
   it('keeps a deliberately cleared folder cleared', async () => {
     await saveImportBaseFolder(storage, 'D:\\Coin Pictures');
     await expect(loadImportBaseFolder(storage)).resolves.toBe('D:\\Coin Pictures');
@@ -101,8 +66,6 @@ describe('import base folder persistence', () => {
   });
 
   it('starts empty when there is no storage at all', async () => {
-    // A session built without StorageService (which is how some unit tests
-    // construct it) simply cannot remember anything. Empty, not a guess.
     await expect(loadImportBaseFolder(undefined)).resolves.toBe('');
   });
 

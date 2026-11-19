@@ -1,49 +1,15 @@
 /*
- * routes/lookups/wikidata-denominations.ts — building and reading one
- * Wikidata query, with no network in sight.
+ * Builds the Wikidata query for an issuer's denominations and parses the
+ * response. Pure functions, so they can be tested without a network.
  *
- * WHY WIKIDATA AND NOT ONE OF THE NUMISMATIC DATASETS
+ * Wikidata is used because it is CC0 with a public SPARQL endpoint (Nomisma's
+ * terms aren't clearly redistributable, Numista blocks automated reads).
+ * Expect few or no results, especially for ancients, and some noise; results
+ * are only proposals the user confirms.
  *
- * The seed's own header records the survey: Nomisma is coin-TYPE data under
- * terms that are not plainly redistributable, Numista answers HTTP 403 to
- * automated reads, WorldCoinDatabase has no export. Wikidata is CC0, has a
- * public SPARQL endpoint, and is queried rather than scraped -- so what
- * comes back is a list of entities, not prose somebody has to parse.
- *
- * *** EXPECT TO FIND NOTHING, AND TREAT THAT AS NORMAL. ***
- * Measured against the live endpoint while this was written:
- *
- *     Japan     -> 9 candidates      Burma    -> 4
- *     Iceland   -> 1                 Parthia  -> 1
- *     Athens    -> 0                 (a nonsense string) -> 0
- *
- * Ancient coverage is thin and some of what does come back is not a
- * denomination at all ('Coin (reproduction)', 'leprosy colony money').
- * That is the whole reason nothing here writes to the database: the route
- * PROPOSES and the user confirms. A denomination is reference data that
- * coins link to by id, so a wrong row outlives the mistake that made it,
- * while an empty issuer costs one more typing session.
- *
- * WHY THE QUERY IS AS SMALL AS IT IS
- *
- * The obvious query -- match the typed name against every rdfs:label in
- * Wikidata, then walk wdt:P31/wdt:P279* to find anything that is a kind of
- * coin -- was written first and TIMED OUT at the endpoint (HTTP 504 after
- * 65 seconds) on names as ordinary as 'Burma'. Both halves were the
- * problem: an unbounded label scan, and an unbounded subclass walk.
- *
- * So the name is resolved by the endpoint's own entity search
- * (`wikibase:mwapi` / EntitySearch, the documented cheap way to do this) and
- * the classes are an explicit two-item VALUES list rather than a transitive
- * closure. The same six names then answer in 0.2 to 6 seconds.
- *
- * A consequence worth stating: EntitySearch does fuzzy matching, so a typo
- * usually returns nothing rather than a near-miss, and the user retries.
- * That is the agreed behaviour -- a typo is theirs to notice.
- *
- * Everything in this file is pure, so the query text and the parsing are
- * testable without a network, which is the half of this feature that can
- * actually be wrong in a quiet way.
+ * The query uses EntitySearch to resolve the name and a fixed two-class VALUES
+ * list, because a label scan plus a transitive subclass walk timed out (504
+ * after 65 s). EntitySearch is not fuzzy, so a typo usually returns nothing.
  */
 
 /** The public CC0 SPARQL endpoint. */
@@ -53,18 +19,12 @@ export const WIKIDATA_SPARQL_ENDPOINT = 'https://query.wikidata.org/sparql';
 export const LOOKUP_SOURCE_NAME = 'Wikidata';
 
 /**
- * A generic client name, with NO user, machine or install detail in it.
- *
- * Wikimedia asks automated clients to identify themselves. It does not ask
- * who is running them, and this application has no business telling an
- * outside service whose collection it holds.
+ * A generic client name with no user, machine or install detail. Wikimedia
+ * asks automated clients to identify themselves, not who runs them.
  */
 export const LOOKUP_USER_AGENT = 'CoinInventory/1.0 (offline coin collection manager)';
 
-/**
- * `Denominations.Label` is NVARCHAR(100). A longer label is not a
- * denomination name, it is an article title that wandered in.
- */
+/** Denominations.Label is NVARCHAR(100); anything longer isn't a denomination name. */
 export const MAX_PROPOSAL_LENGTH = 100;
 
 /** How many proposals a user is asked to read at once. */
@@ -76,12 +36,8 @@ export function sparqlLiteral(value: string): string {
 }
 
 /**
- * The query, for an issuer name the user typed.
- *
- * Q41207 is `coin` and Q8142 is `currency`; P17 is `country`. Items that
- * are an instance of either class and carry the matched entity as their
- * country are the two routes that actually return anything at a tolerable
- * cost. See the header for the larger query this replaced and why.
+ * The query for an issuer name. Q41207 is `coin`, Q8142 is `currency`, P17
+ * is `country`: items of either class whose country is the matched entity.
  */
 export function buildDenominationQuery(issuerName: string): string {
   const name = sparqlLiteral(issuerName.trim());
@@ -110,22 +66,12 @@ export function buildDenominationQueryUrl(issuerName: string): string {
   return `${WIKIDATA_SPARQL_ENDPOINT}?format=json&query=${query}`;
 }
 
-/**
- * An unlabelled Wikidata item.
- *
- * `SERVICE wikibase:label` falls back to the bare item id when there is no
- * English label, so 'Q4087051' comes back as if it were a denomination
- * name. It is not one, and it tells the user nothing they could judge.
- */
+/** An unlabelled item: the label service falls back to the bare id (e.g. 'Q4087051'). */
 const BARE_ITEM_ID = /^Q\d+$/;
 
 /**
- * Turn whatever the endpoint sent into a list a human can be asked about.
- *
- * Defensive to the point of paranoia about the shape, because the input is
- * a third party's JSON over a network: anything unexpected yields an empty
- * list, which lands on the same offline path as no network at all. There is
- * no shape of response that can make this throw.
+ * Turns the endpoint's JSON into a list of proposals. Any unexpected shape
+ * yields an empty list; it never throws.
  */
 export function parseDenominationResults(payload: unknown): string[] {
   const bindings = (payload as { results?: { bindings?: unknown } } | null)?.results?.bindings;
@@ -141,15 +87,9 @@ export function parseDenominationResults(payload: unknown): string[] {
 }
 
 /**
- * Trim, drop what cannot be a denomination, de-duplicate, sort, cap.
- *
- * SORTED, and therefore deterministic. The endpoint does not promise an
- * order, and a list that comes back shuffled between two runs is a list the
- * user cannot re-check. Case-insensitive, because 'Kyat' and 'kyat' are one
- * proposal and offering both invites the user to accept both -- which is
- * exactly the duplicate-label-under-one-issuer collision that makes every
- * coin carrying that text resolve as ambiguous, and ambiguous resolves to
- * NULL.
+ * Trim, drop non-denominations, de-duplicate (case-insensitively) and sort,
+ * then cap. Sorting makes results deterministic; case-insensitive dedup
+ * avoids offering 'Kyat' and 'kyat' as two denominations.
  */
 export function normaliseProposals(labels: readonly string[]): string[] {
   const bySpelling = new Map<string, string>();

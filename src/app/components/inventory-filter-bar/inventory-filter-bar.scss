@@ -76,10 +76,6 @@
 }
 
 // ---- Status tick boxes ----
-//
-// A group of checkboxes where the other advanced filters are single
-// controls, so it opts out of `.filter-group label`'s grid layout rather
-// than inheriting a shape meant for a caption above an input.
 
 .status-filter {
   display: grid;
@@ -138,8 +134,6 @@
   }
 }
 
-// The empty-grid explanation. Deliberately plain rather than an alert: the
-// user did this on purpose one click ago and one more click undoes it.
 .status-filter__empty {
   margin: 0;
   font-weight: 500;
@@ -147,7 +141,6 @@
 }
 
 // ---- Print ----
-// Filtering controls are pointless on paper.
 
 @media print {
   .toolbar, .advanced-filters { display: none !important; }

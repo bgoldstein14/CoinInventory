@@ -1,34 +1,8 @@
 /*
- * catalog-reference.spec.ts — the catalogue reference, tested as pure data.
- * These tests run under Node with no jsdom, which is why every rule they
- * check lives in a pure module rather than in the editor component. The
- * component is a view over these functions and has no logic of its own.
- *
- * WHAT IS ACTUALLY AT RISK HERE, test by test:
- *
- *   - THE SEED DRIFTING FROM THE MATCHER'S VOCABULARY. The catalogue list is
- *     not a wish list: it is the set of catalogues this collection already
- *     uses, and the matcher reads the same set out of
- *     image-matching/filename-vocabulary.ts. If somebody adds `peus` to the
- *     matcher and not here, a filename the matcher understands cannot be
- *     recorded on a coin. The first describe block ties the two together so
- *     that divergence is a build failure rather than a slow puzzle.
- *
- *   - A REFERENCE RENDERING AS "undefined 6819" or "Sear undefined". Every
- *     coin saved before migration 012 has neither field, and a coin can
- *     legitimately have a number with no catalogue (imported text) or a
- *     catalogue with no number (half-entered). All four combinations are
- *     pinned.
- *
- *   - THE NUMBER BEING "TIDIED". `II.1 234`, `RRC 44/5` and `1A` are real
- *     reference formats. Anything that upper-cases, strips punctuation or
- *     collapses spaces would silently rewrite the user's data.
- *
- *   - A STRING ID FAILING TO RESOLVE. The CSV importer copies cells verbatim,
- *     so `catalogId` can arrive as the STRING "3" rather than the number 3.
- *     A strict === lookup would then show no catalogue name at all for every
- *     imported coin, which is the quiet kind of wrong this project keeps
- *     being bitten by.
+ * Tests for the catalogue reference helpers: the seed list stays in step with
+ * the image matcher's vocabulary, every catalogue/number combination renders
+ * cleanly, reference numbers are preserved as typed, and ids that arrive as
+ * strings (from CSV import) still resolve.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -40,7 +14,12 @@ import {
   CatalogOption,
   catalogNameById,
   coinCatalogReference,
-  formatCatalogReference
+  formatCatalogReference,
+  formatCatalogRefs,
+  formatMainCatalogRef,
+  mainCatalogRef,
+  normalizeCatalogRefs,
+  parseCatalogRefs
 } from './catalog-reference';
 
 /** A small, realistic lookup list, in the shape the API returns. */
@@ -53,9 +32,7 @@ const CATALOGS: CatalogOption[] = [
 
 describe('CATALOG_SEED', () => {
   it('is exactly the matcher vocabulary, expanded, plus Krause', () => {
-    // The design (§4.5) names this list and says where it comes from. Writing
-    // it out in full is the point: a reviewer can check the expansions
-    // (`rsc` -> `RSC`, not `Rsc`) by reading one line.
+    // Written out in full so the expansions (`rsc` -> `RSC`) can be checked at a glance.
     expect(CATALOG_SEED).toEqual([
       'Sear', 'RIC', 'Hendin', 'RPC', 'Svoronos', 'BMC', 'SNG', 'Crawford',
       'Sydenham', 'Cohen', 'RSC', 'Meshorer', 'TJC', 'Kraay', 'Krause (KM)'
@@ -63,19 +40,14 @@ describe('CATALOG_SEED', () => {
   });
 
   it('covers every prefix the image matcher knows, in the same order', () => {
-    // THE drift test. CATALOG_PREFIXES is lower-case and abbreviated; this
-    // list is what a human sees in a dropdown. Comparing them case-folded
-    // proves the expansion is a presentation change and nothing more -- no
-    // prefix silently dropped, no catalogue invented.
+    // Case-folded, the seed must start with exactly the matcher's prefixes.
     const seeded = CATALOG_SEED.map(name => name.toLowerCase());
     expect(seeded.slice(0, CATALOG_PREFIXES.length)).toEqual([...CATALOG_PREFIXES]);
   });
 
   it('adds Krause last, because it is the one that is NOT from the matcher', () => {
-    // Krause/KM is world-coin numbering. No filename in this collection says
-    // it, so it is not in CATALOG_PREFIXES -- it is here because the owner
-    // asked for it. Keeping it at the end is what makes the test above a
-    // clean prefix comparison instead of a set difference.
+    // Krause (world coins) is not a matcher prefix; keeping it last keeps the
+    // test above a simple prefix comparison.
     expect(CATALOG_SEED[CATALOG_SEED.length - 1]).toBe('Krause (KM)');
     expect(CATALOG_PREFIXES).not.toContain('krause');
   });
@@ -98,16 +70,13 @@ describe('formatCatalogReference', () => {
   });
 
   it('shows the catalogue alone when no number has been typed yet', () => {
-    // Half-entered is a real state: the user picks Sear, then tabs. Showing
-    // "Sear" is honest; showing "Sear undefined" is a bug report.
+    // Half-entered: the user picked a catalogue but no number yet.
     expect(formatCatalogReference('Sear', '')).toBe('Sear');
     expect(formatCatalogReference('Sear', undefined)).toBe('Sear');
   });
 
   it('shows the number alone when the catalogue is unknown', () => {
-    // This is what an imported coin looks like: a reference the sheet gave us
-    // with no catalogue we could resolve it to. The number is still the
-    // user's data and must not disappear.
+    // Typical of imported coins: a number with no resolvable catalogue.
     expect(formatCatalogReference('', '6819')).toBe('6819');
     expect(formatCatalogReference(undefined, '6819')).toBe('6819');
   });
@@ -115,15 +84,12 @@ describe('formatCatalogReference', () => {
   it('is empty when there is nothing to say', () => {
     expect(formatCatalogReference('', '')).toBe('');
     expect(formatCatalogReference(undefined, undefined)).toBe('');
-    // Whitespace is nothing, not something. Otherwise a cell that holds one
-    // space renders as a blank-looking value the user cannot find or clear.
+    // Whitespace-only counts as empty.
     expect(formatCatalogReference('  ', ' ')).toBe('');
   });
 
   it('preserves the reference exactly as the catalogues write it', () => {
-    // These four are the formats named in the design. Nothing here may
-    // upper-case, strip the dot, the slash or the internal space, or trim
-    // anything but the outer edges.
+    // Real reference formats: no case changes or punctuation/space stripping.
     expect(formatCatalogReference('Sear', '1A')).toBe('Sear 1A');
     expect(formatCatalogReference('RIC', 'II.1 234')).toBe('RIC II.1 234');
     expect(formatCatalogReference('Crawford', 'RRC 44/5')).toBe('Crawford RRC 44/5');
@@ -142,9 +108,7 @@ describe('catalogNameById', () => {
   });
 
   it('resolves an id that arrived as text', () => {
-    // The CSV importer writes cells verbatim, so an exported-and-reimported
-    // coin carries catalogId as the string "3". A === lookup would answer
-    // nothing and the grid would quietly lose every imported catalogue.
+    // The CSV importer copies cells verbatim, so catalogId can be the string "3".
     expect(catalogNameById(CATALOGS, '3' as unknown as number)).toBe('Hendin');
   });
 
@@ -154,22 +118,17 @@ describe('catalogNameById', () => {
   });
 
   it('answers nothing for an id the list does not contain', () => {
-    // A soft-deleted catalogue removed from the local list, a row from
-    // another database, a hand-edited record. "" renders as the number
-    // alone, which is more honest than inventing a name.
+    // "" makes the reference render as the number alone.
     expect(catalogNameById(CATALOGS, 404)).toBe('');
   });
 
   it('still names a SOFT-DELETED catalogue', () => {
-    // Deleting a catalogue sets IsActive = 0; coins keep pointing at it.
-    // Hiding the name here would make those coins read as a bare number for
-    // no reason the user could see. Inactive rows are excluded from the
-    // PICKER, not from display -- the same rule mint marks already follow.
+    // Inactive rows are hidden from the picker, not from display (as with mint marks).
     expect(catalogNameById(CATALOGS, 9)).toBe('Retired');
   });
 
   it('survives an empty or missing lookup list', () => {
-    // Hydration order: the grid renders before /api/catalogs has answered.
+    // The grid can render before /api/catalogs has answered.
     expect(catalogNameById([], 1)).toBe('');
     expect(catalogNameById(undefined, 1)).toBe('');
   });
@@ -186,16 +145,122 @@ describe('coinCatalogReference', () => {
   });
 
   it('is empty for a coin that has no catalogue reference at all', () => {
-    // Every coin that existed before migration 012. There are a lot of them.
+    // E.g. coins saved before migration 012.
     expect(coinCatalogReference(CATALOGS, undefined, undefined)).toBe('');
   });
 });
 
 describe('CATALOG_NUMBER_MAX_LENGTH', () => {
   it('is 50, matching Coins.CatalogNumber NVARCHAR(50)', () => {
-    // The editor's maxlength is bound to this. A larger input would let the
-    // user type a reference that SQL Server refuses (error 8152) or that the
-    // mssql driver silently truncates, depending on which end is wrong.
+    // The editor's maxlength is bound to this; longer input would fail or truncate in SQL Server.
     expect(CATALOG_NUMBER_MAX_LENGTH).toBe(50);
+  });
+});
+
+describe('multiple references', () => {
+  const SEAR = { catalogId: 1, catalogNumber: '6819' };
+  const RIC = { catalogId: 2, catalogNumber: '123' };
+  const COHEN = { catalogId: 4, catalogNumber: '45' };
+  const LIST: CatalogOption[] = [
+    ...CATALOGS,
+    { catalogId: 4, name: 'Cohen', sortOrder: 4, isActive: true },
+    { catalogId: 5, name: 'Krause (KM)', sortOrder: 5, isActive: true },
+    { catalogId: 6, name: ' SEAR ', sortOrder: 6, isActive: true }
+  ];
+
+  describe('mainCatalogRef', () => {
+    it('prefers a Sear reference wherever it is in the list', () => {
+      expect(mainCatalogRef(LIST, [RIC, SEAR])).toEqual(SEAR);
+    });
+    it('falls back to the first reference', () => {
+      expect(mainCatalogRef(LIST, [RIC, COHEN])).toEqual(RIC);
+    });
+    it('takes the first of two Sear references', () => {
+      const second = { catalogId: 1, catalogNumber: '7000' };
+      expect(mainCatalogRef(LIST, [RIC, SEAR, second])).toEqual(SEAR);
+    });
+    it('matches the Sear name case-insensitively and trimmed', () => {
+      const odd = { catalogId: 6, catalogNumber: '1' };
+      expect(mainCatalogRef(LIST, [RIC, odd])).toEqual(odd);
+    });
+    it('returns null for no references', () => {
+      expect(mainCatalogRef(LIST, [])).toBeNull();
+      expect(mainCatalogRef(LIST, undefined)).toBeNull();
+    });
+  });
+
+  describe('formatMainCatalogRef', () => {
+    it('shows the main reference and how many others there are', () => {
+      expect(formatMainCatalogRef(LIST, [RIC, SEAR, COHEN])).toBe('Sear 6819 (+2)');
+    });
+    it('has no suffix for a single reference', () => {
+      expect(formatMainCatalogRef(LIST, [RIC])).toBe('RIC 123');
+    });
+    it('shows a number with no catalogue on its own', () => {
+      expect(formatMainCatalogRef(LIST, [{ catalogId: null, catalogNumber: '99' }])).toBe('99');
+    });
+    it('is empty with no references', () => {
+      expect(formatMainCatalogRef(LIST, undefined)).toBe('');
+    });
+    it('does not count a new row that has no number yet, or a duplicate', () => {
+      expect(formatMainCatalogRef(LIST, [RIC, { catalogId: null, catalogNumber: '' }])).toBe('RIC 123');
+      expect(formatMainCatalogRef(LIST, [{ catalogId: null, catalogNumber: '' }, RIC, RIC])).toBe('RIC 123');
+    });
+  });
+
+  it('formatCatalogRefs lists every reference in order', () => {
+    expect(formatCatalogRefs(LIST, [RIC, SEAR, COHEN])).toBe('RIC 123; Sear 6819; Cohen 45');
+    expect(formatCatalogRefs(LIST, [])).toBe('');
+  });
+
+  it('normalizeCatalogRefs trims, drops empty numbers and duplicates', () => {
+    expect(normalizeCatalogRefs([
+      { catalogId: 1, catalogNumber: ' 6819 ' },
+      { catalogId: 1, catalogNumber: '6819' },
+      { catalogId: 2, catalogNumber: '' },
+      { catalogId: null, catalogNumber: '5' },
+      { catalogId: null, catalogNumber: '5' }
+    ])).toEqual([
+      { catalogId: 1, catalogNumber: '6819' },
+      { catalogId: null, catalogNumber: '5' }
+    ]);
+  });
+
+  describe('parseCatalogRefs', () => {
+    it('splits a cell and matches catalogue names, longest first', () => {
+      expect(parseCatalogRefs(' Sear 6819 ;; RIC 123; Krause (KM) 110; Foo 9 ', LIST)).toEqual([
+        { catalogId: 1, catalogNumber: '6819' },
+        { catalogId: 2, catalogNumber: '123' },
+        { catalogId: 5, catalogNumber: '110' },
+        { catalogId: null, catalogNumber: 'Foo 9' }
+      ]);
+    });
+    it('matches inactive catalogues too', () => {
+      expect(parseCatalogRefs('Retired 4', LIST)).toEqual([{ catalogId: 9, catalogNumber: '4' }]);
+    });
+    it('does not treat a name prefix inside a word as a catalogue', () => {
+      expect(parseCatalogRefs('Searle 1', LIST)).toEqual([{ catalogId: null, catalogNumber: 'Searle 1' }]);
+    });
+    it('round-trips with formatCatalogRefs', () => {
+      const refs = [RIC, SEAR, { catalogId: null, catalogNumber: '77-A' }];
+      expect(parseCatalogRefs(formatCatalogRefs(LIST, refs), LIST)).toEqual(refs);
+    });
+    it('keeps a bare catalogue name as text rather than dropping it', () => {
+      expect(parseCatalogRefs('Sear', LIST)).toEqual([{ catalogId: null, catalogNumber: 'Sear' }]);
+    });
+    it('prefers an active catalogue when a removed one has the same name', () => {
+      const tie: CatalogOption[] = [
+        { catalogId: 20, name: 'Sear', sortOrder: 1, isActive: false },
+        { catalogId: 21, name: 'Sear', sortOrder: 2, isActive: true }
+      ];
+      expect(parseCatalogRefs('Sear 1', tie)).toEqual([{ catalogId: 21, catalogNumber: '1' }]);
+    });
+    it('reads a number typed with its catalogue name as that catalogue', () => {
+      // A number-only "RIC 5" exports as text and re-imports attached to RIC.
+      expect(parseCatalogRefs('RIC 5', LIST)).toEqual([{ catalogId: 2, catalogNumber: '5' }]);
+    });
+    it('returns nothing for an empty cell', () => {
+      expect(parseCatalogRefs('  ', LIST)).toEqual([]);
+    });
   });
 });

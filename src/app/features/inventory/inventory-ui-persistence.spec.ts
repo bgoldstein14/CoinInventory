@@ -1,23 +1,6 @@
 /*
- * Remembering the user's choices between sessions — the grid's grouping,
- * which groups are open, and what it is filtered to.
- *
- * TWO THINGS ARE BEING TESTED AND ONLY ONE OF THEM IS "DOES IT SAVE".
- *
- * The other, and the one with teeth, is what happens when what comes back
- * out of storage no longer makes sense. It is JSON from a browser database
- * that an older build wrote, and columns and statuses in this project do
- * come and go — `Source` left the grid yesterday. A restore that throws
- * takes the app down; a restore that quietly applies nonsense leaves a
- * collector looking at eleven of his four hundred coins with nothing on
- * screen to say why. Both are worse than forgetting the preference.
- *
- * The suite runs under Node with no jsdom: the store is a plain class and
- * the rules it leans on are pure modules, so none of this needs a DOM.
- *
- * MERGED FILE. inventory-sort-persistence.spec.ts was folded in here; its
- * tests are the `inventory sort persistence` block below, under the header
- * that came with them.
+ * Persistence of the grid's sort, filters, grouping and group order between
+ * sessions, including how stale or malformed stored values degrade.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -79,18 +62,7 @@ beforeEach(() => {
   (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
 });
 
-/**
- * Tests for remembering the grid's sort between sessions.
- *
- * Two requirements: the sort survives a restart, and a fresh installation
- * starts sorted by Year.
- *
- * The validation tests matter more than they look. The stored value is JSON
- * from a browser database that may have been written by an older build, and
- * columns in this project do come and go. A remembered sort naming a column
- * that no longer exists would otherwise produce a silently meaningless order
- * with no clue as to why.
- */
+/** Sort is remembered, defaults to Year, and invalid saved values are ignored. */
 describe('inventory sort persistence', () => {
   it('starts sorted by Year ascending on a fresh install', () => {
     const { store } = createStore();
@@ -143,8 +115,7 @@ describe('inventory sort persistence', () => {
   });
 
   it('ignores a saved column that no longer exists', async () => {
-    // 'dealer' is not a column. A browser that sorted by one that has since
-    // been removed still has the name sitting in IndexedDB.
+    // 'dealer' is not a column (e.g. one since removed).
     const { store } = createStore({
       [StorageKeys.SortState]: { column: 'dealer', direction: 'asc' }
     });
@@ -165,7 +136,6 @@ describe('inventory sort persistence', () => {
   });
 
   it('survives a storage read that throws', async () => {
-    // A cosmetic preference must never stop the inventory from rendering.
     const storage = fakeStorage();
     storage.get.mockRejectedValue(new Error('IndexedDB unavailable'));
     const store = new InventoryFilterStore(
@@ -178,8 +148,6 @@ describe('inventory sort persistence', () => {
   });
 
   it('works with no StorageService at all', async () => {
-    // Several specs build the store with only an InventoryService; that must
-    // mean "sort is not remembered", not a crash.
     const store = new InventoryFilterStore(stubInventory());
 
     await expect(store.restoreFromStorage()).resolves.toBeUndefined();
@@ -190,9 +158,7 @@ describe('inventory sort persistence', () => {
 
 describe('the filters are remembered', () => {
   it('writes every filter the moment one of them is changed', () => {
-    // The filter bar writes straight into the signal — `gradeFilter.set(...)`
-    // — and there is no setter method to hang a save off. The signal itself
-    // saves; see `remembered()` in inventory-filter.store.ts.
+    // The filter bar writes signals directly; the signal itself saves.
     const { store, storage } = createStore();
 
     store.gradeFilter.set('MS');
@@ -225,9 +191,7 @@ describe('the filters are remembered', () => {
   });
 
   it('persists NOTHING about the detail panel', () => {
-    // Explicitly excluded: the panel opens closed every session, as it
-    // always has. Pinned from this end because the payload is the only
-    // place it could creep back in.
+    // The detail panel always opens closed; nothing about it is stored.
     const { store, storage } = createStore();
     store.gradeFilter.set('MS');
 
@@ -283,8 +247,6 @@ describe('the filters are remembered', () => {
 
 describe('a restored filter must not be invisible', () => {
   it('opens the advanced panel when something in it is hiding rows', async () => {
-    // Four hundred coins are missing and the only control that could say
-    // why lives in a panel that opens closed. Opening it IS the explanation.
     const { store } = createStore({
       [StorageKeys.Filters]: { countryFilter: 'Mexico', showAdvancedFilters: false }
     });
@@ -302,8 +264,7 @@ describe('a restored filter must not be invisible', () => {
 
     await store.restoreFromStorage();
 
-    // The search box is always on screen and shows its own state, so there
-    // is nothing to reveal.
+    // The search box is always visible, so there is nothing to reveal.
     expect(store.searchQuery()).toBe('morgan');
     expect(store.showAdvancedFilters()).toBe(false);
   });
@@ -336,10 +297,7 @@ describe('a saved filter that no longer makes sense', () => {
   });
 
   it('falls back to ALL statuses when the saved set would show nothing', async () => {
-    // An empty status set deliberately shows no coins, and that is right
-    // within a session, where the user has just unticked the last box with
-    // the panel open in front of him. Restored into a fresh session it is
-    // an empty grid with no author.
+    // An empty set shows no coins; restored into a new session that would be an unexplained empty grid.
     const { store } = createStore({
       [StorageKeys.Filters]: { collectionStatuses: ['consigned'] }
     });
@@ -394,9 +352,7 @@ describe('the grouping is remembered', () => {
     expect(saved(storage, StorageKeys.GridGrouping)).toEqual({
       column: 'country',
       collapsedByDefault: true,
-      // The dragged group order rides in the same blob — one key for the
-      // column, the open groups and the order, because none of the three
-      // means anything without the first. Empty until he drags something.
+      // Group order is stored in the same blob as the grouping.
       exceptions: [],
       orders: {}
     });
@@ -421,7 +377,6 @@ describe('the grouping is remembered', () => {
     const { store, storage } = createStore(undefined, TWO_COUNTRIES);
 
     store.setGroupColumn('country');
-    // The one control reads the state: everything shut, so it offers expand.
     expect(store.expandAllControl().action).toBe('expand');
     store.applyExpandAll();
     expect(saved<{ collapsedByDefault: boolean }>(storage, StorageKeys.GridGrouping)?.collapsedByDefault)
@@ -433,8 +388,7 @@ describe('the grouping is remembered', () => {
   });
 
   it('does NOT re-collapse when the same grouping is chosen again', () => {
-    // A <select> fires `change` on a re-select; shutting the group the user
-    // has just opened would look like the app undoing his click.
+    // A <select> fires `change` on re-select; open groups must stay open.
     const { store } = createStore();
 
     store.setGroupColumn('country');
@@ -486,7 +440,7 @@ describe('the grouping is remembered', () => {
   });
 
   it('degrades a saved grouping for a DELETED column to the flat grid', async () => {
-    // `Source` was dropped from the grid yesterday. This is the real case.
+    // `source` is no longer a grid column.
     const { store } = createStore({
       [StorageKeys.GridGrouping]: { column: 'source', collapsedByDefault: true, exceptions: [] }
     });
@@ -505,17 +459,11 @@ describe('the grouping is remembered', () => {
 });
 
 /*
- * THE GROUPS CAN BE PUT IN THE OWNER'S ORDER, AND IT HAS TO SURVIVE THE NIGHT.
- *
- * "The grid groupings should be movable, so I could drag a grouping to the
- * top, or wherever I like." The rules are pure and exhaustively tested in
- * group-order.spec.ts; what is tested here is the half that is this store's —
- * that a move is written to storage under the same key as the grouping, that
- * it comes back, that it is kept per column, and that a saved order naming
- * groups which no longer exist cannot throw or empty the grid.
+ * Custom group order: saved under the grouping key, restored, kept per column,
+ * and tolerant of stale or malformed saved orders. Ordering rules themselves
+ * are tested in group-order.spec.ts.
  */
 describe('the dragged group order is remembered', () => {
-  /** Three countries, so a move has somewhere to go and somewhere to stop. */
   const THREE_COUNTRIES = [coin('fr-1', 'France'), coin('de-1', 'Germany'), coin('mx-1', 'Mexico')];
 
   const headings = (store: InventoryFilterStore) => store.coinGroups().map(group => group.label);
@@ -581,11 +529,7 @@ describe('the dragged group order is remembered', () => {
   });
 
   it('KEEPS the order when the grouping column changes, and does not apply it', () => {
-    /* Decision 1. An order of countries is meaningless under Grade, so it is
-     * not applied — but dropping it because the user glanced at another
-     * column would destroy a minute of dragging. Both are avoided by keying
-     * the order to its column, and the Reset control appearing and
-     * disappearing with it is what makes that visible. */
+    // Orders are keyed per column: kept but not applied under another column.
     const { store } = groupedByCountry();
     store.dropGroupOn('Mexico', 'France');
 
@@ -610,9 +554,7 @@ describe('the dragged group order is remembered', () => {
   });
 
   it('does not lose a group to a saved order that names groups which are gone', async () => {
-    /* The rule inventory-filter-persistence.ts set, applied here: stale
-     * state degrades. Atlantis was never a country in this collection and
-     * Germany was never placed — neither may cost the user a row. */
+    // Unknown groups in the saved order are skipped; unplaced groups follow.
     const { store } = createStore({
       [StorageKeys.GridGrouping]: {
         column: 'country',
@@ -643,8 +585,7 @@ describe('the dragged group order is remembered', () => {
   });
 
   it('keeps a Country order that was saved beside a grouping by a DELETED column', async () => {
-    // The grouping itself degrades to the flat grid; the order it was saved
-    // next to is still perfectly good and is waiting when he picks Country.
+    // The grouping falls back to flat, but the saved Country order is kept.
     const { store } = createStore({
       [StorageKeys.GridGrouping]: {
         column: 'source',
@@ -671,8 +612,6 @@ describe('what the grid shows once a grouping is chosen', () => {
   });
 
   it('shows headings and NO rows the moment a grouping is chosen', () => {
-    // All groups start collapsed: the point is to see the shape of the
-    // collection, not to add sixty headings to the scroll it already was.
     const { store } = createStore(undefined, TWO_COUNTRIES);
 
     store.setGroupColumn('country');
@@ -691,8 +630,6 @@ describe('what the grid shows once a grouping is chosen', () => {
   });
 
   it('counts the coins the CURRENT FILTERS let through, not the whole collection', () => {
-    // A heading reading 2 above a grid that can only ever show 1 of them
-    // would be the grouping telling the same lie the filter does.
     const { store } = createStore(undefined, TWO_COUNTRIES);
 
     store.setGroupColumn('country');
@@ -731,8 +668,6 @@ describe('restoring does not write back what it just read', () => {
 
 describe('the store without a StorageService at all', () => {
   it('still filters and still groups, it simply forgets', () => {
-    // A dozen specs build this store with only an InventoryService, and a
-    // missing StorageService must mean "not remembered", never a crash.
     const store = new InventoryFilterStore(stubInventory());
 
     expect(() => {

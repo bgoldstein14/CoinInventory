@@ -1,20 +1,7 @@
 /*
- * QIF IMPORT -- THE CONSOLIDATED SPEC.
- *
- * Three smaller specs were folded into this file; each one's own header
- * comment is reproduced verbatim as a banner immediately above the block of
- * describes it came from:
- *
- *   - quicken-sold-date.spec.ts
- *   - quicken-payee-not-a-dealer.spec.ts
- *   - quicken-authenticity.spec.ts
- *
- * The only edit made to the folded-in tests is a rename: both the sold-date
- * and the payee file declared a top-level helper called `parse`, with
- * different signatures, so they are now `parseSold` and `parsePayee`
- * respectively. No assertion was changed.
- *
- * quicken-corpus-securities.spec.ts is deliberately NOT part of this file.
+ * Tests for the QIF import, including the sections for sold dates, the payee
+ * (never used as a dealer) and authenticity wording.
+ * quicken-corpus-securities.spec.ts is separate.
  */
 import { describe, expect, it } from 'vitest';
 import { readdirSync } from 'node:fs';
@@ -43,7 +30,7 @@ MOriginal owner note
     const result = service.parse(qif);
 
     expect(result.importedRecords).toHaveLength(1);
-    // parseAttributes converts "Half Dime" to symbolic "5¢"
+    // "Half Dime" becomes symbolic "5¢".
     expect(result.importedRecords[0].denomination).toBe('5¢');
     expect(result.importedRecords[0].purchasePrice).toBe(12.5);
     expect(result.importedRecords[0].currentValue).toBe(12.5);
@@ -83,8 +70,7 @@ T6.00
 ^
 `;
 
-    // `excludeSold` is the import modal's "only coins I still own" tick box,
-    // and it is UNTICKED by default -- see the sibling test below.
+    // `excludeSold` is the "only coins I still own" option, off by default (see below).
     const result = service.parse(qif, undefined, undefined, { excludeSold: true });
 
     expect(result.importedRecords).toHaveLength(0);
@@ -93,11 +79,7 @@ T6.00
   });
 
   it('imports a fully disposed coin BY DEFAULT, and says it is sold', () => {
-    /* THE REVERSAL. This parser used to drop every sold coin
-     * unconditionally and the modal did not even list what it had dropped:
-     * over the QIF corpus that is 379 of 484 coin records gone in silence.
-     * A coin the owner no longer has is still a coin he had, and the cost,
-     * the grade and the sale are exactly what he wants to report on. */
+    /* By default sold coins import too: cost, grade and sale are still reportable. */
     const service = new QuickenImportService();
     const qif = `!Type:Invst
 D01/15/2024
@@ -116,10 +98,9 @@ T6.00
 
     expect(result.importedRecords).toHaveLength(1);
     expect(result.importedRecords[0].denomination).toBe('25¢');
-    // Nothing is being held out, so there is nothing to report as held out.
+    // Nothing is held out.
     expect(result.skippedRecords).toHaveLength(0);
-    // ...but the caller is still told which coins are gone, so it can mark
-    // them Sold rather than adding them to the collection's value.
+    // ...but the caller is told which coins are gone, to mark them Sold.
     expect(result.soldSecurityNames).toEqual(['1964 Quarter']);
   });
 
@@ -177,8 +158,7 @@ T30.00
 
   it('silently drops a standalone sell with no matching buy', () => {
     const service = new QuickenImportService();
-    // A standalone Sell (no prior Buy) means no latestRecord was ever set,
-    // so the net-quantity filter has nothing to skip or warn about.
+    // A standalone Sell (no prior Buy) leaves nothing to skip or warn about.
     const qif = `!Type:Invst
 D03/01/2024
 NSell
@@ -191,7 +171,7 @@ MSold to dealer
     const result = service.parse(qif);
 
     expect(result.importedRecords).toHaveLength(0);
-    // No warning for standalone sells — no acquisition record to reference
+    // No warning for standalone sells.
     expect(result.skippedRecords).toHaveLength(0);
   });
 
@@ -321,11 +301,11 @@ T2450.00
 
     const result = service.parse(qif);
 
-    // coinType inferred from explicit name in security string
+    // Coin type from an explicit name in the security string.
     expect(result.importedRecords[0].coinType).toBe('Liberty Head');
   });
 
-  // --- Net-quantity filtering tests ---
+  // Net-quantity filtering
 
   it('filters out coins with net quantity <= 0 (bought then sold)', () => {
     const service = new QuickenImportService();
@@ -344,8 +324,7 @@ T6.00
 
     const result = service.parse(qif, undefined, undefined, { excludeSold: true });
 
-    // Coin was bought then sold - net quantity is 0, and the caller asked
-    // for only the coins still held, so it is reported as held out.
+    // Bought then sold (net 0), and only held coins were requested.
     expect(result.importedRecords).toHaveLength(0);
     expect(result.skippedRecords).toHaveLength(1);
     expect(result.skippedRecords[0].denomination).toBe('25¢');
@@ -364,13 +343,13 @@ T5.00
 
     const result = service.parse(qif);
 
-    // Coin was bought but never sold - net quantity is 1, should be imported
+    // Bought and never sold (net 1): imported.
     expect(result.importedRecords).toHaveLength(1);
     expect(result.skippedRecords).toHaveLength(0);
     expect(result.importedRecords[0].denomination).toBe('25¢');
   });
 
-  // --- Attribute parsing tests ---
+  // Attribute parsing
 
   it('parses year, mintmark, denomination, and grade from security name (1875S 20c-XF)', () => {
     const service = new QuickenImportService();
@@ -427,7 +406,7 @@ T150.00
     const coin = result.importedRecords[0];
     expect(coin.year).toBe('1878');
     expect(coin.mintMark).toBe('CC');
-    // parseAttributes converts "Dollar" to symbolic "$1"
+    // "Dollar" becomes symbolic "$1".
     expect(coin.denomination).toBe('$1');
     expect(coin.grade).toBe('MS63');
   });
@@ -466,7 +445,7 @@ T250.00
 
     expect(result.importedRecords).toHaveLength(0);
     expect(result.skippedRecords).toHaveLength(0);
-    // Not silently dropped -- reported as an exception the user can see.
+    // Reported as an exception, not dropped.
     expect(result.rejectedRecords).toHaveLength(1);
     expect(result.rejectedRecords[0].securityName).toBe('Unknown Security Item');
   });
@@ -488,7 +467,7 @@ T250.00
     }
   });
 
-  // --- PM pre-fill tests ---
+  // PM pre-fill
 
   it('pre-fills pmWeightGrams and pmPercent for known US silver coins (1960 Quarter)', () => {
     const service = new QuickenImportService();
@@ -504,7 +483,7 @@ T5.00
 
     expect(result.importedRecords).toHaveLength(1);
     const coin = result.importedRecords[0];
-    // 1960 US Quarter: 90% silver, 5.63g PM weight
+    // 1960 quarter: 90% silver, 5.63 g PM weight.
     expect(coin.pmWeightGrams).toBeCloseTo(5.63, 2);
     expect(coin.pmPercent).toBe(90);
   });
@@ -523,15 +502,14 @@ T3.00
 
     expect(result.importedRecords).toHaveLength(1);
     const coin = result.importedRecords[0];
-    // 1964 US Dime: 90% silver, 2.25g PM weight
+    // 1964 dime: 90% silver, 2.25 g PM weight.
     expect(coin.pmWeightGrams).toBeCloseTo(2.25, 2);
     expect(coin.pmPercent).toBe(90);
   });
 
   it('does not pre-fill pmWeightGrams for unknown coins', () => {
     const service = new QuickenImportService();
-    // A copper cent: importable (year + type + denomination) but the precious
-    // metal reference table has no entry for 1¢, so nothing is pre-filled.
+    // A copper cent imports, but there is no precious metal to pre-fill.
     const qif = `!Type:Invst
 D01/15/2024
 NBuy
@@ -548,7 +526,7 @@ T10.00
     expect(coin.pmPercent).toBeUndefined();
   });
 
-  // --- Odd Type denomination + coinType enrichment tests ---
+  // Odd Type denomination and coin type enrichment
 
   it('parses Half Cent with correct denomination and coinType (1809 Half Cent)', () => {
     const service = new QuickenImportService();
@@ -805,10 +783,8 @@ T125.00
     expect(coin.denomination).toBe('8 Reales');
   });
 
-  // The 2-of-3 main-detail rule (Year / Coin Type / Denomination).
-  //
-  // Without it a coin described by a year alone is imported and then
-  // rejected by the backend with `400 {"error":"denomination is required"}`.
+  // The 2-of-3 rule (Year / Coin Type / Denomination). Without it a year-only
+  // coin would be rejected by the backend (`400 {"error":"denomination is required"}`).
 
   describe('main-detail presence helper', () => {
     it('treats a populated value as present', () => {
@@ -842,8 +818,7 @@ T125.00
 
   it('imports a coin with exactly 2 of the 3 main details', () => {
     const service = new QuickenImportService();
-    // No year in the security name, but Coin Type (Morgan) and
-    // Denomination ($1) are both present -- 2 of 3, so it qualifies.
+    // No year, but Coin Type (Morgan) and Denomination ($1): 2 of 3.
     const qif = `!Type:Invst
 D01/15/2024
 NBuy
@@ -879,7 +854,7 @@ T50.00
 
   it('excepts a year-only coin with a reason naming the missing details', () => {
     const service = new QuickenImportService();
-    // A row carrying nothing but a year.
+    // A row with nothing but a year.
     const qif = `!Type:Invst
 D01/15/2024
 NBuy
@@ -900,7 +875,7 @@ T25.00
     expect(exception.reason).toBe(
       'Only 1 of 3 required details found: Year. Missing: Coin Type, Denomination.'
     );
-    // The partially-parsed record is kept so the user can review / override it.
+    // The partly parsed record is kept for review / override.
     expect(exception.record.year).toBe('1943');
     expect(exception.record.purchasePrice).toBe(25);
   });
@@ -951,24 +926,22 @@ T6.00
 
     const result = service.parse(qif, undefined, undefined, { excludeSold: true });
 
-    // Held and fully detailed -> imported
+    // Held and fully detailed: imported.
     expect(result.importedRecords).toHaveLength(1);
     expect(result.importedRecords[0].coinType).toBe('Morgan');
 
-    // Held but under-detailed -> exception (visible, not silently dropped)
+    // Held but under-detailed: exception.
     expect(result.rejectedRecords).toHaveLength(1);
     expect(result.rejectedRecords[0].securityName).toBe('1943 Steel');
 
-    // Bought then sold, and the caller asked for held coins only
+    // Bought then sold, and only held coins were requested.
     expect(result.skippedRecords).toHaveLength(1);
     expect(result.skippedRecords[0].denomination).toBe('25¢');
   });
 
   it('separates imported and excepted coins with the sold ones left in', () => {
-    /* The same file as above with the tick box UNTICKED, which is the
-     * default. The sold quarter now imports and is named as sold; the
-     * under-detailed row is still an exception, because being sold has
-     * never been a reason to waive the 2-of-3 rule. */
+    /* Same file with the option off (default): the sold quarter imports and is
+     * named as sold; the under-detailed row is still an exception. */
     const service = new QuickenImportService();
     const qif = `!Type:Invst
 D01/15/2024
@@ -1024,11 +997,8 @@ T30.00
   });
 
   it('DOES except a sold coin once the sold filter is off', () => {
-    /* The order of the two gates, made visible. With the sold filter off
-     * there is no first gate to swallow the row, so the 2-of-3 rule judges
-     * it like any other -- and "1943 Steel" carries only a year. It lands
-     * in the exceptions panel the user can see rather than disappearing,
-     * which is the whole reason that panel exists. */
+    /* With the sold filter off, the 2-of-3 rule judges every row: "1943 Steel" has
+     * only a year, so it lands in the exceptions panel. */
     const service = new QuickenImportService();
     const qif = `!Type:Invst
 D01/15/2024
@@ -1087,39 +1057,23 @@ T100.00
   });
 
    /*
-   * CERTIFICATION COMPANY  +  CAC STICKER
-   *
-   * The security names used below are copied (or lightly trimmed) from the
-   * collection's real Quicken export, so these tests describe the shapes the
-   * parser genuinely has to cope with -- not invented ones.
-   *
-   * Two things are being protected here:
-   *   1. Whole-token matching. "NGC" must be its own word, never a fragment of
-   *      a longer one.
-   *   2. The CAC vs CACG distinction. CAC is a green STICKER stuck on someone
-   *      else's slab; CACG is CAC's own GRADING SERVICE. They mean different
-   *      things and must never be confused for one another.
+    * Certification company and CAC sticker, using names from a real Quicken
+    * export. Protected: whole-token matching ("NGC" never as a fragment), and
+    * CAC (a sticker on another slab) vs CACG (CAC's grading service).
     */
   describe('certification company and CAC sticker', () => {
-    /**
-     * Wraps a security name in the smallest valid QIF transaction and returns
-     * the single parsed record. Keeps each assertion below to one line instead
-     * of ten lines of QIF boilerplate.
-     */
+    /** Wraps a security name in a minimal QIF transaction and returns the parsed record. */
     function parseSecurityName(securityName: string) {
       const service = new QuickenImportService();
       const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY${securityName}\nT100.00\n^\n`;
       const result = service.parse(qif);
-      // Every fixture here carries 2+ main details, so it should be imported
-      // rather than diverted to the exceptions list.
+      // Every fixture has 2+ main details, so it is imported.
       expect(result.importedRecords).toHaveLength(1);
       return result.importedRecords[0];
     }
 
-    // --- Every company token, one at a time -------------------------------
-    // PCGS / NGC / ANACS / ICG are the four that actually occur in this
-    // collection's QIF; SEGS / CACG / NNC are supported because the user
-    // owns coins from them that are not yet in the export.
+    // Every company token. PCGS / NGC / ANACS / ICG occur in the export; SEGS /
+    // CACG / NNC are also supported.
     const companyCases: { name: string; expected: string }[] = [
       { name: '1927 $20 - PCGS MS64',   expected: 'PCGS' },
       { name: '1904 $20 - NGC MS63',    expected: 'NGC' },
@@ -1137,21 +1091,18 @@ T100.00
     }
 
     it('matches a company token written in lower case', () => {
-      // Quicken security names are hand-typed, so casing is not reliable.
-      // The stored value is always the canonical upper-case token.
+      // Names are hand-typed; the stored value is the canonical upper-case token.
       expect(parseSecurityName('1927 $20 - pcgs MS64').certCompany).toBe('PCGS');
     });
 
     it('matches a company token separated by a hyphen or a slash, not just a space', () => {
-      // Both of these appear verbatim in the real export.
+      // Both appear verbatim in the real export.
       expect(parseSecurityName('1908 $20-PCGS MS63').certCompany).toBe('PCGS');
       expect(parseSecurityName('1838 Reeded 50¢-XF (CLEANED/PCGS)').certCompany).toBe('PCGS');
     });
 
     it('does not match NGC inside a longer word', () => {
-      // The whole-token rule's whole reason for existing: a substring search
-      // would have found "NGC" in the middle of "RINGCASE" and wrongly
-      // credited the coin to NGC.
+      // A substring search would find "NGC" inside "RINGCASE".
       const coin = parseSecurityName('1921 Morgan Dollar RINGCASE MS63');
       expect(coin.certCompany).toBe('');
     });
@@ -1159,38 +1110,30 @@ T100.00
     it('leaves certCompany empty and hasCacSticker false when the name names neither', () => {
       const coin = parseSecurityName('1921 Morgan Dollar MS63');
       expect(coin.certCompany).toBe('');
-      // Explicitly false, never undefined -- the database column is
-      // BIT NOT NULL and the UI binds a checkbox to it.
+      // False, never undefined: the column is BIT NOT NULL.
       expect(coin.hasCacSticker).toBe(false);
       expect(coin.hasCacSticker).not.toBeUndefined();
     });
 
-    // --- The grade must survive an adjacent company token -----------------
-    // A grade almost always sits immediately after the company, so this is
-    // where a careless implementation (one that stripped the company out of
-    // the string, say) would eat part of the grade.
+    // The grade usually follows the company and must survive it.
     it('does not corrupt a grade that sits right after the company', () => {
       expect(parseSecurityName('1927 $20 - PCGS MS64').grade).toBe('MS64');
       expect(parseSecurityName('1875 20¢ - ANACS VG8').grade).toBe('VG8');
       expect(parseSecurityName('1876 20¢ - PCGS/CAC XF45').grade).toBe('XF45');
-      // The designation is now captured too (see the designation tests below),
-      // and the separator is normalised away.
+      // The designation is captured and the separator removed.
       expect(parseSecurityName('1982 Israel 5 Shilling - ANACS PF69 DCAM').grade).toBe('PF69DCAM');
     });
 
-    // --- Grade designations ------------------------------------------------
-    // Proof and copper coins are graded with a designation suffix. A grade
-    // expression terminated with `\b` loses them: in "PF65RB" there is no
-    // word boundary between "5" and "R", so the whole match fails.
+    // Grade designations: a `\b`-terminated pattern fails on "PF65RB" (no word
+    // boundary between "5" and "R").
     it('captures numeric grades that carry a designation suffix', () => {
       const cases: [string, string][] = [
         ['1870 1¢ - NGC PF65RB', 'PF65RB'],            // red-brown
         ['1867 3CS - NGC PF64Cameo', 'PF64CAMEO'],     // cameo, no separator
         ['1867 3CS - NGC PF64 Cameo', 'PF64CAMEO'],    // cameo, spaced
         ['1884 3CN - PCGS PF65CAM', 'PF65CAM'],
-        // "Israel" alone is not a denomination, so this fixture needs the
-        // unit spelled out to clear the 2-of-3 completeness rule the helper
-        // asserts on.
+        // "Israel" alone isn't a denomination, so the unit is spelled out to pass the
+        // 2-of-3 rule.
         ['1982 Israel 5 Shilling - ANACS PF69DCAM', 'PF69DCAM'],  // deep cameo
         ['1886 $1 - ICG MS64DMPL', 'MS64DMPL'],        // deep mirror prooflike
         ['1938 5¢ - PCGS MS70-FS', 'MS70FS'],          // full steps
@@ -1201,14 +1144,13 @@ T100.00
     });
 
     it('keeps the plus modifier on a grade', () => {
-      // "+" is not a word character, so the old `\b`-terminated expression
-      // dropped it. These must not regress to a bare numeric grade.
+      // "+" isn't a word character, so a `\b`-terminated pattern would drop it.
       expect(parseSecurityName('1870 $1 - PCGS/CAC PF62+').grade).toBe('PF62+');
       expect(parseSecurityName('1927 $20 - PCGS MS64+').grade).toBe('MS64+');
     });
 
     it('still parses plain grades exactly as before', () => {
-      // The fallback pass must keep every previously working form working.
+      // The fallback pass keeps plain grades working.
       expect(parseSecurityName('1906-S $5 - XF').grade).toBe('XF');
       expect(parseSecurityName('1871 3CN - AU53').grade).toBe('AU53');
       expect(parseSecurityName('1875 20¢ - VG8').grade).toBe('VG8');
@@ -1217,18 +1159,14 @@ T100.00
     });
 
     it('does not invent a designation from surrounding words', () => {
-      // "(CLEANED)" and similar trailing text must not be absorbed into the
-      // grade, and must not prevent the grade from being found.
+      // Trailing text like "(CLEANED)" must not be absorbed or block the grade.
       expect(parseSecurityName('1852 3CS ANACS AU53 (CLEANED)').grade).toBe('AU53');
       expect(parseSecurityName('1838 Reeded 50¢-XF (CLEANED/PCGS)').grade).toBe('XF');
     });
 
     it('extracts exactly the same grade with or without a company token present', () => {
-      // A behaviour-independent guard: whatever the grade regex makes of
-      // these suffixes, adding the company in front must not change it.
-      // (Some of these grades -- "PF65RB", "PF64Cameo" -- the grade regex
-      // does not recognise at all; the point here is that company detection
-      // neither helps nor hurts.)
+      // Adding the company in front must not change the grade parsed (some of these
+      // grades aren't recognised at all; company detection must neither help nor hurt).
       const pairs: { withCompany: string; without: string }[] = [
         { withCompany: '1870 1¢ - NGC PF65RB',    without: '1870 1¢ - PF65RB' },
         { withCompany: '1867 3CS - NGC PF64Cameo', without: '1867 3CS - PF64Cameo' },
@@ -1241,9 +1179,7 @@ T100.00
       }
     });
 
-    // --- CAC sticker ------------------------------------------------------
-    // "PCGS/CAC" and "NGC/CAC" are by far the most common forms in the real
-    // export; the rest are spellings the user has used elsewhere.
+    // CAC sticker: "PCGS/CAC" and "NGC/CAC" are the most common forms.
     const cacCases = [
       '1909 S-VDB 1¢ - PCGS/CAC AU58',
       '1835 $5 - NGC/CAC XF45',
@@ -1263,8 +1199,12 @@ T100.00
       });
     }
 
+    it('sets no CAC sticker when the name gives no grade', () => {
+      expect(parseSecurityName('1875 20¢ - PCGS/CAC').hasCacSticker).toBe(false);
+    });
+
     it('still reads the grading company when a CAC sticker is also present', () => {
-      // "PCGS/CAC" means "PCGS slab, CAC sticker" -- both facts, not one.
+      // "PCGS/CAC": PCGS slab and CAC sticker.
       const coin = parseSecurityName('1909 S-VDB 1¢ - PCGS/CAC AU58');
       expect(coin.certCompany).toBe('PCGS');
       expect(coin.hasCacSticker).toBe(true);
@@ -1272,32 +1212,28 @@ T100.00
     });
 
     it('treats CACG as the grading company and NOT as a CAC sticker', () => {
-      // THE trap this feature has to avoid. CACG is CAC's grading service;
-      // a CACG slab is not a CAC-stickered slab.
+      // CACG is CAC's grading service, not a sticker.
       const coin = parseSecurityName('1875 20¢ - CACG MS65');
       expect(coin.certCompany).toBe('CACG');
       expect(coin.hasCacSticker).toBe(false);
     });
 
     it('sets both fields when a CACG coin also carries a CAC sticker', () => {
-      // Belt and braces: the two rules are independent, so an explicit CAC
-      // token still registers even next to CACG.
+      // An explicit CAC token still registers next to CACG.
       const coin = parseSecurityName('1875 20¢ - CACG MS65 (CAC)');
       expect(coin.certCompany).toBe('CACG');
       expect(coin.hasCacSticker).toBe(true);
     });
 
     it('does not mistake Quicken\'s "W/C" (with cents) shorthand for a CAC sticker', () => {
-      // Real name from the export: "1883 5¢ W/C-NGC PF65" means the 1883
-      // Liberty nickel WITH the word CENTS. It is not a CAC coin.
+      // "W/C" here means "with CENTS" (the 1883 Liberty nickel), not CAC.
       const coin = parseSecurityName('1883 5¢ W/C-NGC PF65');
       expect(coin.hasCacSticker).toBe(false);
       expect(coin.certCompany).toBe('NGC');
     });
 
     it('does not let a slab label alone satisfy the 2-of-3 main-detail rule', () => {
-      // Cert company and CAC are NOT main details. A row describing only the
-      // slab still has to be surfaced as an exception, exactly as before.
+      // Cert company and CAC aren't main details: a slab-only row is still an exception.
       const service = new QuickenImportService();
       const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY1943 PCGS/CAC MS65\nT100.00\n^\n`;
 
@@ -1306,7 +1242,7 @@ T100.00
       expect(result.importedRecords).toHaveLength(0);
       expect(result.rejectedRecords).toHaveLength(1);
       expect(result.rejectedRecords[0].missing).toContain('Denomination');
-      // The fields were still parsed -- they just do not count toward the rule.
+      // The fields are parsed but don't count toward the rule.
       expect(result.rejectedRecords[0].record.certCompany).toBe('PCGS');
       expect(result.rejectedRecords[0].record.hasCacSticker).toBe(true);
     });
@@ -1326,21 +1262,12 @@ T100.00
     });
   });
 
-  /* =========================================================================
-   * NAMES WHOSE DENOMINATION IS NOT WRITTEN AS A FACE VALUE
-   * -------------------------------------------------------------------------
-   * Every name below is a REAL security out of a QIF export, not an invented
-   * probe. The rules being pinned:
-   *
-   *   Silver Eagle is $1; a (Gold) Eagle is $10, a Double Eagle $20, a Half
-   *   Eagle $5 and a Quarter Eagle $2.50. The modern Gold Eagle is the $50
-   *   bullion coin, told apart by its year -- it has only been struck since
-   *   1986.
-   *
-   * This is deliberately ONE table rather than a file or a describe-block per
-   * coin: the rules are general, so the cases that exercise them belong
-   * together, and a new one is a new row.
-   * ======================================================================= */
+  /*
+   * Denominations not written as a face value, from real QIF securities.
+   * Silver Eagle is $1; Eagle $10, Double Eagle $20, Half Eagle $5, Quarter
+   * Eagle $2.50; the modern Gold Eagle (since 1986) is $50. One table; add a row
+   * for a new case.
+   */
   describe('denominations that need more than a face value to read', () => {
     const parseOne = (securityName: string) => {
       const service = new QuickenImportService();
@@ -1357,21 +1284,21 @@ T100.00
     };
 
     const cases: ReadonlyArray<readonly [name: string, denomination: string, why: string]> = [
-      // --- silver, which must be asked about before the bare "Eagle" test ---
+      // Silver, asked about before the bare "Eagle" test
       ['1987 Proof Silver Eagle', '$1', 'was imported as a $10 gold piece'],
       ['2006 Proof Silver Eagle', '$1', 'was imported as a $10 gold piece'],
       ['2008 Proof Silver Eagle', '$1', 'was imported as a $10 gold piece'],
       ['2025 250th Anniversary U.S. Army ASE', '$1', 'ASE is the American Silver Eagle'],
 
-      // --- the classic gold eagles, whose readings must NOT have changed ---
+      // Classic gold eagles
       ['1907 Double Eagle - PCGS MS63', '$20', 'double eagle still wins over eagle'],
       ['1901S Eagle - NGC AU58', '$10', 'a bare gold Eagle is still ten dollars'],
 
-      // --- the modern one-ounce gold, settled by its year ---
+      // Modern one-ounce gold, settled by year
       ['1986S Au $50-PF', '$50', 'explicit $50 face value, previously unreadable'],
       ['2025 $50 Gold Buffalo - NGC MS70 FR', '$50', 'explicit $50 face value'],
 
-      // --- initialisms the owner writes with no other denomination word ---
+      // Initialisms used with no other denomination word
       ['1995 SBA - BU', '$1', 'SBA is the Susan B. Anthony dollar'],
       ['1999 SBA - PF', '$1', 'the grade suffix must not change the reading'],
       ['2011 5oz. ATB Vicksburg', '25¢', 'every America the Beautiful coin is a quarter'],
@@ -1384,65 +1311,38 @@ T100.00
       });
     }
 
-    /* A SET is the one eagle that gets NO denomination, on purpose.
-     *
-     * "1987 2-coin Proof American Gold Eagle Set (1.5 troy oz.)" is a $50 and
-     * a $25 in a single holding. There is no single right answer, so the
-     * importer declines to invent one and the row goes to the exceptions
-     * list where the owner can say what he means. Guessing here would be the
-     * same class of silent damage as the ½10¢ half dimes. */
+    /* "1987 2-coin Proof American Gold Eagle Set" is a $50 and a $25, so no
+     * denomination is assigned and the row goes to the exceptions list. */
     it('refuses to pick a denomination for a multi-coin Gold Eagle set', () => {
       const record = parseOne('1987 2-coin Proof American Gold Eagle Set (1.5 troy oz.)');
       expect(record.denomination).toBe('');
     });
 
-    /* The sheqalim rule, and the guard that keeps it from spreading.
-     *
-     * The owner confirmed both the reading and that the coin is 90% gold.
-     * The denomination is settled here; the metal is NOT, because the name
-     * never says "gold" and no reference row covers an Israeli commemorative
-     * -- see the note in the README about what still has to be typed in. */
+    /* The denomination is read; the metal is not (the name doesn't say gold and
+     * no reference row covers an Israeli commemorative). */
     it('reads Israeli sheqalim written as a bare S', () => {
       expect(parseOne('1982 Israel Qumran 5S - ANACS PF69DCAM').denomination)
         .toBe('5 Sheqalim');
     });
 
     it('will not read a bare S as sheqalim when the name does not say Israel', () => {
-      // "5S" here is a mintmark-shaped token on an American coin. Reading it
-      // as a foreign denomination would be exactly the over-reach the guard
-      // exists to prevent.
+      // "5S" on an American coin is mint-mark shaped; the Israel guard prevents
+      // reading it as sheqalim.
       expect(parseOne('1885 5S Morgan Dollar - PCGS MS63').denomination).toBe('$1');
     });
   });
 
-  /* =========================================================================
-   * READINGS THE PARSER IS NOT SURE ABOUT
-   * -------------------------------------------------------------------------
-   * The three-cent piece is the first and, today, the only caller of the
-   * ambiguous-reading channel (`AmbiguousReading` in coin.model.ts), so this
-   * is where that channel gets exercised end to end. It is NOT a file, or a
-   * describe block, about three-cent coins: there is deliberately no
-   * per-denomination machinery in this project, because the rules are general
-   * and a file per denomination would be pure noise.
-   *
-   * WHAT IS BEING PINNED
-   *   1. The two CERTAIN bands answer, and answer without a flag:
-   *      1851-1864 is silver-only, 1874-1889 is nickel-only.
-   *   2. The OVERLAP, 1865-1873, still answers -- a guess is not a refusal
-   *      and the row must still import -- but it carries the flag.
-   *   3. Inside the overlap the tie-break is scarcity with proofs as the
-   *      exception: three-cent silver business strikes after 1862 are very
-   *      scarce, so proof means silver and anything else means nickel.
-   *   4. A name that SPELLS OUT 3CS or 3CN is never flagged. There is
-   *      nothing to be unsure about.
-   *   5. The user's answer, fed back in, moves the denomination AND
-   *      everything derived from it.
-   *
-   * One table, one row per case, per the convention set by the denomination
-   * table above.
-   * ======================================================================= */
+  /*
+   * Ambiguous readings via `AmbiguousReading` (coin.model.ts); the three-cent
+   * piece is currently the only case.
+   *   1. Certain bands answer without a flag: 1851-1864 silver, 1874-1889 nickel.
+   *   2. The 1865-1873 overlap still answers (the row imports) but is flagged.
+   *   3. In the overlap, proof means silver, anything else nickel.
+   *   4. A name spelling out 3CS or 3CN is never flagged.
+   *   5. The user's answer moves the denomination and everything derived from it.
+   */
   describe('ambiguous readings are answered, flagged and correctable', () => {
-    /** Parse one security name; works whether it imports or is excepted. */
+    /** Parses one security name, whether it imports or is excepted. */
     const parseOne = (securityName: string) => {
       const service = new QuickenImportService();
       const result = service.parse(
@@ -1451,23 +1351,23 @@ T100.00
       return [...result.importedRecords, ...result.rejectedRecords.map(r => r.record)][0];
     };
 
-    /** The denomination flag on a record, or undefined when it was certain. */
+    /** The denomination flag on a record, or undefined when certain. */
     const flagOf = (securityName: string) =>
       parseOne(securityName).ambiguities?.find(a => a.field === 'denomination');
 
     interface ThreeCentCase {
-      /** The Quicken security name, written the way a bare reading looks. */
+      /** The security name, written as a bare reading. */
       name: string;
       /** What the importer should settle on. */
       denomination: string;
-      /** True when that answer is a guess and has to say so. */
+      /** True when the answer is a guess and must be flagged. */
       flagged: boolean;
       /** Why this row is in the table. */
       why: string;
     }
 
     const cases: ThreeCentCase[] = [
-      // --- CERTAIN: before the nickel existed ------------------------------
+      // Certain: before the nickel existed
       { name: '1851 3¢ - EF', denomination: '3CS', flagged: false,
         why: 'first year of the silver; the nickel is fourteen years away' },
       { name: '1862 3¢ - XF45', denomination: '3CS', flagged: false,
@@ -1475,7 +1375,7 @@ T100.00
       { name: '1864 3¢ - PCGS PF64', denomination: '3CS', flagged: false,
         why: 'last silver-only year -- certain even though it is a proof' },
 
-      // --- THE OVERLAP: a guess, and it has to admit it --------------------
+      // The overlap: a guess, flagged
       { name: '1865 3¢ - VF30', denomination: '3CN', flagged: true,
         why: 'first year of the overlap; nothing says proof, so the common nickel' },
       { name: '1870 3¢ - AU', denomination: '3CN', flagged: true,
@@ -1493,13 +1393,13 @@ T100.00
       { name: '1871 3c - MS63 Prooflike', denomination: '3CN', flagged: true,
         why: 'PROOFLIKE IS NOT A PROOF -- the trap proof-strike.ts exists to avoid' },
 
-      // --- CERTAIN: after the silver ended ---------------------------------
+      // Certain: after the silver ended
       { name: '1874 3¢ - AU', denomination: '3CN', flagged: false,
         why: 'first nickel-only year' },
       { name: '1889 3¢ - NGC PF65 Cameo', denomination: '3CN', flagged: false,
         why: 'last year of the nickel; a proof proves nothing here, the date settles it' },
 
-      // --- NOT AMBIGUOUS AT ALL: the name says which -----------------------
+      // Not ambiguous: the name says which
       { name: '1870 3CS - NGC PF64', denomination: '3CS', flagged: false,
         why: 'spelled out, inside the overlap -- nothing left to guess' },
       { name: '1870 3CN - AU', denomination: '3CN', flagged: false,
@@ -1522,8 +1422,7 @@ T100.00
       const result = service.parse(
         `!Type:Invst\nD01/15/2024\nNBuy\nY1870 3¢ - AU\nT100.00\n^\n`
       );
-      // Dropping the record was one of the two alternatives the owner
-      // rejected. It belongs in importedRecords, never in the exceptions.
+      // A guess still imports; it is never an exception.
       expect(result.importedRecords).toHaveLength(1);
       expect(result.rejectedRecords).toHaveLength(0);
       expect(result.importedRecords[0].ambiguities).toHaveLength(1);
@@ -1533,11 +1432,9 @@ T100.00
       const flag = flagOf('1870 3¢ - AU');
       expect(flag).toBeDefined();
       expect(flag!.chosen).toBe('3CN');
-      // Both members, always -- so the preview can offer the one that was NOT
-      // picked without having to work out for itself what it is.
+      // Both members, so the preview can offer the other one.
       expect([...flag!.alternatives].sort()).toEqual(['3CN', '3CS']);
-      // The sentence is read by the owner, not by a developer: it has to name
-      // the overlap and say what the assumption rests on.
+      // The user-facing reason names the overlap and the assumption.
       expect(flag!.why).toContain('1865-1873');
       expect(flag!.why).toMatch(/scarce/i);
     });
@@ -1549,10 +1446,8 @@ T100.00
     });
 
     it('treats a three-cent name with no year as maximally ambiguous', () => {
-      // No year means the whole 1851-1889 span is open, so the same tie-break
-      // and the same flag apply. This pins behaviour rather than describing a
-      // real security: every three-cent name in the corpus spells out 3CS
-      // or 3CN.
+      // No year: the whole 1851-1889 span, same tie-break and flag. (Every
+      // three-cent name in the corpus spells out 3CS or 3CN.)
       const record = parseOne('3¢ - VF');
       expect(record.denomination).toBe('3CN');
       const flag = record.ambiguities?.find(a => a.field === 'denomination');
@@ -1561,28 +1456,21 @@ T100.00
     });
 
     it('leaves every unambiguous coin with no flag at all', () => {
-      // `ambiguities` is undefined -- not [] -- on an ordinary record, so
-      // `record.ambiguities?.length` stays an honest test everywhere else.
+      // Undefined, not [], on an ordinary record.
       expect(parseOne('1927 $20 - PCGS MS64').ambiguities).toBeUndefined();
       expect(parseOne('1921 Morgan Dollar MS63').ambiguities).toBeUndefined();
     });
 
     it('carries the raw security name so a preview row has a stable identity', () => {
-      // `id` is a fresh UUID on every parse, so the import modal keys the
-      // user's answers on this instead.
+      // `id` is a new UUID per parse, so the import modal keys answers on this.
       expect(parseOne('1870 3¢ - AU').securityName).toBe('1870 3¢ - AU');
     });
 
-    /* -----------------------------------------------------------------------
-     * THE USER'S ANSWER, AND WHAT IT HAS TO DRAG ALONG WITH IT.
-     *
-     * Fixing the choice cannot mean overwriting one string. The coin type and
-     * the five alloy / weight fields are all DERIVED from the denomination --
-     * an 1870 three-cent silver is 90% silver weighing 0.75 g, while the
-     * three-cent nickel is copper-nickel with no precious metal in it at all
-     * -- so the answer has to go back through the parser rather than being
-     * painted onto its output.
-     * --------------------------------------------------------------------- */
+    /*
+     * The user's answer must go back through the parser: coin type and the five
+     * alloy/weight fields derive from the denomination (an 1870 three-cent silver
+     * is 90% silver at 0.75 g; the nickel has no precious metal).
+     */
     const overlapQif = `!Type:Invst\nD01/15/2024\nNBuy\nY1870 3¢ - AU\nT100.00\n^\n`;
 
     it('re-derives coin type and alloy when the user picks the other candidate', () => {
@@ -1597,12 +1485,10 @@ T100.00
       const corrected = service.parse(overlapQif, undefined, { '1870 3¢ - AU': '3CS' })
         .importedRecords[0];
       expect(corrected.denomination).toBe('3CS');
-      // The two fields that would have been left lying about the coin if the
-      // caller had simply overwritten `denomination` on the finished record.
+      // Fields that would be wrong if the caller only overwrote `denomination`.
       expect(corrected.coinType).toBe('Three Cent Silver');
       expect(corrected.pmPercent).toBe(90);
-      // The flag stays -- the reading really WAS ambiguous -- but it now
-      // reports what is actually on the record.
+      // The flag stays (it was ambiguous) and reports what is on the record.
       expect(corrected.ambiguities?.[0].chosen).toBe('3CS');
     });
 
@@ -1610,8 +1496,7 @@ T100.00
       const service = new QuickenImportService();
       const record = service.parse(overlapQif, undefined, { '1870 3¢ - AU': '$20' })
         .importedRecords[0];
-      // Correcting a guess is not the same thing as free-text editing the
-      // import, and must not quietly become it.
+      // Correcting a guess must not become free-text editing of the import.
       expect(record.denomination).toBe('3CN');
     });
 
@@ -1634,21 +1519,9 @@ T100.00
 });
 
 /*
- * WHAT A QIF SAYS ABOUT A SALE, AND WHERE IT ENDS UP.
- *
- * A Quicken investment account has no "sold" column. It has a Buy and,
- * later, a Sell / SellX / ShrsOut, and the importer reads a disposal off
- * the NET QUANTITY -- that is the honest reading of the document and it
- * stays the detector.
- *
- * What changed is that the detection is no longer the end of it. The
- * disposal block carries a date and usually an amount, and those are the
- * coin's Sold Date and Sold Price. Writing them onto the record is what
- * lets one rule -- "a coin counts as sold when it has a sold date, a sold
- * price or a buyer" (services/import-sold.ts) -- be true of a QIF import,
- * a CSV and a workbook alike. Before this, a QIF-imported coin was known to
- * be sold and had no sold date to show for it, and the user's filter had to
- * mean something different on that path.
+ * Sold dates. A QIF has no "sold" column; net quantity detects a disposal, and
+ * the disposal block's date and amount become Sold Date and Sold Price, so the
+ * shared sold rule (import-sold.ts) applies to QIF imports as to CSV and Excel.
  */
 
 
@@ -1731,10 +1604,8 @@ describe('a transfer out, which states no amount', () => {
   });
 
   it('GETS NO SOLD PRICE, rather than a price of zero', () => {
-    /* 0 is a real sale price -- a coin given away -- and the import's sold
-     * rule counts it as one. A ShrsOut between two Quicken accounts states
-     * no amount at all, so claiming 0 would be putting a number in the
-     * owner's record that his file never contained. */
+    /* 0 is a real sale price (given away). A ShrsOut transfer states no amount, so
+     * no price is recorded. */
     expect(transferred().soldPrice).toBeUndefined();
   });
 });
@@ -1756,8 +1627,7 @@ describe('a coin still held', () => {
       )
     );
 
-    // Two bought, one sold: net 1, so the coin is still held and the sale
-    // belongs to the one that left rather than to this record.
+    // Two bought, one sold: net 1, still held; the sale belongs to the one that left.
     expect(record.soldDate).toBeUndefined();
     expect(record.soldPrice).toBeUndefined();
   });
@@ -1797,10 +1667,8 @@ describe('"import only coins I still own"', () => {
   });
 
   it('holds back a disposal with no date, which has nothing for the rule to read', () => {
-    /* The belt-and-braces half of the gate. A `D`-less disposal block
-     * leaves no sold date and no sold price, so the shared rule cannot see
-     * it -- but Quicken still says the coin is gone, and a coin the user
-     * asked to exclude must not slip back in on a technicality. */
+    /* A disposal without a `D` line gives the shared rule nothing to read, but the
+     * coin is still gone and must stay excluded. */
     const result = parseSold(
       qif(BUY('1864 2¢'), ['NShrsOut', 'Y1864 2¢', 'Q1']),
       true
@@ -1812,39 +1680,18 @@ describe('"import only coins I still own"', () => {
 });
 
 /*
- * quicken-payee-not-a-dealer.spec.ts
+ * The payee is never used as a dealer. The importer fills Purchase Date/Price
+ * from the Buy block and Sold Date/Price from the disposal, and nothing for the
+ * counterparty fields however dealer-like the `P` line looks. In a Quicken
+ * investment register the payee is routinely the account name ("Misc. Coins").
  *
- * WHAT THIS FILE PROVES
- *   That the QIF importer fills the transaction fields it can READ OFF THE
- *   FILE -- Purchase Date and Purchase Price from the Buy block, Sold Date
- *   and Sold Price from the disposal -- and fills NOTHING for the two
- *   counterparty fields, however dealer-like the `P` payee line looks.
- *
- * ---- WHY THE SECOND HALF IS A TEST AND NOT JUST A COMMENT ----
- *   `purchasedFrom` is a field a reader will eventually notice is empty on
- *   every Quicken-imported coin, go looking for the payee, find it sitting
- *   unused in the block, and "fix". The long THE PAYEE IS NOT A DEALER note
- *   in quicken-import.service.ts says why that is wrong; this file makes the
- *   fix fail.
- *
- *   The short version: in a Quicken INVESTMENT register the payee is
- *   routinely the account the transaction is filed against -- "Misc. Coins",
- *   "Odd Type Set" -- not the person who sold the coin. Written into
- *   Purchased From that is a wrong name on every coin, which the owner then
- *   has to clear one at a time. An empty field is visibly empty; a wrong one
- *   has to be noticed first.
- *
- * ---- THE CORPUS CANNOT REFEREE THIS, AND THAT IS THE POINT OF §3 ----
- *   `testing/qif-corpus/` puts an INVENTED DEALER on 84% of acquisition
- *   blocks (`DEALERS` in generate-corpus.mjs) and an account name on none of
- *   them. A payee -> Purchased From rule would therefore measure as 100%
- *   correct here and near 0% on the export this corpus stands in for. So §3
- *   measures what the importer DOES fill -- where the corpus is faithful --
- *   and records the two deliberate zeroes beside it.
+ * The test corpus invents dealer payees on 84% of acquisition blocks
+ * (`DEALERS` in generate-corpus.mjs) and account names on none, so it can't
+ * judge a payee rule; the census below measures only what the importer fills.
  */
 
 
-/** Fields the importer must never invent, whatever the file says. */
+/** Fields the importer must never fill, whatever the file says. */
 const NEVER_FILLED = ['purchasedFrom', 'soldTo', 'transactionNotes'] as const;
 
 function parsePayee(qif: string) {
@@ -1857,7 +1704,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 describe('1. what a Buy block honestly carries, and does', () => {
   it('fills Purchase Date and Purchase Price from the block itself', () => {
-    // These two are not guesses: `D` is the date and `T` is the amount.
+    // `D` is the date and `T` the amount.
     const record = asRecord(parsePayee(
       '!Type:Invst\nD03/14/2014\nNBuy\nY1881-S Morgan $1 - PCGS MS64\nQ1\nT158.33\n^\n'
     ).importedRecords[0]);
@@ -1875,17 +1722,15 @@ describe('1. what a Buy block honestly carries, and does', () => {
 
     expect(record['soldDate']).toBe('2015-07-06');
     expect(record['soldPrice']).toBe(242.26);
-    // Which is what makes the shared rule answer the same way it would for
-    // a spreadsheet row. See services/import-sold.ts.
+    // So the shared rule answers as it would for a spreadsheet row.
     expect(isSoldRecord(record as never)).toBe(true);
   });
 });
 
 describe('2. the payee, which is never a counterparty', () => {
   it('writes nothing for a payee that looks exactly like a dealer', () => {
-    // The hard case. "Kingsmere Numismatics" is indistinguishable from a
-    // real dealer, and it is still not evidence: the same line in the same
-    // position holds the account name on the file this rule exists for.
+    // A dealer-like payee is still not evidence: the same line holds account names
+    // in real exports.
     const record = asRecord(parsePayee(
       '!Type:Invst\nD03/14/2014\nNBuyX\nY1881-S Morgan $1 - PCGS MS64\nQ1\n' +
       'T158.33\nPKingsmere Numismatics\nL[Alder Bank - Checking]\n$158.33\n^\n'
@@ -1909,8 +1754,7 @@ describe('2. the payee, which is never a counterparty', () => {
   });
 
   it('writes no buyer even when the SALE block names one', () => {
-    // A sold coin is where a Sold To would be most tempting and most wrong:
-    // on a SellX the payee is normally the account the proceeds went to.
+    // On a SellX the payee is normally the account the proceeds went to.
     const record = asRecord(parsePayee(
       '!Type:Invst\n' +
       'D03/14/2014\nNBuyX\nY1881-S Morgan $1 - PCGS MS64\nQ1\nT158.33\nPHarbourstone Coins\n^\n' +
@@ -1919,15 +1763,14 @@ describe('2. the payee, which is never a counterparty', () => {
 
     expect(record['soldTo']).toBeUndefined();
     expect(record['purchasedFrom']).toBeUndefined();
-    // The half of the disposal that IS in the file is still read.
+    // The disposal data that is in the file is still read.
     expect(record['soldDate']).toBe('2015-07-06');
     expect(record['soldPrice']).toBe(242.26);
   });
 
   it('does not let a payee alone make a coin look sold', () => {
-    // If a payee ever leaked into `soldTo`, every coin in the account would
-    // satisfy the shared sold rule and "only coins I still own" would import
-    // nothing. That is the blast radius, and it is why this is tested.
+    // A payee in `soldTo` would mark every coin sold, so "only coins I still own"
+    // would import nothing.
     const record = asRecord(parsePayee(
       '!Type:Invst\nD03/14/2014\nNBuy\nY1881-S Morgan $1 - PCGS MS64\nQ1\n' +
       'T158.33\nPKingsmere Numismatics\n^\n'
@@ -1937,8 +1780,7 @@ describe('2. the payee, which is never a counterparty', () => {
   });
 
   it('leaves the transaction note empty while the memo still reaches Notes', () => {
-    // Coins.Notes and Coins.TransactionNotes are two columns. The QIF memo
-    // belongs to the first; nothing in the file belongs to the second.
+    // The QIF memo goes to Coins.Notes; nothing goes to TransactionNotes.
     const record = asRecord(parsePayee(
       '!Type:Invst\nD03/14/2014\nNBuy\nY1881-S Morgan $1 - PCGS MS64\nQ1\n' +
       'T158.33\nMBought at the spring show\n^\n'
@@ -1961,9 +1803,7 @@ function census() {
     for (const imported of result.importedRecords) {
       const record = asRecord(imported);
       counts['total'] += 1;
-      // Text fields are PRESENT only once trimmed, numbers are present at
-      // 0 -- the same two readings services/import-sold.ts uses, so these
-      // counts mean what the sold filter means.
+      // Text is present once trimmed; numbers are present at 0 (as in import-sold.ts).
       for (const field of ['purchaseDate', 'purchasedFrom', 'soldDate', 'soldTo', 'transactionNotes']) {
         const value = record[field];
         if (typeof value === 'string' && value.trim().length > 0) counts[field] += 1;
@@ -1982,38 +1822,27 @@ const CORPUS = census();
 
 describe('3. the whole corpus, field by field', () => {
   it('is a sample worth measuring', () => {
-    // Non-vacuity, the same guard the other corpus specs open with: if the
-    // fixture ever stops producing coins every count below goes to zero and
-    // the two deliberate zeroes become indistinguishable from a broken run.
+    // Non-vacuity: if the fixture stops producing coins, every count goes to zero.
     expect(CORPUS['total']).toBe(457);
     expect(QIF_ACCOUNTS).toHaveLength(7);
   });
 
   it('fills both purchase fields on every single record', () => {
-    // 457 of 457. `D` and the amount are on every acquisition block the
-    // importer builds a record from, so there is no honest reason for
-    // either of these to be short -- and the plan asked whether they were.
+    // Every acquisition block has `D` and an amount.
     expect(CORPUS['purchaseDate']).toBe(457);
     expect(CORPUS['purchasePrice']).toBe(457);
   });
 
   it('fills the sale fields only where the file recorded a disposal', () => {
-    // 352 sold dates and 285 sold prices out of 457. The gap between the two
-    // is real and must not be closed by inventing a 0: a ShrsOut transfer
-    // carries a quantity and no amount, and 0 is a price that means "given
-    // away" to services/import-sold.ts.
+    // 352 sold dates but 285 sold prices: ShrsOut transfers have no amount, and
+    // must not get a 0.
     expect(CORPUS['soldDate']).toBe(352);
     expect(CORPUS['soldPrice']).toBe(285);
   });
 
   it('fills NEITHER counterparty, nor a transaction note, on any record', () => {
-    /* THREE DELIBERATE ZEROES, AND THEY ARE THE RESULT, NOT A SHORTFALL.
-     *
-     * 84% of this corpus's acquisition blocks carry a payee and every one
-     * of them reads like a dealer, so a rule that copied the payee across
-     * would show 380-odd filled fields here and look like an improvement.
-     * It would be filling the owner's real export with his own account
-     * names. See the note in quicken-import.service.ts. */
+    /* Three deliberate zeroes. A payee-copying rule would fill ~380 fields here and
+     * look like an improvement, but would fill real exports with account names. */
     expect(CORPUS['purchasedFrom']).toBe(0);
     expect(CORPUS['soldTo']).toBe(0);
     expect(CORPUS['transactionNotes']).toBe(0);
@@ -2021,41 +1850,21 @@ describe('3. the whole corpus, field by field', () => {
 });
 
 /*
- * quicken-authenticity.spec.ts — FAKES IMPORT, AND THE WORD SURVIVES.
+ * Authenticity wording:
+ *   1. A counterfeit the user owns imports like any other coin.
+ *   2. The word ("FAKE") is kept in Variety, so the record differs from the
+ *      genuine coin of the same date and grade.
+ * Also: Notes is the Quicken memo only, with no synthesised text or fallback.
  *
- * TWO RULES, AND THEY PULL IN OPPOSITE DIRECTIONS, WHICH IS WHY THEY ARE
- * PINNED TOGETHER IN ONE FILE.
- *
- *   1. A counterfeit the owner keeps is a thing he owns, so it IMPORTS. It
- *      is not refused, not filtered, not quietly downgraded.
- *   2. The word that says it is a counterfeit has to SURVIVE the import, in
- *      the Variety field. Before this, "1855 3CS - VF - FAKE" imported as an
- *      1855 three-cent silver in VF with Variety empty: byte for byte the
- *      same record as the genuine one, and the owner had no way to tell them
- *      apart in the grid. Five records in the QIF corpus were in that state.
- *
- * AND ONE RULE THAT IS NOT ABOUT FAKES AT ALL, ASSERTED HERE BECAUSE THIS IS
- * WHERE IT WOULD BE BROKEN: Notes is the Quicken memo (`M`) column and
- * nothing else. The obvious wrong way to implement rule 2 is to write a
- * sentence about the coin into Notes, and the obvious wrong way to make an
- * import "more helpful" is to fall back to the security name when there is
- * no memo. Both are tested against here.
- *
- * *** DO NOT CONFUSE ANY OF THIS WITH THE IMAGE MATCHER. ***
- * filename-vocabulary.ts keeps counterfeit PHOTOGRAPHS out of the automated
- * matching run, and that exclusion is matcher-only by standing policy -- such
- * a photo stays listable, searchable and attachable by hand. It is a
- * different mechanism answering a different question, and nothing in it is a
- * reason to refuse an import. The three single words are shared with it so
- * that "what counts as the word fake" has one definition; the behaviour is
- * not shared at all.
+ * Separate from the image matcher's exclusion of counterfeit photos
+ * (filename-vocabulary.ts); only the word list is shared.
  */
 
 
 const CORPUS_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../testing/qif-corpus');
 const CORPUS_FILES = readdirSync(CORPUS_DIR).filter(name => name.toUpperCase().endsWith('.QIF'));
 
-/** A one-line QIF holding a single purchase of `security`. */
+/** A QIF with a single purchase of `security`. */
 function buy(security: string, extraLines: string[] = []): string {
   return ['!Type:Invst', 'D01/15/2024', 'NBuy', `Y${security}`, 'T25.00', ...extraLines, '^', '']
     .join('\n');
@@ -2078,8 +1887,7 @@ describe('a counterfeit in the Quicken file', () => {
   });
 
   it('carries the word into Variety, spelled the way the owner wrote it', () => {
-    // Verbatim, not normalised to a house spelling. Variety is a field he
-    // reads; rewriting his own word in it is a change nobody asked for.
+    // Verbatim, not normalised.
     expect(importOne('1855 3CS - VF - FAKE').variety).toBe('FAKE');
     expect(importOne('1860 Counterfeit 3CS - VF').variety).toBe('Counterfeit');
     expect(importOne('1921 $1 Morgan replica - AU').variety).toBe('replica');
@@ -2091,8 +1899,7 @@ describe('a counterfeit in the Quicken file', () => {
   });
 
   it('keeps the variety it already had instead of replacing it', () => {
-    /* A doubled die that is also a fake is both facts at once. The two
-     * readings are independent, so one must not consume the other. */
+    /* A doubled die that is also a fake: both readings are kept. */
     const record = importOne('1861 3CS DDO - XF - FAKE');
 
     expect(record.variety).toContain('DDO');
@@ -2105,20 +1912,18 @@ describe('a counterfeit in the Quicken file', () => {
   });
 
   it('does not treat "copy" as a counterfeit marker', () => {
-    /* Deliberately absent from the shared word list -- it is also what
-     * Windows appends to a duplicated file, and in a Quicken security name
-     * it is far likelier to be prose. See COUNTERFEIT_MARKER_WORDS. */
+    /* "copy" is deliberately not in the word list (Windows appends it to duplicated
+     * files; in a security name it is usually prose). See COUNTERFEIT_MARKER_WORDS. */
     expect(importOne('1909 1¢ VDB copy dies - VF').variety).toBe('');
   });
 
   it('does not match the word inside a longer one', () => {
-    // Whole-token, like every other reading in this parser.
+    // Whole-token matching.
     expect(importOne('1878 50¢ Fakenham Hoard - VF').variety).toBe('');
   });
 
   it('writes NOTHING about it into Notes', () => {
-    /* The wording is a description of the coin and belongs in Variety.
-     * Notes is the Quicken memo column; see the suite below. */
+    /* The wording describes the coin, so it goes in Variety, not Notes. */
     const record = importOne('1855 3CS - VF - FAKE');
 
     expect(record.notes).toBe('');
@@ -2126,7 +1931,7 @@ describe('a counterfeit in the Quicken file', () => {
 });
 
 describe('the counterfeits in the real QIF corpus', () => {
-  /** Every record the corpus produces, across every file, with its name. */
+  /** Every record the corpus produces, across every file, with its file. */
   const records = CORPUS_FILES.flatMap(file => {
     const result = new QuickenImportService().parse(decodeQif(file));
     return result.importedRecords.map(record => ({ file, record }));
@@ -2137,17 +1942,14 @@ describe('the counterfeits in the real QIF corpus', () => {
   );
 
   it('finds the counterfeits the collection actually holds', () => {
-    /* Measured, not assumed. Three distinct securities across two accounts,
-     * two of which appear in both files -- five records in total. If the
-     * corpus is regenerated this number moves; what must not move is that
-     * it is greater than zero, or the assertions below pass vacuously. */
+    /* Three distinct securities across two accounts, five records. The number
+     * moves if the corpus is regenerated; it must stay above zero. */
     expect(fakes.length, 'the corpus no longer contains a counterfeit').toBeGreaterThan(0);
     expect(fakes).toHaveLength(5);
   });
 
   it('imports every one of them', () => {
-    // They are in `importedRecords` by construction above, so this is really
-    // a statement about the count: none of the five went missing.
+    // They are in `importedRecords` by construction, so this checks none went missing.
     expect(fakes.map(({ record }) => record.securityName).sort()).toEqual([
       '1855 3CS - VF - FAKE',
       '1855 3CS - VF - FAKE',
@@ -2158,10 +1960,8 @@ describe('the counterfeits in the real QIF corpus', () => {
   });
 
   it('gives every one of them a Variety saying so', () => {
-    /* THE REGRESSION THIS EXISTS FOR. All five used to import with Variety
-     * empty, indistinguishable in the grid from the genuine 1855 and 1859
-     * three-cent silvers sitting next to them -- and this collection holds
-     * several of each, which is exactly where the confusion lands. */
+    /* Each fake must carry its wording in Variety, distinguishing it from the
+     * genuine three-cent silvers alongside. */
     for (const { file, record } of fakes) {
       expect(record.variety, `${file}: "${record.securityName}" lost its wording`)
         .toBe('FAKE');
@@ -2176,11 +1976,8 @@ describe('Notes is the Quicken memo column and nothing else', () => {
   });
 
   it('is BLANK when there is no `M` line, however much else is on the row', () => {
-    /* NO FALLBACK. The security name, the payee, the account, the action
-     * and the date are all in hand at the point Notes is written, and any
-     * of them could be made to read like a note. None of them is the
-     * owner's note, and a field he did not write is a field he cannot
-     * trust. */
+    /* No fallback: security name, payee, account, action and date are all
+     * available but none is the user's note. */
     const record = importOne('1909-S VDB 1¢ - PCGS/CAC AU58', ['PKingsmere Numismatics']);
 
     expect(record.notes).toBe('');
@@ -2201,23 +1998,9 @@ describe('Notes is the Quicken memo column and nothing else', () => {
   });
 
   it('is left blank rather than synthesised across the whole corpus', () => {
-    /* MEASURED OVER THE REAL EXPORTS, TWICE.
-     *
-     * BEFORE the transfer-memo rule: 66 of the 457 records the corpus
-     * imports carried a note, and every single one of them was Quicken's
-     * own `Xfr From: Misc. Coins` -- auto-generated text the owner never
-     * typed. Not most of them. All 66.
-     *
-     * AFTER: 0. There is no coin in this corpus whose memo the owner wrote
-     * himself, so the honest Notes column for it is empty, and that is what
-     * he asked for: "If there's a note/memo field from the QIF then use it,
-     * otherwise leave Notes as blank."
-     *
-     * The count is pinned at exactly 0 rather than "fewer than 66" so that
-     * a broader filter -- one that started eating real memos -- and a
-     * weaker one -- one that let the boilerplate back through -- both show
-     * up here. The verbatim-memo rule itself is tested on hand-built QIFs
-     * above and below, where a genuine memo can be put in deliberately. */
+    /* Over the corpus, every note came from Quicken's `Xfr From:` memo, so after
+     * the rule none remain. Pinned at exactly 0 so both an over-broad filter and a
+     * too-weak one show up. The verbatim-memo rule is tested on hand-built QIFs. */
     const imported = CORPUS_FILES.flatMap(
       file => new QuickenImportService().parse(decodeQif(file)).importedRecords
     );
@@ -2228,10 +2011,7 @@ describe('Notes is the Quicken memo column and nothing else', () => {
   });
 
   it('never lets the transfer boilerplate through, by any route', () => {
-    /* The assertion that does not depend on the corpus's exact shape: no
-     * matter how many notes survive, none of them may be the generated
-     * line. Regenerate the corpus with ten real memos in it and this test
-     * still says the right thing. */
+    /* Independent of corpus shape: no surviving note may be the generated line. */
     const imported = CORPUS_FILES.flatMap(
       file => new QuickenImportService().parse(decodeQif(file)).importedRecords
     );
@@ -2245,15 +2025,9 @@ describe('Notes is the Quicken memo column and nothing else', () => {
 });
 
 /*
- * QUICKEN'S TRANSFER BOILERPLATE
- *
- * The owner: "Do not put in that 'Xfr From....' note. It's not really
- * helpful. If there's a note/memo field from the QIF then use it, otherwise
- * leave Notes as blank."
- *
- * The danger in implementing that is OVERREACH -- a filter that reads the
- * memo's SUBJECT rather than its SHAPE and eats a note the owner wrote
- * about a transfer. Half of the tests below are there to pin that down.
+ * Quicken's `Xfr From:` / `Xfr To:` memo is dropped; other memos are kept as
+ * written. Half of these tests guard against over-matching a memo that merely
+ * mentions a transfer.
  */
 describe('the Quicken transfer memo', () => {
   it('does not reach Notes from the receiving side', () => {
@@ -2270,7 +2044,7 @@ describe('the Quicken transfer memo', () => {
   });
 
   it('leaves Notes BLANK rather than falling back to anything else', () => {
-    // No synthesis: not the security name, not the payee, not the account.
+    // No synthesis: not the security name, payee or account.
     const record = importOne('1905 $20 - PCGS MS64', [
       'MXfr From: Misc. Coins',
       'PKingsmere Numismatics'
@@ -2278,11 +2052,10 @@ describe('the Quicken transfer memo', () => {
     expect(record.notes).toBe('');
   });
 
-  /* ---- AND NOW THE MEMOS THAT MUST SURVIVE ---- */
+  /* Memos that must survive */
 
   it('does not eat a real memo that happens to mention a transfer', () => {
-    // The corpus's own wording, on a cash block. A coin block could carry
-    // it just as easily, and then it is the owner's note.
+    // The corpus's own wording; on a coin block it is the user's note.
     expect(importOne('1921 Morgan Dollar MS63', ['MOpening transfer']).notes)
       .toBe('Opening transfer');
   });
@@ -2293,7 +2066,7 @@ describe('the Quicken transfer memo', () => {
   });
 
   it('does not eat a memo that starts with the word Xfr itself', () => {
-    // "Xfr" with no "From:"/"To:" after it is not the generated line.
+    // "Xfr" without "From:"/"To:" isn't the generated line.
     expect(importOne('1921 Morgan Dollar MS63', ['MXfr paperwork mislaid']).notes)
       .toBe('Xfr paperwork mislaid');
   });

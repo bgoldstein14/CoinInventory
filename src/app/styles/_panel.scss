@@ -1,10 +1,4 @@
-// The white rounded "card" that both main areas of the screen sit in.
-//
-// WHY THIS PARTIAL EXISTS
-// Two components render a `.panel`: the inventory table (`.panel
-// .inventory-panel`) and the coin detail sidebar (`.panel .detail-panel`).
-// Because Angular scopes styles per component, each one has to import the rule
-// itself — so it lives here rather than being duplicated in both files.
+// The white rounded card shared by the inventory table and the detail sidebar.
 
 .panel {
   background: #fff;

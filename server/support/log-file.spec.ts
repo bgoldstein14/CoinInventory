@@ -1,23 +1,8 @@
 /**
- * support/log-file.spec.ts — the second file, and the caps on it.
- *
- * WHAT IS BEING PROTECTED HERE
- * This file exists because removing the zip left the raw `app.log` as the
- * only log a user could drag into a PUBLIC issue, and that one has never been
- * through the redactor. So the properties below are safety properties:
- *
- *  - it is capped, and says out loud when it dropped lines, because a
- *    silently truncated log is worse than a short one;
- *  - it says, in its own first paragraph, that it has been redacted and that
- *    its placeholders mean the same thing as the report's — someone finding
- *    this file on an issue has no other way to know either;
- *  - it is named from the same instant as the report, so the pair is a pair.
- *
- * THE REDACTION IS NOT TESTED HERE, ON PURPOSE. This module deliberately
- * renders UNREDACTED text and hands it to `prepareSupportFiles`, which
- * redacts it with the report's own redactor. The canary for the written file
- * lives in routes/support/support.spec.ts, where the real pass runs; the
- * shared-instance property is in report-file.spec.ts.
+ * The optional log file: capped and says what it dropped, states that it is
+ * redacted and its placeholders match the report's, and shares the report's
+ * timestamp. Redaction itself is tested in routes/support/support.spec.ts and
+ * report-file.spec.ts, since this module renders unredacted text.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -40,20 +25,13 @@ describe('logFileName', () => {
     expect(logFileName(WHEN)).toBe('coin-inventory-log-2026-11-13-180405.txt');
   });
 
-  /**
-   * `.txt`, not `.log` or `.zip`: GitHub's attachment allow-list takes it and
-   * Windows opens it in Notepad without asking which program to use.
-   */
+  /** `.txt`: accepted by GitHub and opened by Notepad. */
   it('is a plain text file, not an archive', () => {
     expect(logFileName(WHEN)).toMatch(/\.txt$/);
     expect(logFileName(WHEN)).not.toMatch(/\.zip$/);
   });
 
-  /**
-   * THE PAIR IS A PAIR. A Desktop can easily hold three reports; if the two
-   * files of one submission carried different stamps the user would have to
-   * guess which log went with which report.
-   */
+  /** Same stamp as the report, so the pair is recognisable. */
   it('carries the same timestamp as the report written beside it', () => {
     const stamp = /(\d{4}-\d{2}-\d{2}-\d{6})/;
     expect(logFileName(WHEN).match(stamp)![1]).toBe(reportFileName(WHEN).match(stamp)![1]);
@@ -76,11 +54,7 @@ describe('renderLogFile', () => {
     expect(text.indexOf('first line')).toBeLessThan(text.indexOf('third line'));
   });
 
-  /**
-   * Somebody finding this file on a public issue has no other way to know it
-   * was scrubbed — and no way to know that a `<USER>` in it is the same
-   * `<USER>` as in the report. Both facts have to be in the file.
-   */
+  /** The file itself must say it was scrubbed and that placeholders match the report's. */
   it('says it is redacted and that its placeholders match the report’s', () => {
     const text = renderLogFile(['a line'], context());
 
@@ -93,11 +67,7 @@ describe('renderLogFile', () => {
     expect(renderLogFile(['a line'], context())).toMatch(/nothing was uploaded/i);
   });
 
-  /**
-   * THE CAP IS NOT NEGOTIABLE AND NEITHER IS SAYING SO. A file too big to
-   * send is indistinguishable from one never sent; a quietly shortened one is
-   * worse, because the reader cannot tell what is missing.
-   */
+  /** Capped, and says how many lines were dropped. */
   it('keeps only the most recent lines and says how many it dropped', () => {
     const lines = Array.from({ length: LOG_FILE_LIMITS.maxLines + 7 }, (_, i) => `line ${i}`);
 
@@ -112,10 +82,7 @@ describe('renderLogFile', () => {
     expect(renderLogFile(['one', 'two'], context())).not.toMatch(/earlier line/);
   });
 
-  /**
-   * One serialised HttpErrorResponse or base64 image on a single line would
-   * otherwise spend the whole budget on one entry.
-   */
+  /** One huge line (e.g. base64) mustn't use the whole budget. */
   it('clamps an absurd line and says it did, rather than dropping it', () => {
     const monster = 'x'.repeat(LOG_FILE_LIMITS.maxLineChars + 500);
 
@@ -132,12 +99,7 @@ describe('renderLogFile', () => {
     expect(text).toMatch(/Coin Inventory/);
   });
 
-  /**
-   * It renders what it is given, unredacted, because the caller redacts it
-   * with the REPORT'S redactor. If this module ever started redacting on its
-   * own, the two files would disagree about placeholders — so the absence of
-   * redaction here is a property worth pinning, not an oversight.
-   */
+  /** Unredacted by design: the caller redacts with the report's redactor. */
   it('does not redact — that is the shared pass’s job, one step later', () => {
     const text = renderLogFile(['signed in as devuser'], context());
     expect(text).toContain('signed in as devuser');

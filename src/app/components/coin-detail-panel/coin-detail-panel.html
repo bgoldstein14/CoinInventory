@@ -1,40 +1,14 @@
 <aside class="panel detail-panel">
-  <!-- The header is nothing but the action buttons: every value worth
-       showing is an editable field in the form immediately below, and a
-       read-only restatement of it here would only be something the user
-       cannot correct. -->
+  <!-- Header: Show images on the left, the close × in the top-right corner. -->
   <div class="detail-header">
-    <div class="detail-header-actions">
-      <!--
-        Show / hide this coin's photos.
-
-        Not disabled for a coin with no photos: the gallery is also where
-        photos are ADDED to one specific coin, so the empty coin is the case
-        that needs the button most. `canOpenImageGallery` means "is a coin
-        selected" — the `[disabled]` binding is kept only because the store's
-        signature still allows null, not because a photo-less coin should be
-        turned away.
-
-        The label flips to "Hide images", so the handler must be
-        toggleImageGallery(), not openImageGallery().
-      -->
-      <button type="button" class="secondary small-button" [disabled]="!images().canOpenImageGallery(coin())" (click)="images().toggleImageGallery()">
-        {{ images().showImageGallery() ? 'Hide images' : 'Show images' }}
-      </button>
-      <button type="button" class="secondary small-button" (click)="closeRequested.emit()">Close</button>
-      <button type="button" class="danger small-button" (click)="deleteRequested.emit()">Delete</button>
-    </div>
+    <!-- Enabled even with no photos, because the gallery is also where photos are added. -->
+    <button type="button" class="secondary small-button" [disabled]="!images().canOpenImageGallery(coin())" (click)="images().toggleImageGallery()">
+      {{ images().showImageGallery() ? 'Hide images' : 'Show images' }}
+    </button>
+    <button type="button" class="detail-close" aria-label="Close" title="Close" (click)="closeRequested.emit()">&times;</button>
   </div>
 
-  <!-- WHAT THIS COIN STILL NEEDS, said where the user is typing.
-       A half-typed coin is an expected state, so this is a quiet line, not
-       an error box and never a toast: "Needs a Denomination before it can be
-       saved" says what to do next. role="status" (polite) for the same
-       reason — nothing is wrong.
-
-       It DOES turn into an alert for the one case that genuinely is an
-       error: a save that was attempted and refused by the server. See
-       services/inventory/draft-row-status.ts. -->
+  <!-- Draft note: polite status while typing; an alert only when the server refused a save. -->
   @if (draftStatus(); as draft) {
     <p
       class="detail-draft-note"
@@ -43,26 +17,12 @@
     >{{ draft.summary }}</p>
   }
 
-  <!-- THE EDITABLE FIELDS, AND NOW ALSO THE TRANSACTIONS SECTION.
-
-       `showTransactions` is handed DOWN rather than used here. The section
-       has to render immediately above the coin’s Notes box, and that box is
-       inside CoinEditorForm’s template, so nothing this component renders
-       could be placed between the two. See the long comment at the section
-       itself in coin-editor-form.html. -->
+  <!-- Editable fields. The Transactions section renders inside the form, above Notes. -->
   <app-coin-editor-form [coin]="coin()" [showTransactions]="showTransactions()" />
 
-  <!-- TWO SECTIONS USED TO FOLLOW AND BOTH ARE GONE.
+  <!-- Delete sits bottom-left, away from the close × in the top-right corner. -->
+  <div class="detail-footer">
+    <button type="button" class="danger small-button" (click)="deleteRequested.emit()">Delete</button>
+  </div>
 
-       "Original image files" listed where each photo’s full-resolution
-       original lives on this machine. Removed at the owner’s request: the
-       paths are long, they pushed the panel wide, and the gallery is where
-       photos are actually worked with. The data is untouched —
-       CoinImages.SourcePath is still written and still served by
-       GET /api/images/file; only this read-out of it has gone.
-
-       The transaction HISTORY — a list of rows plus an add-a-transaction
-       form — went with the Transactions table. A coin has one purchase and
-       at most one sale, and those are fields on the coin now, edited in the
-       Transactions section inside the form above. -->
 </aside>

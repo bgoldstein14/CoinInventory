@@ -1,18 +1,8 @@
 /**
- * routes/lookups/lookups.spec.ts — HTTP-level tests for the reference tables:
- * categories, metal contents, coin sets, denominations and mint marks.
- *
- * The "without injecting a duplicate static catalog" tests are regression
- * guards: denominations and mint marks used to be merged with a hard-coded
- * list in the server, which produced duplicate dropdown entries. They must
- * return exactly what the database returned, nothing more.
- *
- * *** THE REFERENCE DATA IS REAL NOW. *** These run against the in-memory
- * SQLite database built from db/schema.sql and seeded by db/seed.ts: 1,207
- * denominations, 15 metal contents, 9 mint marks and 2 categories. Where a
- * test needs to assert an EXACT response — which is the whole point of the
- * duplicate-catalog guards — it narrows the table to one row first, rather
- * than canning a recordset that the schema might not even accept.
+ * HTTP tests for categories, metal contents, coin sets, denominations and
+ * mint marks, against the seeded in-memory database. The "no duplicate static
+ * catalog" tests guard against merging a hard-coded list into the response;
+ * they narrow the table to one row so the exact comparison is readable.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -21,9 +11,7 @@ import request from 'supertest';
 import { queryRows, withTestDb, rebuildTestDatabase } from '../../test-support/sqlite-test-db';
 import { app } from '../../server';
 
-// These tests add categories and coin sets and narrow the seeded
-// Denominations and MintMarks tables, none of which the ordinary per-test
-// reset touches.
+// These tests change lookup tables the per-test reset doesn't touch.
 beforeEach(async () => {
   await rebuildTestDatabase();
 });
@@ -32,15 +20,14 @@ beforeEach(async () => {
 
 describe('GET /api/categories', () => {
   it('returns category names', async () => {
-    // Server reads row['CategoryName']. The two the seed ships with are
-    // real rows, so only Gold and Silver have to be arranged.
+    // The seed ships two categories; Gold and Silver are added.
     await withTestDb((database) => {
       database.exec("INSERT INTO Categories (CategoryName) VALUES ('Gold'), ('Silver')");
     });
 
     const res = await request(app).get('/api/categories');
     expect(res.status).toBe(200);
-    // ORDER BY CategoryName, so the seeded two interleave with the new ones.
+    // Ordered by name, so seeded and new rows interleave.
     expect(res.body).toEqual(['20th Cent. Type', 'Gold', 'Odd Type Set', 'Silver']);
   });
 });
@@ -49,8 +36,7 @@ describe('GET /api/metalcontents', () => {
   it('returns canonical metal-content names', async () => {
     const res = await request(app).get('/api/metalcontents');
     expect(res.status).toBe(200);
-    // ORDER BY SortOrder, which is METAL_CONTENT_SEED's display order —
-    // NOT alphabetical, which would open the list on Aluminum.
+    // SortOrder (the seed's display order), not alphabetical.
     expect(res.body).toEqual([
       'Gold',
       'Silver',
@@ -88,15 +74,8 @@ describe('GET /api/denominations', () => {
   });
 
   it('returns the database denomination rows without injecting a duplicate static catalog', async () => {
-    // Still an exact `toEqual`, which is the point of the test: the response
-    // is the database rows and nothing else. It gained issuerId, issuerName
-    // and faceValue when the maintenance screen was rebuilt to group by
-    // issuer — three columns of the same row, not an injected
-    // extra entry.
-    //
-    // The table is narrowed to ONE ROW first. Exact equality against 1,207
-    // seeded rows would assert nothing a reader could check; against one it
-    // says precisely what the wire shape is.
+    // Exact equality against one row: the response is the row's columns and
+    // nothing injected.
     const [mexico] = await queryRows("SELECT IssuerId FROM Issuers WHERE Name = 'Mexico'");
     const [reales] = await queryRows(
       "SELECT DenominationId FROM Denominations WHERE Label = '8 Reales' AND IssuerId = @id",
@@ -140,8 +119,7 @@ describe('GET /api/mintmarks', () => {
   });
 
   it('returns the database mint-mark rows without injecting a duplicate static catalog', async () => {
-    // Narrowed to one row for the same reason as the denominations guard
-    // above: an exact `toEqual` is only readable against a known single row.
+    // Narrowed to one row, as above.
     await withTestDb((database) => {
       database.exec("DELETE FROM MintMarks WHERE Label <> 'D'");
     });
@@ -186,20 +164,15 @@ describe('POST /api/categories', () => {
     expect(res.status).toBe(201);
     expect(res.body.name).toBe('silver');
 
-    // The duplicate-safe part, asserted on the TABLE rather than on the
-    // SQL text: CategoryName is the PRIMARY KEY and it is COLLATE NOCASE,
-    // so a second insert of 'SILVER' would be a constraint violation and a
-    // 500 if the INSERT ... WHERE NOT EXISTS guard were dropped. It is a
-    // no-op instead, and the table still holds exactly one row.
+    // Checked on the table: a second 'SILVER' is a no-op, not a primary key
+    // violation (CategoryName is COLLATE NOCASE).
     const second = await request(app).post('/api/categories').send({ name: 'SILVER' });
     expect(second.status).toBe(201);
 
     const stored = await queryRows("SELECT CategoryName FROM Categories WHERE CategoryName = 'silver'");
     expect(stored).toEqual([{ CategoryName: 'silver' }]);
 
-    // The LTRIM/RTRIM half of the same guard, which the PRIMARY KEY does NOT
-    // cover: '  gold  ' and 'Gold' are two different strings to the index,
-    // so only the query's trimming stops the picker growing a second Gold.
+    // The trimming half, which the primary key doesn't cover.
     await withTestDb((database) => {
       database.exec("INSERT INTO Categories (CategoryName) VALUES ('  gold  ')");
     });
@@ -224,9 +197,7 @@ describe('DELETE /api/categories/:name', () => {
 
 describe('GET /api/coin-sets', () => {
   it('returns set names', async () => {
-    // Server reads row['SetName']. CoinSets is the one lookup table the
-    // seed does not fill — it is entirely user-made — so the rows are
-    // arranged here.
+    // CoinSets isn't seeded, so rows are arranged here.
     await withTestDb((database) => {
       database.exec("INSERT INTO CoinSets (SetName) VALUES ('Morgan Set'), ('Peace Set')");
     });

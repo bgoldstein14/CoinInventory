@@ -1,13 +1,7 @@
 /**
- * backup/jobs.spec.ts — the registry, tested where timing is decidable.
- *
- * *** WHY THESE ARE NOT HTTP TESTS. *** Two of the rules here are about
- * what is true in a single tick — "a second backup is refused while one is
- * running", "a bad folder throws before a job exists". Over HTTP both
- * become races: the test database is small enough that the copy can finish
- * between supertest sending one request and the next, so the assertions
- * would pass or fail on how fast the disk was that morning. Called
- * directly, with no `await` between the two calls, they are decidable.
+ * The backup job registry, called directly rather than over HTTP: rules like
+ * "a second backup is refused while one runs" would be timing races over
+ * HTTP with a small test database.
  */
 
 import fs from 'fs';
@@ -58,8 +52,7 @@ describe('startBackupJob — one at a time', () => {
     database = await useFileDatabase('jobs-one-at-a-time');
     await insertCoins(20);
 
-    // No await between these two, so the first is unambiguously still
-    // running when the second is attempted.
+    // No await between the two, so the first is still running.
     const first = startBackupJob({ directory: database.backupDirectory });
     expect(() => startBackupJob({ directory: database!.backupDirectory })).toThrow(
       BackupRequestError
@@ -70,16 +63,14 @@ describe('startBackupJob — one at a time', () => {
 
     expect(await settle(first.id)).toBe('done');
 
-    // ...and the slot is free again afterwards, or the feature would work
-    // exactly once per server start.
+    // ...and the slot is free again afterwards.
     expect(isBackupRunning()).toBe(false);
     const second = startBackupJob({ directory: database.backupDirectory });
     expect(await settle(second.id)).toBe('done');
   });
 
   it('does not claim the slot when it refuses the request', async () => {
-    // A rejected request that left `runningJobId` set would lock the
-    // feature out for the rest of the session.
+    // A rejected request must not leave runningJobId set.
     database = await useFileDatabase('jobs-no-leak');
 
     expect(() =>
@@ -102,8 +93,7 @@ describe('startBackupJob — what the dialog sees', () => {
     expect(path.basename(first.destination)).toBe('coin-inventory-backup-2026-11-14-1100.db');
     expect(await settle(first.id)).toBe('done');
 
-    // Same minute again: the name must move aside, and the status must say
-    // so BEFORE the copy finishes rather than after.
+    // Same minute: the name gets a suffix, visible in the status before the copy finishes.
     const second = startBackupJob({ directory: database.backupDirectory, now: when });
     expect(path.basename(second.destination)).toBe(
       'coin-inventory-backup-2026-11-14-1100 (2).db'
@@ -130,16 +120,9 @@ describe('startBackupJob — what the dialog sees', () => {
   });
 
   it('reports a failure as failed, with a message, rather than running for ever', async () => {
-    // EVERY path out of the copy must reach a terminal state. A job stuck
-    // on 'running' is a dialog that spins until the user gives up, with a
-    // backup that may or may not exist.
-    //
-    // The failure is staged by pointing the data layer at a collection
-    // file that is not there, AFTER the destination has been accepted — so
-    // the destination check passes synchronously and the copy itself is
-    // what fails. (`releaseFileDatabase` in the afterEach puts
-    // COIN_INVENTORY_DB_PATH back to ':memory:', which vitest-setup.ts
-    // insists on.)
+    // Every path must reach a terminal state. The failure is staged by
+    // pointing the data layer at a missing collection file after the
+    // destination is accepted, so the copy itself fails.
     database = await useFileDatabase('jobs-failed');
     await insertCoins(2);
 
@@ -151,7 +134,7 @@ describe('startBackupJob — what the dialog sees', () => {
     const failed = getBackupJob(started.id)!;
     expect(failed.error).toMatch(/could not be found/i);
     expect(failed.finishedAt).not.toBeNull();
-    // And the slot is free, so one failure does not disable the feature.
+    // The slot is free again after a failure.
     expect(isBackupRunning()).toBe(false);
   });
 });
@@ -174,8 +157,7 @@ describe('cancelBackupJob', () => {
   });
 
   it('is a no-op, not an error, for a job that has already finished', async () => {
-    // The user pressed Cancel at the same moment the copy completed. There
-    // is nothing to apologise for.
+    // Cancel pressed just as the copy completed.
     database = await useFileDatabase('jobs-cancel-late');
     await insertCoins(1);
 

@@ -1,23 +1,9 @@
-// Page-level basics for the root <app-root> component.
-//
-// The shared buttons / badges / form primitives used to live here too, but
-// child components cannot reach styles written in app.scss, so they moved to
-// `_controls.scss` where every component can `@use` them. This file keeps only
-// the rules that are genuinely about the application root itself — most
-// importantly `:host`, which must NOT be inherited by child components.
+// Page-level basics for the root <app-root> component only (`:host` must not
+// reach child components). Shared primitives live in `_controls.scss`.
 @use 'controls' as *;
 
-// The app root is a full-viewport flex column:
-//
-//   [ error banner (only when disconnected) ]  <- natural height
-//   [ .app-shell                            ]  <- flex: 1, takes the rest
-//   [ .status-bar                           ]  <- natural height
-//
-// Using an exact `height` (not `min-height`) plus `overflow: hidden` is what
-// keeps the page from scrolling. The previous `min-height: 100vh` let the
-// content grow past the viewport, and combined with the browser's default
-// body margin it produced a permanent page scrollbar and a few pixels of
-// vertical drift.
+// Full-viewport flex column: [error banner] [.app-shell, flex: 1] [.status-bar].
+// An exact `height` with `overflow: hidden` keeps the page from scrolling.
 :host {
   display: flex;
   flex-direction: column;

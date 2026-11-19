@@ -1,53 +1,13 @@
  /*
- * corpus-denomination-labels.spec.ts
- * WHAT RESOLVING THE COIN'S ID COSTS THE MATCHER ON A REAL COLLECTION
+ * Regression check: runs the QIF corpus (457 coins, seven accounts) through
+ * the real importer, links each coin against the real denomination seed, and
+ * matches the generated photo filenames with and without resolved labels.
+ * No photo should change coin or tier: the QIF importer stores the seed's own
+ * spellings ('3CS', '50¢'), so label and text are identical. The behaviour
+ * when they differ is covered in coin-denomination-label.spec.ts.
  *
- * WHAT THIS FILE IS
- *
- * Every other spec for this change asks whether a rule is implemented. This
- * one asks what the change DOES to a collection, and the answer is a number
- * rather than a reassurance:
- *
- *   - the REAL importer is run over all seven coin accounts of the
- *     structurally faithful corpus in `testing/qif-corpus/` (457 coins);
- *   - every coin is linked against the REAL authored seed -- 1,161
- *     denominations under 61 issuers -- through the same
- *     `resolveIndexedDenomination` the import path uses;
- *   - his filename conventions produce the photographs: an obverse and a
- *     reverse per security, a deliberately uninformative "silent" shot per
- *     coin, and a slab-label shot;
- *   - and the whole lot is matched TWICE, with and without the resolved
- *     labels, and the two sets of decisions are compared file by file.
- *
- * THE ANSWER IS ZERO, AND ZERO IS THE RESULT WE WANTED
- *
- * Not one photograph changes which coin it lands on. That is not a weak
- * result; it is the one design §2 asks for:
- *
- *     "The image matcher getting worse. It identifies coins partly by
- *      denomination; a regression there means photos attaching to the wrong
- *      coin, which is expensive to notice and painful to undo."
- *
- * AND HERE IS *WHY* IT IS ZERO, BECAUSE THE NUMBER IS WORTHLESS WITHOUT IT
- *
- * *** FOR EVERY ONE OF THE 449 CORPUS COINS THAT LINK, THE LOOKUP'S LABEL IS
- * CHARACTER-IDENTICAL TO THE TEXT THE QIF IMPORTER STORED. *** The importer
- * writes the seed's own spellings -- '3CS', '50¢', '$20' -- so the coin side
- * reads the same string either way and nothing can move. The eight that do
- * not link (`8 Reales` x4, `5s`, blank x3) keep their text, which is also
- * the unchanged path.
- *
- * So this file proves NO REGRESSION, and it deliberately cannot prove the
- * change does anything: a corpus with no divergence between text and label
- * has nothing to say about divergence. The behaviour itself is pinned in
- * coin-denomination-label.spec.ts, on the state the CSV and Excel importers
- * really produce (`Half Dollar` stored, `50¢` linked).
- *
- * *** IF THIS FILE EVER FAILS, DO NOT ADJUST THE NUMBER. *** It means either
- * the seed's labels have moved away from what the importers store, or the
- * coin side has started reading something new. Both are findings about the
- * coin side has started reading something new. Both are findings about the
- * coin before anything is changed.
+ * A failure means seed labels have drifted from what importers store, or the
+ * coin side reads something new; investigate rather than adjusting numbers.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -90,9 +50,7 @@ function census(): Census {
   for (const account of QIF_ACCOUNTS) {
     const inventory: CoinRecord[] = inventoryFor(account);
 
-    // EXACTLY what the import path does: the coin's own text, the coin's own
-    // country. Not a constant, and not the file's. (See the header of
-    // denominations/denomination-index.ts.)
+    // Resolve as the import path does: the coin's own text and country.
     for (const coin of inventory) {
       coins += 1;
       coin.denominationId =
@@ -101,7 +59,7 @@ function census(): Census {
     }
 
     const names = [
-      ...photoFilenamesFor(account),                              // his obverse + reverse
+      ...photoFilenamesFor(account),                              // obverse + reverse
       ...silentPhotoFilenamesFor(account),                        // the shot that says less
       ...photoFilenamesFor(account, ['Slab Label'])               // a label, which never identifies
     ];
@@ -132,11 +90,7 @@ const CORPUS = census();
 
 describe('the QIF corpus, matched with and without the resolved denomination', () => {
   it('is a sample worth measuring', () => {
-    /* NON-VACUITY, and this file needs it more than most: if the fixture
-     * stopped producing coins, or the seed stopped linking any of them, or
-     * the filename builder returned nothing, "no photograph moved" would be
-     * true of an empty set and this whole file would pass while measuring
-     * air. Each number below is asserted exactly for that reason. */
+    // Guards against the next test passing vacuously on an empty sample.
     expect(CORPUS.coins).toBe(457);
     expect(CORPUS.linked).toBe(449);
     expect(CORPUS.decisions).toBeGreaterThan(1500);
@@ -145,7 +99,7 @@ describe('the QIF corpus, matched with and without the resolved denomination', (
   });
 
   it('moves not one photograph off the coin it was already on', () => {
-    // The list, not a count -- a review has to be of the actual coins.
+    // Compared as a list so a failure names the files.
     expect(CORPUS.moved).toEqual([]);
   });
 });

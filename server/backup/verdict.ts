@@ -1,55 +1,27 @@
 /**
- * backup/verdict.ts — WHAT RESTORE REFUSES, AND WHY, AS A PURE FUNCTION.
+ * Decides whether a file may replace the collection, as a pure function of
+ * facts gathered by backup/inspect.ts. Anything uncertain is refused, since a
+ * half-working restore silently loses data. Checked in order (each assumes the
+ * previous passed):
  *
- * *** THIS IS THE DANGEROUS HALF OF §16 AND IT IS DELIBERATELY THE DULLEST
- * FILE IN IT. *** Everything that decides whether a file is allowed to
- * replace somebody's collection is here, it takes plain facts and returns a
- * plain answer, and it touches no disk, no database and no HTTP. That is
- * what makes "refuse a newer schema" something a test can hold still rather
- * than something buried in a route handler behind two awaits.
- *
- * THE RULE THE WHOLE FEATURE TURNS ON: *a restore that half-works is worse
- * than one that refuses.* A refusal costs the user one confused minute. A
- * half-restore costs them a collection, and it does it quietly — the app
- * opens, the grid draws, and the coins added since March are simply not
- * there. So every check below is run BEFORE anything is moved, and anything
- * this file is not certain about is refused.
- *
- * FIVE REFUSALS AND TWO ACCEPTANCES, in the order they are decided:
- *
- *   missing       there is no file at that path
- *   not-sqlite    the first sixteen bytes are not SQLite's
- *   unreadable    SQLite would not open it (truncated, encrypted, corrupt)
- *   not-this-app  it is a SQLite database, but not Coin Inventory's
- *   newer-schema  it is ours, from a LATER build than this one
+ *   missing       no file at that path
+ *   not-sqlite    the header isn't SQLite's
+ *   unreadable    SQLite won't open it (truncated, encrypted, corrupt)
+ *   not-this-app  a SQLite database, but not Coin Inventory's
+ *   newer-schema  ours, from a later build
  *   ---
  *   ok            ours, and this build understands it
- *   unversioned   ours, with no version stamp — see below
- *
- * The order matters. Each check assumes the ones above it passed, which is
- * why the table check can trust that there is a readable database to have
- * tables at all.
+ *   unversioned   ours, with no version stamp (accepted)
  */
 
 import { SCHEMA_VERSION, UNSTAMPED_SCHEMA_VERSION } from '../db';
 
 /**
- * The tables a Coin Inventory database has. All of them must be present;
- * this is the test for "is this OUR database".
- *
- * WHY ALL ELEVEN AND NOT JUST `Coins`. A file with a Coins table and no
- * Denominations table is not a Coin Inventory backup — it is something else
- * that happens to share a noun, or one of ours that was truncated in
- * transit. Restoring it would produce an application that starts, shows an
- * empty grid and throws on the first lookup. Checking the full set costs one
- * query and turns that into a refusal.
- *
- * It is NOT read from db/schema.sql on purpose. This list is the contract
- * for what an ACCEPTABLE FILE looks like; schema.sql is what this build
- * creates. Deriving one from the other would mean that adding a table to
- * schema.sql silently started rejecting every backup in existence, which is
- * precisely the decision SCHEMA_VERSION exists to make explicit.
- * db/schema.spec.ts asserts the two agree today.
+ * The tables a Coin Inventory database must have; all must be present for a
+ * file to count as ours (a partial set is something else, or truncated).
+ * Hand-written rather than read from db/schema.sql: this is the contract for
+ * an acceptable file, and adding a table must not silently reject old backups
+ * (that's what SCHEMA_VERSION is for). backup/verdict.spec.ts checks they match.
  */
 export const REQUIRED_TABLES: readonly string[] = [
   'AppSettings',
@@ -64,6 +36,12 @@ export const REQUIRED_TABLES: readonly string[] = [
   'MintMarks',
   'SpotPrices',
 ];
+
+/**
+ * Tables a current database has that older backups may lack. Opening a file
+ * creates them and db/schema.ts upgradeSchema() fills them, so they are not required.
+ */
+export const TABLES_CREATED_ON_OPEN: readonly string[] = ['CoinCatalogRefs'];
 
 export type RestoreVerdict =
   | 'ok'
@@ -90,7 +68,7 @@ export interface CandidateFacts {
 
 export interface RestoreDecision {
   readonly verdict: RestoreVerdict;
-  /** True ONLY for 'ok' and 'unversioned'. The single gate on the restore. */
+  /** True only for 'ok' and 'unversioned'. */
   readonly acceptable: boolean;
   /** One sentence for the user. No jargon, no stack traces, no file paths. */
   readonly message: string;
@@ -100,12 +78,8 @@ export interface RestoreDecision {
 
 /**
  * Decides whether this file may replace the user's collection.
- *
- * Pure: same facts in, same answer out, every time. The caller does not get
- * to override it — backup/restore.ts calls this and stops on `acceptable`
- * being false, and it calls it AGAIN at the moment of the swap rather than
- * trusting the answer the dialog was shown. A user can edit a path between
- * pressing Inspect and pressing Restore.
+ * backup/restore.ts calls it again at swap time, since the path may have
+ * changed after the dialog showed its verdict.
  */
 export function classifyRestoreCandidate(facts: CandidateFacts): RestoreDecision {
   if (!facts.fileExists) {
@@ -145,21 +119,8 @@ export function classifyRestoreCandidate(facts: CandidateFacts): RestoreDecision
 
   const version = facts.schemaVersion ?? UNSTAMPED_SCHEMA_VERSION;
 
-  /* *** THE REFUSAL WITH NO WAY ROUND IT. ***
-   *
-   * There is no migration runner in this application and there is
-   * deliberately not going to be one yet (db/schema.ts). A file from a
-   * later build cannot be read DOWN: this build does not know what the
-   * later one added, so it cannot drop it, and it cannot know which of the
-   * columns it does recognise now mean something different.
-   *
-   * The temptation is to "try anyway, it is probably fine". It usually
-   * would be. The time it is not, the user has already let us move their
-   * good collection aside to make room for a file we then mangle — and the
-   * mangling is silent, because a column this build never reads is a column
-   * it never notices is missing. So: refused, by number, before anything
-   * moves. The message names both versions because "upgrade Coin Inventory"
-   * is the actual fix and the user needs to recognise that it applies. */
+  // A newer build's file can't be read safely (no downgrade path; changes
+  // would be silently lost), so refuse it and name both versions.
   if (version > SCHEMA_VERSION) {
     return refuse(
       'newer-schema',
@@ -170,16 +131,8 @@ export function classifyRestoreCandidate(facts: CandidateFacts): RestoreDecision
     );
   }
 
-  /* UNVERSIONED IS NOT A PROBLEM, IT IS A DATE.
-   *
-   * `PRAGMA user_version` defaults to 0 and this application never set it
-   * before 2026-11-14, so every database older than that reads 0. Those
-   * files have the eleven tables above — nothing in the schema changed when
-   * the stamp was introduced — and the table check has already passed, so
-   * they are accepted on the strength of their SHAPE rather than their
-   * number. The dialog still says so, because "we cannot tell exactly which
-   * version wrote this" is true and the user is about to replace a
-   * collection with it. */
+  // Version 0 means made before stamping existed. Those files have the same
+  // tables and the table check passed, so accept them; the dialog says so.
   if (version === UNSTAMPED_SCHEMA_VERSION) {
     return {
       verdict: 'unversioned',

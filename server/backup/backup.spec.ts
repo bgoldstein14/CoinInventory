@@ -1,16 +1,6 @@
 /**
- * backup/backup.spec.ts — AGAINST REAL FILES, BECAUSE EVERY FAILURE MODE
- * THIS FEATURE HAS IS A FILE FAILURE.
- *
- * There is not a mock in this file and there must not be one. A mocked
- * `backup()` would prove that run-backup.ts calls it with the arguments
- * run-backup.ts was written to call it with, which is a tautology. What is
- * actually in question is whether the file on the other side is a complete,
- * consistent, openable database — and only a real database written to a
- * real disk and read back can answer that.
- *
- * THE FIRST TEST IS THE ONE THAT MATTERS. Everything else here is
- * housekeeping around it.
+ * Backup tests against real files on disk, with no mocks: the question is
+ * whether the resulting file is a complete, openable database.
  */
 
 import fs from 'fs';
@@ -37,101 +27,59 @@ import {
 let database: FileDatabase | null = null;
 
 afterEach(async () => {
-  // Restores COIN_INVENTORY_DB_PATH to ':memory:'. vitest-setup.ts fails
-  // the test if this is skipped — read its header for the incident.
+  // Restores COIN_INVENTORY_DB_PATH to ':memory:' (vitest-setup.ts enforces this).
   if (database) await releaseFileDatabase(database);
   database = null;
 });
 
 describe('backup — the WAL trap, and why the app no longer has to be closed', () => {
   /**
-   * *** THE CENTRAL CLAIM OF §16, MEASURED RATHER THAN ASSERTED. ***
-   *
-   * The plan this feature came from used to warn users to close the
-   * application before copying their database. The reason was real: the
-   * collection runs in WAL mode, so recent transactions sit in a `-wal`
-   * sibling until a checkpoint folds them into the `.db`. Copy the `.db`
-   * on its own and you get a database that opens, passes an integrity
-   * check, and is missing the user's most recent coins.
-   *
-   * This test does both things at the same moment, on the same live
-   * database, with the application's connection still open and still
-   * holding uncheckpointed writes:
-   *
-   *   fs.copyFileSync  -> short. The exact silent data loss the warning
-   *                       existed for.
-   *   performBackup    -> complete.
-   *
-   * If the second assertion ever fails, the warning has to come back.
+   * In WAL mode recent transactions sit in the -wal file, so a plain copy of
+   * the .db misses them. This takes a file copy and a backup at the same
+   * moment with the app's connection open: the copy is short, the backup
+   * complete.
    */
   it('copies every committed row while the app is open, where a file copy does not', async () => {
     database = await useFileDatabase('wal-trap');
 
-    // Enough rows that the WAL has not been checkpointed. SQLite
-    // auto-checkpoints at 1,000 pages, so this deliberately stays under
-    // the point where the main file catches up on its own.
+    // Stay under SQLite's 1,000-page auto-checkpoint so the WAL isn't folded in.
     await insertCoins(400, 'wal');
 
-    // Proof that the premise holds on this machine before anything is
-    // claimed about the fix: there really is uncommitted-to-main content.
+    // Confirm the premise: there is content only in the WAL.
     expect(fs.existsSync(`${database.file}-wal`)).toBe(true);
     expect(fs.statSync(`${database.file}-wal`).size).toBeGreaterThan(0);
 
-    // THE WRONG WAY, for comparison. Same instant, same file, no close.
+    // A plain file copy, for comparison.
     const naiveCopy = path.join(database.backupDirectory, 'naive-copy.db');
     fs.copyFileSync(database.file, naiveCopy);
     const naiveFacts = readDatabaseFileFacts(naiveCopy);
 
-    // THE RIGHT WAY. Still no close, still the same live handle open.
+    // The backup, with the live handle still open.
     const result = await performBackup({ directory: database.backupDirectory });
     const backupFacts = readDatabaseFileFacts(result.path);
 
     expect(backupFacts.coinCount).toBe(400);
     expect(result.coinCount).toBe(400);
 
-    // And the comparison that makes the point. Not `toBeLessThan`, because
-    // a flaky checkpoint could make the naive copy complete by accident and
-    // turn this into a test that fails for the wrong reason — so it asserts
-    // what we are protected FROM only when the premise actually held.
+    // Only asserted when the premise held, so a checkpoint can't make this flaky.
     expect(naiveFacts.coinCount).not.toBeNull();
     if ((naiveFacts.coinCount ?? 0) < 400) {
-      // The usual case, and the one the old warning was about.
       expect(backupFacts.coinCount! - naiveFacts.coinCount!).toBeGreaterThan(0);
     }
   });
 
   /**
-   * *** THE APPLICATION KEEPS WRITING, AND THE BACKUP STILL FINISHES. ***
-   *
-   * This is the test that found the one real bug in this feature. SQLite
-   * RESTARTS a backup — from the beginning, not from where it was — when
-   * the source database is modified through a connection other than the
-   * one the copy is reading. We read through a second, read-only
-   * connection on purpose, so every edit the user makes during a backup is
-   * exactly that kind of modification. An early version of this test wrote
-   * a row every millisecond and never completed: 62 restarts in ten
-   * seconds against a 60,000-row database.
-   *
-   * The fix is in db/backup.ts (pinReadSnapshot): hold a read transaction
-   * for the whole copy, so the source the backup sees cannot change and
-   * there is nothing to restart for. This test writes continuously
-   * throughout and insists the copy still finishes — which it only does
-   * because the snapshot is pinned.
+   * SQLite restarts a backup whenever another connection writes to the
+   * source. Without the pinned read snapshot in db/backup.ts, continuous
+   * writes meant the copy never finished. This writes throughout and
+   * requires the copy to complete.
    */
   it('finishes under a continuous stream of writes, instead of restarting for ever', async () => {
     database = await useFileDatabase('concurrent-writes');
     await insertCoins(200, 'before');
 
-    /* *** THE DATABASE HAS TO BE BIG, OR THIS TEST PROVES NOTHING. ***
-     *
-     * A restart only hurts when a full copy takes longer than the gap
-     * between writes. An earlier version of this test used the bare
-     * seeded database — a few hundred pages — and the copy finished
-     * inside one 1 ms gap whether the snapshot was pinned or not, so
-     * removing the pin left it passing. Ten megabytes is enough that an
-     * unpinned copy is thrown away and started again faster than it can
-     * ever reach the end. Verified by deleting pinReadSnapshot() and
-     * watching this fail. */
+    // Must be large (~10 MB): a small database copies within one write gap
+    // and would pass even without the pinned snapshot.
     await insertBulkImageData(40, 256 * 1024);
 
     const connection = await getPool();
@@ -147,11 +95,8 @@ describe('backup — the WAL trap, and why the app no longer has to be closed', 
         });
     }, 1);
 
-    /* A DEADLINE, not the suite's timeout. The unpinned failure mode is
-     * "never finishes", and a bare `await` would surface that as a
-     * generic timeout 20 seconds later with no explanation. This names
-     * it. The margin is enormous — pinned, this copy takes well under a
-     * second — so it cannot go off because a machine was busy. */
+    // Explicit deadline so the "never finishes" failure is named, not a
+    // generic timeout. Pinned, the copy takes well under a second.
     const DEADLINE_MS = 10_000;
     let result;
     try {
@@ -178,26 +123,20 @@ describe('backup — the WAL trap, and why the app no longer has to be closed', 
 
     const facts = readDatabaseFileFacts(result.path);
 
-    // A consistent snapshot: everything committed before the copy began is
-    // in it. Which of the interleaved writes also made it is deliberately
-    // not asserted — they land on one side of the snapshot or the other,
-    // and both are correct.
+    // Everything committed before the copy began is in it; interleaved
+    // writes may land either side of the snapshot.
     expect(facts.coinCount).toBeGreaterThanOrEqual(200);
     expect(facts.tables).toContain('Coins');
 
-    // The writer really did run throughout, and the application was never
-    // blocked out of its own database.
+    // The writer ran throughout and was never blocked.
     expect(written).toBeGreaterThan(10);
     expect(failedWrites).toBe(0);
   }, 30000);
 });
 
 /**
- * Pads the database out with `rows` photographs of `bytes` each.
- *
- * Through the raw handle rather than the request API: this is fixture
- * setup, and 10 MB of base64 pushed one statement at a time through the
- * binding layer is slow enough to notice in a suite that runs in seconds.
+ * Pads the database with `rows` photos of `bytes` each, via the raw handle
+ * for speed.
  */
 async function insertBulkImageData(rows: number, bytes: number): Promise<void> {
   const connection = await getPool();
@@ -224,8 +163,6 @@ describe('backup — what the file carries', () => {
     const result = await performBackup({ directory: database.backupDirectory });
     const facts = readDatabaseFileFacts(result.path);
 
-    // THE WHOLE REASON THE STAMP HAD TO EXIST BEFORE THIS FEATURE SHIPPED.
-    // A backup with user_version 0 is a file no restore can reason about.
     expect(facts.schemaVersion).toBe(SCHEMA_VERSION);
     expect(result.schemaVersion).toBe(SCHEMA_VERSION);
   });
@@ -247,8 +184,7 @@ describe('backup — what the file carries', () => {
   });
 
   it('is ONE file — no -wal or -shm left beside it', async () => {
-    // "A portable file" means one thing the user can copy to a USB stick.
-    // A backup that needed its sidecars to be complete would be three.
+    // A backup must be one self-contained file, with no sidecars needed.
     database = await useFileDatabase('single-file');
     await insertCoins(50);
 
@@ -282,7 +218,7 @@ describe('backup — progress and cancellation', () => {
     });
 
     expect(seen.length).toBeGreaterThan(1);
-    // Monotonic: a bar that goes backwards is a bar nobody trusts.
+    // Progress must never go backwards.
     for (let i = 1; i < seen.length; i++) {
       expect(seen[i]).toBeGreaterThanOrEqual(seen[i - 1]!);
     }
@@ -302,9 +238,7 @@ describe('backup — progress and cancellation', () => {
       })
     ).rejects.toBeInstanceOf(BackupCancelled);
 
-    // A half-written .db with a plausible name in the user's backup folder
-    // is a file they will try to restore from one day. Nothing, not even a
-    // sidecar, may be left.
+    // A cancelled backup leaves nothing behind, not even a sidecar.
     expect(fs.readdirSync(database.backupDirectory)).toEqual([]);
   });
 
@@ -353,10 +287,7 @@ describe('backup — refusing a destination it cannot use', () => {
   });
 
   it('NEVER overwrites an existing backup', async () => {
-    // Two backups in the same minute suggest the same name. Overwriting the
-    // first destroys a copy the user may be relying on — most likely at the
-    // exact moment they are pressing Backup repeatedly because something
-    // has gone wrong.
+    // Two backups in the same minute must not overwrite each other.
     database = await useFileDatabase('no-overwrite');
     await insertCoins(5);
 
@@ -379,7 +310,7 @@ describe('percentComplete', () => {
   });
 
   it('answers 100 rather than NaN for an empty database', () => {
-    // 0/0. A bar stuck at the left for a backup that has already finished.
+    // Empty database: 0/0 must read as done.
     expect(percentComplete(0, 0)).toBe(100);
   });
 

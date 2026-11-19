@@ -1,43 +1,17 @@
 /**
- * routes/coins/image-source-paths.ts — POST /api/coins/image-source-paths
- *
- * Answers "which ORIGINAL files are already attached to these coins?" for a
- * whole review screen in one round trip.
+ * POST /api/coins/image-source-paths: which original files are already
+ * attached to these coins, for a whole import review screen in one request.
  *
  *   Request:  { "coinIds": ["morgan", "peace"] }
- *   Response: { "results": { "morgan": ["D:\\pics\\morgan obverse.jpg",
- *                                       "D:\\pics\\morgan reverse.jpg"],
+ *   Response: { "results": { "morgan": ["D:\pics\morgan obverse.jpg",
+ *                                       "D:\pics\morgan reverse.jpg"],
  *                            "peace":  [] } }
  *
- * THE BUG THIS EXISTS TO PREVENT. The batch import is append-only and has no
- * way of knowing what is already attached: the only thing that identifies a
- * source FILE is `CoinImages.SourcePath`, and that value does not otherwise
- * reach the browser. `CoinRecord.imagePaths` — the array the whole front end
- * works from — holds the downscaled `data:` URLs and nothing else, by
- * deliberate design (see services/image-source-paths.ts). Without this
- * endpoint, re-importing a folder of 300 photos of which 290 were already
- * attached re-saves all 300, duplicating 290 of them.
- *
- * A BATCHED endpoint rather than GET /api/coins/:id/images, which already
- * returns `sourcePath` for ONE coin: a review screen covers a hundred-odd
- * coins, and that many requests to decide what to skip would cost more than
- * the duplicate import. Shape and limits deliberately mirror
- * POST /api/images/exists — one POST, an array in, a keyed object out, a hard
- * cap on the batch size.
- *
- * ImageData IS NOT IN THE SELECT LIST, AND MUST NEVER BE. Those NVARCHAR(MAX)
- * base64 blobs ARE the database; everything else is a few kilobytes of text.
- * Selecting them for a hundred coins to answer a question about file names
- * moves tens of megabytes to decide something a few hundred short strings can
- * decide. The column list below is part of this endpoint's contract and its
- * spec asserts on it.
- *
- * POST for a read, same reason as /api/images/exists: the payload is an
- * unbounded list, and a query string has both a length limit and a pile of
- * encoding traps.
- *
- * Every database call goes through `withDb()`; there are no `resetPool()`
- * calls. See db/index.ts for why that matters.
+ * Lets the batch import skip files already attached instead of duplicating
+ * them (the client's imagePaths hold only data URLs, not source paths).
+ * Batched like POST /api/images/exists. ImageData must never be selected:
+ * those blobs are the bulk of the database, and the spec checks the column
+ * list. POST because the id list is unbounded.
  */
 
 import { Router, Request, Response } from 'express';
@@ -48,35 +22,25 @@ import { sendDbError } from '../db-error-response';
 const router = Router();
 
 /**
- * The most coins we will answer for in one request.
- *
- * Each id becomes one bound parameter in an IN list, and SQL Server refuses a
- * statement with more than 2,100 parameters outright. 500 stays an order of
- * magnitude clear of that ceiling while covering any review screen a real
- * photo folder produces. A caller with more than 500 should page; hitting
- * this limit means something unintended.
- *
- * Matches MAX_PATHS_PER_REQUEST in routes/images/exists.ts on purpose — two
- * batched endpoints with two different limits is a trap for the next reader.
+ * Max coins per request. Each id is a bound parameter; 500 is well under
+ * engine parameter limits. Matches MAX_PATHS_PER_REQUEST in
+ * routes/images/exists.ts.
  */
 export const MAX_COIN_IDS_PER_REQUEST = 500;
 
-// MOUNT ORDER NOTE: this router is mounted FIRST in routes/coins/index.ts.
-// The only other POST under /api/coins is `POST /` (create a coin), which is
-// an exact-root match and cannot capture `/image-source-paths` — but "cannot
-// today" is a weaker guarantee than "is matched first", and a 201 Created
-// here would silently insert a junk coin on every import.
+// Mounted first in routes/coins/index.ts so `POST /` (create a coin) can never
+// capture this path.
 router.post('/image-source-paths', async (req: Request, res: Response) => {
   const rawIds = (req.body as { coinIds?: unknown } | undefined)?.coinIds;
 
-  // ----- 400: the body is not the shape we documented ---------------------
+  // 400: wrong body shape.
   if (!Array.isArray(rawIds)) {
     logWarn('POST /api/coins/image-source-paths called without a "coinIds" array');
     res.status(400).json({ error: 'Body must be { "coinIds": string[] }.' });
     return;
   }
 
-  // ----- 400: too many coins for one statement ----------------------------
+  // 400: too many ids.
   if (rawIds.length > MAX_COIN_IDS_PER_REQUEST) {
     logWarn(
       `POST /api/coins/image-source-paths rejected ${rawIds.length} ids (limit ${MAX_COIN_IDS_PER_REQUEST})`
@@ -87,27 +51,17 @@ router.post('/image-source-paths', async (req: Request, res: Response) => {
     return;
   }
 
-  // Keep only strings, and de-duplicate. Non-string entries are dropped rather
-  // than reported, exactly as /api/images/exists drops non-string paths: there
-  // is no sensible key to return them under, and the caller finding no entry
-  // means the same thing as an empty one.
+  // Keep strings only, de-duplicated (as /api/images/exists does).
   const coinIds = [...new Set(rawIds.filter((id): id is string => typeof id === 'string'))];
 
   /**
-   * EVERY REQUESTED ID GETS AN ENTRY, even when the coin has no photos or does
-   * not exist at all.
-   *
-   * The alternative — omitting empty coins — makes "this coin has nothing
-   * attached" and "the server did not answer about this coin" the same value
-   * on the client, and the client's reaction to those two has to differ: the
-   * first means "attach everything", the second means "do not guess". A
-   * present-but-empty array says the question was asked and answered.
+   * Every requested id gets an entry, even if empty, so "nothing attached"
+   * is distinguishable from "not answered".
    */
   const results: Record<string, string[]> = {};
   for (const id of coinIds) results[id] = [];
 
-  // Nothing to ask about. Answer without opening a connection — an import of a
-  // folder whose coins all turn out to be new hits this every time.
+  // Nothing to look up: answer without a query.
   if (coinIds.length === 0) {
     res.json({ results });
     return;
@@ -117,18 +71,14 @@ router.post('/image-source-paths', async (req: Request, res: Response) => {
     const rows = await withDb(async (db) => {
       const request = db.request();
 
-      // A parameterised IN list. The ids are user data (they arrive in a
-      // request body), so they are BOUND, never interpolated — the spec sends
-      // a `'; DROP TABLE Coins; --` id to keep that honest. Parameter names are
-      // positional and generated here, so they cannot collide.
+      // Bound parameters (the spec tries an injection string); names are generated.
       const placeholders = coinIds.map((id, index) => {
         const name = `coinId${index}`;
         request.input(name, DB_BINDINGS.coinId, id);
         return `@${name}`;
       });
 
-      // No ORDER BY: the client builds a set out of this and compares by
-      // normalised path, so ordering would be work nobody reads.
+      // No ORDER BY: the client builds a set.
       const result = await request.query(
         `SELECT CoinId, SourcePath FROM CoinImages ` +
           `WHERE SourcePath IS NOT NULL AND CoinId IN (${placeholders.join(', ')})`
@@ -142,13 +92,10 @@ router.post('/image-source-paths', async (req: Request, res: Response) => {
       const coinId = row['CoinId'] as string | null | undefined;
       const sourcePath = row['SourcePath'] as string | null | undefined;
 
-      // The WHERE clause already excludes SQL NULL, but a whitespace-only
-      // SourcePath is just as useless and has to be filtered in code. Both are
-      // "no path recorded", which is how every image imported before the
-      // column existed looks.
+      // Whitespace-only paths are as useless as NULL.
       if (!coinId || !sourcePath || sourcePath.trim().length === 0) continue;
 
-      // Keeps the response keyed strictly by what was requested.
+      // Keyed strictly by what was requested.
       const bucket = results[coinId];
       if (!bucket) continue;
 

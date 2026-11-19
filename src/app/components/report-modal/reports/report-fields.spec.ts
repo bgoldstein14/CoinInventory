@@ -1,16 +1,6 @@
 /**
- * report-fields.spec.ts
- *
- * Two things are being pinned here.
- *
- * 1. WHAT AN INSURANCE SCHEDULE MAY NOT CONTAIN. The user's private notes are
- *    the obvious one, but provenance ('source') and sale history are equally
- *    none of an insurer's business. A field creeping into that list is a
- *    privacy regression, and it would be invisible on screen, so it is tested.
- *
- * 2. THAT ADDING A COIN FIELD LATER COSTS NOTHING HERE. A new grid column
- *    must reach the inventory listing with no edit to this file, and must
- *    NOT reach the insurance schedule by accident.
+ * Pins which fields the insurance schedule withholds, and that new grid
+ * columns reach the inventory listing but not the schedule.
  */
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../../types/coin.model';
@@ -45,8 +35,6 @@ function coin(overrides: Partial<CoinRecord> = {}): CoinRecord {
 
 describe('INSURANCE_REPORT_FIELDS', () => {
   it('identifies the coin and states its value', () => {
-    // The two jobs of an appraisal line: say WHICH coin, and say WHAT IT IS
-    // WORTH. Anything that does neither has no business on the page.
     for (const field of ['year', 'denomination', 'coinType', 'grade', 'currentValue']) {
       expect(INSURANCE_REPORT_FIELDS).toContain(field);
     }
@@ -79,9 +67,6 @@ describe('INSURANCE_REPORT_FIELDS', () => {
   });
 
   it('names only fields this report can actually render', () => {
-    // Guards against a typo or a renamed field turning into a column of
-    // em-dashes that nobody notices until the document is in an insurer's
-    // hands.
     for (const field of INSURANCE_REPORT_FIELDS) {
       expect(formatReportCell(coin(), field)).not.toBe('');
       expect(reportFieldLabel(field)).not.toBe('');
@@ -89,9 +74,6 @@ describe('INSURANCE_REPORT_FIELDS', () => {
   });
 
   it('does NOT absorb a new grid column automatically', () => {
-    // The inventory listing follows the grid; the insurance schedule is a
-    // deliberate, curated list. A field added to the grid must not appear in
-    // front of an insurer until somebody decides it should.
     const extras = (inventoryColumnOrder as readonly string[])
       .filter(column => !(INSURANCE_REPORT_FIELDS as readonly string[]).includes(column));
     expect(extras.length).toBeGreaterThan(0);
@@ -105,9 +87,6 @@ describe('inventoryReportFields', () => {
   });
 
   it('accepts EVERY column the grid knows about, including ones added later', () => {
-    // The future-proofing test: a new entry in inventoryColumnOrder is
-    // covered here with no edit, and if the report cannot render it this
-    // fails rather than printing a silent column of dashes.
     const all = inventoryReportFields([...inventoryColumnOrder]);
     expect(all).toEqual([...inventoryColumnOrder]);
     for (const field of all) {
@@ -129,8 +108,6 @@ describe('inventoryReportFields', () => {
 
 describe('reportFieldLabel', () => {
   it('spells out the abbreviations the grid uses to save width', () => {
-    // 'MM' and 'Denom.' are fine above a 60px column. They are not fine on a
-    // printed document handed to somebody who is not a coin collector.
     expect(reportFieldLabel('mintMark')).toBe('Mint Mark');
     expect(reportFieldLabel('denomination')).toBe('Denomination');
     expect(reportFieldLabel('certCompany')).toBe('Certified By');
@@ -160,11 +137,7 @@ describe('formatReportCell', () => {
   });
 
   it('renders an UNRECORDED money value as a blank, not as $0.00', () => {
-    // The grid prints `$0.00` here and that is fine on screen, where the
-    // reader knows the collection. On an insurance schedule it is a claim
-    // that the coin is worth nothing, which is the exact lie this whole
-    // feature exists to avoid. It must also agree with the grand total:
-    // a coin the total counts as `unknown` has to LOOK unknown in its row.
+    // The grid prints `$0.00`; the report must match the total, which counts it as unknown.
     expect(formatReportCell(coin({ currentValue: 0 }), 'currentValue')).toBe('—');
     expect(formatReportCell(coin({ purchasePrice: 0 }), 'purchasePrice')).toBe('—');
   });
@@ -193,36 +166,19 @@ describe('reportFieldIsNumeric', () => {
   });
 });
 
-/*
- * WHAT A PRINTED CELL NEEDS THAT A COIN RECORD DOES NOT CONTAIN
- *
- * Three grid columns are not functions of the coin alone: `meltValue` needs
- * today's spot prices, `catalogReference` needs the Catalogs lookup, and
- * `denomination` needs the Denominations lookup, because the coin stores an
- * id and the label behind it lives on the service.
- *
- * `formatReportCell` delegates to `formatInventoryCell` so that the document
- * and the screen agree. That promise is only kept if it hands over the
- * ARGUMENTS as well as the coin — a lookup it quietly drops produces a
- * printed page that disagrees with the screen it came from, and the owner
- * has no way to tell which one is right.
- */
-
 describe('formatReportCell passes the lookups through to the grid formatter', () => {
   const CATALOGS = [
     { catalogId: 1, name: 'Sear', sortOrder: 1, isActive: true }
   ];
 
   it('prints the catalogue NAME and number, not the bare number', () => {
-    const ancient = coin({ catalogId: 1, catalogNumber: '6819' });
+    const ancient = coin({ catalogRefs: [{ catalogId: 1, catalogNumber: '6819' }] });
     expect(formatReportCell(ancient, 'catalogReference', undefined, CATALOGS))
       .toBe('Sear 6819');
   });
 
   it('still prints the number alone when no catalogue list is available', () => {
-    // Honest, and better than an em-dash: the bare number is real data the
-    // user typed.
-    const ancient = coin({ catalogId: 1, catalogNumber: '6819' });
+    const ancient = coin({ catalogRefs: [{ catalogId: 1, catalogNumber: '6819' }] });
     expect(formatReportCell(ancient, 'catalogReference')).toBe('6819');
   });
 

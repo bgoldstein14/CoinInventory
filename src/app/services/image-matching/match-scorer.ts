@@ -1,25 +1,11 @@
- /*
- * match-scorer.ts
+/*
+ * Scores one filename signature against one coin signature: a 0..1 score, a
+ * count of strong agreements and a plain-English reason. Deciding whether the
+ * score is good enough to act on is match-decider.ts's job.
  *
- * WHAT THIS FILE OWNS
- *   STAGE 2: comparing ONE filename signature against ONE coin signature and
- *   producing a 0..1 score, a count of strong agreements, and a plain-English
- *   reason. `scorePair` is the whole of it; `buildReason`, `diceSimilarity`
- *   and `formatYear` are its private helpers.
- *
- * WHY IT IS ITS OWN FILE
- *   Scoring answers "how alike are these two?" and nothing else. It has no
- *   opinion about whether that is good enough to act on -- that judgement is
- *   match-decider.ts's job. Keeping the measurement separate from the
- *   decision means you can change how alike-ness is measured without
- *   accidentally loosening a safety gate, and vice versa.
- *
- *   It is also the file where the "absence is not agreement" rule is
- *   enforced, which is the single most important invariant in the matcher:
- *   an attribute that only one side has must stay out of BOTH the numerator
- *   and the denominator. Every `if (both sides have it)` guard below is that
- *   rule.
-  */
+ * Absence is not agreement: an attribute only one side has stays out of both
+ * the numerator and the denominator.
+ */
 
 import { Signature, formatYear } from './coin-signature';
 import { compareGrades } from './grade-tolerance';
@@ -44,23 +30,9 @@ export interface ScoreBreakdown {
   strongAttributeCount: number;
   reason: string;
   /**
-   * True when this pair is DISQUALIFIED outright -- a stated year conflict, a
-   * stated denomination conflict, or a proof against a business strike. See
-   * match-vetoes.ts.
-   *
-   * WHY IT IS REPORTED HERE RATHER THAN APPLIED HERE
-   *   The verdict rides along on every breakdown so that nothing can score a
-   *   pair without being told it is disqualified. But the SCORE itself is
-   *   left untouched, which is deliberate: scoring answers "how alike are
-   *   these two?", and a disqualified coin can still be very alike (an 1861
-   *   proof and an 1861 XF45 differ by one grade). Zeroing it here would
-   *   destroy the evidence the skip reporting needs to say "this coin came
-   *   closest, and here is exactly why it was thrown out".
-   *
-   *   ACTING on the verdict is match-decider.ts's job, and it acts on it
-   *   completely: a vetoed coin is dropped before the gates run, so it can be
-   *   neither the match, nor a suggestion, nor the runner-up the margin is
-   *   measured against.
+   * True when the pair is disqualified outright (see match-vetoes.ts). The
+   * score is left untouched so skip reporting can still show the closest coin
+   * and why it was rejected; match-decider.ts drops vetoed coins before the gates.
    */
   vetoed: boolean;
   /** One clause per conflict, for the explanation. Empty when not vetoed. */
@@ -70,17 +42,10 @@ export interface ScoreBreakdown {
 /**
  * Compare one filename signature to one coin signature.
  *
- * The core idea, stated plainly:
+ *   score = (share of comparable evidence that agreed)
+ *         x (damping by how much evidence was comparable at all)
  *
- *   score = (how much of the comparable evidence agreed)
- *         x (how much evidence was comparable at all)
- *
- * An attribute is "comparable" only when BOTH sides have a value for it.
- * If the coin record has no mint mark, the coin's silence is not evidence
- * for or against -- the attribute is simply left out of both the numerator
- * and the denominator. This is the "absence must not count as agreement"
- * rule, and it is why a sparsely-filled coin record cannot rack up a fake
- * perfect score.
+ * An attribute is comparable only when both sides have a value for it.
  */
 export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   let achieved = 0;      // weighted agreement actually observed
@@ -105,16 +70,9 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   }
 
   /* ---- Denomination ----------------------------------------------------
-   * Compared with `denominationsAgree`, never with `===`: "3¢" is equivalent
-   * to 3CS or 3CN, so a filename saying three cents does not say WHICH
-   * three-cent piece and agrees with either specific record -- while 3CS and
-   * 3CN remain different coins and never agree with each other. The table and
-   * the full reasoning are in reference-tables.ts.
-   *
-   * A generic/specific agreement earns the FULL weight and counts as a strong
-   * attribute, because the two really do describe the same coin; only the
-   * wording of the explanation distinguishes it, so the user can see that the
-   * filename was the vaguer of the two. */
+   * Uses `denominationsAgree`, not `===`: a generic "3¢" agrees with 3CS or
+   * 3CN, but 3CS and 3CN never agree (see reference-tables.ts). A
+   * generic/specific agreement earns full weight; only the reason text differs. */
   if (file.denomination && coin.denomination) {
     comparable += WEIGHTS.denomination;
     if (denominationsAgree(file.denomination, coin.denomination)) {
@@ -177,24 +135,9 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   }
 
   /* ---- Certification company + grade ----------------------------------
-   * These two are scored as a PAIR, which is the one place in this file that
-   * departs from "one attribute, one verdict". The reason is real-world:
-   *
-   *   - "PCGS" alone is nearly worthless. Hundreds of coins in this
-   *     collection are PCGS-graded, so agreement is almost guaranteed and
-   *     tells you nothing about WHICH coin a photo shows.
-   *   - "MS63" alone is nearly worthless for the same reason -- dozens of
-   *     coins share any popular grade.
-   *   - "PCGS MS63" together is genuinely narrowing.
-   *
-   * So each contributes its (small) weight to the score independently, but
-   * they yield at most ONE strong attribute between them, and only when BOTH
-   * agree. A grade match on its own must never help clear the two-strong-
-   * attributes gate; that is what "grade alone is weak" means in practice.
-   *
-   * The usual rule still holds for each half: an attribute only enters the
-   * numerator or the denominator when BOTH sides have a value.
-   */
+   * Each adds its own small weight, but together they yield at most ONE
+   * strong attribute, and only when both agree: "PCGS" or "MS63" alone barely
+   * narrows a collection, "PCGS MS63" does. */
   let certCompanyAgreed = false;
   let gradeAgreed = false;
 
@@ -212,45 +155,13 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
     }
   }
 
-  /* THE GRADE IS COMPARED WITH `compareGrades`, NEVER WITH `===`.
-   *
-   * A grade may differ slightly and still be the same grade: 63CAM / 63 CAMEO,
-   * 63PL / 63 PL. These two files are PHOTOGRAPHS OF ONE COIN whose record
-   * reads "1867 3CS - NGC PF65 Cameo":
-   *
-   *     1867 3CS - NGC PF65CAM - Reverse.jpg      scored 0.84 -> skipped
-   *     1867 3CS - NGC PF65 Cameo - Obverse.jpg   scored 0.88 -> attached
-   *
-   * Nothing about the coin differed. One abbreviated the designation and the
-   * other spelled it out, and that alone moved the score by 0.03 -- exactly
-   * the width of the gap across the 0.85 auto-match bar.
-   *
-   * WHERE THE TOLERANCE LIVES. grade-tolerance.ts, which near-match.ts's
-   * tier-2 test also calls. Do not copy it in here: two implementations of
-   * "are these the same grade?" would drift, and the day they drifted the
-   * scorer would reward a pairing the near-match test refuses.
-   *
-   * THE TWO KINDS OF AGREEMENT ARE SCORED DIFFERENTLY, AND THAT IS THE POINT
-   *
-   *   'exact'        the SAME grade, however it is spelled. "PF65CAM" and
-   *                  "PF65 Cameo"; "PR65" and "PF65"; "MS63PL" and
-   *                  "MS63 PROOFLIKE". Full weight, and eligible to form the
-   *                  one strong attribute the cert-company/grade pair can
-   *                  earn. These two sides genuinely said the same thing.
-   *
-   *   'extra-detail' the same grade, but ONE SIDE SAYS MORE: "MS64" against
-   *                  "MS64 CAC", "PF64" against "PF64RB". Full weight,
-   *                  because the grades really are the same grade -- but
-   *                  NEVER a strong attribute. The two sides did not say the
-   *                  same thing; one of them said more, and the
-   *                  two-strong-attributes gate is where this matcher keeps
-   *                  its caution.
-   *
-   *   'different'    a different grade, or two decorations that contradict
-   *                  (MS64 RB against MS64 BN). No weight, and it is listed
-   *                  as a disagreement.
-   *
-   * The grade can never earn a strong attribute by itself. */
+  /* Grades are compared with `compareGrades` (grade-tolerance.ts, shared with
+   * near-match.ts), not `===`, so "PF65CAM" and "PF65 Cameo" agree.
+   *   'exact'        same grade however spelled: full weight, may form the
+   *                  cert-company/grade strong attribute.
+   *   'extra-detail' one side says more ("MS64" vs "MS64 CAC"): full weight,
+   *                  never a strong attribute.
+   *   'different'    no weight; listed as a disagreement. */
   if (file.grade && coin.grade) {
     comparable += WEIGHTS.grade;
     const relation = compareGrades(file.grade, coin.grade).relation;
@@ -273,10 +184,7 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   // One strong attribute for the PAIR, never one each.
   if (certCompanyAgreed && gradeAgreed) strongAttributes++;
 
-  /* ---- the hard vetoes -------------------------------------------------
-   * Asked once, here, so that every caller of `scorePair` is told. The
-   * answer does not alter the score (see the note on ScoreBreakdown.vetoed);
-   * match-decider.ts is what acts on it. */
+  // Hard vetoes are reported, not applied to the score (see ScoreBreakdown.vetoed).
   const veto = findVetoes(file, coin);
 
   // Nothing at all was comparable -> no evidence -> zero. Never a match.
@@ -304,7 +212,7 @@ export function scorePair(file: Signature, coin: Signature): ScoreBreakdown {
   };
 }
 
-/** Turn the agreement lists into one specific, honest sentence. */
+/** Turn the agreement lists into one explanation sentence. */
 export function buildReason(agreed: string[], disagreed: string[]): string {
   const parts: string[] = [];
   if (agreed.length) parts.push(capitalize(agreed.join('; ')) + '.');
@@ -314,11 +222,8 @@ export function buildReason(agreed: string[], disagreed: string[]): string {
 }
 
 /**
- * Dice coefficient: 2 * shared / (sizeA + sizeB).
- *
- * Symmetric, so "morgan" vs "morgan" = 1.0 but "morgan" vs
- * "morgan liberty head" = 0.5. That penalty is intentional -- a filename
- * mentioning only part of a coin's design name is weaker evidence.
+ * Dice coefficient: 2 * shared / (sizeA + sizeB). "morgan" vs
+ * "morgan liberty head" = 0.5, so a partial design name is weaker evidence.
  */
 export function diceSimilarity(left: string[], right: string[]): number {
   const a = new Set(left);
@@ -330,11 +235,7 @@ export function diceSimilarity(left: string[], right: string[]): number {
 }
 
 /**
- * Render a coin's year (or year range) for the explanation text.
- *
- * It lives in coin-signature.ts and is re-exported here so the long-standing
- * `import { formatYear } from './match-scorer'` keeps working. It has to live
- * there because match-vetoes.ts needs it too and this file imports the
- * vetoes -- defining it here would make the two files import each other.
+ * Re-exported for existing importers. Defined in coin-signature.ts because
+ * match-vetoes.ts needs it too, and defining it here would create a cycle.
  */
 export { formatYear };

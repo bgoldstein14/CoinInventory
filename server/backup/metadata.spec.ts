@@ -1,11 +1,6 @@
 /**
- * backup/metadata.spec.ts — the round trip, and the nulls.
- *
- * The round trip is easy. The nulls are the test that matters: every
- * backup taken before this feature existed has no stamp at all, and a
- * reader that threw, or that invented a date, would turn "I cannot tell
- * you when this was taken" into either a crash or a lie — in a dialog
- * whose whole job is to help somebody tell two files apart.
+ * Backup metadata round trip, and reading files with no stamp (older backups),
+ * which must give nulls rather than throw or invent values.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -43,9 +38,7 @@ describe('buildBackupMetadata', () => {
   });
 
   it('keeps every key under the backup. prefix, so nothing else is shadowed', () => {
-    // AppSettings is the Angular app's preference store. A backup stamp
-    // that collided with a UI key would silently change a setting on
-    // restore.
+    // Keys must not collide with the app's own AppSettings preferences.
     for (const key of Object.keys(buildBackupMetadata(stamp))) {
       expect(key.startsWith('backup.')).toBe(true);
     }
@@ -66,10 +59,7 @@ describe('readBackupProvenance', () => {
     });
   });
 
-  /* *** THE CASE THAT IS NOT AN ERROR. *** Every backup taken before this
-   * feature existed carries no stamp. The dialog says "unknown", which is
-   * the truth, and the restore goes ahead on the strength of the tables
-   * and the pragma. */
+  // Older backups have no stamp; the dialog shows "unknown".
   it('answers nulls for a backup with no stamp at all', () => {
     expect(readBackupProvenance({})).toEqual({ takenAt: null, recordedCoinCount: null });
   });

@@ -1,42 +1,19 @@
  /*
  * image-downscaler.ts
  *
- * Shrinks a photo IN THE BROWSER before it is stored, using only a <canvas>.
- * No new dependencies, and the user's original file on the share is never
- * touched - we read it, draw a smaller copy, and throw the big one away.
+ * Shrinks a photo in the browser with a <canvas> before it is stored. The
+ * original file is never modified.
  *
- * WHY (the numbers that drove this decision)
+ * Images are stored in SQL Server as base64 text (4/3 the byte size), so
+ * originals averaging ~2.5 MB would bloat the database. The long edge is
+ * capped at 1600 px, keeping aspect ratio and never upscaling:
  *
- * The share holds 4.2 GB of JPEGs: ~2.5 MB average, largest 46 MB. Images are
- * stored in SQL Server as base64 TEXT, and base64 inflates bytes by 4/3
- * (every 3 bytes become 4 characters). So attaching them untouched would mean:
+ *     4000 x 3000  ->  scale 0.4  ->  1600 x 1200
+ *     1200 x 900   ->  left alone
  *
- *     4.2 GB  x  4/3  =  ~5.6 GB of text in the database
- *
- * ...for pictures that are displayed in a gallery a few hundred pixels wide.
- *
- * THE MATHS
- *
- * We cap the LONG edge at 1600 px and keep the aspect ratio:
- *
- *     scale = MAX_LONG_EDGE / max(width, height)
- *
- * and only ever apply it when scale < 1 (never upscale - enlarging a small
- * photo adds no detail, just bytes and blur).
- *
- *     4000 x 3000  ->  scale = 1600/4000 = 0.4   ->  1600 x 1200
- *     3000 x 4000  ->  scale = 1600/4000 = 0.4   ->  1200 x 1600
- *     1200 x 900   ->  scale = 1600/1200 = 1.33  ->  left alone at 1200 x 900
- *
- * Re-encoded at JPEG quality 0.85 a 1600 px long edge lands around 250 KB, so
- * base64 stores ~333 KB per photo. For ~1,700 photos that is roughly 0.5 GB
- * instead of 5.6 GB - an order of magnitude smaller, at a resolution that
- * still looks sharp full-screen on a 1080p monitor.
- *
- * Quality 0.85 is the usual sweet spot for photographs: visually
- * indistinguishable from 1.0 for most eyes, but roughly a third of the bytes.
- * Below ~0.75 JPEG blocking starts showing up in the flat fields of a coin,
- * which is exactly where a collector looks for surface detail.
+ * At JPEG quality 0.85 that is roughly 250 KB per photo, still sharp
+ * full-screen at 1080p. Below ~0.75, JPEG blocking shows in a coin's flat
+ * fields.
   */
 
 import { Injectable } from '@angular/core';
@@ -64,8 +41,8 @@ export interface DownscaleResult {
 }
 
 /**
- * Pure aspect-ratio maths, split out from anything DOM so it can be unit
- * tested in Node (and read without wading through canvas plumbing).
+ * Target size for a long-edge cap, preserving aspect ratio. Pure, so it can
+ * be unit tested in Node.
  *
  * @param width    source width in pixels
  * @param height   source height in pixels
@@ -77,25 +54,22 @@ export function computeScaledSize(
   height: number,
   maxEdge: number = MAX_LONG_EDGE
 ): { width: number; height: number; resized: boolean } {
-  // Defensive: a failed decode can hand us 0 or NaN. Returning 0x0 would make
-  // canvas.toDataURL() throw, so bail out with a 1x1 and let the caller record
-  // it as a failure instead of crashing the whole batch.
+  // A failed decode can report 0 or NaN; 0x0 would make toDataURL() throw,
+  // so return 1x1 and let the caller record a per-file failure.
   if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
     return { width: 1, height: 1, resized: false };
   }
 
   const longEdge = Math.max(width, height);
 
-  // Already within budget: pass it through untouched. This is the "leaves
-  // already-small images alone" rule - no upscaling, ever.
+  // Already small enough: never upscale.
   if (longEdge <= maxEdge) {
     return { width: Math.round(width), height: Math.round(height), resized: false };
   }
 
   const scale = maxEdge / longEdge;
   return {
-    // Math.max(1, ...) guards the extreme panorama case where the short edge
-    // would round down to zero pixels.
+    // Math.max(1, ...) stops an extreme panorama's short edge rounding to 0.
     width: Math.max(1, Math.round(width * scale)),
     height: Math.max(1, Math.round(height * scale)),
     resized: true
@@ -117,20 +91,16 @@ export function dataUrlByteLength(dataUrl: string): number {
 }
 
 /**
- * Reads an image File and returns a downscaled JPEG data URL.
- *
- * Kept as an injectable service (rather than a bare function) so the batch
- * importer can be handed a stub in tests - there is no <canvas> in the Node
- * test environment.
+ * Reads an image File and returns a downscaled JPEG data URL. A service so
+ * tests can stub it (no <canvas> in Node).
  */
 @Injectable({ providedIn: 'root' })
 export class ImageDownscaleService {
   /**
    * Shrink one file.
    *
-   * @throws when the file cannot be decoded (corrupt JPEG, or an extension
-   *         that slipped past the filter). The caller is expected to catch
-   *         this per-file so one bad photo cannot abort a 1,700-file run.
+   * @throws when the file cannot be decoded. Callers catch this per file so
+   *         one bad photo doesn't abort the run.
    */
   async downscale(file: File, maxEdge: number = MAX_LONG_EDGE): Promise<DownscaleResult> {
     const bitmap = await this.decode(file);
@@ -138,24 +108,16 @@ export class ImageDownscaleService {
     try {
       return this.render(bitmap, file, maxEdge, JPEG_QUALITY);
     } finally {
-      // createImageBitmap results hold native memory until closed. Skipped
-      // harmlessly for the HTMLImageElement fallback path.
+      // ImageBitmaps hold native memory until closed (no-op for <img>).
       const closable = bitmap as unknown as { close?: () => void };
       if (typeof closable.close === 'function') closable.close();
     }
   }
 
   /**
-   * Shrink one file so the STORED copy fits a byte budget.
-   *
-   * The file is DECODED ONCE and re-drawn per attempt: decoding is the
-   * expensive half (a 46 MB JPEG over a share), the canvas work is not, and
-   * at the default budget there is only ever one attempt anyway because
-   * rung 0 of the ladder is today's 1600 px / quality 0.85.
-   *
-   * See encode-budget.ts for the ladder, for why a budget cannot be computed
-   * arithmetically, and for why a photo that cannot be squeezed small enough
-   * is kept at its smallest rather than dropped.
+   * Shrink one file so the stored copy fits a byte budget (see
+   * encode-budget.ts). Decoded once and re-drawn per attempt, since decoding
+   * is the expensive step.
    */
   async downscaleWithin(file: File, maxStoredBytes: number): Promise<BudgetedEncode> {
     const bitmap = await this.decode(file);
@@ -170,13 +132,7 @@ export class ImageDownscaleService {
     }
   }
 
-  /**
-   * One encode of an already-decoded image at a given size and quality.
-   *
-   * Split out of `downscale` when the byte budget arrived: the budget needs
-   * several encodes of the SAME decoded bitmap, and decoding once per attempt
-   * would multiply the only expensive step in the whole import.
-   */
+  /** One encode of an already-decoded image at a given size and quality. */
   private render(
     bitmap: ImageBitmap | HTMLImageElement,
     file: File,
@@ -192,24 +148,20 @@ export class ImageDownscaleService {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Could not get a 2D canvas context');
 
-    // A white backdrop matters for PNGs and GIFs with transparency: JPEG has
-    // no alpha channel, so without this the transparent areas come out black.
+    // White backdrop: JPEG has no alpha, so transparent areas would be black.
     context.fillStyle = '#ffffff';
     context.fillRect(0, 0, target.width, target.height);
 
-    // The browser's built-in smoothing is a good bilinear/box filter; asking
-    // for 'high' avoids the aliasing you get from a raw nearest-neighbour
-    // squeeze of a 4000 px photo down to 1600 px.
+    // 'high' smoothing avoids aliasing on large downscales.
     context.imageSmoothingEnabled = true;
     context.imageSmoothingQuality = 'high';
     context.drawImage(bitmap as unknown as CanvasImageSource, 0, 0, target.width, target.height);
 
-    // Always JPEG, even when the source was a PNG: a photograph of a coin
-    // compresses far better as JPEG, and we are not preserving transparency.
+    // Always JPEG: photos compress far better, and transparency isn't kept.
     const dataUrl = canvas.toDataURL('image/jpeg', quality);
 
-    // Free the canvas backing store promptly. Doing 1,700 of these without
-    // shrinking the canvas leaves a lot of retained pixel buffers around.
+    // Free the canvas backing store promptly; large batches otherwise retain
+    // many pixel buffers.
     canvas.width = 0;
     canvas.height = 0;
 
@@ -224,12 +176,8 @@ export class ImageDownscaleService {
   }
 
   /**
-   * Decode a File into something drawable.
-   *
-   * Preferred path is createImageBitmap(), which decodes OFF the main thread -
-   * that is what keeps the UI from locking up while we chew through a queue of
-   * multi-megabyte photos. Older engines get the classic object-URL + <img>
-   * fallback, which decodes on the main thread but still works.
+   * Decode a File into something drawable. createImageBitmap() decodes off the
+   * main thread, keeping the UI responsive; older engines fall back to <img>.
    */
   private async decode(file: File): Promise<ImageBitmap | HTMLImageElement> {
     if (typeof createImageBitmap === 'function') {

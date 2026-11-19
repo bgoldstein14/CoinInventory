@@ -1,17 +1,7 @@
 /*
- * denomination-expansion.spec.ts — the Denominations pane's fold state.
- *
- * Two things are pinned here and they are the two that were actually wrong
- * on screen:
- *
- *   1. "Collapse all" means ALL — including groups that were filtered out
- *      by a search, and including an issuer created after the button was
- *      pressed. A model that remembers "the headings I folded" cannot do
- *      that, which is why the state is a default plus exceptions.
- *   2. Landing on a newly added issuer is a COLLAPSE of the others, never a
- *      filter: `focusGroup` names exactly one heading and says nothing
- *      about which groups exist, so no group can be removed from the list
- *      by it.
+ * Fold state for the Denominations pane: "collapse all" covers every group,
+ * including ones filtered out or added later, and focusing a group collapses
+ * the others rather than filtering them out.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -30,7 +20,7 @@ import {
   toggleGroup,
 } from './denomination-expansion';
 
-/** A handful of the 70 the real pane carries, in the order it shows them. */
+/** A few of the pane's headings, in display order. */
 const HEADINGS = ['Austria', 'Burma', 'Mexico', 'No issuer yet'];
 
 describe('the pane opens with everything expanded', () => {
@@ -54,10 +44,7 @@ describe('collapseAllGroups — the control that makes 70 issuers scannable', ()
   });
 
   it('folds a group that was NOT on screen when it was pressed', () => {
-    /* THE HOLE A SET OF COLLAPSED HEADINGS WOULD HAVE. Press Collapse all
-     * while a search is narrowing the pane to two issuers, then clear the
-     * search: the sixty groups that were filtered out were never named, and
-     * with a denylist they would spring open again. */
+    // Groups filtered out by a search must stay collapsed when the search clears.
     const state = collapseAllGroups();
     expect(isGroupExpanded(state, 'An issuer the search was hiding')).toBe(false);
   });
@@ -92,10 +79,7 @@ describe('focusGroup — landing on the issuer that was just added', () => {
   });
 
   it('names ONE heading and nothing else, so it cannot hide a group', () => {
-    /* The bug this replaces showed the new issuer and no route to any
-     * other. Expansion state has to be incapable of expressing "these are
-     * the only issuers that exist", so the whole value is a flag plus the
-     * single heading to keep open. */
+    // The state is a flag plus one heading, so it can't hide other issuers.
     const state = focusGroup('Siam');
     expect([...state.exceptions]).toEqual(['Siam']);
     expect(state.collapsedByDefault).toBe(true);
@@ -126,8 +110,7 @@ describe('toggleGroup', () => {
   });
 
   it('does not touch the state it was given', () => {
-    // The caller holds this in a signal that the template reads. Mutating
-    // it in place is a render that does not happen.
+    // The caller holds this in a signal; it must not be mutated in place.
     const before = collapseAllGroups();
     const sizeBefore = before.exceptions.size;
 
@@ -182,9 +165,7 @@ describe('describeExpandAllControl — one control, never a no-op', () => {
   });
 
   it('still offers to collapse when only ONE group is left open', () => {
-    // One open group is enough to bury every heading below it, which is the
-    // whole reason the control exists. A majority rule would read as the
-    // button doing the wrong thing at exactly the moment it matters.
+    // Any open group means the control offers collapse.
     const control = describeExpandAllControl(focusGroup('Mexico'), HEADINGS);
     expect(control.action).toBe('collapse');
   });

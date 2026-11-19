@@ -21,48 +21,25 @@
 }
 
 .detail-editor__row--pricing,
-.detail-editor__row--certs,
 .detail-editor__row--bottom-metrics,
 .detail-editor__row--weight-inline {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 // ---- Metal / Composition ----
-// Two columns, not three equal thirds. Metal is a dropdown of short words
-// ("Gold", "Copper-Nickel") and needs very little room; Composition holds free
-// text that the alloy inference fills with things like
-// "91.67% Gold, 8.33% Silver and Copper". Splitting the row evenly truncated
-// the long one. `minmax(0, …)` on both tracks is what lets the input actually
-// shrink inside the grid rather than forcing the row wider.
+// Metal is a short dropdown; Composition holds long alloy text, so it gets most of the row.
 .detail-editor__row--metadata {
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 2.2fr);
 }
 
 // ---- Row 1: Year / Coin Type / Denomination / Mint mark ----
-//
-// Explicit pixel tracks rather than `1fr` columns plus per-field max-widths,
-// because the four fields have genuinely different needs and sizing them as
-// four independent rules is how they drift out of step:
-//
-//   64px  Year        — four digits; a range like "1916-1945" scrolls inside
-//                       the input, which is normal text-input behaviour.
-//   1fr   Coin Type   — gets everything left over, because it is the one
-//                       free-text field here with no natural maximum.
-//   132px Denomination— sized from the ACTUAL lookup table, whose longest
-//                       active label is "2/6 (Half Crown)" (16 characters).
-//                       Narrower than this clips it to "2/6 (Half...".
-//   68px  Mint mark   — labels are "", P, D, S, W, O, CC, C, Other plus the
-//                       "Other…" entry.
-//
-// The tighter column gap and select padding below buy back the handful of
-// pixels that keeps Coin Type usable at the 420px sidebar width.
+// Fixed tracks: Year 64px, Coin Type takes the rest, Denomination 132px (fits "2/6 (Half Crown)"),
+// Mint mark 68px. The tighter gap and padding keep Coin Type usable at the 420px sidebar width.
 .detail-editor__row--top {
   grid-template-columns: 64px minmax(0, 1fr) 132px 68px;
   column-gap: 6px;
 
-  // Trimmed from the shared 7px. Not trimmed further on the right: a <select>
-  // draws its drop-down arrow inside the right padding, and squeezing that
-  // makes the longest label run underneath the arrow.
+  // Right padding is kept for the select's drop-down arrow.
   select {
     padding-left: 4px;
     padding-right: 4px;
@@ -73,22 +50,13 @@
 .detail-field--coin-type,
 .detail-field--denomination,
 .detail-field--mint-mark {
-  // The grid track above owns the width; a max-width here would fight it.
+  // The grid track owns the width.
   max-width: none;
   min-width: 0;
 }
 
-// ---- The denomination type-ahead ----
-//
-// A search box stacked above the denomination <select>, inside the SAME 132px
-// track as before: `.detail-field` is a grid, so an extra child simply stacks,
-// and the row grows by one short input rather than the whole layout being
-// re-argued.
-//
-// It needs to be visibly a different KIND of control from the three inputs
-// beside it, because it is the only one on this line that does not edit the
-// coin — typing in it saves nothing. Hence the lighter weight, the smaller
-// text and the tint rather than the solid field background.
+// ---- Denomination search ----
+// Styled lighter than the inputs beside it because it filters the list and does not edit the coin.
 .detail-field__search {
   font-size: 0.68rem;
   padding-top: 3px;
@@ -96,19 +64,13 @@
   background: #f6efe4;
   color: #5c4935;
 
-  // The browser's own clear button on type="search". Keep it: clearing the
-  // filter in one click is the most common thing the user will want, and the
-  // alternative is selecting and deleting inside a 132px box.
+  // Keep the browser's clear button on type="search".
   &::-webkit-search-cancel-button {
     cursor: pointer;
   }
 }
 
-// The one-line explanation under the picker and under the custom box. It
-// carries information the control cannot show any other way — "your search
-// matched nothing so this is everything", "there are more than fit" and
-// "here is how this coin will read" — so it must stay legible rather than
-// become decoration.
+// Short note under the picker and the custom box.
 .detail-field__note {
   font-size: 0.62rem;
   font-weight: 500;
@@ -117,25 +79,13 @@
 }
 
 // ---- Grade line ----
-// Certification company first, then Grade with its inline CAC tick-box.
-// `max-content` lets the company field take only the width its 12ch input
-// needs, so Grade keeps the rest of the line rather than half of it.
+// max-content keeps the company field narrow so Grade gets the rest of the line.
 .detail-editor__row--grade {
   grid-template-columns: max-content minmax(0, 1fr);
 }
 
-.detail-editor__row--certs {
-  margin-top: 6px;
-  margin-bottom: 8px;
-  column-gap: 14px;
-}
-
 // ---- Individual fields ----
-//
-// The base `.detail-field` look and `--full` modifier now live in
-// `styles/_field.scss` (see the `@use` at the top of this file), because the
-// add-transaction row in the detail sidebar uses the same pattern. Only the
-// modifiers specific to this editor's grid remain below.
+// Base .detail-field styles live in styles/_field.scss.
 
 .detail-field--grade-wrap {
   display: grid;
@@ -157,6 +107,12 @@
   color: #5c4935;
   font-weight: 700;
   white-space: nowrap;
+}
+
+// No grade yet, so CAC can't be set.
+.cac-inline-toggle--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .detail-field--compact,
@@ -183,63 +139,52 @@
 .detail-field--cert-company {
   max-width: 200px;
 
-  // 12ch, not the 7.5ch that looks right: `ch` is the width of the digit
-  // "0", but grader names are UPPERCASE letters, which are wider, and the
-  // global `box-sizing: border-box` means this width also has to cover the
-  // input's 7px horizontal padding and 1px border on each side. Anything
-  // tighter clips the final letter of "ANACS".
+  // 12ch: uppercase grader names are wider than `ch` (the "0" glyph), and the width includes padding
+  // and border. Anything narrower clips "ANACS".
   input {
     width: 12ch;
     text-transform: uppercase;
   }
 }
 
-// SIZED TO THE DATA, like the catalogue number below it. A slab number is
-// 7-10 characters — "2599001" (PCGS), "481230-004" (NGC, the longest shape
-// there is). 13ch covers ten digits plus the input's 7px horizontal padding
-// and 1px border on each side, which the global `box-sizing: border-box`
-// makes the declared width pay for.
-//
-// This REPLACES an inline `style="width: 125%"` on the input itself. A
-// percentage width resolves against the grid cell, so 125% was by definition
-// wider than the cell: the box overflowed into the Catalogue column and the
-// <select> there — later in the document, so painted later — sat on top of
-// it. Nothing on this row is percentage-sized any more.
-//
-// `max-width` stays on the wrapper so the caption, which is `nowrap`, sets
-// the floor rather than the box: "Certification Number" is the widest thing
-// in this cell now, and it fits in the ~121px third of the row.
+// Slab numbers are up to 10 characters; 13ch fits them plus padding and border.
+// Same width as the Weight (g) box above it.
 .detail-field--cert-number {
-  max-width: 160px;
+  max-width: 150px;
+}
 
-  input {
-    width: 13ch;
+// ---- Catalogue references: one row per reference ----
+.detail-catalog-refs {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+
+  legend {
+    padding: 0;
+    margin-bottom: 4px;
   }
 }
 
-// ---- The catalogue reference ----
-// The picker holds names up to "Krause (KM)", so it needs a little more room
-// than a mint mark but nothing like the width of the cert number beside it.
-.detail-field--catalog {
+.detail-catalog-refs__row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.detail-catalog-refs__catalog {
   max-width: 180px;
 }
 
-// SIZED TO THE DATA, NOT TO THE COLUMN. The real references are short: "1A",
-// "6819", "II.1 234", "RRC 44/5", eight characters at the outside. 11ch covers
-// that with room to spare once the input's 7px padding and 1px border on each
-// side are accounted for (global `box-sizing: border-box` means the width has
-// to pay for those).
-//
-// The COLUMN is NVARCHAR(50) and the input's maxlength is 50 to match. The
-// box being narrower than its maximum is the intended effect: it looks like
-// a reference field rather than a notes field, and it still accepts a long
-// one by scrolling.
-.detail-field--catalog-number {
-  max-width: 150px;
+// References are short ("RRC 44/5"); the box still accepts the column's 50 characters.
+.detail-catalog-refs__number {
+  width: 11ch;
+}
 
-  input {
-    width: 11ch;
-  }
+.detail-catalog-refs__remove {
+  padding: 2px 8px;
 }
 
 .detail-field--pm-weight {
@@ -262,21 +207,10 @@
 }
 
 // ---- Notes ----
-//
-// THIS IS THE LAST THING IN THE SIDEBAR'S FLEX COLUMN, so every stray pixel
-// here is a pixel at the very bottom edge of the panel. The rules below are
-// written to add none of their own. They do NOT, however, fix the notes box
-// being cut off: that is the detail PANEL clipping its own overflow (see
-// `.detail-panel` in coin-detail-panel.scss, `overflow: hidden` on a
-// height-capped flex column with no scrolling child). Nothing in this file
-// can give the panel a scrollbar.
 
 .detail-notes { margin-top: 8px; }
 
-// The label wraps the caption and the textarea. Left inline it generates a
-// line box, and an inline-block textarea sits on that line's baseline — which
-// reserves room for a descender UNDER the box that nothing ever draws in.
-// Those few pixels are pure phantom height at the bottom of the panel.
+// Block display avoids the baseline gap an inline textarea leaves under itself.
 .detail-notes label {
   display: block;
 }
@@ -289,9 +223,6 @@
   margin-bottom: 4px;
 }
 
-// The hint under the caption. Half the reason the two notes boxes cannot be
-// mistaken for each other: the caption says which one this is, the hint says
-// what goes in it. See the long comment in coin-editor-form.html.
 .detail-notes-hint {
   display: block;
   font-size: 0.66rem;
@@ -301,9 +232,6 @@
 }
 
 .detail-notes textarea {
-  // `block`, not the browser default `inline-block`: see above. It also makes
-  // `width: 100%` mean the full row rather than the full row plus whatever
-  // whitespace the line box contributes.
   display: block;
   width: 100%;
   min-height: 52px;
@@ -315,15 +243,11 @@
 }
 
 // ---- Responsive ----
-// On a narrow screen the two/three-column field grid collapses to one column.
 
 @media (max-width: 900px) {
   .detail-editor { grid-template-columns: 1fr; }
 
-  // Below 900px the sidebar drops under the table and spans the full page
-  // width, but the fixed pixel tracks above were measured for a 420px column.
-  // Hand the row back to proportional columns so nothing is clipped on a
-  // phone or a narrow window.
+  // The sidebar spans the page here, so the fixed tracks go back to proportional columns.
   .detail-editor__row--top {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     column-gap: 8px;
@@ -336,14 +260,8 @@
   }
 }
 
-// ---- Read-only value inside the editor grid (Melt) ----
-// Melt value is computed, not typed, so it is an <output> rather than an
-// <input>. These rules make it sit on the same baseline and the same height
-// as the money inputs beside it, so the Price / Value / Melt row reads as one
-// row rather than two inputs and a stray caption. The muted fill is the cue
-// that it cannot be edited — deliberately NOT a disabled input, which would
-// be focusable-looking, greyed-out text and imply the value is unavailable
-// rather than derived.
+// ---- Read-only value (Melt) ----
+// An <output> styled to line up with the money inputs; the muted fill marks it as derived, not editable.
 .detail-field--readonly {
   .readonly-value {
     display: block;
@@ -361,17 +279,8 @@
   }
 }
 
-// ---- The transactions section ----
-//
-// Moved here from coin-detail-panel.scss when the Transactions TABLE was
-// dropped. It has to live in this component because it renders between the
-// editor grid and the coin's Notes box, both of which are this template's
-// children.
-//
-// THE CARD IS LOAD-BEARING, NOT DECORATION. It is the fourth of the four
-// things keeping this block's notes box from reading as a duplicate of the
-// coin's Notes box below it: a titled, tinted, bordered card against the
-// plain panel background. See the comment in coin-editor-form.html.
+// ---- Transactions section ----
+// The tinted card keeps this section's notes box visually distinct from the coin's notes below.
 .detail-transactions {
   margin-top: 14px;
   padding: 12px;
@@ -389,9 +298,7 @@
   color: #8a7a63;
 }
 
-// Three fields to a line, collapsing to one on a narrow sidebar. `1fr`
-// columns rather than fixed widths so the two long counterparty names and
-// the date controls all stay inside the panel instead of pushing it wider.
+// Three fields per line; 1fr columns so long names and dates stay inside the panel.
 .detail-transactions__row {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -423,11 +330,7 @@
   margin-bottom: 4px;
 }
 
-// *** TALLER THAN THE COIN'S NOTES BOX ON PURPOSE. *** The owner asked for
-// the transaction note to be the bigger of the two, and the size difference
-// is also one of the four cues that stop the adjacent boxes reading as the
-// same field. `.detail-notes textarea` above is min-height: 52px; keep this
-// one comfortably above it.
+// Deliberately taller than the coin's notes box (52px).
 .detail-transaction-notes textarea {
   display: block;
   width: 100%;

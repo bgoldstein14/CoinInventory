@@ -1,51 +1,7 @@
 /**
- * db/connection.spec.ts — tests for the connection half of the database
- * layer: db/config.ts, db/pool.ts and db/errors.ts.
- *
- * ============================================================
- * *** A TEST WAS DELETED FROM THIS FILE. READ THIS BEFORE ASKING WHERE THE
- * CRASH REGRESSION WENT. ***
- * ============================================================
- *
- * This file used to open with the sentence "If you only read one spec in this
- * project, read the crash regression below", and the describe it pointed at
- * was `connection pool error handling (crash regression)`. It is gone, and it
- * was removed on purpose rather than ported.
- *
- * WHAT THE CRASH WAS. `mssql`'s ConnectionPool is a Node EventEmitter. When
- * SQL Server dropped or errored an idle pooled connection, mssql called
- * `pool.emit('error', err)`. A Node EventEmitter with ZERO 'error' listeners
- * THROWS when 'error' is emitted on it, and that throw happened inside an
- * internal socket callback where nothing could catch it — so it became an
- * uncaught exception and killed the whole Express process, with nothing in
- * app.log because the process died before any logging ran. The fix was one
- * `pool.on('error', ...)` listener attached before `connect()`, and the test
- * emitted 'error' on the pool and asserted nothing threw.
- *
- * WHY IT CANNOT BE PORTED. Every noun in that paragraph is gone. There is no
- * pool, because SQLite is a file and a second handle on the same file buys
- * contention rather than throughput. There is no socket, so there is nothing
- * to drop. There is no EventEmitter anywhere in db/, so there is no
- * emit-with-no-listener rule to violate. The failure the test guarded against
- * is not merely unlikely now — it is unreachable.
- *
- * WHY NOT KEEP A VERSION OF IT ANYWAY. Because the only way to keep it would
- * have been to give `DbConnection` an EventEmitter it does not otherwise
- * need, emit 'error' on it from the test, and assert that nothing threw —
- * a test that exercises scaffolding built for the test. That is a comment
- * pretending to be code, and it would read to the next person as evidence
- * that a real hazard is covered.
- *
- * WHAT SURVIVED, AND WHY. Everything else in db/pool.ts was kept, because
- * the reasons for it outlive the engine, and all of it is tested below:
- * single-flight opening, the generation counter, the absence of a
- * per-request health check, and withDb()'s one retry for connection-class
- * errors only. See the header of db/pool.ts.
- *
- * ============================================================
- *
- * Note this file deliberately does NOT import the Express app — everything
- * here is exercised through the db/ API directly.
+ * Tests for the connection side of the database layer: db/config.ts,
+ * db/pool.ts and db/errors.ts. Exercised through the db/ API directly, without
+ * the Express app.
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
@@ -71,9 +27,8 @@ import {
 import { BUSY_TIMEOUT_MS, DATABASE_FILE_NAME, DATA_DIR_NAME, IN_MEMORY_DATABASE } from './config';
 
 /**
- * Runs `work` with some environment variables set, then puts every one of
- * them back exactly as it was — including COIN_INVENTORY_DB_PATH, which the
- * harness relies on to keep the suite off the owner's real collection.
+ * Runs `work` with some environment variables set, then restores them all,
+ * including COIN_INVENTORY_DB_PATH, which keeps the suite off real data.
  */
 function withEnv(values: Record<string, string | undefined>, work: () => void): void {
   const previous = new Map<string, string | undefined>();
@@ -95,10 +50,7 @@ function withEnv(values: Record<string, string | undefined>, work: () => void): 
 
 describe('buildDbConfig — where the database file lives', () => {
   it('puts the database under %LOCALAPPDATA%\\CoinInventory by default', () => {
-    // Design §4.10a. NOT the install directory: Program Files is not writable
-    // by a standard user, so a database there fails to open for writing on an
-    // ordinary run — and fails intermittently, because an admin install
-    // followed by a standard-user launch is the common case.
+    // Not the install directory: Program Files isn't writable by a standard user.
     withEnv(
       { [DB_PATH_ENV_VAR]: undefined, [DB_DIR_ENV_VAR]: undefined, LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local' },
       () => {
@@ -110,8 +62,6 @@ describe('buildDbConfig — where the database file lives', () => {
   });
 
   it('never puts the database inside the install directory', () => {
-    // The property that makes §4.7's "uninstall must not remove the
-    // collection silently" structurally true rather than a promise.
     withEnv(
       { [DB_PATH_ENV_VAR]: undefined, [DB_DIR_ENV_VAR]: undefined, LOCALAPPDATA: 'C:\\Users\\x\\AppData\\Local' },
       () => {
@@ -122,17 +72,14 @@ describe('buildDbConfig — where the database file lives', () => {
   });
 
   it('falls back to the home directory when LOCALAPPDATA is not set', () => {
-    // A stripped environment or a CI container must still start, and the
-    // data must still land outside the install directory.
+    // A stripped environment must still start, with data outside the install directory.
     withEnv({ [DB_PATH_ENV_VAR]: undefined, [DB_DIR_ENV_VAR]: undefined, LOCALAPPDATA: undefined }, () => {
       expect(resolveDataDirectory()).toBe(path.join(os.homedir(), '.coininventory'));
     });
   });
 
   it('is overridable by COIN_INVENTORY_DB_PATH, which is what keeps the suite off the real file', () => {
-    // Every spec in this project now runs against a real database. Without
-    // this override the suite would open — and the harness would truncate —
-    // the owner's actual collection on every `npm test`.
+    // Without this override the suite would open the real collection.
     withEnv({ [DB_PATH_ENV_VAR]: IN_MEMORY_DATABASE }, () => {
       const config = buildDbConfig();
       expect(config.file).toBe(IN_MEMORY_DATABASE);
@@ -155,10 +102,7 @@ describe('buildDbConfig — where the database file lives', () => {
   });
 
   it('always asks for foreign key enforcement, and for a bounded lock wait', () => {
-    // *** THE MOST IMPORTANT LINE IN THE CONFIG. *** SQLite's foreign key
-    // enforcement is OFF by default at the C-library level, per connection.
-    // If this is ever false, every FOREIGN KEY in db/schema.sql becomes
-    // decorative and nothing in the application notices.
+    // SQLite leaves foreign keys off by default; without this every FOREIGN KEY is ignored.
     withEnv({ [DB_PATH_ENV_VAR]: IN_MEMORY_DATABASE }, () => {
       expect(buildDbConfig().enableForeignKeyConstraints).toBe(true);
       expect(buildDbConfig().busyTimeoutMs).toBe(BUSY_TIMEOUT_MS);
@@ -167,8 +111,7 @@ describe('buildDbConfig — where the database file lives', () => {
 });
 
 describe('foreign keys are enforced on the live connection', () => {
-  // Asserting the config is not the same as asserting the connection. This
-  // reads the pragma off the handle the routes actually use.
+    // Reads the pragma off the handle the routes actually use.
   it('reports PRAGMA foreign_keys = 1', async () => {
     const [row] = await withTestDb((database) => database.prepare('PRAGMA foreign_keys').all());
     expect(row['foreign_keys']).toBe(1);
@@ -193,10 +136,7 @@ describe('opening the database (single-flight, generation-guarded)', () => {
   it('shares a single open attempt between concurrent callers (single-flight)', async () => {
     await resetPool();
 
-    // The Angular app fires ~7 requests in parallel on load. Without the
-    // single-flight guard each of them saw "no handle", and each one opened
-    // the file, applied the schema and ran the 1,274-row seed — seven times,
-    // concurrently, against one database.
+    // The app fires several requests in parallel on load; they must share one open.
     const connections = await Promise.all([
       getPool(), getPool(), getPool(), getPool(), getPool(), getPool(), getPool(),
     ]);
@@ -221,8 +161,7 @@ describe('opening the database (single-flight, generation-guarded)', () => {
 
     const after = await getPool();
     expect(after).not.toBe(before);
-    // A fresh `:memory:` database is a different database, so the marker is
-    // gone and the seed has run again.
+    // A fresh :memory: database is a different database, so the seed ran again.
     const rows = await after
       .request()
       .query("SELECT CategoryName FROM Categories WHERE CategoryName = 'Reset Marker'");
@@ -233,9 +172,7 @@ describe('opening the database (single-flight, generation-guarded)', () => {
     await resetPool();
     const live = await getPool();
 
-    // Generation 1 (or whatever we are up to) is live. A request that started
-    // on an older generation asks us to reset generation 0 — that must be a
-    // no-op, or a slow failure would take down a handle opened after it.
+    // A reset for an older generation must be a no-op.
     await resetPool(0);
 
     expect(live.isClosed).toBe(false);
@@ -249,9 +186,7 @@ describe('opening the database (single-flight, generation-guarded)', () => {
     const before = executedSql().length;
     await getPool();
 
-    // The old getPool() issued 'SELECT 1' before handing back the pool,
-    // doubling round trips and racing with in-flight queries. Here it would
-    // also be pointless: the "connection" is a file descriptor.
+    // No per-request health check query.
     expect(executedSql().length).toBe(before);
   });
 });
@@ -266,10 +201,7 @@ describe('isConnectionError', () => {
   });
 
   it('masks EXTENDED result codes down to their primary code', () => {
-    // SQLite returns extended codes whose low byte is the primary one:
-    // SQLITE_IOERR_READ is 266 and 266 & 0xFF is 10, SQLITE_CANTOPEN_ISDIR
-    // is 526 and 526 & 0xFF is 14. A check that compared the whole number
-    // would miss every one of them — which is most of them in practice.
+    // Extended codes are masked to their low byte (266 & 0xFF = 10, 526 & 0xFF = 14).
     for (const errcode of [266, 526, 3338, 1038]) {
       const err = Object.assign(new Error('nope'), { code: 'ERR_SQLITE_ERROR', errcode });
       expect(isConnectionError(err), String(errcode)).toBe(true);
@@ -277,8 +209,7 @@ describe('isConnectionError', () => {
   });
 
   it('recognises a closed handle by its Node code, not only by its wording', () => {
-    // db/sql-api.ts builds this error with ERR_INVALID_STATE deliberately,
-    // so the 503 does not depend on a sentence somebody could reword.
+    // db/sql-api.ts uses ERR_INVALID_STATE so classification doesn't depend on message text.
     expect(isConnectionError(Object.assign(new Error('whatever'), { code: 'ERR_INVALID_STATE' }))).toBe(true);
   });
 
@@ -288,9 +219,7 @@ describe('isConnectionError', () => {
   });
 
   it('does NOT treat a read-only database as a transient connection fault', () => {
-    // SQLITE_READONLY (8) is deliberately absent from the set. Reopening a
-    // read-only file changes nothing, and withDb()'s retry would run the
-    // caller's work — including its writes — a second time for nothing.
+    // SQLITE_READONLY is excluded: retrying would rerun the caller's writes for nothing.
     const err = Object.assign(new Error('attempt to write a readonly database'), {
       code: 'ERR_SQLITE_ERROR',
       errcode: 8,
@@ -299,8 +228,7 @@ describe('isConnectionError', () => {
   });
 
   it('is conservative: ordinary query errors are NOT connection errors', () => {
-    // If this ever returns true we would close a healthy database AND re-run
-    // the caller's writes because of a constraint violation.
+    // A true here would reopen a healthy database and rerun the caller's writes.
     const constraintViolation = Object.assign(new Error('UNIQUE constraint failed: Coins.CoinId'), {
       code: 'ERR_SQLITE_ERROR',
       errcode: 2067,
@@ -313,9 +241,7 @@ describe('isConnectionError', () => {
   });
 
   it('classifies a real constraint violation from the engine as NOT a connection error', () => {
-    // The same claim, but driven by an error the database itself produced
-    // rather than one this file invented. The two must agree, or the
-    // hand-built fixtures above are testing a vocabulary nothing speaks.
+    // The same claim, using an error SQLite itself produced.
     return withTestDb((database) => {
       database.prepare("INSERT INTO Categories (CategoryName) VALUES ('Clash')").run();
       try {
@@ -355,9 +281,7 @@ describe('withDb', () => {
 
     await expect(withDb(work.fn)).rejects.toBe(queryError);
     expect(work.calls).toBe(1);
-    // The shared connection must survive an ordinary query failure. Closing
-    // it would break every other request in flight, which is the defect the
-    // whole layer was reorganised to remove.
+    // An ordinary query failure must not close the shared connection.
     expect(live.isClosed).toBe(false);
     expect(await getPool()).toBe(live);
   });
@@ -374,13 +298,7 @@ describe('withDb', () => {
   });
 });
 
-/**
- * A tiny hand-rolled call recorder.
- *
- * `vi.fn().mockRejectedValueOnce(...)` would do, but these three tests are
- * about how many times withDb() invokes its callback, and spelling that out
- * in six lines is clearer than three chained mock verbs.
- */
+/** A minimal call recorder, for counting how many times withDb() calls back. */
 function vi_fn() {
   const state = {
     calls: 0,

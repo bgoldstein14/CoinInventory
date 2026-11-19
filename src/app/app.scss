@@ -1,28 +1,11 @@
-// Styles for the application shell only.
-//
-// `base` sets up the page background and pulls in the shared `controls`
-// primitives (buttons, badges, the box-sizing reset); `layout` is the flex
-// column, the header and the main content grid.
-//
-// Everything that belongs to one region of the screen now lives with that
-// region's component — the toolbar, filter bar, inventory table, detail panel,
-// image overlays, bulk edit bar and settings dialog all carry their own .scss.
-// Angular scopes component styles, so a rule written here could not reach into
-// those child templates anyway.
+// Application shell styles. Component regions carry their own scoped .scss.
 @use 'styles/base' as *;
 @use 'styles/layout' as *;
 
-// ---- Connection status bar (the last row of the shell, in normal flow) ----
+// ---- Connection status bar ----
 
-// The status bar is the last row of the root flex column, NOT a fixed
-// overlay.
-//
-// It used to be `position: fixed; bottom: 0`, which took it out of the
-// document flow. Nothing reserved space for it, so it sat on top of the
-// bottom of the inventory table and hid the last row — and the shell's
-// `calc(100vh - 24px)` was an attempt to compensate that never lined up.
-// As a normal flex item it simply occupies its own height and the shell
-// gets exactly what is left.
+// Last row of the root flex column, in normal flow (a fixed overlay would
+// cover the table's last row).
 .status-bar {
   flex-shrink: 0;
   display: flex;
@@ -71,12 +54,7 @@
 
   strong { white-space: nowrap; }
 
-  // The one technical line ("RangeError: Invalid string length in
-  // GET /api/coins"). AVAILABLE BUT NOT SHOUTED: a non-technical user needs
-  // to read the sentence beside it and nothing else, while whoever is
-  // debugging needs this exact string. Dimmed and monospaced rather than
-  // hidden behind a disclosure, because a detail nobody can find is a
-  // detail that gets re-derived from the log every time.
+  // Technical detail line, dimmed so the plain-language message leads.
   &__detail {
     font-family: Consolas, "Courier New", monospace;
     font-size: 0.75rem;
@@ -84,13 +62,7 @@
   }
 }
 
-/* "Some of your coins have no denomination."
- *
- * Deliberately NOT the red of .db-error-banner above. Nothing is broken: a
- * coin with no linked denomination is a valid record (design §4.1) and the
- * app is working exactly as intended. Dressing housekeeping as a fault
- * teaches the user to ignore the colour, which is what they will then do
- * when the database really is down. */
+// Unlinked-denomination prompt: amber, not error red, since nothing is broken.
 .unlinked-banner {
   flex-shrink: 0;
   display: flex;
@@ -106,21 +78,11 @@
   span { flex: 1 1 auto; }
 }
 
-// ---- The loading state of the deferred screens (@defer in app.html) ----
-//
-// Every dialog in the shell, and the detail sidebar, are now fetched on
-// demand. On a local install a chunk arrives in a few milliseconds, so each
-// block is written as `@loading (after 100ms)`: on a normal open nothing is
-// ever drawn here. A box that flashes up and vanishes is worse than a dialog
-// that takes 40 ms longer.
-//
-// What this is for is the slow first open — cold disk cache, a busy machine —
-// where a click that paints nothing at all reads as a broken button.
+// ---- Loading state for @defer blocks (shown only on a slow first open) ----
 .defer-loading {
   position: fixed;
   inset: 0;
-  // The same layer the real modal backdrops use (styles/_modal.scss), so the
-  // handover from this to the dialog itself is invisible.
+  // Same layer as modal backdrops (styles/_modal.scss).
   z-index: 1100;
   display: flex;
   align-items: center;
@@ -130,10 +92,7 @@
   font-size: 0.9rem;
 }
 
-// The detail sidebar is not a dialog: it is a column of the main grid, and
-// `.has-detail` has already reserved its 420px while the chunk loads. Fill
-// that column instead of covering the screen — dimming the whole app for a
-// sidebar would be a bigger interruption than the thing being waited for.
+// Detail sidebar: fills the grid column `.has-detail` reserves instead of covering the screen.
 .defer-loading--panel {
   position: static;
   background: transparent;

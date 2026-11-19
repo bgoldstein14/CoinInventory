@@ -97,11 +97,10 @@ So there are two separate probes:
   has to be serving `index.html`, so the status code is enough.
 - **API:** `GET http://localhost:3000/api/health` returning 200 **and** a body
   of `{"status":"ok","database":"connected"}`. The health route runs a
-  `SELECT 1` against SQL Server, so a 200 there means the database has actually
-  answered — not merely that Express is listening.
+  `SELECT 1` against the database, so a 200 means it has actually answered, not
+  merely that Express is listening.
 
-**The body check is not belt-and-braces, it is load-bearing.** The Express
-server has an Angular SPA catch-all route (`app.get('*')`) that returns
+The body check matters: the Express server has an Angular SPA catch-all route (`app.get('*')`) that returns
 `index.html` with a **200** for any unmatched GET. Checking only the status code
 would make a missing or misnamed `/api/health` look perfectly healthy, and the
 launcher would open the browser too early — the exact bug it exists to prevent.
@@ -117,9 +116,8 @@ The launcher starts Edge with `--new-window` and **no `--user-data-dir`**, i.e.
 your ordinary profile, on purpose. The app stores its UI preferences — visible
 columns, app settings — in the browser's **IndexedDB**. Launching with a
 throwaway `--user-data-dir` would hand the app a blank profile and silently
-reset all of those every single time you started it. (Coin data itself lives in
-SQL Server and would be unaffected either way; it is the UI state that would be
-lost.)
+reset all of those every time. (Coin data itself lives in the SQLite database and
+is unaffected either way.)
 
 The catch this creates: if Edge is *already* running, the `msedge.exe` the
 launcher starts just hands the URL to the existing instance and exits
@@ -132,43 +130,9 @@ you so.
 
 ## Notes
 
-- **Database migrations are not applied by the launcher.** If your database
-  already contains coins, apply the outstanding scripts in
-  `server/migrations/` by hand — see the migrations section of
-  `server/README.md`. There are seven scripts, `002` through `008`; `002` and
-  `003` have been applied, and **`004` through `008` are still
-  outstanding** (widening the weight columns, dropping the `CoinTags` table,
-  dropping `Coins.Dealer`, filling in metal content and composition, and
-  converting `Coins.Weight` from troy ounces to grams). Apply them in
-  numerical order — `008` reads values that `007` writes.
-
-  **`008` is the one that matters if you delay it.** The others are cleanup or
-  fill-in, and nothing breaks while they are pending. `008` is different: the
-  application has already been relabelled to say the gross weight is in grams,
-  but the stored numbers are still troy ounces until the script runs, so every
-  weight on screen reads as roughly a thirty-first of its real value. It is
-  also the only script that must not be run twice — it guards itself with a
-  marker row in `AppSettings`, and its header explains why at length. Read
-  that header before running it.
-
-  Startup will not apply any of them for you. Re-running
-  `server/setup-database.sql` is **not** an
-  upgrade path: it drops every table before recreating them, so it is only for
-  building an empty database.
-- There used to be two separate launchers, one here and one in the project
-  root, with different readiness checks and different lock files (this one used
-  `%TEMP%`, the root one uses the project directory). Because the lock files
-  differed, launching both at once started two sets of servers competing for
-  ports 3000 and 4200. There is now a single implementation.
-- Two other behaviours of the old launcher in this folder were deliberately not
-  carried over: a cleanup routine that killed any process whose command line
-  contained the app directory *and* the substring `server` (broad enough to
-  terminate an editor or a terminal that merely had the project open), and
-  guessing the browser process by enumerating `msedge.exe` and taking the
-  newest one (Edge spawns renderer and GPU children, so this could latch onto
-  a short-lived helper and shut the app down moments after it started).
-- If the app still fails to connect to SQL Server, run the backend directly so
-  you can see its startup output in your own console:
+- The database (SQLite) builds and updates itself when the server starts; there
+  are no scripts to run. Its file is `%LOCALAPPDATA%CoinInventorycoin-inventory.db`.
+- If the app fails to start, run the backend directly to see its startup output:
   ```powershell
   cd server
   npx tsx server.ts
@@ -178,8 +142,5 @@ you so.
   Invoke-WebRequest -UseBasicParsing http://localhost:3000/api/health |
       Select-Object -ExpandProperty Content
   ```
-- The app depends on the local SQL Server database, and on
-  `server/setup-database.sql` for the canonical lookup data (categories,
-  denominations, mint marks, metal contents).
 - Errors are logged to `server/logs/app.log`, which is the first place to look
   when startup fails.

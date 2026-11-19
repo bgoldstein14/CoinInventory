@@ -1,20 +1,11 @@
 /**
- * routes/lookups/denominations.ts — the Denominations reference table.
+ * The Denominations reference table. DELETE is a soft delete (IsActive = 0)
+ * and GET returns only active rows. Mounted at /api:
  *
- * Unlike Categories and CoinSets, a denomination is a real row with an id, a
- * country and a sort order, and DELETE is a SOFT delete: it sets IsActive = 0
- * rather than removing the row, so coins that already reference the label keep
- * making sense. GET only ever returns the active ones.
- *
- * Mounted (via routes/lookups/index.ts) at /api:
- *
- *   GET    /denominations      -> active denominations, ordered by country
- *   POST   /denominations      -> create one (returns the new DenominationId)
- *   PUT    /denominations/:id  -> rename / re-country / re-order one
- *   DELETE /denominations/:id  -> soft-delete (IsActive = 0)
- *
- * Every database call runs inside `withDb()` and every parameter type comes
- * from DB_BINDINGS so it matches setup-database.sql.
+ *   GET    /denominations      active denominations, ordered by country
+ *   POST   /denominations      create one (returns the new DenominationId)
+ *   PUT    /denominations/:id  rename / re-country / re-order one
+ *   DELETE /denominations/:id  soft-delete and unlink its coins
  */
 
 import { Router, Request, Response } from 'express';
@@ -31,9 +22,8 @@ router.get('/denominations', async (_req: Request, res: Response) => {
     logInfo('Fetching active denominations');
 
     const denominations = await withDb(async (db) => {
-      // A LEFT JOIN, not an inner one. Denominations.IssuerId is nullable and
-      // a row the seed never reached still has none. Dropping those rows here
-      // would hide them from the one screen that can give them an issuer.
+      // LEFT JOIN: IssuerId is nullable, and unmatched rows must still be listed
+      // so the maintenance screen can assign them an issuer.
       const result = await db.request()
         .query(
           'SELECT d.DenominationId, d.Label, d.Country, d.IssuerId, d.FaceValue, d.SortOrder, ' +
@@ -46,10 +36,8 @@ router.get('/denominations', async (_req: Request, res: Response) => {
         denominationId: row['DenominationId'],
         label: row['Label'],
         country: row['Country'],
-        // The fields the maintenance screen groups by. ADDED alongside
-        // `country` rather than replacing it: the coin editor's dropdown
-        // still groups by Country, so removing it here would empty that
-        // dropdown's headings.
+        // Grouping fields for the maintenance screen; `country` stays for the
+        // coin editor's dropdown.
         issuerId: row['IssuerId'] ?? null,
         issuerName: row['IssuerName'] ?? null,
         faceValue: row['FaceValue'] ?? null,
@@ -72,11 +60,8 @@ router.post('/denominations', async (req: Request, res: Response) => {
     return;
   }
 
-  // issuerId is OPTIONAL here and REQUIRED by the maintenance screen, and
-  // the asymmetry is deliberate: the column is nullable, the editor's older
-  // add path does not send one, and rejecting those would break a working
-  // caller to enforce a rule that belongs to the UI. Absent means null, the
-  // same state the seed leaves an unmatched row in.
+  // Optional here (the editor's older add path doesn't send it); the
+  // maintenance screen requires it. Absent means null.
   const resolvedIssuerId = Number.isInteger(Number(issuerId)) && Number(issuerId) > 0
     ? Number(issuerId)
     : null;
@@ -96,7 +81,7 @@ router.post('/denominations', async (req: Request, res: Response) => {
           RETURNING DenominationId
         `);
 
-      // Guard the OUTPUT clause rather than blindly dereferencing [0].
+      // Guard against an empty RETURNING result.
       const row = result.recordset[0];
       if (!row) throw new Error('Denomination INSERT returned no row from its OUTPUT clause');
       return row['DenominationId'];
@@ -162,52 +147,16 @@ router.put('/denominations/:id', async (req: Request, res: Response) => {
 });
 
 /*
- * DELETE — a soft delete that leaves Coins.Denomination alone
- *   1. Count the coins using it, and say the number plainly.   <- the UI, via
- *                                                                 GET /api/
- *                                                                 reference-usage
- *   2. If confirmed: soft-delete (IsActive = 0) and NULL those coins'
- *      DenominationId.                                          <- here
- *   3. Coins.Denomination text is NEVER touched.                <- here
- *   4. Re-selecting a denomination re-links them. Nothing is lost.
+ * DELETE: soft-delete the denomination and NULL its coins' DenominationId, in
+ * one transaction. Coins.Denomination (the recorded text) is never touched,
+ * so re-selecting a denomination relinks a coin and nothing is lost.
  *
- * *** STEP 3 IS THE RULE THAT MAKES EVERYTHING ELSE RECOVERABLE. ***
- * Coins.Denomination is never written. It holds what the SOURCE
- * said — typed by the user or read out of a QIF — and after this runs it is
- * the only record of what the coin was. It is what lets the user recognise
- * the row, and it is what denomination-display.ts renders the unresolved
- * form from. A delete that blanked it would turn a reversible unlink into
- * data loss, so this statement sets exactly one column and that column is
- * DenominationId.
- *
- * WHY STEP 2 IS NOT LEFT TO THE SOFT DELETE ALONE. A coin still pointing at
- * a deactivated row displays as unresolved anyway, because the row no longer
- * comes back from GET — but by accident rather than by design, and the state
- * is a lie: the coin claims a link to a denomination that is not on offer.
- * Reactivating the row would silently re-link coins the user had already
- * decided to detach. Nulling makes the user's decision real.
- *
- * WHY ONE TRANSACTION, AND WHY COINS FIRST.
- * The two UPDATEs run inside one transaction, so a failure between them
- * cannot leave the job half done. Coins first because FK_Coins_Denomination
- * guarantees no coin points at a denomination that does not exist, which
- * makes unlinking-then-deactivating safe in every order of failure;
- * deactivating first would open a window — and on a failure, a permanent
- * state — in which coins point at a row the API no longer returns.
- *
- * *** THIS USED TO BE A SINGLE T-SQL BATCH AND COULD NOT STAY ONE. *** It
- * read `UPDATE ...; DECLARE @unlinked INT = @@ROWCOUNT; UPDATE ...; SELECT
- * @@ROWCOUNT, @unlinked;` — four statements in one call, with the row counts
- * carried in a local variable because the next statement resets @@ROWCOUNT.
- * SQLite has neither @@ROWCOUNT nor DECLARE, and — worse — its prepare()
- * compiles the FIRST statement of a multi-statement string and discards the
- * rest in silence, so a naive translation would have unlinked the coins and
- * never deactivated the denomination while reporting success. db/sql-api.ts
- * refuses a multi-statement query outright for exactly that reason. The
- * explicit transaction below is what replaces the batch, and the row counts
- * come back from each statement's own `rowsAffected`, which is clearer than
- * the variable ever was.
-  */
+ * The coins are unlinked explicitly (rather than left pointing at an inactive
+ * row) so that reactivating the row later can't silently relink coins the user
+ * detached. Coins are updated first so a failure never leaves coins pointing
+ * at a row the API no longer returns. The UI shows the coin count beforehand
+ * via GET /api/reference-usage.
+ */
 router.delete('/denominations/:id', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
@@ -243,8 +192,7 @@ router.delete('/denominations/:id', async (req: Request, res: Response) => {
     });
 
     if (outcome.removed === 0) {
-      // Nothing was changed: the FK means a denomination that does not exist
-      // can have no coins pointing at it, so the first UPDATE was a no-op too.
+      // Not found; the FK means no coins could point at it either.
       logWarn(`Denomination not found: ${id}`);
       res.status(404).json({ error: 'Denomination not found' });
       return;

@@ -1,23 +1,7 @@
 /**
- * routes/data/data.spec.ts — HTTP-level tests for the non-coin data routes:
- * spot prices and settings.
- *
- * *** NOTHING HERE IS CANNED ANY MORE. *** Rows are inserted into a real
- * in-memory SQLite database built from db/schema.sql and read back through
- * the real query the route runs. Where a test used to queue a recordset on a
- * hand-written mock it now arranges the row, and where it used to assert that
- * the mock was or was not called it now asserts on the statements the data
- * layer actually executed (executedSql) or on the rows that ended up in the
- * table (queryRows).
- *
- * WHAT THE MOCK USED TO HIDE, still visible below:
- *   - SpotPrices.SpotPriceId is assigned by the database, not by the test, so
- *     the assertion is now "the id the route reported is the id of the row
- *     that exists" rather than a number the mock was told to return.
- *
- * (There is no test for POST /api/log: it writes to app.log and always answers
- * 204, so there is nothing to assert that the logger's own behaviour does not
- * already cover.)
+ * HTTP tests for the non-coin data routes (spot prices and settings), against
+ * real rows in the in-memory database. POST /api/log isn't tested here: it
+ * always answers 204 and the logger has its own tests.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -30,42 +14,14 @@ import {
 } from '../../test-support/sqlite-test-db';
 import { app } from '../../server';
 
-// Transactions API: REMOVED, AND PROVED REMOVED
-//
-// Five cases lived here and all five went with the Transactions table:
-//   GET  /api/transactions                returns all transactions
-//   GET  /api/transactions?coinId=        honours the filter
-//   POST /api/transactions                400s without coinId/type/date
-//   POST /api/transactions                creates a row
-//   POST /api/transactions                refuses an unknown coin (the FK)
-//   DELETE /api/transactions/:id          404s for an unknown id
-//
-// None of them has anywhere to move to: they tested a table, three routes
-// and a foreign key that no longer exist. What replaces them is the pair
-// below — the endpoints must be GONE, not merely unused — plus the coin
-// write tests in routes/coins/writes.spec.ts, which now cover
-// PurchasedFrom / SoldTo / TransactionNotes round-tripping through
-// PUT /api/coins/:id.
+// Transactions API: removed. The endpoints must be gone; purchase/sale fields
+// are covered in routes/coins/writes.spec.ts.
 
 describe('the transaction endpoints no longer exist', () => {
   it('no longer answers GET /api/transactions with a transaction list', async () => {
-    /*
-     * NOT a 404, and the reason is worth knowing: server.ts ends with a
-     * `app.get('/*splat')` SPA fallback, so ANY unmatched GET is handled
-     * there rather than rejected.
-     *
-     * This test used to assert `content-type` is not application/json, and
-     * that was **environment-coupled**: with no `dist/` on disk the
-     * fallback's `sendFile` fails and Express answers with a JSON error
-     * body, so the test went red for a reason that had nothing to do with
-     * transactions. It depended, invisibly, on a build having run first.
-     *
-     * The property that actually matters is that no transaction route
-     * survives, and `executedSql()` proves it directly: a real route would
-     * have queried the database. The body check below is deliberately about
-     * SHAPE rather than content-type, so it holds whether the fallback
-     * serves index.html or errors.
-     */
+    // Not a 404: the SPA fallback handles any unmatched GET (and its response
+    // depends on whether dist/ exists). So assert that no database query ran,
+    // and check the body's shape rather than its content type.
     const res = await request(app).get('/api/transactions');
 
     expect(executedSql()).toEqual([]);
@@ -74,8 +30,7 @@ describe('the transaction endpoints no longer exist', () => {
   });
 
   it('404s on POST /api/transactions', async () => {
-    // A POST that still worked would be a second, unvalidated write path to
-    // the coin fields that replaced the table.
+    // A surviving POST would be a second, unvalidated write path.
     const res = await request(app)
       .post('/api/transactions')
       .send({ coinId: 'abc-123', type: 'sale', date: '2024-06-15', amount: 10 });
@@ -94,9 +49,7 @@ describe('GET /api/spot-prices/latest', () => {
   });
 
   it('returns latest spot prices', async () => {
-    // Server reads CamelCase column names: Gold, Silver, Platinum, Copper, Source, FetchedAt
-    // Two rows, so "latest" has to mean something: the route orders by
-    // FetchedAt DESC, which is lexicographic over ISO-8601 text.
+    // Two rows: "latest" is ORDER BY FetchedAt DESC (ISO text sorts by time).
     await withTestDb((database) => {
       const insert = database.prepare(
         `INSERT INTO SpotPrices (Gold, Silver, Platinum, Copper, Source, FetchedAt)
@@ -121,9 +74,7 @@ describe('POST /api/spot-prices', () => {
       .send({ gold: 2400, silver: 30, platinum: 1050, copper: 4.2, source: 'metals.live' });
     expect(res.status).toBe(201);
 
-    // SpotPriceId comes from the RETURNING clause, so the id the route
-    // reported must be the id of the row that now exists. (The mock simply
-    // asserted the number 1, which proved only that the mock said 1.)
+    // The reported id is the id of the stored row.
     const rows = await queryRows('SELECT * FROM SpotPrices');
     expect(rows).toHaveLength(1);
     expect(res.body.id).toBe(rows[0]['SpotPriceId']);
@@ -132,11 +83,8 @@ describe('POST /api/spot-prices', () => {
     expect(rows[0]['Copper']).toBe(4.2);
   });
 
-  // "A zero is not a price"
-  // A precious metal never trades at zero, so a zero means "no price". This
-  // endpoint is the one place that matters most, because /spot-prices/latest
-  // reads the newest row back and the client applies it at start-up: a single
-  // all-zero row would blank every melt value on every subsequent launch.
+  // A zero is not a price: an all-zero row would break melt values on every
+  // launch, since the client applies the latest row at start-up.
 
   it('refuses an all-zero price set without touching the database', async () => {
     const res = await request(app)
@@ -145,15 +93,12 @@ describe('POST /api/spot-prices', () => {
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/zero/i);
-    // The important half: no INSERT was attempted. executedSql() is every
-    // statement the data layer ran during this test, so an empty list means
-    // the guard fired before the database was opened at all.
+    // No statement ran: the guard fires before the database is touched.
     expect(executedSql()).toEqual([]);
   });
 
   it('refuses a body with no prices at all', async () => {
-    // Missing is no more a price than zero is, and Number(undefined) is NaN
-    // rather than 0, so this needs its own check.
+    // Missing counts as zero (Number(undefined) is NaN, so it needs its own check).
     const res = await request(app).post('/api/spot-prices').send({});
 
     expect(res.status).toBe(400);
@@ -170,10 +115,7 @@ describe('POST /api/spot-prices', () => {
   });
 
   it('ACCEPTS a partial set where only one metal has a price', async () => {
-    // Deliberately all-zero and not any-zero. The four metals are fetched as
-    // independent symbols, so silver succeeding while platinum fails is
-    // normal, and a user may only care about gold. The zeros simply mean "no
-    // price for that metal".
+    // All-zero, not any-zero: partial sets are normal.
     const res = await request(app)
       .post('/api/spot-prices')
       .send({ gold: 2400, silver: 0, platinum: 0, copper: 0 });
@@ -245,13 +187,7 @@ describe('PUT /api/settings/:key', () => {
   });
 
   it('overwrites an existing value rather than failing on the primary key', async () => {
-    /*
-     * NEW. The ON CONFLICT ... DO UPDATE upsert was untestable against the
-     * mock: nothing in it had a primary key, so the second PUT could not have
-     * conflicted with the first and a plain INSERT would have passed. Here
-     * AppSettings.SettingKey really is the primary key, so an implementation
-     * that lost the ON CONFLICT clause would answer 409 instead of 200.
-     */
+    // SettingKey is the primary key, so losing ON CONFLICT would give a 409.
     await request(app).put('/api/settings/theme').send({ value: 'light' });
     const res = await request(app).put('/api/settings/theme').send({ value: 'dark' });
 

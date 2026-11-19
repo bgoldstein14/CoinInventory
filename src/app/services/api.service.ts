@@ -30,62 +30,30 @@ import {
 } from './backup/backup-messages';
 import { describeHttpError, resolveApiBaseUrl, retryTransientFailures } from './http-utils';
 
-// Shared HTTP helpers live in ./http-utils so that a service needing only a
-// helper (e.g. LoggingService) can import it without dragging ApiService --
-// and therefore Angular's HttpClient/XHR backend -- into the module graph.
-// Re-exported here so imports from './api.service' keep working.
+// Defined in ./http-utils (so LoggingService can use them without pulling in
+// HttpClient); re-exported for existing importers.
 export { describeHttpError, resolveApiBaseUrl, retryTransientFailures, isHttpErrorResponse, isRetryableError } from './http-utils';
 
 /**
- * ApiService provides typed HTTP methods for all backend API endpoints.
- *
- * This service acts as the single source of truth for backend communication.
- * All HTTP calls return RxJS Observables that must be subscribed to execute.
- *
- * Usage:
- *   constructor(private api: ApiService) {}
- *
- *   // Subscribe to get data
- *   this.api.getCoins().subscribe({
- *     next: (coins) => console.log('Loaded coins:', coins),
- *     error: (err) => console.error('Failed to load coins:', err)
- *   });
- *
- * The baseUrl is resolved at runtime by `resolveApiBaseUrl()` â€” see that
- * function for the localhost:3000 vs. same-origin rules.
- *
- * Coin writes (POST/PUT/DELETE) are wrapped in `retryTransientFailures()` so a
- * brief backend hiccup does not lose the user's edit.
+ * Typed HTTP methods for every backend endpoint. All calls return cold
+ * Observables (nothing is sent until subscribed). The base URL comes from
+ * `resolveApiBaseUrl()`. Coin writes are wrapped in `retryTransientFailures()`
+ * so a brief backend hiccup doesn't lose an edit.
  */
 @Injectable({ providedIn: 'root' })
 export class ApiService {
-  /**
-   * Base URL for all API calls, resolved once when the service is created.
-   * See `resolveApiBaseUrl()` above for the rules.
-   */
+  /** Base URL for all API calls, resolved once (see `resolveApiBaseUrl()`). */
   private readonly baseUrl = resolveApiBaseUrl();
 
   constructor(private http: HttpClient) {}
 
-  // ---- Coin Operations ----
+  // Coins
 
   /**
-   * Fetch all coins from the inventory.
-   *
-   * *** THE RETURNED RECORDS HAVE NO `imagePaths` KEY. ***
-   *
-   * Not an empty array — the key is absent. `GET /api/coins` must not inline
-   * photographs: on a collection of ~100 coins the concatenated base64 pushes
-   * `JSON.stringify` past V8's maximum string length and it throws
-   * `RangeError: Invalid string length`, so the whole response fails with a
-   * 500 that looks to the client like a dead database.
-   *
-   * Every coin still carries `imageCount`, which answers "does this coin have
-   * photographs, and how many" for free. The photographs themselves come from
-   * `getCoinImages()` below, one coin at a time, and the grid's row
-   * thumbnails from `coinThumbnailUrl()`.
-   *
-   * @returns Observable of coin array, with image counts but no image data
+   * Fetches all coins. The records have no `imagePaths` key (absent, not empty):
+   * inlining every photo's base64 would exceed V8's maximum string length and
+   * fail the whole response. Each coin carries `imageCount`; photos come from
+   * `getCoinImages()` and grid thumbnails from `coinThumbnailUrl()`.
    */
   getCoins(): Observable<CoinRecord[]> {
     return this.http.get<CoinRecord[]>(`${this.baseUrl}/api/coins`);
@@ -96,10 +64,7 @@ export class ApiService {
     return this.http.get<CoinRecord>(`${this.baseUrl}/api/coins/${id}`);
   }
 
-  /**
-   * Create a new coin in the inventory.
-   * Retries automatically on network/5xx failures (see retryTransientFailures).
-   */
+  /** Creates a coin; retries on network/5xx failures. */
   createCoin(coin: Partial<CoinRecord>): Observable<{ id: string }> {
     return this.http
       .post<{ id: string }>(`${this.baseUrl}/api/coins`, coin)
@@ -107,14 +72,9 @@ export class ApiService {
   }
 
   /**
-   * Update an existing coin's data.
-   *
-   * IMPORTANT: `coin` must contain ONLY the fields that actually changed.
-   * The backend does a partial update, so sending a whole record would
-   * overwrite fields the user never touched. InventoryService.updateCoin()
-   * is responsible for computing that minimal diff.
-   *
-   * Retries automatically on network/5xx failures.
+   * Updates a coin. `coin` must contain only the changed fields: the backend does
+   * a partial update, so a whole record would overwrite untouched fields.
+   * InventoryService computes the minimal diff. Retries on network/5xx failures.
    */
   updateCoin(id: string, coin: Partial<CoinRecord>): Observable<void> {
     return this.http
@@ -122,28 +82,19 @@ export class ApiService {
       .pipe(retryTransientFailures());
   }
 
-  /**
-   * Delete a coin from the inventory.
-   * Retries automatically on network/5xx failures.
-   */
+  /** Deletes a coin; retries on network/5xx failures. */
   deleteCoin(id: string): Observable<void> {
     return this.http
       .delete<void>(`${this.baseUrl}/api/coins/${id}`)
       .pipe(retryTransientFailures());
   }
 
-  // ---- Coin Image Operations (and the ORIGINAL file behind each image) ----
+  // Coin images and their original files
 
   /**
-   * Fetch the full image records for ONE coin: the displayable base64 data
-   * plus, for each one, the absolute path of the original file on the host
-   * machine (`sourcePath`, which is null when no path was ever recorded).
-   *
-   * Called lazily — only when a coin is actually being viewed. `GET /api/coins`
-   * can be asked to omit image payloads, so this is the endpoint that fills in
-   * the detail for the single coin the user is looking at.
-   *
-   * @returns Observable of the coin's images, in display order
+   * Fetches one coin's images: base64 data plus each original file's absolute path
+   * on the host (`sourcePath`, null when not recorded). Called lazily when a coin
+   * is viewed.
    */
   getCoinImages(coinId: string): Observable<CoinImageRecord[]> {
     return this.http.get<CoinImageRecord[]>(
@@ -152,57 +103,22 @@ export class ApiService {
   }
 
   /**
-   * The URL of ONE coin's main photograph, as binary image bytes, for the
-   * `src` of a grid row thumbnail.
+   * URL of one coin's main photograph as image bytes, for a grid thumbnail `src`.
+   * A URL rather than an Observable so the browser lazy-loads, caches (ETag with
+   * `Cache-Control: no-cache`, so changes show at once) and never concatenates
+   * images. Use only for coins with `imageCount > 0`; otherwise the endpoint 404s.
+   * The id is URL-encoded because coin ids are free text.
    *
-   * *** WHY A URL AND NOT AN OBSERVABLE ***
+   * `revision` is the count of server-confirmed image changes to the coin this
+   * session (inventory/coin-thumbnail-revision.ts). A browser never retries a
+   * failed image load, and a new photo is shown before its save lands, so a new
+   * URL after the save makes the browser fetch it. Revision 0 must stay the bare
+   * URL so unchanged coins keep a stable, cacheable URL (see
+   * server/routes/coins/thumbnail.ts).
    *
-   * Everything else here fetches data for TypeScript to hold. This returns a
-   * string for the BROWSER to fetch, and that difference is the whole point:
-   *
-   *   - The grid renders these with `loading="lazy"`, so rows below the fold
-   *     cost nothing until the user scrolls to them.
-   *   - The browser caches each one, so scrolling back up costs a 304 with
-   *     an empty body (the server sends `Cache-Control: no-cache` plus an
-   *     ETag, so a photograph the user just changed still updates at once).
-   *   - Nothing ever concatenates them. A JSON endpoint returning one
-   *     thumbnail per coin would rebuild the oversized string that `getCoins`
-   *     above exists to avoid; one image per HTTP response cannot, at any
-   *     collection size.
-   *
-   * CALL IT ONLY FOR COINS THAT HAVE PHOTOGRAPHS. `imageCount` comes free on
-   * every coin from `getCoins()`, so the grid renders no `<img>` at all for a
-   * coin with none and makes no request. The endpoint answers 404 if asked
-   * anyway, which is harmless but pointless.
-   *
-   * The id is URL-encoded: coin ids are free text and a `/` or `?` in one
-   * would otherwise change which endpoint is being addressed.
-   *
-   * *** WHY THERE IS A REVISION PARAMETER ***
-   *
-   * Because the id alone was not enough, and a broken thumbnail was the
-   * result. Attaching a photo repaints the row immediately but PUTs it a
-   * second later, so the browser asked for this URL while the server still
-   * had no image and got a 404. When the save landed, nothing re-requested:
-   * same element, byte-identical URL, and a browser never retries a failed
-   * image load. The picture stayed broken until the grid was reloaded.
-   *
-   * `revision` is the count of SERVER-CONFIRMED changes to that coin's image
-   * set this session (services/inventory/coin-thumbnail-revision.ts). A
-   * confirmed save therefore produces a URL the browser has never failed on,
-   * and it fetches the photograph.
-   *
-   * REVISION 0 MUST STAY THE BARE URL. A coin whose photographs have not
-   * changed keeps one stable URL for the whole session, which is what lets
-   * scrolling the grid cost a 304 against the endpoint's ETag instead of
-   * re-downloading every visible photograph. Do not "simplify" this by always
-   * appending a token, and do not fix caching problems here by turning
-   * caching off — see server/routes/coins/thumbnail.ts.
-   *
-   * @param coinId - the coin whose main photograph is wanted
-   * @param revision - confirmed image-write count; 0 (the default) means
-   *                   "unchanged since load" and yields the plain URL
-   * @returns An absolute, same-origin URL safe to put in `src`
+   * @param coinId the coin whose main photograph is wanted
+   * @param revision confirmed image-write count; 0 (default) gives the plain URL
+   * @returns an absolute, same-origin URL for `src`
    */
   coinThumbnailUrl(coinId: string, revision = 0): string {
     const url = `${this.baseUrl}/api/coins/${encodeURIComponent(coinId)}/thumbnail`;
@@ -210,21 +126,11 @@ export class ApiService {
   }
 
   /**
-   * Ask the backend whether a batch of original image files still exist on
-   * disk, in ONE round trip.
+   * Checks in one request whether original image files still exist; returns a
+   * `path -> boolean` map. The server de-duplicates and caps at 500 paths. A POST
+   * because long Windows paths are awkward in a query string.
    *
-   * WHY BATCHED: a coin can easily have eight photos. Eight requests to render
-   * one sidebar is wasteful and makes the links pop in one at a time, so the
-   * endpoint takes an array and answers with a `path -> boolean` map. The
-   * server de-duplicates the list and caps it at 500 paths per request.
-   *
-   * WHY A POST for what is logically a read: the payload is a list of long
-   * Windows paths full of backslashes, colons, spaces and the occasional
-   * non-ASCII character. A JSON body has no length limit to run into and no
-   * encoding traps; a query string has both.
-   *
-   * @param paths - Absolute paths to check (max 500)
-   * @returns Observable of `{ results: { [path]: boolean } }`
+   * @param paths absolute paths to check (max 500)
    */
   checkImagesExist(paths: string[]): Observable<{ results: Record<string, boolean> }> {
     return this.http.post<{ results: Record<string, boolean> }>(
@@ -234,28 +140,13 @@ export class ApiService {
   }
 
   /**
-   * Ask which ORIGINAL files are already attached to each of a list of coins,
-   * in ONE round trip.
+   * Which original files (`CoinImages.SourcePath`) are already attached to each
+   * coin, in one request. The batch image import uses it to skip photos already
+   * stored; the browser only holds downscaled `data:` URLs. Carries no image data.
    *
-   * WHY THIS EXISTS: the batch image import needs to tell a photo it has
-   * already stored from one it has not, and the only thing that identifies a
-   * source file is `CoinImages.SourcePath`. That value is not available in
-   * the browser — `CoinRecord.imagePaths` carries the downscaled `data:` URLs
-   * and nothing else, deliberately (see services/image-source-paths.ts).
-   * Without this endpoint, re-importing a folder offers every already-attached
-   * photo again.
-   *
-   * WHY NOT `getCoinImages()` ABOVE: that one is per coin, and a review screen
-   * covers ~112 of them. 112 requests to decide what to skip would cost more
-   * than the duplicate import did.
-   *
-   * The response deliberately carries NO `imageData`. Those base64 blobs are
-   * the bulk of the database, and this question is about file names.
-   *
-   * @param coinIds - Coins to ask about (max 500; the server rejects more)
-   * @returns Observable of `{ results: { [coinId]: string[] } }`, with an
-   *          entry for every id asked about — an empty array means "asked,
-   *          nothing attached", which is not the same as a missing key.
+   * @param coinIds coins to ask about (max 500)
+   * @returns `{ results: { [coinId]: string[] } }` with an entry for every id; an
+   *          empty array means nothing attached
    */
   getCoinImageSourcePaths(coinIds: string[]): Observable<{ results: Record<string, string[]> }> {
     return this.http.post<{ results: Record<string, string[]> }>(
@@ -265,36 +156,19 @@ export class ApiService {
   }
 
   /**
-   * Build the URL that serves an ORIGINAL full-resolution image file.
+   * URL that serves an original full-resolution image through the backend.
+   * Browsers silently block navigation from an `http://` page to `file://`, so the
+   * server streams the file (`Content-Disposition: inline`) from the same origin.
+   * The path is URL-encoded (backslashes, spaces, `&`, `#`).
    *
-   * *** WHY THIS GOES THROUGH THE BACKEND INSTEAD OF A `file:///` LINK ***
-   *
-   * The obvious idea is to render `<a href="file:///C:/Coin Pictures/x.jpg">`.
-   * It does not work, and it fails in the most confusing possible way: Chrome
-   * and Edge BLOCK navigation from an `http://` page to a `file://` URL, and
-   * they block it SILENTLY. The user clicks, nothing happens, and there is not
-   * even an error on screen. This is a hard browser security boundary — no
-   * attribute, header or setting turns it off — because otherwise any web page
-   * could probe your local disk.
-   *
-   * So the server, which is a normal process on the user's own machine and has
-   * no such restriction, opens the file and streams it back with
-   * `Content-Disposition: inline`. The browser is then just loading an ordinary
-   * `http://` URL from the same origin, which it is perfectly happy to do in a
-   * new tab.
-   *
-   * The path is URL-encoded because it is a Windows path: it contains
-   * backslashes and almost always spaces (`\\NAS\Coin Pictures\...`),
-   * and `&` or `#` in a filename would otherwise truncate the query string.
-   *
-   * @param sourcePath - Absolute path of the original file on the host machine
-   * @returns An absolute, same-origin URL safe to put in `href`
+   * @param sourcePath absolute path of the original file on the host
+   * @returns an absolute, same-origin URL for `href`
    */
   imageFileUrl(sourcePath: string): string {
     return `${this.baseUrl}/api/images/file?path=${encodeURIComponent(sourcePath)}`;
   }
 
-  // ---- Denomination Operations ----
+  // Denominations
 
   /** Fetch all available denominations (Quarter, Half Dollar, etc.). */
   getDenominations(): Observable<Denomination[]> {
@@ -316,86 +190,45 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/denominations/${id}`);
   }
 
-  // ---- Issuer Operations (migration 011, design §4.5a) ----
-  // Who struck the coin. These are read ONLY by the reference-data
-  // maintenance screen, which is why there is no `issuers` signal on
-  // InventoryService to go with them: 61 rows with their usage counts are
-  // not worth fetching at startup for the large majority of sessions that
-  // never open Settings. The screen loads them when it opens and drops them
-  // when it closes.
-  // ========================================
+  // Issuers (migration 011, design §4.5a). Used only by the reference-data
+  // maintenance screen, which loads them on open, so there is no issuers signal
+  // on InventoryService.
 
-  /**
-   * Fetch the ACTIVE issuers, each with its denomination and coin counts.
-   * @returns Observable of issuer array, in picker order
-   */
+  /** Fetches the active issuers with their denomination and coin counts, in picker order. */
   getIssuers(): Observable<IssuerRecord[]> {
     return this.http.get<IssuerRecord[]>(`${this.baseUrl}/api/issuers`);
   }
 
   /**
-   * Create an issuer the seed missed — OR BRING A REMOVED ONE BACK.
-   *
-   * Removal is a SOFT delete, so a removed issuer still holds its name and
-   * cannot be re-created alongside itself. Posting that name revives the
-   * existing row, keeping its id and its denominations, and the answer
-   * carries `revived` and `denominationsRestored` so the caller can say
-   * which of the two happened. See `IssuerCreationResult`.
-   *
-   * The server answers 409 for a name an ACTIVE issuer already holds rather
-   * than letting UQ_Issuers_Name turn into a 500, and 400 for an ISO code
-   * that is not exactly two letters. Both are expected answers, not faults.
+   * Creates an issuer, or revives a soft-deleted one with the same name (keeping
+   * its id and denominations; see `revived` / `denominationsRestored` in
+   * `IssuerCreationResult`). The server answers 409 for a name an active issuer
+   * holds and 400 for an ISO code that isn't two letters; both are expected.
    */
   createIssuer(issuer: NewIssuer): Observable<IssuerCreationResult> {
     return this.http.post<IssuerCreationResult>(`${this.baseUrl}/api/issuers`, issuer);
   }
 
-  /**
-   * Edit an issuer IN PLACE, keeping its id.
-   *
-   * Denominations reference an issuer by id, so remove-and-re-add — which is
-   * all the text-keyed lookups offer — would orphan every denomination filed
-   * under it.
-   */
+  /** Edits an issuer in place, keeping its id (denominations reference it by id). */
   updateIssuer(id: number, issuer: NewIssuer): Observable<IssuerRecord> {
     return this.http.put<IssuerRecord>(`${this.baseUrl}/api/issuers/${id}`, issuer);
   }
 
   /**
-   * Remove an issuer, CASCADING to its denominations and their coins.
-   *
-   * Soft on the server, and atomic: the issuer, its denominations and the
-   * `DenominationId` on every coin using them all go in one transaction, so
-   * there is no state in which the issuer is gone and live denominations are
-   * still filed under it. `Coins.Denomination` — the recorded text — is not
-   * touched, which is what lets the caller promise that no coin is lost.
-   *
-   * It USED TO REFUSE with a 409 while any denomination remained. See the
-   * handler in server/routes/lookups/issuers.ts for why that refusal was
-   * the bug rather than the safeguard it looked like.
-   *
-   * The response says what actually happened, so the caller can report that
-   * rather than what it predicted in the confirmation.
+   * Removes an issuer, cascading to its denominations and their coins' links, in
+   * one transaction (soft delete). `Coins.Denomination` text is untouched, so no
+   * coin is lost. The response reports what actually happened.
    */
   deleteIssuer(id: number): Observable<IssuerRemovalResult> {
     return this.http.delete<IssuerRemovalResult>(`${this.baseUrl}/api/issuers/${id}`);
   }
 
   /**
-   * Ask what denominations an issuer struck. THE APP'S ONLY OUTBOUND
-   * REQUEST, and it only goes as far as our own server, which forwards the
-   * NAME and nothing else to Wikidata.
-   *
-   * *** CALLING THIS AT ALL IS THE DECISION. *** The checkbox on the issuer
-   * form must gate the CALL, not the handling of the answer: "unchecked
-   * must skip the request entirely rather than making it and discarding
-   * the answer". There is nothing this method or the route behind it can do
-   * about a packet that has already left.
-   *
-   * It does not fail. No network, no results and a timeout all come back as
-   * a 200 with an `outcome` saying which — see
-   * server/routes/lookups/denomination-lookup.ts for why a 500 would be
-   * wrong for the commonest case.
+   * Asks which denominations an issuer struck. The app's only outbound request:
+   * our server forwards just the name to Wikidata. The issuer form's checkbox
+   * must gate this call itself, not the handling of the answer. Never errors:
+   * no network, no results and timeouts all return 200 with an `outcome`
+   * (see server/routes/lookups/denomination-lookup.ts).
    */
   lookUpDenominations(issuerName: string): Observable<DenominationLookupResult> {
     const name = encodeURIComponent(issuerName);
@@ -403,52 +236,40 @@ export class ApiService {
   }
 
   /**
-   * How many coins use each entry of each reference list.
-   *
-   * One round trip for all five types. Counted in SQL rather than from the
-   * loaded coins because the number shown beside Remove has to be the
-   * number of rows Remove will touch, and Remove is a server-side UPDATE —
-   * so both have to come from the same place or they can disagree.
+   * How many coins use each entry of each reference list, in one request.
+   * Counted in SQL so the number shown beside Remove matches what Remove touches.
    */
   getReferenceUsage(): Observable<ReferenceUsageCounts> {
     return this.http.get<ReferenceUsageCounts>(`${this.baseUrl}/api/reference-usage`);
   }
 
-  // ---- Catalogue Operations ----
-  // The reference catalogues a coin can be attributed to -- Sear, RIC,
-  // Hendin, Krause. Identical in shape to the denomination and mint-mark
-  // calls above and below, on purpose: it is the same kind of lookup table,
-  // maintained from the same kind of screen, with the same soft delete.
-  // ========================================
+  // Catalogues (Sear, RIC, Hendin, Krause): same shape and soft delete as the
+  // other lookup tables.
 
   /** Fetch the ACTIVE catalogues, in seeded order. */
   getCatalogs(): Observable<CatalogOption[]> {
     return this.http.get<CatalogOption[]>(`${this.baseUrl}/api/catalogs`);
   }
 
-  /**
-   * Create a new catalogue the seed did not include.
-   * @param c - Partial catalogue; `name` is required
-   */
+  /** Creates a catalogue the seed didn't include; `name` is required. */
   createCatalog(c: Partial<CatalogOption>): Observable<CatalogOption> {
     return this.http.post<CatalogOption>(`${this.baseUrl}/api/catalogs`, c);
   }
 
-  /** Rename a catalogue (or change where it sits in the picker). */
+  /** Renames a catalogue or changes its picker position. */
   updateCatalog(id: number, c: Partial<CatalogOption>): Observable<void> {
     return this.http.put<void>(`${this.baseUrl}/api/catalogs/${id}`, c);
   }
 
   /**
-   * Remove a catalogue. SOFT delete on the server (IsActive = 0), so coins
-   * already attributed to it keep reading "Sear 6819" and a mistake is
-   * recoverable by reactivating the row.
+   * Removes a catalogue (soft delete), so attributed coins keep reading
+   * "Sear 6819" and the row can be reactivated.
    */
   deleteCatalog(id: number): Observable<void> {
     return this.http.delete<void>(`${this.baseUrl}/api/catalogs/${id}`);
   }
 
-  // ---- Mint Mark Operations ----
+  // Mint marks
 
   /** Fetch all available mint marks (D, S, P, W, etc.). */
   getMintMarks(): Observable<MintMarkOption[]> {
@@ -470,14 +291,14 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/mintmarks/${id}`);
   }
 
-  // ---- Category Operations ----
+  // Categories
 
   /** Fetch all available categories. */
   getCategories(): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseUrl}/api/categories`);
   }
 
-  /** Fetch all canonical metal content values from the database. */
+  /** Fetches all canonical metal content values. */
   getMetalContents(): Observable<string[]> {
     return this.http.get<string[]>(`${this.baseUrl}/api/metalcontents`);
   }
@@ -492,7 +313,7 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/categories/${name}`);
   }
 
-  // ---- Coin Set Operations ----
+  // Coin sets
 
   /** Fetch all available coin sets. */
   getCoinSets(): Observable<string[]> {
@@ -509,93 +330,48 @@ export class ApiService {
     return this.http.delete<void>(`${this.baseUrl}/api/coin-sets/${name}`);
   }
 
-  // ---- Transaction Operations: REMOVED ----
-  //
-  // getTransactions / createTransaction / deleteTransaction called
-  // /api/transactions, which no longer exists. The buy and the sale are
-  // ordinary fields on the coin now — purchasedFrom, soldTo,
-  // transactionNotes, plus the money and dates that were always there — so
-  // they are saved by updateCoin() along with every other field. Do not add
-  // a second write path back.
+  // Spot prices
 
-  // ---- Spot Price Operations ----
-
-  /**
-   * Fetch current spot prices from external API.
-   * This triggers the backend to read live COMEX/NYMEX futures prices.
-   */
+  /** Fetches current spot prices; the backend reads live COMEX/NYMEX futures. */
   fetchSpotPrices(): Observable<SpotPriceResult> {
     return this.http.get<SpotPriceResult>(`${this.baseUrl}/api/spot-prices/fetch`);
   }
 
   /**
-   * Read back the most recently SAVED spot prices from the database.
-   *
-   * This is the start-up counterpart to fetchSpotPrices() above. That one goes
-   * out to COMEX live; this one just reads the newest row of our own
-   * SpotPrices history table, which is what lets melt values survive a restart
-   * without hitting a third-party API every time the app opens.
-   *
-   * The route never 404s. When the table is empty it answers 200 with every
-   * price zeroed and `source`/`fetchedAt` both null, so callers should test
-   * `fetchedAt` rather than the numbers to tell "nothing saved yet" apart from
-   * "saved prices that are genuinely zero".
-   *
-   * @returns Observable of the newest saved prices plus their provenance
+   * Reads the most recently saved spot prices from the SpotPrices history table,
+   * so melt values survive a restart without calling the external API.
+   * Never 404s: an empty table gives 200 with zero prices and null
+   * `source`/`fetchedAt`, so test `fetchedAt` to detect "nothing saved yet".
    */
   getLatestSpotPrices(): Observable<LatestSpotPrices> {
     return this.http.get<LatestSpotPrices>(`${this.baseUrl}/api/spot-prices/latest`);
   }
 
   /**
-   * Save spot prices to the database.
+   * Saves spot prices. Each call inserts a new history row (POST
+   * /api/spot-prices; see server/routes/data/spot-prices.ts), so call only on a
+   * deliberate user action. InventoryService.commitSpotPrices() is the only caller.
    *
-   * *** THIS INSERTS A NEW HISTORY ROW EVERY TIME IT IS CALLED. ***
-   * There is no update-in-place; POST /api/spot-prices is an INSERT (see
-   * server/routes/data/spot-prices.ts). That is by design — the table is a
-   * price history — but it means this method must only ever be reached from a
-   * DELIBERATE user action, never from a signal change or a keystroke.
-   * InventoryService.commitSpotPrices() is the only caller and it exists
-   * precisely to enforce that; read its comment before adding another.
-   *
-   * @param prices - Spot prices for gold, silver, platinum, copper, plus an
-   *                 optional `source` label recording where they came from
-   *                 (e.g. "COMEX/NYMEX futures via Yahoo Finance", "Manual entry")
-   * @returns Observable that completes when save is done
+   * @param prices gold, silver, platinum and copper prices, plus an optional
+   *               `source` label (e.g. "COMEX/NYMEX futures via Yahoo Finance", "Manual entry")
    */
   saveSpotPrices(prices: SpotPrices & { source?: string }): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/spot-prices`, prices);
   }
 
-  // ---- Logging Operations ----
+  // Logging
 
-  /**
-   * Send a log entry to the backend.
-   * Used by LoggingService to persist frontend logs.
-   */
+  /** Sends a log entry to the backend (used by LoggingService). */
   postLog(entry: Partial<LogEntry>): Observable<void> {
     return this.http.post<void>(`${this.baseUrl}/api/log`, entry);
   }
 
-  // ---- Health Check ----
+  // Health check
 
   /**
-   * Check if the backend API is alive.
-   *
-   * Hits the dedicated `GET /api/health` endpoint, which returns
-   * `200 { status: 'ok' }` when the server and its database are healthy,
-   * or `503` when they are not.
-   *
-   * This observable NEVER errors â€” it always emits a single boolean, which
-   * makes it safe to use directly in a template or a simple `if`:
-   *
-   *   this.api.healthCheck().subscribe(alive => console.log(alive));
-   *
-   * The pipeline reads as: wait at most 5 seconds (`timeout`), treat any
-   * successful response as `true` (`map`), and turn *any* failure â€” timeout,
-   * 503, network error â€” into `false` (`catchError` + `of(false)`).
-   *
-   * @returns Observable that emits true if the backend is available, false otherwise
+   * Whether the backend is alive, via `GET /api/health` (200 when the server and
+   * database are healthy, 503 otherwise). Never errors: emits one boolean, false
+   * on timeout (5 s), 503 or network error.
    */
   healthCheck(): Observable<boolean> {
     return this.http.get<{ status: string }>(`${this.baseUrl}/api/health`).pipe(
@@ -605,68 +381,44 @@ export class ApiService {
     );
   }
 
-  // ---- App Info ----
+  // App info
 
   /**
-   * Ask the backend which folder the app itself is installed in, on the machine
-   * hosting it.
+   * The folder the app is installed in on the host machine. Used to prefill the
+   * batch image import's base-folder box, since browsers never reveal a picked
+   * file's real location (see image-import/source-path.ts): it is a real path on
+   * the right machine for the user to edit. Once edited, the user's choice is
+   * remembered.
    *
-   * *** WHY THE BROWSER HAS TO ASK ***
-   *
-   * The batch image import needs one thing a browser will never reveal: where a
-   * picked file really lives on disk. A directory picker hands JavaScript only
-   * `File.webkitRelativePath` — the path RELATIVE to the chosen folder — so the
-   * import screen has to ask the user for the front half of the path. (The full
-   * story is in services/image-import/source-path.ts.)
-   *
-   * The app's own folder is not where the photos are, but it IS a real path
-   * on the right machine with the right drive letter, so it is used to
-   * prefill that box: the user has something correct to edit instead of an
-   * empty one. Once they edit it, their choice is remembered and this value
-   * is never consulted again. Do not hardcode a default here -- anything
-   * hardcoded is right on one workstation and wrong on the host.
-   *
-   * *** WHY THIS OBSERVABLE NEVER ERRORS ***
-   *
-   * Same contract as `healthCheck()` above: any failure — the endpoint missing
-   * because the backend has not been rebuilt, a timeout, no server at all —
-   * emits `''` rather than propagating. This value is a cosmetic convenience,
-   * and an import screen that refused to open because it could not fetch a
-   * default would be a plainly bad trade. An empty answer simply leaves the box
-   * empty, which the screen already handles: it shows its "no folder given"
-   * warning and records no source paths.
-   *
-   * The 5-second timeout matters for the same reason. Without it a hung request
-   * would leave the box empty indefinitely with no explanation.
-   *
-   * @returns Observable that emits the host-side app folder, or '' on any failure
+   * Never errors: any failure (including the 5 s timeout) emits '', leaving the box
+   * empty, which the import screen handles.
    */
   getAppFolder(): Observable<string> {
     return this.http.get<{ appFolder?: string }>(`${this.baseUrl}/api/app-info`).pipe(
       timeout(5000),
-      // Defensive: an old or proxied backend could answer 200 with a body that
-      // has no `appFolder`, and `undefined` must not reach the text box.
+      // An old or proxied backend may omit `appFolder`; never pass undefined to the box.
       map(info => (typeof info?.appFolder === 'string' ? info.appFolder : '')),
       catchError(() => of(''))
     );
   }
 
-  /* ===================== Backup and restore (§16) =====================
-   *
-   * *** EVERY ONE OF THESE PROPAGATES ITS ERRORS. ***
-   *
-   * That is the opposite of `getAppFolder()` and `healthCheck()` just
-   * above, and the difference is deliberate. Those two answer cosmetic
-   * questions, so swallowing a failure and returning a blank is the right
-   * trade — a screen that refused to open because a prefill could not be
-   * fetched would be worse than one with an empty box.
-   *
-   * Nothing here is cosmetic. A backup that silently resolves to "fine"
-   * when the server said no is a user who believes they have a copy of
-   * their collection and does not. A restore that swallows a 400 is a
-   * refusal the user never sees. So these are also NOT wrapped in
-   * `retryTransientFailures()`: retrying a restore would mean replacing
-   * the collection twice.
+  /**
+   * The user's Documents folder on the host, the starting value of the image
+   * import's folder box. Never errors: any failure emits ''.
+   */
+  getDocumentsFolder(): Observable<string> {
+    return this.http.get<{ documentsFolder?: string }>(`${this.baseUrl}/api/app-info`).pipe(
+      timeout(5000),
+      map(info => (typeof info?.documentsFolder === 'string' ? info.documentsFolder : '')),
+      catchError(() => of(''))
+    );
+  }
+
+  /*
+   * Backup and restore (§16). Unlike `getAppFolder()` and `healthCheck()`, these
+   * propagate errors: a swallowed failure could leave the user believing a backup
+   * exists, or hide a refused restore. Not wrapped in `retryTransientFailures()`
+   * (a retried restore would replace the collection twice).
    */
 
   /** Where to put a backup and what to call it. Never cached. */
@@ -675,18 +427,10 @@ export class ApiService {
   }
 
   /**
-   * The `*.db` files the SERVER can see in a folder the user named.
-   *
-   * *** THIS IS HOW THE RESTORE BOX OFFERS A CHOICE AT ALL. *** A browser
-   * will not read a folder for a web page, so without this endpoint the
-   * only way to name the file that is about to replace an entire
-   * collection is to type its path exactly. The server can simply look.
-   *
-   * Read-only on the server's side (see server/backup/list-db-files.ts
-   * for what it will and will not report), but its errors still
-   * propagate like the rest of §16: a folder that silently resolves to
-   * "no backups here" when the real answer was "that folder does not
-   * exist" is how a user concludes their backups are gone.
+   * The `*.db` files the server can see in a named folder, so the restore box can
+   * offer a choice (a browser can't read folders). Read-only (see
+   * server/backup/list-db-files.ts). Errors propagate, so a missing folder isn't
+   * mistaken for "no backups here".
    */
   listBackupFiles(directory: string): Observable<BackupDirectoryListing> {
     return this.http.get<BackupDirectoryListing>(`${this.baseUrl}/api/backup/files`, {
@@ -694,7 +438,7 @@ export class ApiService {
     });
   }
 
-  /** Starts a backup. Resolves with the job's opening status (HTTP 202). */
+  /** Starts a backup; resolves with the job's opening status (HTTP 202). */
   startBackup(directory: string, fileName: string): Observable<BackupJobStatus> {
     return this.http.post<BackupJobStatus>(`${this.baseUrl}/api/backup/jobs`, {
       directory,
@@ -709,7 +453,7 @@ export class ApiService {
     );
   }
 
-  /** Asks a running backup to stop. It stops on its next batch. */
+  /** Asks a running backup to stop; it stops at its next batch. */
   cancelBackup(id: string): Observable<{ accepted: boolean }> {
     return this.http.post<{ accepted: boolean }>(
       `${this.baseUrl}/api/backup/jobs/${encodeURIComponent(id)}/cancel`,
@@ -718,17 +462,14 @@ export class ApiService {
   }
 
   /**
-   * Looks at a file WITHOUT changing anything, and reports what it is.
-   *
-   * Answers 200 even for a file that will be refused — the inspection
-   * succeeded and its answer is "no" — so the caller reads
-   * `decision.acceptable`, not the status code.
+   * Inspects a backup file without changing anything. Returns 200 even for a file
+   * that will be refused, so read `decision.acceptable`, not the status.
    */
   inspectBackup(path: string): Observable<BackupInspection> {
     return this.http.post<BackupInspection>(`${this.baseUrl}/api/restore/inspect`, { path });
   }
 
-  /** *** REPLACES THE COLLECTION. *** The server validates again first. */
+  /** Replaces the collection with the backup; the server validates it again first. */
   restoreBackup(path: string): Observable<RestoreResult> {
     return this.http.post<RestoreResult>(`${this.baseUrl}/api/restore`, { path });
   }

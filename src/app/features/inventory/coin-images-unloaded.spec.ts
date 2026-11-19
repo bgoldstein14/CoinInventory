@@ -1,20 +1,7 @@
 /*
- * CoinImagesStore, driven against a coin WHOSE PHOTOGRAPHS ARE NOT LOADED.
- *
- * That is the normal startup state. `GET /api/coins` does not inline
- * photographs — doing so makes the response impossible to serialise at even
- * a hundred coins (see server/routes/coins/list-query.ts) — so
- * `coin.imagePaths` is ABSENT until the selected coin's fetch lands.
- *
- * Every method in this store that CHANGES the photo set sends the COMPLETE
- * array, and `PUT /api/coins/:id` deletes the coin's image rows and
- * re-inserts exactly what it is handed. So a method that built its array
- * from an absent `imagePaths` would not merely do nothing — it would DELETE
- * every photograph on the coin.
- *
- * The rule, once, for all of them: NO WRITE WITHOUT THE REAL SET IN HAND.
- * Reads degrade to "nothing to show"; writes either load first or do
- * nothing at all.
+ * CoinImagesStore against a coin whose photos haven't loaded (the normal
+ * state after the list fetch: `imagePaths` absent, `imageCount` present).
+ * Reads fall back to the count; writes load first or do nothing.
  *
  * Fake timers: CoinEditor debounces its PUT by one second.
  */
@@ -120,8 +107,6 @@ describe('writes refuse to act on photographs they do not have', () => {
     store.setMainImage(OLD_B);
     vi.advanceTimersByTime(2000);
 
-    // Sending a re-ordered array built from nothing would be a one-element
-    // array, and the other photograph would be deleted.
     expect(putsSent(mockApiService)).toHaveLength(0);
   });
 
@@ -158,8 +143,6 @@ describe('writes refuse to act on photographs they do not have', () => {
     await store.addCoinImages(pickEvent());
     await vi.advanceTimersByTimeAsync(2000);
 
-    // The user loses an upload they can retry. The alternative is losing
-    // photographs they cannot.
     expect(putsSent(mockApiService)).toHaveLength(0);
   });
 

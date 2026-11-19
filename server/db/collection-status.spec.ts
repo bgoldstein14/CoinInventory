@@ -1,31 +1,7 @@
 /**
- * db/collection-status.spec.ts — the five status tokens, and the guard that
- * stops the server's copy of them drifting away from the client's.
- *
- * WHY THERE ARE TWO COPIES OF THIS LIST AT ALL
- * `server/` is a separate TypeScript project: its tsconfig sets `rootDir: "."`
- * and includes only `**\/*.ts` beneath it, so it cannot import from
- * `src/app/types/`, and making it able to would mean restructuring the build
- * of both halves of the app for one five-element array.
- *
- * So the array is written down twice, which is a drift risk — and this file
- * is the answer to it. The last test below READS the Angular module off disk
- * and fails if the two lists disagree, exactly as db/coin-fields.spec.ts reads
- * setup-database.sql and fails when a parameter length no longer matches its
- * column. A duplicate that cannot silently diverge is a copy; a duplicate that
- * can is a bug waiting to happen.
- *
- * WHAT GOES WRONG IF THE NORMALISER IS WRONG
- * Coins.CollectionStatus is NVARCHAR(20) NOT NULL DEFAULT 'owned'. Two
- * failures are possible and both are bad:
- *
- *   - binding NULL to it aborts the INSERT with a constraint violation, so
- *     the user cannot save a coin at all; and
- *   - binding arbitrary text puts a sixth value into a five-value column,
- *     which nothing downstream has a rule for.
- *
- * The normaliser prevents both by answering 'owned' for everything it does
- * not recognise.
+ * The collection status tokens and normalizer, plus a check that the server's
+ * copy of the list matches src/app/types/collection-status.ts (the server
+ * project can't import from src/).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -49,9 +25,7 @@ describe('the status tokens', () => {
   });
 
   it('every token fits the NVARCHAR(20) column', () => {
-    // A token longer than the bound parameter would be silently truncated by
-    // the mssql driver before SQL Server ever saw it — the exact class of bug
-    // db/coin-fields.ts exists to prevent.
+    // A token must fit the column width.
     for (const status of COLLECTION_STATUSES) {
       expect(status.length).toBeLessThanOrEqual(MAX_COLLECTION_STATUS_LENGTH);
     }
@@ -98,9 +72,7 @@ describe('the server copy has not drifted from the Angular one', () => {
   }
 
   it('found the Angular list to compare against', () => {
-    // Guards the parser itself. If the client module is reformatted so this
-    // regex stops matching, the drift test below would pass vacuously — which
-    // is worse than no test, because it looks like cover.
+    // Guards the parser, so the drift test below can't pass vacuously.
     expect(clientStatuses().length).toBeGreaterThan(1);
   });
 

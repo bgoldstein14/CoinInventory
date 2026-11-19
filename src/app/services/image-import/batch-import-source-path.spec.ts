@@ -1,7 +1,6 @@
 /**
- * Tests for the import SESSION's half of the path feature: the base-folder box,
- * the live example that stops a wrong folder from being used on 1,700 rows,
- * and the fact that confirming an import really does record the paths.
+ * The import session's base-folder box, its live path preview, and recording
+ * source paths on confirm.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -27,14 +26,7 @@ const stubEncoder = (file: File) => Promise.resolve({
   storedBytes: 500
 });
 
-/**
- * A stand-in for ApiService that answers only `getAppFolder()`.
- *
- * That is the only method the session uses it for — asking the backend where
- * the app is installed, so a first-time user's base-folder box starts from a
- * real host path instead of blank. Everything else on ApiService would drag
- * HttpClient (and therefore Angular's XHR backend) into this spec.
- */
+/** A stand-in for ApiService that answers only `getAppFolder()`. */
 function stubApi(appFolder: Observable<string>): ApiService {
   return { getAppFolder: vi.fn(() => appFolder) } as unknown as ApiService;
 }
@@ -72,14 +64,7 @@ function selectFiles(session: BatchImportSession, files: File[]): Promise<void> 
   return session.handleDirectorySelection({ target: { files, value: '' } } as unknown as Event);
 }
 
-/**
- * Lets the constructor's fire-and-forget restore finish.
- *
- * Several macrotasks rather than one, because restoring now has two async steps
- * in sequence: read the saved preference out of IndexedDB, and only if that
- * comes back empty, ask the backend for the app's folder. One tick was enough
- * when there was only the storage read.
- */
+/** Lets the constructor's fire-and-forget restore finish (several macrotasks). */
 const settle = async () => {
   for (let tick = 0; tick < 5; tick++) {
     await new Promise<void>(resolve => setTimeout(resolve, 0));
@@ -98,23 +83,12 @@ describe('BatchImportSession — base folder', () => {
   afterEach(() => imageSourcePaths.clear());
 
   it('starts empty before the asynchronous restore has finished', () => {
-    // The saved value comes from IndexedDB, so the box is briefly empty.
-    // Nothing can be imported in that window.
     const { session } = createSession(storage);
     expect(session.folder.value()).toBe('');
   });
 
-  /**
-   * DO NOT make the box prefill with the app's own install folder, however
-   * much "should always start out from the app folder" sounds reasonable.
-   * That seed caused a real data bug: an import stamped every row under the
-   * development directory, because the box was still holding it. It is a
-   * plausible-looking path that is never the correct answer, and it does not
-   * improve when packaged (it becomes `C:\Program Files\...`). An empty box
-   * is honest and, unlike a wrong path, visibly demands attention.
-   *
-   * See the header of import-base-folder.ts for the full account.
-   */
+  // The app's install folder is never a correct default; see
+  // import-base-folder.ts.
   it('stays empty when nothing has been saved, rather than guessing', async () => {
     const { session } = createSession(storage, stubApi(of('D:\\CoinInventory')));
     await settle();
@@ -123,9 +97,6 @@ describe('BatchImportSession — base folder', () => {
   });
 
   it('prefers a SAVED folder over the app folder', async () => {
-    // The other half: "then memorize subsequent choices as the next base
-    // folder". The saved value must win, or the user's setting would be reset
-    // to the program folder on every import.
     await saveImportBaseFolder(storage, 'E:\\My Coin Photos');
 
     const { session } = createSession(storage, stubApi(of('D:\\CoinInventory')));
@@ -135,8 +106,6 @@ describe('BatchImportSession — base folder', () => {
   });
 
   it('opens with an empty box when the app-info call fails, rather than breaking', async () => {
-    // A failing endpoint (backend not rebuilt, server down) must not stop the
-    // import screen from working. Empty is a state the screen already explains.
     const { session } = createSession(
       storage,
       stubApi(throwError(() => new Error('backend unreachable')))
@@ -149,8 +118,7 @@ describe('BatchImportSession — base folder', () => {
 
   it('persists an edited base folder and reloads it in the next session', async () => {
     const { session } = createSession(storage);
-    // Awaited so the IndexedDB write has definitely landed before we read it
-    // back; in the app this is deliberately fire-and-forget.
+    // Awaited here; fire-and-forget in the app.
     await session.folder.set('D:\\Coins\\Photos');
 
     // A brand new session, as if the modal had been closed and reopened.
@@ -176,13 +144,9 @@ describe('BatchImportSession — base folder', () => {
     // Nothing selected yet, so nothing to preview.
     expect(session.folder.preview()).toBe(null);
 
-    // The base folder starts EMPTY (nothing is prefilled any more -- see
-    // source-path.ts), so the test supplies the host path the way the user
-    // would. A drive letter, because the host keeps the photos on a local drive.
     session.folder.set('D:\\Coin Pictures');
     await selectFiles(session, [pickedFile('a.jpg', 'Business Strikes/a.jpg')]);
 
-    // This is the guard rail: the user sees the finished path BEFORE importing.
     expect(session.folder.preview())
       .toBe('D:\\Coin Pictures\\Business Strikes\\a.jpg');
   });
@@ -199,16 +163,12 @@ describe('BatchImportSession — base folder', () => {
     const { session } = createSession(storage);
     await settle();
 
-    // With no saved preference the box starts empty and the warning is showing
-    // from the outset. That is the point of not prefilling a guess: the user is
-    // told immediately, rather than discovering it after ~1,700 rows have been
-    // stamped with a location that does not exist on the host.
     expect(session.folder.missing()).toBe(true);
 
     session.folder.set('D:\\Coin Pictures');
     expect(session.folder.missing()).toBe(false);
 
-    // Whitespace only is still "missing" -- a path of spaces records nothing.
+    // Whitespace only is still missing.
     session.folder.set('  ');
     expect(session.folder.missing()).toBe(true);
   });
@@ -217,7 +177,6 @@ describe('BatchImportSession — base folder', () => {
     const { session, inv } = createSession(storage);
     await settle();
 
-    // Supply the host folder explicitly -- nothing is prefilled any more.
     session.folder.set('D:\\Coin Pictures');
 
     // A coin the filename matcher will recognise.
@@ -233,8 +192,7 @@ describe('BatchImportSession — base folder', () => {
       pickedFile('1921 Morgan Dollar - Obverse.jpg', 'Business Strikes/1921 Morgan Dollar - Obverse.jpg')
     ]);
 
-    // Only proceed if the matcher actually placed the file; otherwise this test
-    // would silently assert nothing.
+    // Guard against asserting nothing.
     expect(session.attachCount()).toBe(1);
 
     await session.applyConfirmedMatches();
@@ -243,7 +201,7 @@ describe('BatchImportSession — base folder', () => {
     expect(imageSourcePaths.pathFor(dataUrl)).toBe(
       'D:\\Coin Pictures\\Business Strikes\\1921 Morgan Dollar - Obverse.jpg'
     );
-    // And the coin's displayed images are still plain data URLs.
+    // Displayed images are still plain data URLs.
     expect(inv.inventory()[0].imagePaths).toEqual([dataUrl]);
   });
 });

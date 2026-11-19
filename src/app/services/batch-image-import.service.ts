@@ -1,32 +1,14 @@
- /*
- * BatchImageImportService
- *
- * The engine behind "point at a folder and attach the photos to my coins".
- *
- * It owns two jobs, and the whole design of the feature comes out of the order
- * they run in:
- *
- *   1. PLAN  (cheap)      - match FILENAMES to coins. No file is opened.
- *   2. APPLY (expensive)  - read + shrink + save ONLY the files the user
- *                           ticked. Lives in ./image-import/attach-runner.ts.
- *
- * ---- WHY FILENAME-ONLY MATCHING HAPPENS BEFORE ANY FILE IS READ ----
- * The share is 4.2 GB across ~2,140 files (average 2.5 MB, largest 46 MB).
- * `<input webkitdirectory>` hands us File handles instantly - that part is
- * free, because a File is only a pointer to something on disk. The expensive
- * part is `file.arrayBuffer()` / decoding, which pulls the bytes over the
- * network share and into browser memory.
- *
- * Read everything up front and you ask the browser to hold gigabytes of pixel
- * data. It will not: the tab dies, or the user stares at a frozen window for
- * several minutes.
- *
- * And it would be pointless work, because the matcher needs NOTHING but the
- * name: "1880-S $1 - MS64 - Obverse - Photo.jpg" identifies the coin
- * completely. So stage 1 touches only `file.name`, which makes the review
- * screen appear in well under a second even for the full share. Bytes are
- * only ever read for the files the user actually confirms - typically a few
- * hundred, not 1,700, and with a progress bar in front of them.
+ /**
+  * Engine behind "point at a folder and attach the photos to my coins".
+  *
+  *   1. Plan  (cheap)     match filenames to coins; no file is read.
+  *   2. Apply (expensive) read, shrink and save only the ticked files
+  *                        (./image-import/attach-runner.ts).
+  *
+  * Matching uses only `file.name`: a File from `<input webkitdirectory>` is just
+  * a handle, and reading thousands of multi-MB photos from a network share up
+  * front would exhaust browser memory. The filename alone identifies the coin,
+  * e.g. "1880-S $1 - MS64 - Obverse - Photo.jpg".
   */
 
 import { Injectable, inject } from '@angular/core';
@@ -54,17 +36,12 @@ import {
 } from './image-import/attach-runner';
 
 /**
- * How many filenames we match before yielding to the browser.
- *
- * The trade-off: `matchImages` re-derives the coin signatures on every call,
- * so smaller chunks mean more repeated work, while larger chunks mean longer
- * freezes. 200 keeps each chunk in the low tens of milliseconds (comfortably
- * inside one animation frame) and costs ~9 signature rebuilds for the full
- * share, which is nothing next to a single file read.
+ * Filenames matched per chunk before yielding to the browser. `matchImages`
+ * rebuilds coin signatures per call, so this balances repeated work against
+ * UI freezes.
  */
 export const MATCH_CHUNK_SIZE = 200;
 
-/** Re-exported so callers only need to import this service. */
 export type { AttachOptions, EncodedImage };
 
 @Injectable({ providedIn: 'root' })
@@ -72,20 +49,13 @@ export class BatchImageImportService {
   private readonly matcher = inject(ImageMatchingService);
   private readonly downscaler = inject(ImageDownscaleService);
 
-  /* ---- STAGE 1 - PLAN (filenames only, nothing is read) ---- */
-
   /**
-   * Match a filtered list of image files against the inventory and build the
-   * review rows.
+   * Matches image files against the inventory and builds the review rows.
    *
-   * @param files     already filtered to displayable images (see image-file-filter)
-   * @param inventory the coins to match against
-   * @param onChunk   progress callback: (matched so far, total)
-   * @param denominations the denominations lookup, so a linked coin is
-   *   identified by the denomination its `DenominationId` names rather than
-   *   by whatever text the source wrote (design §6). Optional: omitting it,
-   *   or passing a lookup that failed to load, is the matcher exactly as it
-   *   behaved before `DenominationId` existed.
+   * @param files         already filtered to displayable images (see image-file-filter)
+   * @param onChunk       progress callback: (matched so far, total)
+   * @param denominations optional denominations lookup, so linked coins are
+   *   identified by their `DenominationId`
    */
   async buildRows(
     files: readonly File[],
@@ -95,25 +65,14 @@ export class BatchImageImportService {
   ): Promise<BatchImageRow[]> {
     const rows: BatchImageRow[] = [];
 
-     /*
-     * !! TAKEN ONCE, HERE, AND NOT INSIDE THE LOOP. !!
-     *
-     * This loop yields to the browser between chunks, so a denominations
-     * response landing mid-import could otherwise match photographs 1-200
-     * under one set of rules and 201-400 under another -- one folder, two
-     * behaviours, and nothing anywhere saying so. Freezing the lookup before
-     * the first chunk makes the whole batch internally consistent whatever
-     * the network does. See coin-signature.ts for the full note.
-     *
-     * It is also the cheap place to do it: one pass over the lookup for the
-     * import rather than one per chunk.
-      */
+     // Snapshot the lookup once, before the chunked loop, so a lookup response
+     // arriving mid-import can't make chunks match under different rules.
     const denominationLabels = denominationLabelSnapshot(denominations);
 
     for (let start = 0; start < files.length; start += MATCH_CHUNK_SIZE) {
       const chunk = files.slice(start, start + MATCH_CHUNK_SIZE);
 
-      // The ONLY thing handed to the matcher is the name. No file.arrayBuffer().
+      // Only the name is passed to the matcher; no file bytes are read.
       const results = this.matcher.matchImages(
         chunk.map(f => f.name),
         inventory as CoinRecord[],
@@ -126,7 +85,7 @@ export class BatchImageImportService {
 
       onChunk?.(Math.min(start + chunk.length, files.length), files.length);
 
-      // Let the browser paint the progress bar before the next chunk.
+      // Let the browser paint the progress bar.
       if (start + MATCH_CHUNK_SIZE < files.length) await yieldToBrowser();
     }
 
@@ -134,21 +93,12 @@ export class BatchImageImportService {
   }
 
   /**
-   * One matcher result -> one review row, with the row's STARTING STATE taken
-   * from the import tier (see image-matching/near-match.ts).
-   *
-   *   tier 'matched'      -> coin attached, ticked, decision 'auto'.
-   *   tier 'near'         -> no coin, unticked, decision 'review'. This is the
-   *                          only bucket that waits on the user, and it is a
-   *                          single yes/no.
-   *   tier 'not-imported' -> no coin, unticked, decision 'skipped' ALREADY.
-   *
-   * A file the matcher has no apparent match for is skipped automatically
-   * rather than sitting in a queue demanding attention it cannot reward:
-   * with ~2,140 files that would be hundreds of cards whose only honest
-   * answer is "yes, skip it". Nothing is lost — the row keeps its result, its
-   * parse and its `skipReason`, and the screen lists every one of them
-   * read-only.
+   * One matcher result -> one review row, starting state set by tier
+   * (see image-matching/near-match.ts):
+   *   'matched'      coin attached, ticked, decision 'auto'
+   *   'near'         no coin, unticked, decision 'review' (waits on the user)
+   *   'not-imported' no coin, unticked, decision 'skipped' (listed read-only
+   *                  with its skipReason)
    */
   private toRow(file: File, result: ImageMatchResult): BatchImageRow {
     const isMatched = result.tier === 'matched' && !!result.matchedRecordId;
@@ -156,35 +106,24 @@ export class BatchImageImportService {
 
     return {
       fileName: file.name,
-      // Deliberately empty: object URLs are created lazily, only for the coin
-      // groups the user actually expands. 1,700 <img> tags each decoding a
-      // 2.5 MB JPEG would be just as fatal as reading the files up front.
+      // Object URLs are created lazily, only for groups the user expands.
       thumbnailUrl: '',
       result,
       selectedCoinId: isMatched ? result.matchedRecordId : null,
-      // For a skipped row the short "why" reads far better in a list than the
-      // matcher's full scoring sentence.
+      // For skipped rows the short reason reads better than the full scoring sentence.
       selectionReason: isAutoSkipped ? (result.skipReason ?? result.reason) : result.reason,
       confidence: result.confidence,
       decision: isMatched ? 'auto' : isAutoSkipped ? 'skipped' : 'review',
-      // "All matched images start selected." Nothing else ever does.
+      // Only matched images start selected.
       selected: isMatched,
       photo: describePhoto(file.name, result.parsed),
       sizeBytes: file.size
     };
   }
 
-  /* ---- TIER 2 GROUPING - one entry per SUGGESTED COIN, not one per file ---- */
-
   /**
-   * Collapse the near-match rows into one group per coin they point at.
-   *
-   * See {@link NearMatchGroup} for why: obverse, reverse, label and two
-   * retakes of the same coin are five files but one question, and the group
-   * header is what lets the user answer it once.
-   *
-   * Groups with the most outstanding rows come first, because those are the
-   * ones where a single "accept all" saves the most clicks.
+   * Groups near-match rows by suggested coin, so several photos of one coin are
+   * one question. Groups with the most outstanding rows come first.
    */
   groupNearMatches(rows: readonly BatchImageRow[]): NearMatchGroup[] {
     const groups = new Map<string, BatchImageRow[]>();
@@ -215,18 +154,9 @@ export class BatchImageImportService {
       .sort((a, b) => b.outstandingCount - a.outstandingCount || a.coinLabel.localeCompare(b.coinLabel));
   }
 
-  /* ---- GROUPING - one row per COIN, not one row per file ---- */
-
   /**
-   * Collapse rows into per-coin groups for the review screen.
-   *
-   * A flat list of 1,700 files is unreviewable; "here are the 8 photos I think
-   * belong to your 1880-S Morgan, are they right?" is a question a human can
-   * actually answer. Rows with no coin yet are not grouped - they live in the
-   * needs-a-choice / no-match buckets instead.
-   *
-   * Within a group, photos are ordered Obverse, Reverse, Label, then the rest,
-   * so the two shots that matter are always the first two thumbnails.
+   * Groups rows with a coin into per-coin groups for the review screen. Photos
+   * are ordered Obverse, Reverse, Label, then the rest.
    */
   groupByCoin(
     rows: readonly BatchImageRow[],
@@ -243,8 +173,7 @@ export class BatchImageImportService {
 
     return [...groups.entries()]
       .map(([coinId, coinRows]) => this.toGroup(coinId, coinRows, labelFor))
-      // Weakest matches first: the groups most likely to be wrong are the ones
-      // the user should look at, and they would otherwise be buried.
+      // Weakest matches first: those are the most likely to be wrong.
       .sort((a, b) => a.topConfidence - b.topConfidence || a.coinLabel.localeCompare(b.coinLabel));
   }
 
@@ -268,27 +197,18 @@ export class BatchImageImportService {
     };
   }
 
-  /* ---- STAGE 2 - APPLY (delegated to attach-runner.ts) ---- */
-
   /**
-   * Read, shrink and save every ticked row. See attach-runner.ts for the
-   * sequential-with-yield strategy and the per-file error isolation.
-   *
-   * `options.encode` is optional: leave it out and the real <canvas>
-   * downscaler is used. Tests pass a stub, because there is no canvas in the
-   * unit-test environment.
+   * Reads, shrinks and saves every ticked row (see attach-runner.ts).
+   * `options.encode` defaults to the <canvas> downscaler; tests pass a stub.
    */
   attachSelected(
     rows: readonly BatchImageRow[],
     options: Omit<AttachOptions, 'encode'> & {
       encode?: AttachOptions['encode'];
       /**
-       * The size budget for the STORED copy, from Settings. Omitted means
-       * the default, which is above anything the 1600 px / quality 0.85
-       * encoder produces and so leaves this import byte-for-byte as it has
-       * always been. Ignored when `encode` is supplied — the referenced
-       * mode stores nothing, and the specs' stub encoder has no bytes to
-       * budget. See services/image-import/encode-budget.ts.
+       * Size budget for the stored copy, from Settings. Omitted means the default,
+       * which is above anything the encoder produces. Ignored when `encode` is
+       * supplied. See image-import/encode-budget.ts.
        */
       maxStoredImageBytes?: number;
     }
@@ -301,7 +221,7 @@ export class BatchImageImportService {
     });
   }
 
-  /** The production encoder: shrink to 1600 px / quality 0.85 via <canvas>. */
+  /** Production encoder: shrink to 1600 px / quality 0.85 via <canvas>. */
   private async encodeWithDownscaler(
     file: File,
     maxStoredImageBytes?: number

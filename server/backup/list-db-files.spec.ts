@@ -1,20 +1,7 @@
 /**
- * list-db-files.spec.ts — the two properties that make the listing safe.
- *
- * This module reads a directory whose path the CLIENT chooses, so most of
- * what is asserted below is not "does it work" but "what does it refuse to
- * tell you":
- *
- *   ONLY `*.db`        a folder full of .env, .log and .txt comes back
- *                      with none of them in it, so the endpoint cannot be
- *                      used to enumerate a directory.
- *   ONE FOLDER         a `.db` sitting in a SUB-folder is not listed, and
- *                      neither is one in the PARENT, so naming a folder
- *                      says nothing about its neighbours.
- *
- * The rest — newest-first, size and date, the three ways a folder can be
- * unnameable — exists because the dialog shows them to someone choosing
- * which file replaces their collection.
+ * The backup folder listing. The client chooses the folder, so the key
+ * properties are what it won't reveal: only `*.db` files, and only in the
+ * named folder (not sub-folders or the parent).
  */
 
 import fs from 'fs';
@@ -44,9 +31,7 @@ afterEach(() => {
 
 describe('listBackupFiles — what it will not tell you', () => {
   it('names *.db files and nothing else in the folder', () => {
-    // The security property. Everything that is not a database is absent
-    // from the answer entirely, so this cannot be used as "read me the
-    // contents of C:\Users\You".
+    // Non-database files are omitted entirely.
     writeFile(root, 'coin-inventory-backup-2026-11-14-1432.db');
     writeFile(root, '.env');
     writeFile(root, 'app.log');
@@ -63,8 +48,7 @@ describe('listBackupFiles — what it will not tell you', () => {
   });
 
   it('is not fooled by a name that merely contains .db', () => {
-    // `path.extname`, not `includes('.db')`: `notes.db.txt` is a text file
-    // and `.db` on its own is a hidden file, not a database.
+    // `notes.db.txt` is a text file and `.db` alone is a hidden file.
     writeFile(root, 'notes.db.txt');
     writeFile(root, '.db');
     writeFile(root, 'database');
@@ -79,8 +63,7 @@ describe('listBackupFiles — what it will not tell you', () => {
   });
 
   it('never leaves the folder it was given — not downward', () => {
-    // No recursion. A backup two folders down is not this folder's
-    // business, and recursing would turn one click into a disk crawl.
+    // No recursion.
     const child = path.join(root, 'nested');
     fs.mkdirSync(child);
     writeFile(child, 'hidden-away.db');
@@ -90,7 +73,7 @@ describe('listBackupFiles — what it will not tell you', () => {
   });
 
   it('never leaves the folder it was given — not upward', () => {
-    // Naming a folder must say nothing about its parent or its siblings.
+    // Nothing about the parent or siblings.
     const child = path.join(root, 'inner');
     fs.mkdirSync(child);
     writeFile(root, 'in-the-parent.db');
@@ -100,7 +83,7 @@ describe('listBackupFiles — what it will not tell you', () => {
   });
 
   it('does not offer a DIRECTORY called something.db as a file', () => {
-    // Restoring one would be an EISDIR deep inside the swap.
+    // A directory named *.db isn't offered.
     fs.mkdirSync(path.join(root, 'looks-like-a-backup.db'));
     writeFile(root, 'actually-a-backup.db');
 
@@ -133,8 +116,7 @@ describe('listBackupFiles — telling two backups apart', () => {
   });
 
   it('reports an empty folder as an empty list, not as a failure', () => {
-    // A normal outcome: the user guessed a folder, or has not backed up
-    // yet. It must be distinguishable from "no such folder".
+    // An empty folder is normal, and distinct from a missing one.
     const listing = listBackupFiles(root);
     expect(listing.files).toEqual([]);
     expect(listing.truncated).toBe(false);
@@ -153,8 +135,7 @@ describe('listBackupFiles — folders it cannot list', () => {
   });
 
   it('says a missing folder is missing, and names what was asked for', () => {
-    // "There is no folder called D:\Backpus" is the message that finds a
-    // typo; an empty list would send the user looking for lost backups.
+    // A missing folder gets its own message, so typos are obvious.
     const absent = path.join(root, 'not-here');
     try {
       listBackupFiles(absent);
@@ -167,8 +148,7 @@ describe('listBackupFiles — folders it cannot list', () => {
   });
 
   it('says so when the path is a file rather than a folder', () => {
-    // The likeliest mistake once a file picker exists: pasting the path of
-    // the backup itself into the folder box.
+    // Pasting the backup file's path into the folder box.
     const file = writeFile(root, 'backup.db');
     try {
       listBackupFiles(file);

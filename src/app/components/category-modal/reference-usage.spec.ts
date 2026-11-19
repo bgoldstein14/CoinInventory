@@ -1,23 +1,7 @@
 /*
- * reference-usage.spec.ts — "how many coins use this?", and what Remove does.
- *
- * Removing a denomination, in order:
- *
- *   1. Count the coins using it. Say the number PLAINLY.
- *   2. If confirmed: soft-delete, and null those coins' DenominationId.
- *   3. Coins.Denomination TEXT is NEVER touched, so they read the unresolved
- *      display form.
- *   4. Re-selecting a denomination re-links them. Nothing is lost.
- *
- * The count has to be on screen BEFORE the dialog, and the dialog has to
- * repeat it: "are you sure?" with no number in it is a question the user has
- * no way to answer.
- *
- * NOTE ON THE WORDING of the "what those coins will read afterwards" string:
- * it is built by denominationDisplay() and nowhere else. That is enforced by
- * a grep in services/denominations/denomination-display.spec.ts, and it is
- * the reason this module imports a function to produce what looks like a
- * two-line template.
+ * In-use counts and removal prompts. Removing a denomination soft-deletes it
+ * and clears linked coins' DenominationId; their text is kept and they
+ * re-link when a denomination is re-selected. The prompt quotes the count.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -41,19 +25,8 @@ describe('buildUsageIndex', () => {
   });
 
   it('keys numeric ids as strings, so an id from JSON and an id from a template agree', () => {
-    // THE BUG THIS GUARDS: a count keyed by the number 103 and looked up
-    // with the string '103' reading 0, so the screen offers to delete a
-    // denomination three coins are using while promising none are.
-    //
-    // HONESTY NOTE, because the next person to mutation-test this will find
-    // it: in JavaScript the explicit String() calls in buildUsageIndex and
-    // usageCount are belt-and-braces. Object property keys are coerced to
-    // strings on assignment AND on read, so removing either call leaves
-    // this test green — verified. The call stays because the TYPE says
-    // Record<string, number> and a reader must not have to know the
-    // coercion rule to trust it; what this test actually pins is the
-    // CONTRACT — both spellings answer 3 — which would break the moment the
-    // index became a Map, where no coercion happens.
+    // Number and string keys must find the same count. (String() is redundant
+    // for plain objects but pins the contract if the index becomes a Map.)
     const index = buildUsageIndex([{ key: 103, count: 3 }]);
     expect(index['103']).toBe(3);
     expect(usageCount(index, 103)).toBe(3);
@@ -76,10 +49,7 @@ describe('buildUsageIndex', () => {
 
 describe('usageCount', () => {
   it('answers zero for a key nobody counted', () => {
-    // Zero, not undefined. An undefined reaching the template renders as a
-    // blank where a number belongs, which reads as "unknown" — and the whole
-    // point of this screen is that the consequence is KNOWN before the
-    // dialog appears.
+    // Zero, not undefined, for missing keys.
     expect(usageCount({ Gold: 3 }, 'Silver')).toBe(0);
   });
 
@@ -99,11 +69,7 @@ describe('usageCount', () => {
   });
 
   it('has an index for every type the endpoint returns, and no more', () => {
-    /* A type added to ReferenceUsageCounts but forgotten here would be
-     * `undefined` on this object, and `usageCount` would answer 0 for it
-     * for ever — a pane whose badges all read "Not used by any coin" even
-     * when every entry is in use, which is the one wrong answer this
-     * screen must never give. */
+    // Every usage type must be present, or its badges would always read 0.
     expect(Object.keys(EMPTY_REFERENCE_USAGE).sort()).toEqual([
       'catalogs',
       'categories',
@@ -121,8 +87,6 @@ describe('describeUsage — the number, said plainly', () => {
   });
 
   it('gets the singular right', () => {
-    // "Used by 1 coins" on a screen whose whole job is to be trusted about
-    // numbers is a small thing that costs trust.
     expect(describeUsage(1)).toBe('Used by 1 coin');
   });
 
@@ -145,18 +109,14 @@ describe('planDenominationRemoval — §4.4 steps 1 to 4', () => {
   });
 
   it('promises exactly what those coins will read afterwards, via denominationDisplay', () => {
-    // The unresolved display form, and the only legal way to produce it. If
-    // this ever disagrees with the grid, the dialog is promising one
-    // spelling while the grid shows another.
+    // Built by denominationDisplay(), so it matches the grid.
     const plan = planDenominationRemoval({ label: '8 Reales', denominationId: 103 }, 3);
     expect(plan.resultingDisplay).toBe(denominationDisplay(null, '8 Reales'));
     expect(plan.prompt).toContain(plan.resultingDisplay);
   });
 
   it('says the text is kept and the link can be remade', () => {
-    // Step 4 is the reassurance that makes step 2 acceptable. If the prompt
-    // only said "3 coins will lose their denomination" the honest user
-    // cancels, and the mess stays.
+    // The prompt says coins can be re-linked.
     const plan = planDenominationRemoval({ label: '8 Reales', denominationId: 103 }, 3);
     expect(plan.prompt.toLowerCase()).toContain('re-select');
   });
@@ -192,9 +152,7 @@ describe('planReferenceRemoval — the other five types', () => {
   });
 
   it('does NOT promise the denomination re-link wording', () => {
-    // Removing a category does not null a column on five coins and leave a
-    // recoverable text behind — it is a different consequence and borrowing
-    // the reassuring sentence would be a lie.
+    // Non-denomination removals use different wording: nothing is unlinked.
     const plan = planReferenceRemoval('category', 'Gold', 5);
     expect(plan.prompt.toLowerCase()).not.toContain('re-select');
   });

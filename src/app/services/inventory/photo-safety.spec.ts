@@ -1,40 +1,20 @@
  /*
- * photo-safety.spec.ts — "a save must never destroy a coin's photographs".
- * ---- THE DANGER THIS FILE EXISTS FOR ----
- * `GET /api/coins` no longer returns `imagePaths`. The key is ABSENT, not
- * empty, and the distinction is the difference between a working app and a
- * destroyed photo collection:
- *
- *   `PUT /api/coins/:id` carrying an `imagePaths` key REPLACES the coin's
- *   whole image set. It DELETEs every CoinImages row and re-inserts the array
- *   it was handed (server/routes/coins/write-helpers.ts, replaceImages).
- *
- * So if ANY part of the client ever turns "not loaded" into `[]` and lets it
- * reach a PUT body, every photograph on that coin is deleted. Silently. With
- * a 200 response. On the owner's real, irreplaceable collection.
- *
- * ---- THE TWO DEFENCES, AND WHY BOTH ARE PINNED HERE ----
- * 1. THE SERVER OMITS THE KEY rather than sending `imagePaths: undefined` or
- *    `imagePaths: []` (list-query.ts). Pinned on the server side in
- *    server/routes/coins/list-query.spec.ts.
- *
- * 2. THE CLIENT SENDS ONLY CHANGED FIELDS. CoinChangeTracker builds the PUT
- *    body from its dirty-field set and from nothing else, so a field the user
- *    never touched is not in the request at all — and the server's
- *    `hasOwnProperty('imagePaths')` guard then leaves the images alone.
- *
- * Defence 2 is what the tests below assert, end to end through the real
- * InventoryService and the real CoinEditor, with only the HTTP layer mocked.
- *
- * ---- WHY `not.toHaveProperty` IS NOT ENOUGH ON ITS OWN ----
- * `expect(payload).not.toHaveProperty('imagePaths')` passes for a payload of
- * `{ imagePaths: undefined }`, and `JSON.stringify` would drop that key — so
- * it would even be harmless TODAY. It would stop being harmless the moment
- * anything serialises differently. The assertions below therefore check
- * `Object.keys()` and the `in` operator too, which is also precisely how the
- * server decides whether to touch the images.
- *
- * Fake timers: CoinEditor debounces its PUT by one second.
+  * A save must never destroy a coin's photos.
+  *
+  * `GET /api/coins` omits `imagePaths` (absent, not empty), and a PUT carrying an
+  * `imagePaths` key replaces the coin's whole image set (replaceImages in
+  * server/routes/coins/write-helpers.ts). If "not loaded" ever became `[]` in a PUT
+  * body, every photo would be silently deleted.
+  *
+  * Two defences: the server omits the key (tested in
+  * server/routes/coins/list-query.spec.ts), and the client sends only changed
+  * fields, so the server's `hasOwnProperty('imagePaths')` guard leaves images
+  * alone. These tests check the second, end to end through the real
+  * InventoryService and CoinEditor with only HTTP mocked.
+  *
+  * `not.toHaveProperty` alone would pass for `{ imagePaths: undefined }`, so the
+  * checks also use `Object.keys()` and `in` (how the server decides).
+  * Fake timers: CoinEditor debounces its PUT by one second.
   */
 import 'fake-indexeddb/auto';
 import '@angular/compiler';
@@ -43,11 +23,8 @@ import { CoinRecord } from '../../types/coin.model';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
 /**
- * A coin exactly as `GET /api/coins` now hands it over: every text field, an
- * `imageCount`, and NO `imagePaths` key whatsoever.
- *
- * Built by deleting the key rather than by setting it to undefined, because
- * the whole point is that the property must not exist.
+ * A coin as `GET /api/coins` returns it, with no `imagePaths` key at all (deleted,
+ * not set to undefined).
  */
 function listLoadedCoin(imageCount: number): CoinRecord {
   const coin = {
@@ -58,8 +35,7 @@ function listLoadedCoin(imageCount: number): CoinRecord {
     source: 'manual', imageCount
   } as unknown as CoinRecord;
 
-  // Belt and braces: if the literal above ever gains the key, this spec must
-  // still be testing a record that genuinely lacks it.
+  // Ensures the key is absent even if the literal above gains it.
   delete (coin as { imagePaths?: unknown }).imagePaths;
   return coin;
 }
@@ -77,11 +53,8 @@ function sentPayloads(api: { updateCoin: ReturnType<typeof vi.fn> }): Record<str
 }
 
 /**
- * The assertion this whole file is about, in one place and stated three ways.
- *
- * `in` is the one that matters most: it is the JavaScript equivalent of the
- * server's `hasOwnProperty('imagePaths')` guard, which is what decides
- * whether the photographs are deleted.
+ * The key assertion, stated three ways. `in` matters most: it matches the
+ * server's `hasOwnProperty('imagePaths')` guard.
  */
 function expectNoImagePathsKey(payload: Record<string, unknown>): void {
   expect(payload).not.toHaveProperty('imagePaths');
@@ -96,7 +69,7 @@ describe('A save on a coin whose photographs were never loaded', () => {
   it('sends NO imagePaths key at all when an unrelated field is edited', () => {
     const { inv, mockApiService } = createHarness();
 
-    // The ordinary thing a user does: type in a text box on the detail panel.
+    // An ordinary text edit on the detail panel.
     inv.updateCoin('coin-1', { notes: 'Bought at the Baltimore show' });
     vi.advanceTimersByTime(1500);
 
@@ -139,8 +112,7 @@ describe('A save on a coin whose photographs were never loaded', () => {
     inv.updateCoin('coin-1', { notes: 'edited' });
     vi.advanceTimersByTime(1500);
 
-    // The optimistic on-screen copy must not gain `imagePaths: []` either.
-    // That is how the empty array would get into a LATER payload.
+    // The on-screen copy must not gain `imagePaths: []`, or a later payload could carry it.
     const live = inv.inventory()[0]!;
     expect('imagePaths' in live).toBe(false);
     expect(live.notes).toBe('edited');
@@ -148,11 +120,9 @@ describe('A save on a coin whose photographs were never loaded', () => {
 
   it('IS able to send imagePaths when the user really does change the photos', () => {
      /*
-     * The anti-vacuity test. Everything above would also pass if `updateCoin`
-     * silently dropped `imagePaths` from every request, or if no request were
-     * ever sent at all — and either of those would be a worse bug than the
-     * one being prevented, because re-ordering and deleting photographs both
-     * work by sending the full array.
+      * Anti-vacuity: the tests above would also pass if `updateCoin` dropped
+      * `imagePaths` from every request or sent nothing, which would break reordering
+      * and deleting photos.
       */
     const { inv, mockApiService } = createHarness();
 

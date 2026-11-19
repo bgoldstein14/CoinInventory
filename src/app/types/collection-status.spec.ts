@@ -1,24 +1,8 @@
 /*
- * collection-status.spec.ts
- * THE DISASTER THESE TESTS EXIST TO PREVENT
- * This feature adds a per-coin status so a collection can hold coins the owner
- * does NOT have — a want list. Everything about that is safe except one thing,
- * and that one thing would be catastrophic and silent:
- *
- *   A COIN WHOSE STATUS IS MISSING, EMPTY, MISSPELLED OR FROM A FUTURE
- *   VERSION MUST READ AS "OWNED".
- *
- * Every coin already in the database predates this field. Every old JSON
- * backup, every old CSV export, every hand-edited row has no status at all. If
- * any of those read as anything other than Owned, the coin drops out of the
- * totals, out of the insurance schedule, and visually out of the collection —
- * and nothing anywhere says so. The owner would open the app one morning and
- * find his collection worth less than it was, with no error to go on.
- *
- * So the normaliser is the load-bearing part of this module, and most of what
- * follows is about it. The rest pins the value set and the ownership rule,
- * because "which statuses mean I actually have the coin" is the question the
- * totals, the melt figure and the insurance export all delegate to here.
+ * Tests for collection status. The key rule: a missing, empty, misspelled or
+ * unknown status must read as "owned", otherwise legacy coins would silently
+ * drop out of totals and the insurance schedule. Also pins the value set and
+ * the "held in collection" rule used by totals, melt and insurance export.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -36,23 +20,18 @@ import {
 
 describe('the status value set', () => {
   it('is exactly the five states this app models', () => {
-    // Pinned as a literal rather than a length check so that ADDING a value is
-    // a deliberate act with a test change attached, not something that happens
-    // by accident in a merge. Each one is justified in the module header.
+    // Pinned as a literal so adding a status requires a test change.
     expect([...COLLECTION_STATUSES]).toEqual(
       ['owned', 'wanted', 'ordered', 'for-sale', 'sold']
     );
   });
 
   it('defaults to owned', () => {
-    // The single most important line in the feature. See the file header.
     expect(DEFAULT_COLLECTION_STATUS).toBe('owned');
   });
 
   it('stores lowercase tokens, never display text', () => {
-    // The database column holds these strings verbatim. Tokens mean a label
-    // can be reworded without a data migration — the same reason
-    // CoinRecord.source stores 'quicken' rather than 'Quicken import'.
+    // Stored verbatim in the database, so labels can change without a migration.
     for (const status of COLLECTION_STATUSES) {
       expect(status).toBe(status.toLowerCase());
       expect(status).toMatch(/^[a-z][a-z-]*$/);
@@ -73,24 +52,19 @@ describe('the status value set', () => {
   });
 
   it('never fits the two "Duplicate" readings into one value', () => {
-    // OpenNumismat has a Duplicate status. This app deliberately does not:
-    // a duplicate is still a coin you OWN, so it is a property, not a state,
-    // and making it a state would mean a duplicate could not also be For Sale
-    // — which is the single most likely thing to be true of a duplicate.
+    // A duplicate is still owned (and may be For Sale), so it is not a status.
     expect(COLLECTION_STATUSES).not.toContain('duplicate');
   });
 });
 
 describe('normalizeCollectionStatus — the "old data is Owned" guarantee', () => {
   it('maps undefined to owned', () => {
-    // Every coin that existed before this feature. If this ever returns
-    // anything else, the whole collection silently leaves the totals.
+    // Coins saved before the status field existed.
     expect(normalizeCollectionStatus(undefined)).toBe('owned');
   });
 
   it('maps null to owned', () => {
-    // A NULL CollectionStatus column, which is what a row inserted by an older
-    // build of the server would have before the migration runs.
+    // A NULL CollectionStatus column from an older server build.
     expect(normalizeCollectionStatus(null)).toBe('owned');
   });
 
@@ -100,8 +74,7 @@ describe('normalizeCollectionStatus — the "old data is Owned" guarantee', () =
   });
 
   it('maps an unrecognised value to owned rather than throwing it away', () => {
-    // A typo in a CSV cell, or a status written by a FUTURE version of the app
-    // that this build does not know about. Both must land on the safe answer.
+    // CSV typos or statuses from a newer version.
     expect(normalizeCollectionStatus('wishlist')).toBe('owned');
     expect(normalizeCollectionStatus('Pass')).toBe('owned');
     expect(normalizeCollectionStatus(42)).toBe('owned');
@@ -115,17 +88,12 @@ describe('normalizeCollectionStatus — the "old data is Owned" guarantee', () =
   });
 
   it('is forgiving about case and surrounding space', () => {
-    // CSV cells are typed by humans and arrive with whatever casing and
-    // padding a spreadsheet felt like adding.
     expect(normalizeCollectionStatus('  WANTED ')).toBe('wanted');
     expect(normalizeCollectionStatus('For-Sale')).toBe('for-sale');
   });
 
   it('accepts the spellings a human would actually type for For Sale', () => {
-    // The stored token is 'for-sale', but the EXPORTED label is "For Sale" and
-    // that is the text that comes back in on a re-import. A round trip that
-    // silently turned every For Sale coin into an Owned one would be exactly
-    // the quiet data loss this module exists to prevent.
+    // Exports write the label "For Sale", so re-imports must accept it.
     expect(normalizeCollectionStatus('For Sale')).toBe('for-sale');
     expect(normalizeCollectionStatus('for sale')).toBe('for-sale');
     expect(normalizeCollectionStatus('forsale')).toBe('for-sale');
@@ -138,20 +106,16 @@ describe('isHeldInCollection — what "I have this coin" means', () => {
   });
 
   it('counts a coin that is for sale', () => {
-    // Listing a coin does not remove it from the house. It is still yours,
-    // still worth money, and still needs insuring until it actually sells.
+    // Still in hand and insured until it actually sells.
     expect(isHeldInCollection({ collectionStatus: 'for-sale' })).toBe(true);
   });
 
   it('does NOT count a wanted coin', () => {
-    // The whole point of the feature: a want-list coin must never inflate the
-    // value of a collection the user does not have.
     expect(isHeldInCollection({ collectionStatus: 'wanted' })).toBe(false);
   });
 
   it('does NOT count an ordered coin', () => {
-    // Bought but not in hand. The test is possession, not title: it is not on
-    // the shelf, so it is not in the insurance schedule and not in the totals.
+    // Bought but not yet in hand; the rule is possession, not title.
     expect(isHeldInCollection({ collectionStatus: 'ordered' })).toBe(false);
   });
 
@@ -160,8 +124,7 @@ describe('isHeldInCollection — what "I have this coin" means', () => {
   });
 
   it('counts a coin with NO status at all', () => {
-    // Legacy data again, from the other side. Every pre-feature coin reaches
-    // this predicate with the key absent and must be counted.
+    // Legacy coins have no status key.
     expect(isHeldInCollection({})).toBe(true);
     expect(isHeldInCollection({ collectionStatus: undefined })).toBe(true);
   });
@@ -202,9 +165,7 @@ describe('collectionStatusLabel', () => {
   });
 
   it('renders a missing status as Owned, never as a dash', () => {
-    // A dash would say "unknown". It is not unknown — a coin with no status is
-    // owned, and the grid must say so, or every pre-existing coin would look
-    // like it had a gap in its record.
+    // No status means owned, not unknown.
     expect(collectionStatusLabel(undefined)).toBe('Owned');
     expect(collectionStatusLabel('')).toBe('Owned');
   });

@@ -5,27 +5,16 @@ import { CoinRecord } from '../../types/coin.model';
 import { InventoryFilterStore } from './inventory-filter.store';
 
 /**
- * InventorySelectionStore — the checkbox "multi-select" in the inventory table
- * and the bulk actions that operate on it.
- *
- * WHY THIS FILE EXISTS
- * Two very different pieces of UI share this state: the checkboxes inside the
- * table rows, and the floating bulk-edit bar at the bottom of the screen. They
- * are nowhere near each other in the template, so the state has to live
- * somewhere both can reach.
- *
- * Note this is a *different* idea from `InventoryService.selectedCoinId`. That
- * is "the one coin whose details are on screen"; this is "the set of coins the
- * user has ticked for a bulk operation".
+ * InventorySelectionStore — the checkbox multi-select in the inventory table
+ * and the bulk actions on it, shared by the table rows and the bulk-edit bar.
+ * Distinct from `InventoryService.selectedCoinId` (the coin shown in the
+ * detail panel).
  */
 export class InventorySelectionStore {
   /** Ids of every ticked coin. A Set so membership checks stay cheap. */
   readonly selectedCoinIds = signal<Set<string>>(new Set());
 
-  /**
-   * Row index of the last checkbox the user clicked, so shift-click can select
-   * a contiguous range. -1 means "nothing clicked yet".
-   */
+  /** Row index of the last clicked checkbox, for shift-click ranges (-1 = none). */
   private lastClickedIndex = -1;
 
   constructor(
@@ -98,10 +87,8 @@ export class InventorySelectionStore {
   }
 
   /**
-   * Write the same value into one field of every selected coin.
-   *
-   * The bulk edit bar only ever hands us strings (it is a plain text input), so
-   * numeric fields have to be coerced back to numbers before they are saved.
+   * Write the same value into one field of every selected coin. The bulk edit
+   * bar supplies strings, so numeric fields are coerced first.
    */
   bulkUpdateField(field: string, value: string): void {
     const ids = this.selectedCoinIds();

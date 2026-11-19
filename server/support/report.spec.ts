@@ -1,18 +1,6 @@
 /**
- * support/report.spec.ts — what the bundle contains, and what it must not.
- *
- * THE TWO PROMISES BEING TESTED
- *   1. The collection is described by COUNTS ONLY. Not one coin, price,
- *      note or photo path from the user's data goes into a report that is
- *      destined for a public issue tracker. "How big is your collection" is
- *      a useful debugging fact; "what is in it" is nobody's business.
- *
- *   2. Everything in the report has been through redaction, and the user is
- *      told what came out. The receipt is generated FROM the redaction pass,
- *      not written by hand, so it cannot drift from what actually happened.
- *
- * The caps are tested too, because an uncapped report is the same support
- * failure as an uncapped log: too big to send is the same as not sent.
+ * The report builder: the collection is described by counts only, everything
+ * is redacted with a generated receipt, and every section is capped.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -72,10 +60,7 @@ describe('the collection — counts only, never content', () => {
     );
 
     expect(markdown).toMatch(/could not be read|unavailable/i);
-    // The report must still be generated. Half the reason somebody files a
-    // problem report is that the database is not working, so a report that
-    // needs a working database is a report that is missing exactly when it
-    // is needed.
+    // The report must still work when the database doesn't, which is often why it's filed.
     expect(markdown).toContain('v24.3.0');
   });
 });
@@ -144,9 +129,7 @@ describe('the log tail', () => {
     const { markdown } = buildSupportReport(snapshot({ logLines: lines }), IDENTITY);
 
     expect(markdown).toContain('line 4999');
-    // Anchored, because a bare `not.toContain('line 0')` would also be
-    // satisfied by 'line 0' never having been rendered in any form — and
-    // because 'line 0' is a prefix of 'line 01' and friends.
+    // Anchored: 'line 0' is a prefix of 'line 01'.
     expect(markdown).not.toMatch(/^line 0$/m);
     expect(markdown).toMatch(/earlier line/i);
   });
@@ -180,13 +163,8 @@ describe('the log tail', () => {
 });
 
 /**
- * "INCLUDE THE LOG" HAS TO MEAN ALL OF IT.
- *
- * The checkbox's visible effect is the second file, but the body tail is the
- * part that can quietly betray the choice: a user who unticks the box because
- * they do not want log lines in a public issue would otherwise publish 150 of
- * them in the report itself and never know. That would make the unticked
- * state a half-truth, which is worse than not offering the choice.
+ * Unticking "Include recent log" must remove the log tail from the report
+ * body too, not just skip the separate file.
  */
 describe('the log tail when the reporter did not ask for the log', () => {
   const LINES = [
@@ -205,11 +183,7 @@ describe('the log tail when the reporter did not ask for the log', () => {
     expect(markdown).not.toContain('rendered');
   });
 
-  /**
-   * "Not included" and "none was available" are different facts, and only one
-   * of them is true. Reporting the wrong one sends the owner hunting a
-   * logging bug that does not exist instead of asking for the log.
-   */
+  /** "Left out by the reporter" and "none available" are different facts. */
   it('says the reporter left it out, not that there was nothing to show', () => {
     const { markdown } = buildSupportReport(
       snapshot({ logLines: LINES, includeLog: false }),
@@ -226,12 +200,7 @@ describe('the log tail when the reporter did not ask for the log', () => {
     expect(markdown).toMatch(/no log file was written/i);
   });
 
-  /**
-   * Names and sizes are not log CONTENT, and they answer a question worth
-   * answering — "is it even logging?" — so they stay. The dialog's summary
-   * says so in the same breath, rather than leaving them under a sentence
-   * that implies nothing log-related is sent.
-   */
+  /** Log file names and sizes aren't log content, and show whether logging works. */
   it('still lists the names and sizes of the log files', () => {
     const { markdown } = buildSupportReport(
       snapshot({
@@ -244,7 +213,7 @@ describe('the log tail when the reporter did not ask for the log', () => {
     expect(markdown).toContain('app-2026-11-08.log');
   });
 
-  /** Omitted means ticked: the checkbox's default, and every older caller. */
+  /** Omitted means ticked (the checkbox default). */
   it('treats an absent flag as "include", matching the checkbox default', () => {
     const { markdown } = buildSupportReport(snapshot({ logLines: LINES }), IDENTITY);
     expect(markdown).toContain('SQLEXPRESS');
@@ -264,11 +233,8 @@ describe('the log file inventory', () => {
 });
 
 /**
- * The in-app picker is gone, so the report no longer lists attachments — it
- * cannot: the app never sees them. What it must still do is SAY so, in the
- * document itself, because the report is read on a GitHub issue that may well
- * have files dragged onto it, and a reader has to be able to tell which of
- * them the app put there. The answer is none.
+ * The app attaches nothing itself, and the report says so, so readers know
+ * any files on the issue were added by the user.
  */
 describe('attachments', () => {
   it('states that the app attached and uploaded nothing', () => {
@@ -340,7 +306,7 @@ describe('the whole report is bounded', () => {
   });
 });
 
-// Canary — through the real report builder this time
+// Canary, through the real report builder
 
 describe('canary: a marker seeded into every channel does not reach the report', () => {
   const CANARY = 'CANARYLEAK7391';
@@ -362,10 +328,7 @@ describe('canary: a marker seeded into every channel does not reach the report',
       clientErrors: [
         { timestamp: '2026-11-08T17:00:00.000Z', message: `failed for user${CANARY}` }
       ],
-      // The marker used to ride in on an attachment NAME. The in-app picker
-      // is gone, so it rides in on the user's own description instead —
-      // the same string, through a carrier that still exists, so the canary
-      // keeps exactly the reach it had.
+      // The marker rides in on the user's own description.
       userDescription: `I was exporting user${CANARY}-holdings.qif when it crashed`,
       logFiles: [{ name: 'app-2026-11-08.log', bytes: 10 }]
     }),

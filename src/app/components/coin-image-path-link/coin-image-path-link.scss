@@ -1,30 +1,16 @@
-// One photo's original-file path. Three looks, one for each state.
-//
-// Colours are taken from the palette already in use elsewhere in the app:
-// #29528a is the blue of `.badge--circulated`, and the muted browns match
-// `.hint-text` / `.empty-state` in styles/_modal.scss. No new primitives are
-// introduced here — this is a single label, not a control, so there is nothing
-// in _controls.scss or _field.scss to reuse.
+// One photo's original-file path, styled for each of its three states.
 
-// `display: contents` makes the host element itself disappear from the layout,
-// leaving the <a>/<span> as a direct child of whatever grid or flex container
-// this component sits in. Two reasons:
-//   - the parent's `gap` then spaces the actual text, not an extra wrapper, and
-//   - when there is no path at all this component renders NOTHING, and an
-//     empty host with `display: block` would still collect a grid gap and
-//     leave a stray blank row in the list.
+// `display: contents` so the parent's gap spaces the text directly, and an
+// empty host leaves no stray grid gap.
 :host { display: contents; }
 
 .image-path {
   display: block;
-  // Monospace so the separators line up and a path is easy to read and
-  // compare. Small, because it is reference information rather than content.
   font-family: Consolas, "Courier New", monospace;
   font-size: 0.7rem;
   line-height: 1.35;
-  // The text is already middle-ellipsised in TypeScript (see
-  // image-path-display.ts), but a pathological filename with no break
-  // opportunities must still never widen the sidebar.
+  // Paths are already middle-ellipsised in image-path-display.ts; this guards
+  // against an unbreakable filename widening the layout.
   overflow-wrap: anywhere;
   min-width: 0;
 }
@@ -41,10 +27,7 @@
   }
 }
 
-// ---- Missing: visibly different, and NOT interactive ----
-// The element is a <span> in this state, so it is already unfocusable and
-// href-less; these rules are what make that legible at a glance. The strike
-// through reads as "this is no longer valid" without hiding any of the text.
+// ---- Missing: not interactive, struck through ----
 .image-path--missing {
   color: #a8695c;
   text-decoration: line-through;
@@ -52,9 +35,7 @@
   cursor: default;
 }
 
-// ---- Unknown: plain, uncommitted ----
-// Same muted grey-brown as the app's other hint text. Nothing about this state
-// should suggest either that the file is fine or that it is gone.
+// ---- Unknown: neutral hint colour ----
 .image-path--unknown {
   color: #8a7a63;
   cursor: default;

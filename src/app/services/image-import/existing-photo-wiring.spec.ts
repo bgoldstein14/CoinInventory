@@ -1,17 +1,9 @@
  /*
  * existing-photo-wiring.spec.ts
  *
- * existing-photo-mode.spec.ts proves the DECISION is right and
- * existing-photo-attach.spec.ts proves the attach runner OBEYS it. This file
- * proves the two are actually joined up to the screen: that the question is
- * only asked when it means something, that its counts are real, that the
- * destructive answer is confirmed before anything is deleted, and that the
- * bulk source-path lookup happens exactly when it is needed and never when it
- * is not.
- *
- * That separation is the same one base-folder-guard-wiring.spec.ts draws, and
- * for the same reason: the original base-folder bug was not a wrong decision,
- * it was a correct decision nothing acted on.
+ * The existing-photo mode wired into the import session: when the question
+ * is shown, its counts, confirmation before "replace" deletes anything, and
+ * when the bulk source-path lookup runs.
   */
 
 import 'fake-indexeddb/auto';
@@ -69,8 +61,7 @@ function createSession(sourcePaths: Record<string, string[]> | 'throw' = {}) {
 
   const api = {
     getAppFolder: () => of(''),
-    // Every path resolves, so the base-folder guard never refuses and these
-    // tests are only ever exercising the new code.
+    // Every path resolves, so the base-folder guard never refuses.
     checkImagesExist: (paths: string[]) =>
       of({ results: Object.fromEntries(paths.map(p => [p, true])) }),
     getCoinImageSourcePaths
@@ -124,15 +115,8 @@ afterEach(() => {
   delete (globalThis as unknown as { confirm?: unknown }).confirm;
 });
 
-/* =========================================================================
- * WHEN THE QUESTION IS ASKED AT ALL
- * ======================================================================= */
-
 describe('the three-way choice is offered only when it is relevant', () => {
   it('is hidden when no matched coin has photos', async () => {
-    // A question with no meaning trains people to stop reading the ones that
-    // do have meaning. Importing into a fresh inventory must look exactly as
-    // it always did.
     const { session, inv } = createSession();
     seedCoins(inv, [], []);
     await selectFiles(session, [MORGAN_FILE, PEACE_FILE]);
@@ -151,17 +135,12 @@ describe('the three-way choice is offered only when it is relevant', () => {
   it('ignores photos on coins this import is not touching', async () => {
     const { session, inv } = createSession();
     seedCoins(inv, [], ['data:image/jpeg;base64,OLD']);
-    // Only the Morgan is being imported for; the Peace dollar's photos are
-    // none of this import's business.
+    // Only the Morgan is in this import.
     await selectFiles(session, [MORGAN_FILE]);
 
     expect(session.existingPhotoChoiceVisible()).toBe(false);
   });
 });
-
-/* =========================================================================
- * THE COUNTS
- * ======================================================================= */
 
 describe('the counts in the question are real', () => {
   it('reports the coins, the ones with photos, the ones without, and the photos', async () => {
@@ -178,9 +157,7 @@ describe('the counts in the question are real', () => {
   });
 
   it('does not change when the user picks a different answer', async () => {
-    // The numbers describe the IMPORT, not the current answer. If choosing
-    // "Leave them alone" rewrote them to "0 of 1", the sentence offering the
-    // choice would destroy itself and the user could never get back to it.
+    // The counts describe the import, not the chosen answer.
     const { session, inv } = createSession();
     seedCoins(inv, ['data:image/jpeg;base64,A'], []);
     await selectFiles(session, [MORGAN_FILE, PEACE_FILE]);
@@ -204,10 +181,6 @@ describe('the counts in the question are real', () => {
   });
 });
 
-/* =========================================================================
- * THE DEFAULT
- * ======================================================================= */
-
 describe('"Leave them alone" is the default and it really leaves them alone', () => {
   it('starts on "leave"', async () => {
     const { session } = createSession();
@@ -215,7 +188,6 @@ describe('"Leave them alone" is the default and it really leaves them alone', ()
   });
 
   it('counts only the coins with no photos in the Save button total', async () => {
-    // The Save button must not promise to import 2 photos and import 1.
     const { session, inv } = createSession();
     seedCoins(inv, ['data:image/jpeg;base64,A'], []);
     await selectFiles(session, [MORGAN_FILE, PEACE_FILE]);
@@ -238,8 +210,6 @@ describe('"Leave them alone" is the default and it really leaves them alone', ()
   });
 
   it('does not ask the backend for source paths it will not use', async () => {
-    // Under "leave" the coins with photos are not written to at all, so there
-    // is nothing to compare against and no reason to pay for the round trip.
     const { session, inv, getCoinImageSourcePaths } = createSession();
     seedCoins(inv, ['data:image/jpeg;base64,A'], []);
     await selectFiles(session, [MORGAN_FILE, PEACE_FILE]);
@@ -262,10 +232,6 @@ describe('"Leave them alone" is the default and it really leaves them alone', ()
       .toEqual(['data:image/jpeg;base64,A']);
   });
 });
-
-/* =========================================================================
- * THE DESTRUCTIVE ANSWER
- * ======================================================================= */
 
 describe('"Replace what they have" is confirmed before anything is deleted', () => {
   it('asks, naming the number of photos about to go', async () => {
@@ -292,9 +258,7 @@ describe('"Replace what they have" is confirmed before anything is deleted', () 
     await session.applyConfirmedMatches();
 
     expect(confirmSpy).toHaveBeenCalled();
-    // Not even the coin with no photos, which would have been safe: a
-    // cancelled import is a cancelled import, and a half-done one the user
-    // did not ask for is its own surprise.
+    // Not even the coin with no photos: cancelling cancels the whole import.
     expect(updateCoin).not.toHaveBeenCalled();
   });
 
@@ -326,9 +290,6 @@ describe('"Replace what they have" is confirmed before anything is deleted', () 
   });
 
   it('does not ask when no matched coin has photos', async () => {
-    // "Replace" with nothing to replace deletes nothing, so there is nothing
-    // to warn about. A confirmation that fires when it need not is how people
-    // learn to click through the ones that matter.
     const confirmSpy = stubConfirm(true);
     const { session, inv } = createSession();
     seedCoins(inv, [], []);
@@ -353,10 +314,6 @@ describe('"Replace what they have" is confirmed before anything is deleted', () 
   });
 });
 
-/* =========================================================================
- * "KEEP BOTH" AND THE BULK LOOKUP
- * ======================================================================= */
-
 describe('"Keep both" skips files that are already on the coin', () => {
   it('asks the backend only about the coins that already have photos', async () => {
     const { session, inv, getCoinImageSourcePaths } = createSession();
@@ -371,8 +328,7 @@ describe('"Keep both" skips files that are already on the coin', () => {
   });
 
   it('does not re-attach a file the coin already has', async () => {
-    // THE HEADLINE REGRESSION, end to end: the folder is re-picked, the file
-    // is already recorded against the coin, and nothing must be written.
+    // Re-picked folder; the file is already recorded against the coin.
     const { session, inv } = createSession({
       morgan: [`D:\\Coin Pictures\\Dollars\\${MORGAN_FILE}`]
     });
@@ -404,8 +360,7 @@ describe('"Keep both" skips files that are already on the coin', () => {
   });
 
   it('imports everything when the lookup fails', async () => {
-    // FAILS OPEN, like the base-folder check does. A diagnostic endpoint
-    // hiccup must not silently drop photos the user asked for.
+    // Fails open.
     const { session, inv } = createSession('throw');
     seedCoins(inv, ['data:image/jpeg;base64,A'], []);
     await selectFiles(session, [MORGAN_FILE]);
@@ -418,14 +373,8 @@ describe('"Keep both" skips files that are already on the coin', () => {
   });
 });
 
-/* =========================================================================
- * RESET
- * ======================================================================= */
-
 describe('reset', () => {
   it('puts the answer back to the safe default', async () => {
-    // Picking a new folder after a replace import must not carry the
-    // destructive answer silently into the next run.
     const { session, inv } = createSession();
     seedCoins(inv, ['data:image/jpeg;base64,A'], []);
     await selectFiles(session, [MORGAN_FILE]);

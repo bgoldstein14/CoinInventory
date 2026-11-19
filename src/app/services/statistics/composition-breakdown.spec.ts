@@ -1,23 +1,9 @@
  /*
- * composition-breakdown.spec.ts
- * ---- WHAT THESE TESTS DEFEND ----
- * Two separate ways a breakdown chart lies, both of them silent:
- *
- *   1. A BLANK FIELD BECOMES A CATEGORY. Thirty coins with no country typed
- *      in get grouped under "" and drawn as a bar like any other, or — worse
- *      — bucketed as "(none)" and sorted into the middle of the ranking where
- *      it reads as a real place. Here, unlabelled coins are NEVER a slice.
- *      They come back as a separate count so the view can print "No country
- *      recorded for 30 coins" under the chart.
- *
- *   2. THE TAIL IS DROPPED. Showing the top ten of forty denominations and
- *      saying nothing about the other thirty makes the chart look like the
- *      whole collection. The fold into "Other" is explicit, counted, and
- *      always last regardless of its size.
- *
- * A third, quieter one: when the metric is VALUE, a slice's value is the sum
- * over the coins in it that have a value — which is not the same as the sum
- * over the slice. `valueUnknownCount` is how the chart admits that.
+  * Tests for buildBreakdown:
+  *   1. Coins with a blank field are never a slice; they are returned as a
+  *      separate count.
+  *   2. The tail past the cap is folded into one explicit "Other" slice, always last.
+  *   3. Under the value metric, `valueUnknownCount` reports unappraised coins.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -105,8 +91,7 @@ describe('buildBreakdown — ranking', () => {
   });
 
   it('ranks by value, largest first, when the metric is value', () => {
-    // A completely different order from the count ranking — which is the
-    // whole reason both metrics exist.
+    // A different order from the count ranking.
     const breakdown = buildBreakdown(coins, 'category', 'value');
     expect(breakdown.slices.map(s => s.label)).toEqual(['Gold', 'Ancients', 'Type Set']);
   });
@@ -158,10 +143,8 @@ describe('buildBreakdown — the value of a slice', () => {
   });
 
   it('ranks a LARGE unvalued slice last too — the axis says dollars, not coins', () => {
-    // Ten unappraised coins against one $5 coin. A comparator that quietly
-    // fell back to the count for an unvalued slice would put the big empty
-    // bucket at the top of a chart whose axis is money, which is the most
-    // misleading single bar this view could draw.
+    // Ten unappraised coins vs one $5 coin: the unvalued slice must not rank
+    // first on a money axis.
     const breakdown = buildBreakdown(
       [
         ...Array.from({ length: 10 }, () => statsCoin({ country: 'Unappraised' })),
@@ -207,8 +190,7 @@ describe('buildBreakdown — folding the tail into Other', () => {
   });
 
   it('keeps Other last even when the folded tail outweighs every named slice', () => {
-    // Eight categories of one coin each plus one of two: folding seven
-    // singletons makes an Other of 7, bigger than any named bar except the 2.
+    // Eight singletons plus one of two: the folded Other (7) outranks named bars.
     const coins = [
       statsCoin({ category: 'Big' }),
       statsCoin({ category: 'Big' }),
@@ -221,7 +203,7 @@ describe('buildBreakdown — folding the tail into Other', () => {
   });
 
   it('does NOT create an Other bar holding a single category — it names it', () => {
-    // Folding one slice into "Other" hides a name for no benefit at all.
+    // Folding a single slice into "Other" would only hide a name.
     const coins = [
       statsCoin({ category: 'A' }), statsCoin({ category: 'A' }),
       statsCoin({ category: 'B' }),
@@ -257,8 +239,7 @@ describe('buildBreakdown — folding the tail into Other', () => {
 
 describe('buildBreakdown — denomination labels match the grid', () => {
   it('renders shilling shorthand the way the inventory table does', () => {
-    // formatDenominationDisplay turns "2/-" into "2 sh". Two charts of the
-    // same collection must not name the same denomination differently.
+    // Same display as the grid: "2/-" becomes "2 sh".
     const breakdown = buildBreakdown([statsCoin({ denomination: '2/-' })], 'denomination', 'count');
     expect(breakdown.slices[0].label).toBe('2 sh');
   });
@@ -274,28 +255,11 @@ describe('buildBreakdown — denomination labels match the grid', () => {
   });
 });
 
-/* ===========================================================================
- * DENOMINATION, AFTER THE REFERENCE-MODEL REFACTOR
- * ---------------------------------------------------------------------------
- * A breakdown bucket is keyed on THE STRING THE GRID SHOWS. That one decision
- * answers both of the questions this section exists for:
- *
- *   WHY UNRESOLVED COINS DO NOT SHARE A BUCKET. `Other (8 Reales)` and
- *   `Other (100 Soles)` are two different strings, so they are two different
- *   bars. Collapsing them under a single "Other" would be this file's own
- *   silent-lie #1 wearing a different hat — a bar that reads as a real
- *   denomination, sorted into the ranking by size, that is in fact a pile of
- *   unrelated coins. On the owner's un-migrated database it would be ALL 105
- *   of them in one bar, which is worse than no chart.
- *
- *   WHY A RESOLVED COIN BUCKETS UNDER ITS LABEL. Two views of one collection
- *   that name the same denomination differently make a user distrust both.
- *   The chart and the grid read the same function.
- *
- * There is no new "unknown" bucket and no `(none)` escape hatch. A coin with
- * nothing recorded at all stays out of the slices entirely, exactly as it
- * always has.
- * ======================================================================== */
+/*
+ * Denomination buckets are keyed on the string the grid shows. So unresolved
+ * `Other (8 Reales)` and `Other (100 Soles)` are separate bars, a resolved coin
+ * buckets under its label, and a coin with nothing recorded stays out of the slices.
+ */
 
 describe('buildBreakdown — denomination, with the lookup loaded', () => {
   it('buckets a resolved coin under its Label, not the text it arrived with', () => {
@@ -307,8 +271,7 @@ describe('buildBreakdown — denomination, with the lookup loaded', () => {
   });
 
   it('keeps two different unresolved denominations in two different slices', () => {
-    // THE REQUIREMENT. Both of these read as unresolved on screen, and they
-    // are not the same coin by any reading.
+    // Two different unresolved denominations must stay separate.
     const breakdown = buildBreakdown(
       [
         statsCoin({ denomination: 'Pillar Dollar' }),
@@ -319,18 +282,14 @@ describe('buildBreakdown — denomination, with the lookup loaded', () => {
     expect(breakdown.slices).toHaveLength(2);
     expect(breakdown.slices.map(slice => slice.count)).toEqual([1, 1]);
     expect(breakdown.distinctLabelCount).toBe(2);
-    // Asserted explicitly, not just as "two of something": a bucket keyed on
-    // the raw text would also produce two slices here, so counting them
-    // alone would not tell the two implementations apart. The LABELS are
-    // what prove the chart is reading the same strings the grid prints.
+    // Checking labels, not just the count, proves the chart reads the grid's strings.
     expect(breakdown.slices.map(slice => slice.label).sort())
       .toEqual(['Other (Pillar Dollar)', 'Other (Trade Dollar)']);
     expect(breakdown.slices.map(slice => slice.label)).not.toContain(OTHER_LABEL);
   });
 
   it('still keeps a coin with nothing recorded out of the ranking', () => {
-    // The em-dash placeholder must never become a category. It would be the
-    // `(none)` bar this file's header refuses, with a prettier name.
+    // The em-dash placeholder must never become a category.
     const breakdown = buildBreakdown(
       [statsCoin({ denomination: 'Trime', country: 'United States' }), statsCoin({ denomination: '' })],
       'denomination', 'count', undefined, DENOMINATION_LOOKUP
@@ -341,8 +300,7 @@ describe('buildBreakdown — denomination, with the lookup loaded', () => {
   });
 
   it('counts an id-less coin and an id-bearing one as the same denomination', () => {
-    // Migration 014 must not split or merge a single bar. Same text, same
-    // country, one with the id written and one without.
+    // Same text and country, one with the id and one without: one bar.
     const breakdown = buildBreakdown(
       [
         statsCoin({ denomination: '8 Reales', country: 'United States' }),
@@ -364,8 +322,7 @@ describe('buildBreakdown — denomination, with the lookup loaded', () => {
   });
 
   it('labels every slice with the string the inventory grid would print', () => {
-    // The claim in one assertion, over every interesting shape of coin at
-    // once: whatever the chart calls a coin, the grid calls it the same.
+    // Whatever the chart calls a coin, the grid calls it the same.
     const coins = [
       statsCoin({ denominationId: MEXICO_8_REALES, denomination: 'Pillar Dollar' }),
       statsCoin({ denomination: 'Trade Dollar' }),
@@ -382,8 +339,7 @@ describe('buildBreakdown — denomination, with the lookup loaded', () => {
 
 describe('buildBreakdown — denomination, before the lookup arrives', () => {
   it('buckets exactly as it always has when no lookup is passed', () => {
-    // Every existing caller, and the whole app during hydration. A chart
-    // that regrouped itself a beat after opening would be its own bug.
+    // Without the lookup (e.g. during hydration).
     const coins = [
       statsCoin({ denomination: '2/-' }),
       statsCoin({ denomination: '2 Shilling' }),

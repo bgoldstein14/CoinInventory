@@ -29,38 +29,16 @@ import {
 } from '../../services/statistics/stats-format';
 
 /*
- * StatisticsModal — the "Statistics" dialog.
+ * The Statistics dialog. A thin renderer: figures come from pure modules in
+ * services/statistics/ and SVG coordinates from chart-geometry.ts, so all the
+ * arithmetic is testable without a DOM. Unknown figures are null and render
+ * as "—" with a coverage note; they are never shown as zero.
  *
- * A THIN RENDERER, by constraint rather than by taste. Every figure comes out
- * of a pure module under `services/statistics/` and every SVG coordinate out
- * of `chart-geometry.ts`; this file maps those answers onto strings and
- * signals and does no arithmetic of its own. The frontend suite runs under
- * Node with NO jsdom, so anything calculated in this class — or in the
- * template — would be untestable by construction.
- *
- * THE RULE EVERY FIGURE ON THIS SCREEN OBEYS: a visible blank beats a
- * silently wrong number (the project's governing principle, stated at the top
- * of services/pm-reference.ts). The statistics modules return `null` for
- * "cannot say" plus a count of the coins they could not account for; this
- * class renders the null as "—" and the count as a sentence underneath. It
- * never substitutes a zero and never silently averages a blank in.
- *
- * NO CHARTING LIBRARY. The production initial bundle is 752 kB against a
- * 500 kB warning and a 1 MB HARD ERROR budget (angular.json); Chart.js is
- * ~200 kB minified and ECharts around 1 MB. The geometry needed here is a few
- * dozen lines of arithmetic, adds zero dependency bytes, and — decisively,
- * given the no-jsdom constraint — is unit-testable to the pixel.
- *
- * THE CHART SVGs HAVE A FIXED PIXEL WIDTH AND NO viewBox SCALING. The
- * crosshair reads `PointerEvent.offsetX`, which is in CSS pixels; under a
- * `viewBox` with `width="100%"` those pixels are NOT user units, so the
- * crosshair would drift further from the pointer the more the chart scaled —
- * and there is no DOM in the tests to catch it. A fixed width means offsetX
- * IS the user-unit x, exactly, and the dialog scrolls horizontally on a very
- * narrow window instead of lying about where the pointer is.
+ * Charts are hand-drawn SVG (no charting library) with a fixed pixel width
+ * and no viewBox scaling, so PointerEvent.offsetX equals the SVG x coordinate.
  */
 
-/** Geometry of the composition chart. Fixed — see the header. */
+/** Geometry of the composition chart. Fixed width; see the header. */
 const BAR_CHART = {
   width: 700,
   /** Room for a denomination or country name on the left. */
@@ -87,14 +65,7 @@ const SPEND_CHART = {
 /** Font size the bar labels are drawn at; geometry needs it to fit text. */
 const LABEL_FONT_SIZE = 11;
 
-/**
- * The unconditional footnote under the spend chart.
- *
- * UNCONDITIONAL ON PURPOSE. The absence of a value-over-time line otherwise
- * reads as a missing feature or a broken chart, rather than as the honest
- * consequence of each coin storing one overwritable Current Value and no
- * history to plot.
- */
+/** Always shown under the spend chart, to explain why there is no value-over-time line. */
 const VALUE_HISTORY_NOTE =
   'This is money spent, not what the collection has been worth. Each coin stores one ' +
   'Current Value, overwritten whenever it is re-appraised, so no history of value exists ' +
@@ -110,13 +81,8 @@ export interface StatTile {
   /** "Not recorded for 31 of 125 coins", or null when nothing is missing. */
   note: string | null;
   /**
-   * Direction, for the gain/loss colouring.
-   *
-   * NEVER the only cue. The tile's LABEL changes between "Unrealised gain"
-   * and "Unrealised loss" and the figure carries an explicit +/- sign, so the
-   * meaning survives greyscale, print and a red/green deficiency. The app's
-   * `.gain` green measures 2.87:1 against white — below the 3:1 the guidance
-   * wants — so colour here is a third cue rather than the first.
+   * Direction, for the gain/loss colouring. Colour is never the only cue: the
+   * label and the +/- sign also change, for greyscale and colour-blind users.
    */
   tone: 'gain' | 'loss' | null;
 }
@@ -168,16 +134,8 @@ export class StatisticsModal {
   }
 
   /**
-   * Has the collection actually arrived?
-   *
-   * Every figure on this screen is computed over `inv.inventory()`, which is
-   * an empty array until hydration finishes — rendered then, the screen
-   * states with complete confidence that the collection is worth $0.00 and
-   * contains no gold. `connected()` is what makes the difference knowable:
-   * ConnectionManager.hydrate() sets it only once the coin fetch has come
-   * back. The wording lives in the pure module
-   * features/inventory/collection-zero-state.ts, because nothing decided in
-   * a template can be tested without jsdom.
+   * Notice shown until the collection has loaded, so an empty inventory is not
+   * reported as a collection worth $0.00.
    */
   protected readonly notReadyNotice = computed(() =>
     collectionNotReadyNotice({
@@ -188,13 +146,7 @@ export class StatisticsModal {
 
   // --- The numbers ---
 
-  /**
-   * Statistics are over the WHOLE collection, never the filtered grid.
-   *
-   * "Total current value" that silently means "of the 12 coins matching your
-   * search" is the same class of lie this whole screen is built to avoid, and
-   * a dialog has no filter bar visible to explain itself with.
-   */
+  /** Statistics cover the whole collection, not the filtered grid. */
   private readonly coins = computed(() => this.inv.inventory());
 
   private readonly totals = computed(() =>
@@ -204,15 +156,8 @@ export class StatisticsModal {
   private readonly holdings = computed(() => computePreciousMetalHoldings(this.coins()));
 
   /**
-   * The ranked-bar chart's data.
-   *
-   * The two trailing arguments are both deliberate. `undefined` keeps
-   * composition-breakdown.ts's own MAX_SLICES as the one place the cap is
-   * written down. The denominations lookup is what lets a `denomination`
-   * breakdown name its bars the way the inventory grid does: the string on
-   * screen is derived from `denominationId`, and a chart reading the raw
-   * column would label the same coin differently from the table the user
-   * just came from.
+   * The ranked-bar chart's data. `undefined` keeps the module's default slice
+   * cap; the denominations lookup labels bars the same way the grid does.
    */
   protected readonly breakdown = computed(() =>
     buildBreakdown(this.coins(), this.dimension(), this.metric(), undefined, this.inv.denominations())
@@ -239,8 +184,6 @@ export class StatisticsModal {
       label: 'Coins',
       value: formatCount(t.coinCount),
       detail: null,
-      // The only figure here with no gap in it: a coin is either in the
-      // inventory or it is not.
       note: null,
       tone: null
     });
@@ -255,8 +198,6 @@ export class StatisticsModal {
 
     const gain = t.gainLoss.total;
     tiles.push({
-      // The WORD changes with the direction, so the tile does not depend on
-      // its colour being seen. See StatTile.tone.
       label: gain !== null && gain < 0 ? 'Unrealised loss' : 'Unrealised gain',
       value: formatStatDelta(gain),
       detail: t.gainLossPercent === null ? null : `${t.gainLossPercent.toFixed(1)}% of cost`,
@@ -272,8 +213,7 @@ export class StatisticsModal {
       tone: null
     });
 
-    // Only once something has actually been sold. A permanent "Realised: —"
-    // on a collection nobody has sold out of is a gap that is not a gap.
+    // Shown only once something has been sold.
     if (t.realised.total !== null) {
       tiles.push({
         label: 'Realised proceeds',
@@ -288,13 +228,8 @@ export class StatisticsModal {
   });
 
   /**
-   * The melt tile's footnote.
-   *
-   * A melt figure can be missing for two completely different reasons that
-   * call for opposite reactions — the same distinction `describeMeltValue`
-   * draws for a single grid cell. An empty price table is two clicks from
-   * being fixed; a tray of clad quarters is not a fault at all. Saying only
-   * "not recorded for 94 coins" would conflate them.
+   * The melt tile's footnote. Distinguishes "no spot prices loaded" (fixable)
+   * from coins that simply have no precious-metal weight.
    */
   private meltNote(knownCount: number, coinCount: number): string | null {
     if (coinCount === 0) return null;
@@ -354,10 +289,7 @@ export class StatisticsModal {
     const metric = this.metric();
     const items = this.breakdown().slices.map(slice => ({
       label: slice.label,
-      // Under the VALUE metric an unappraised slice measures 0 and draws no
-      // bar at all — which is right: the chart genuinely cannot say how big
-      // it is. Its coin count is still in the readout and its name still on
-      // the axis, so it does not disappear.
+      // An unappraised slice draws no bar under the value metric but keeps its label.
       value: metric === 'count' ? slice.count : slice.value ?? 0,
       valueText: metric === 'count' ? formatCount(slice.count) : formatStatMoney(slice.value)
     }));
@@ -392,15 +324,9 @@ export class StatisticsModal {
   });
 
   /**
-   * The hover/focus readout for the composition chart.
-   *
-   * A tooltip ENHANCES, it never gates: every bar already carries its name
-   * and (where it fits) its value, and this line adds what the bar could not
-   * hold — above all how much of the slice has no value recorded, the one
-   * thing a bar length cannot express.
-   *
-   * Rendered as a live region rather than a floating box so keyboard focus
-   * announces exactly what hover shows.
+   * The hover/focus readout for the composition chart, including how much of
+   * the slice has no value recorded. Rendered as a live region so keyboard
+   * focus announces what hover shows.
    */
   protected readonly barReadout = computed(() => {
     const index = this.hoveredBar();
@@ -464,10 +390,7 @@ export class StatisticsModal {
     this.spendChart().xTicks.map(tick => ({ x: tick.x, text: formatChartMonth(tick.value) }))
   );
 
-  /**
-   * The single direct label on the curve: the total, at the end of the line.
-   * The axis, the crosshair and the table twin carry the rest.
-   */
+  /** The total, labelled at the end of the line. */
   protected readonly spendEndLabel = computed(() => {
     const points = this.spendChart().points;
     if (points.length === 0) return null;
@@ -497,11 +420,7 @@ export class StatisticsModal {
     );
   });
 
-  /**
-   * The table twin. Every value on the curve is reachable here without a
-   * pointer, which is what makes the tooltip an enhancement rather than the
-   * only way to read the chart.
-   */
+  /** Table version of the spend curve, readable without a pointer. */
   protected readonly spendTableRows = computed(() =>
     this.spend().points.map(point => ({
       date: formatChartDay(point.time),
@@ -543,11 +462,8 @@ export class StatisticsModal {
   }
 
   /**
-   * The crosshair follows the pointer anywhere over the plot and snaps to the
-   * nearest point: the reader aims at a DATE, never at a 2px line.
-   *
-   * `offsetX` is a user-unit x because the SVG has a fixed pixel width and no
-   * viewBox scaling — see the class header.
+   * Snaps the crosshair to the point nearest the pointer. offsetX is usable as
+   * an SVG x because the chart has a fixed width (see the header).
    */
   protected onPlotMove(event: PointerEvent): void {
     const index = nearestPointIndex(this.spendChart().points, event.offsetX);
@@ -558,7 +474,7 @@ export class StatisticsModal {
     this.crosshair.set(null);
   }
 
-  /** The same readout, reachable from the keyboard. */
+  /** Keyboard navigation of the crosshair. */
   protected onPlotKey(event: KeyboardEvent): void {
     const count = this.spendChart().points.length;
     if (count === 0) return;
@@ -591,7 +507,7 @@ export class StatisticsModal {
 
   // --- Plumbing ---
 
-  /** "1 coin" / "125 coins". Used everywhere a count is spoken, not shown. */
+  /** "1 coin" / "125 coins". */
   private coinWord(count: number): string {
     return count === 1 ? '1 coin' : `${formatCount(count)} coins`;
   }

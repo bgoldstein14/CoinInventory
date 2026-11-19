@@ -1,19 +1,7 @@
 /*
- * "IMPORT ONLY COINS I STILL OWN" ON THE CSV AND EXCEL PATH.
- *
- * The option used to exist on the Quicken dialog alone, which quietly made
- * it a property of one file format rather than of the import. It is now on
- * all three, keyed on one rule:
- *
- *     A coin counts as sold when it has a sold date, a sold price or a
- *     buyer.
- *
- * These run the rule END TO END -- through `mapRowToCoin`, which is what
- * turns a spreadsheet cell into the field the rule reads -- rather than
- * over hand-built CoinRecords. That is the point: a cell holding `0`, or a
- * cell holding one space, has to survive the mapping as the thing the rule
- * expects, and a unit test on the predicate alone cannot say whether it
- * does. The predicate's own edge cases are in services/import-sold.spec.ts.
+ * "Import only coins I still own" on the CSV and Excel path. Runs the rule
+ * end to end through `mapRowToCoin`, so cells like `0` or a single space are
+ * checked after mapping. The rule's own edge cases are in import-sold.spec.ts.
  */
 import { describe, expect, it } from 'vitest';
 import { CsvService } from '../csv.service';
@@ -67,7 +55,7 @@ describe('the sold filter on a spreadsheet', () => {
   });
 
   it('leaves out a row with only a buyer', () => {
-    // The owner may remember who took it and nothing else.
+    // Only the buyer is recorded.
     const result = plan(
       headers,
       [['Morgan Dollar', 'Dollar', '1881', '', '', 'Tollgate Rarities']],
@@ -78,12 +66,8 @@ describe('the sold filter on a spreadsheet', () => {
     expect(result.excludedAsSold).toBe(1);
   });
 
-  /* ---- THE TWO THAT FAIL ON A REAL SHEET ---- */
-
   it('TREATS A SOLD PRICE OF 0 AS SOLD', () => {
-    // Given away, written off, traded at no cash value. Truthiness reads
-    // this as "never sold" and hands the row back in an import the user
-    // asked to be free of sold coins.
+    // A sold price of 0 (given away, written off) counts as sold.
     const result = plan(headers, [['Morgan Dollar', 'Dollar', '1881', '', '0', '']], true);
 
     expect(result.excludedAsSold).toBe(1);
@@ -91,7 +75,7 @@ describe('the sold filter on a spreadsheet', () => {
   });
 
   it('DOES NOT TREAT A WHITESPACE-ONLY BUYER AS SOLD', () => {
-    // One stray space bar would otherwise hide the coin from the import.
+    // A single space must not count as a buyer.
     const result = plan(headers, [['Morgan Dollar', 'Dollar', '1881', '', '', '   ']], true);
 
     expect(result.excludedAsSold).toBe(0);
@@ -144,10 +128,7 @@ describe('the sold filter on a spreadsheet', () => {
   });
 
   it('does not report an excluded sale as a row that lacked detail', () => {
-    /* A row the user asked not to import is not an exception he can act
-     * on. Listing "no Denomination" for a coin he sold in 2013 and
-     * deliberately filtered out would be noise in the one list that is
-     * supposed to be actionable. */
+    // Rows excluded as sold are not listed as exceptions.
     const result = plan(headers, [['', '', '', '2013-11-16', '', '']], true);
 
     expect(result.rejected).toEqual([]);

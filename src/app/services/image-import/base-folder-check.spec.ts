@@ -1,27 +1,9 @@
  /*
  * base-folder-check.spec.ts
  *
- * THE BUG THIS EXISTS TO PREVENT (it really happened)
- *
- * An import stamped every resulting row with a path under a DEVELOPMENT
- * folder -- "making up directories under Development by denomination" --
- * instead of the folder that had been picked.
- *
- * Nothing was made up. The directory picker cannot supply an absolute path
- * (see source-path.ts), so only the RELATIVE half comes from the picked
- * folder; the absolute prefix comes solely from the base-folder text box.
- * That box had been left holding its fallback, the folder the app itself is
- * installed in, so the real subfolder names were glued onto the wrong root
- * and every image resolved to nothing.
- *
- * The screen already showed a live preview of the path about to be stored.
- * It was ADVISORY -- "it does not fail loudly -- it stamps every imported row
- * with a location that resolves to nothing" -- and a hint
- * that a user is under no obligation to read.
- *
- * So the preview is no longer the only defence. Before anything is written,
- * the paths that WOULD be stored are checked against the disk, and an import
- * whose paths resolve to nothing is refused outright.
+ * Before writing, the paths an import would store are checked against the
+ * disk; an import whose paths all resolve to nothing (wrong base folder) is
+ * refused.
   */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -32,11 +14,7 @@ import {
   verdictMessage
 } from './base-folder-check';
 
-/**
- * A File as a directory picker produces it. Node's File has no
- * `webkitRelativePath`, and it is read-only in the browser, hence
- * defineProperty rather than assignment.
- */
+/** A File as a directory picker produces it (webkitRelativePath is read-only). */
 function pickedFile(name: string, relativePath = ''): File {
   const file = new File(['x'], name, { type: 'image/jpeg' });
   Object.defineProperty(file, 'webkitRelativePath', { value: relativePath });
@@ -67,11 +45,6 @@ describe('samplePathsToVerify', () => {
     expect(samplePathsToVerify('D:\\Pics', files).length).toBe(MAX_SAMPLED_PATHS);
   });
 
-  /**
-   * Spread rather than "the first five". A selection is ordered, so the first
-   * five files are usually all in the SAME subfolder — which would check one
-   * corner of the tree and call the whole import verified.
-   */
   it('spreads the sample across the selection rather than taking a prefix', () => {
     const files = Array.from({ length: 50 }, (_, i) =>
       pickedFile(`a${i}.jpg`, `Coins/Sub${i}/a${i}.jpg`)
@@ -106,7 +79,6 @@ describe('verifyBaseFolder', () => {
 
     expect(verdict.ok).toBe(false);
     expect(verdict.reason).toBe('unreadable');
-    // The offending path is carried out so the message can name it.
     expect(verdict.checked).toContain('C:\\dev\\coin-inventory\\Half Dollars\\a.jpg');
   });
 
@@ -116,12 +88,7 @@ describe('verifyBaseFolder', () => {
     expect((await verifyBaseFolder('D:\\Coin Pictures', files, allPresent)).ok).toBe(true);
   });
 
-  /**
-   * A base folder that is simply absent is a DIFFERENT state, already handled
-   * elsewhere: sourcePathForFile records null and the screen shows its own
-   * "no folder given" warning. Importing without recording paths is a
-   * legitimate, long-standing choice, so this must not block it.
-   */
+  // No base folder means paths are not recorded; not an error.
   it('does not block when no base folder is set at all', async () => {
     const probe = vi.fn(allPresent);
 
@@ -139,14 +106,7 @@ describe('verifyBaseFolder', () => {
     expect(probe).not.toHaveBeenCalled();
   });
 
-  /**
-   * PARTIAL failure is NOT the wrong-base-folder signature and must not be
-   * treated as one. The user picked these files moments ago, so they exist;
-   * if the root were wrong, EVERY path would fail. A few missing means
-   * something individual happened (a file removed between pick and attach, a
-   * permission oddity), which is the pre-existing "crossed out in the grid"
-   * behaviour and not a reason to refuse 1,700 good rows.
-   */
+  // A wrong root fails every path; a partial failure is individual.
   it('allows the import when only some paths are missing', async () => {
     const files = [
       pickedFile('a.jpg', 'Coins/a.jpg'),
@@ -159,12 +119,7 @@ describe('verifyBaseFolder', () => {
     expect((await verifyBaseFolder('D:\\Pics', files, halfMissing)).ok).toBe(true);
   });
 
-  /**
-   * FAILS OPEN, deliberately. This check is a safety net, not a dependency.
-   * Blocking a legitimate import because a diagnostic endpoint hiccupped
-   * would be a worse bug than the one being prevented — the user would have
-   * no way to proceed at all.
-   */
+  // Fails open.
   it('allows the import when the check itself fails', async () => {
     const broken = () => Promise.reject(new Error('backend down'));
 
@@ -175,9 +130,6 @@ describe('verifyBaseFolder', () => {
   });
 
   it('treats a path absent from the response as unknown, not as missing', async () => {
-    // The endpoint keys its answer by path and drops anything it could not
-    // use. A missing KEY is not the same as `false`, and reading it as false
-    // would block a perfectly good import.
     const empty = async () => ({});
 
     expect((await verifyBaseFolder('D:\\Pics', [pickedFile('a.jpg', 'x/a.jpg')], empty)).ok)
@@ -192,10 +144,7 @@ describe('verdictMessage', () => {
 
     const message = verdictMessage(verdict);
 
-    // The actual path, so the user can see WHY it is wrong rather than being
-    // told abstractly that something is.
     expect(message).toContain('C:\\dev\\coin-inventory\\Half Dollars\\a.jpg');
-    // And where to fix it.
     expect(message?.toLowerCase()).toContain('folder');
   });
 

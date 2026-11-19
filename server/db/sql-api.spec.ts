@@ -1,31 +1,12 @@
 /**
- * db/sql-api.spec.ts — the request-shaped adapter, and the two traps it
- * exists to close.
+ * The request-style adapter (db/sql-api.ts). Most of it is exercised through
+ * the routes; this covers what it adds over mssql:
  *
- * db/sql-api.ts keeps the `.input(name, type, value).query(sql)` API the
- * twenty route modules already speak, so that moving off SQL Server changed
- * a route only where the dialect genuinely differs. Most of what it does is
- * therefore tested through those routes.
- *
- * What is tested HERE is the handful of things it does that `mssql` did not,
- * each of which closes a SILENT failure specific to this engine:
- *
- *   1. A MULTI-STATEMENT QUERY IS REFUSED. `node:sqlite`'s prepare()
- *      compiles the FIRST statement of a string and discards the rest
- *      without a word. The denominations DELETE used to be a four-statement
- *      T-SQL batch; translated naively it would have unlinked a
- *      denomination's coins, never deactivated the denomination, and
- *      returned 200.
- *   2. AN UNBOUND PARAMETER IS REFUSED. SQLite binds a named parameter
- *      nobody supplied to NULL and runs happily, so `WHERE CoinId = @coinid`
- *      is "no rows" rather than an error. `mssql` threw.
- *   3. SQLITE ERRORS CARRY SQL SERVER ERROR NUMBERS, so
- *      routes/db-error-response.ts — which is good, and well tested — did
- *      not have to be rewritten into this migration.
- *   4. ACCESS IS SERIALISED. `mssql` gave each transaction its own pooled
- *      connection; there is one SQLite handle and SQLite has no nested
- *      transactions, so two concurrent writes would interleave BEGIN/COMMIT
- *      and one request would commit the other's half-finished work.
+ *   1. multi-statement queries are refused (prepare() would silently run only
+ *      the first statement);
+ *   2. unbound parameters are refused (SQLite would bind NULL);
+ *   3. SQLite errors carry SQL Server error numbers;
+ *   4. access to the single handle is serialised.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -91,7 +72,7 @@ describe('a multi-statement query is refused', () => {
         .query("INSERT INTO Categories (CategoryName) VALUES ('one'); INSERT INTO Categories (CategoryName) VALUES ('two');")
     ).rejects.toThrow(/2 statements/);
 
-    // And neither of them ran. Without the guard the first would have.
+    // Neither statement ran.
     expect(await queryRows("SELECT CategoryName FROM Categories WHERE CategoryName IN ('one','two')"))
       .toEqual([]);
   });
@@ -115,15 +96,13 @@ describe('an unbound parameter is refused', () => {
       connection
         .request()
         .input('id', DB_BINDINGS.coinId, 'abc')
-        // Note the case: @coinId was never bound, only @id.
+    // Note the case: only @id was bound.
         .query('SELECT * FROM Coins WHERE CoinId = @coinId')
     ).rejects.toThrow(/@coinId/);
   });
 
   it('allows an .input() the statement does not mention', async () => {
-    // routes/coins/writes.ts binds every COIN_FIELDS entry and then names
-    // only the columns the request body supplied. `mssql` ignored the
-    // extras; so must this, or every partial update would fail.
+    // writes.ts binds every COIN_FIELDS entry and names only some; extras must be ignored.
     const connection = await getPool();
 
     const result = await connection
@@ -136,8 +115,7 @@ describe('an unbound parameter is refused', () => {
   });
 
   it('does not validate an unused binding, matching an unreferenced SQL Server parameter', async () => {
-    // An over-long value bound to a parameter the statement never names is
-    // not an error — nothing was going to be stored.
+    // An unused binding isn't validated: nothing was going to be stored.
     const connection = await getPool();
     await expect(
       connection
@@ -175,15 +153,12 @@ describe('SQLite errors carry the SQL Server error numbers the HTTP layer classi
   });
 
   it('gives a non-constraint error NO number, so it reaches the generic 500', () => {
-    // Exactly as an unrecognised `mssql` error did. Inventing a number here
-    // would turn a server fault into a 409 the user is invited to fix.
+    // Unknown errors get no number, so they stay a 500.
     expect(translateSqliteError({ errcode: 1, message: 'no such table: Nope' }).number).toBeUndefined();
   });
 
   it('carries the driver code through under the name db/errors.ts reads', () => {
-    // If this property is ever renamed, isConnectionError()'s code branch
-    // goes dead and a closed database is recognised only by the wording of
-    // its message. See the comment on DbQueryError.
+    // isConnectionError() reads `code`; renaming it would break that branch.
     const translated = translateSqliteError({ errcode: 2067, code: 'ERR_SQLITE_ERROR', message: 'x' });
     expect(translated.code).toBe('ERR_SQLITE_ERROR');
     expect(translated.errcode).toBe(2067);
@@ -217,7 +192,6 @@ describe('rowsAffected', () => {
       .request()
       .input('id', DB_BINDINGS.coinId, 'nobody')
       .query("UPDATE Coins SET CoinType = 'y' WHERE CoinId = @id");
-    // Every 404 in this backend is `rowsAffected[0] === 0`.
     expect(missed.rowsAffected).toEqual([0]);
   });
 
@@ -228,9 +202,7 @@ describe('rowsAffected', () => {
   });
 
   it('hands back plain objects, not null-prototype ones', async () => {
-    // `node:sqlite` returns rows with a null prototype. Everything that
-    // spreads a row, serialises it or compares it with toEqual is happier
-    // with an ordinary object, and the copy costs one shallow clone.
+    // node:sqlite returns null-prototype rows; they are copied to plain objects.
     const connection = await getPool();
     const result = await connection.request().query('SELECT 1 AS one');
     expect(Object.getPrototypeOf(result.recordset[0])).toBe(Object.prototype);
@@ -239,9 +211,8 @@ describe('rowsAffected', () => {
 
 describe('transactions serialise access to the one handle', () => {
   it('runs two concurrent transactions one after the other, not interleaved', async () => {
-    // Without the connection lock, the second BEGIN would fail ("cannot
-    // start a transaction within a transaction") or — far worse — the first
-    // COMMIT would commit the second transaction's half-finished work.
+    // Without the lock, the second BEGIN would fail or the first COMMIT
+    // would commit the other transaction's work.
     const connection = await getPool();
 
     const write = async (id: string) => {
@@ -332,8 +303,7 @@ describe('transactions serialise access to the one handle', () => {
 
 describe('a closed connection', () => {
   it('reports itself as a connection failure, by code', async () => {
-    // db/pool.ts's withDb() retries exactly this and nothing else, so the
-    // classification has to come off a code rather than a sentence.
+    // withDb() retries only this, so it must be classified by code.
     const connection = await getPool();
     connection.close();
 
@@ -343,7 +313,7 @@ describe('a closed connection', () => {
     } catch (err) {
       expect((err as { code?: string }).code).toBe('ERR_INVALID_STATE');
     } finally {
-      // Leave a working database behind for whatever runs next.
+    // Leave a working database for the next test.
       await withTestDb(() => undefined).catch(() => undefined);
     }
   });

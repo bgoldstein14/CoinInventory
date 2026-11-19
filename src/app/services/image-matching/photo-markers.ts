@@ -1,38 +1,13 @@
  /*
- * photo-markers.ts
- *
- * WHAT THIS FILE OWNS
- *   Reading the parts of a filename that describe the PHOTOGRAPH rather than
- *   the coin: which side is shown, which shot in a series it is, and which
- *   variant of the file it is. Public entry point is `parsePhotoMarkers`.
- *
- * WHY IT IS ITS OWN FILE
- *   This collection photographs most coins at least twice:
+ * Reads the parts of a filename that describe the photograph rather than the
+ * coin: side shown, shot number and file variant.
  *
  *       1870 1-cent NGC PF65RB - Obverse 2.jpg
- *       1870 10-cent - NGC PF64Cameo - Reverse 5.jpg
  *       1875CC - VF30 - 2 - Obverse.jpg
- *       1865 3CN - Choice VF - Obverse - Photo.jpg
  *       1904 $20 - PCGS MS63 - small.jpg
  *
- *   Those trailing bits do TWO different jobs at once, which is why they get
- *   their own module:
- *
- *   1. They must be kept OUT of the score. "Obverse" agreeing with "Obverse"
- *      is not evidence that two filenames show the same coin -- almost every
- *      filename says it. (The stripping itself is automatic: every word here
- *      is folded into STOP_WORDS via filename-vocabulary.ts, so
- *      `meaningfulTokens` drops them.)
- *
- *   2. They must be REPORTED, because the batch-import UI groups the obverse
- *      and reverse shots of one coin together, and needs to know which is
- *      which. So we return them as structured fields instead of just deleting
- *      them.
- *
- *   No imports from text-tokens on purpose: this module works on the raw
- *   filename (where the " - " separators are still visible) and is imported by
- *   reference-tables.ts's vocabulary chain, so staying dependency-free keeps
- *   the module graph acyclic.
+ * These words are excluded from scoring (they are stop words) but reported
+ * so the batch-import UI can group a coin's obverse and reverse shots.
   */
 
 import { ParsedSide, PHOTO_VARIANT_WORDS, SIDE_WORDS } from './filename-vocabulary';
@@ -48,27 +23,17 @@ export interface PhotoMarkers {
   take: number | null;
   /**
    * File variant: 'photo', 'orig', 'sharpened', 'small', 'large', ...
-   * Null when the name does not say. Two files differing only by this are the
-   * same coin at a different size or processing stage.
+   * Null when the name does not say.
    */
   variant: string | null;
 }
 
-/**
- * The largest number we will believe is a shot number.
- *
- * Takes in this collection run 1..9 with the odd 10+. Capping at two digits
- * means a stray four-digit number can never be mistaken for a take, and a
- * year certainly cannot.
- */
+/** Largest number accepted as a shot number, so years can't be read as takes. */
 const MAX_TAKE = 99;
 
 /**
- * Segment separator: a hyphen with whitespace on at least one side.
- *
- * Written this way so that hyphens INSIDE a value survive: "1875-CC" and
- * "XF-AU" have no spaces around their hyphens and stay in one piece, while
- * " - " genuinely separates two fields.
+ * Segment separator: a hyphen with whitespace on at least one side, so
+ * "1875-CC" and "XF-AU" stay in one piece.
  */
 const SEGMENT_SEPARATOR = /\s+-+\s*|\s*-+\s+/;
 
@@ -76,10 +41,8 @@ const SEGMENT_SEPARATOR = /\s+-+\s*|\s*-+\s+/;
 const VARIANTS_LONGEST_FIRST = [...PHOTO_VARIANT_WORDS].sort((a, b) => b.length - a.length);
 
 /**
- * Read the photo markers out of an extension-stripped filename.
- *
- * Purely descriptive: nothing here affects the score. It only fills in the
- * fields the UI needs in order to group shots of the same coin.
+ * Read the photo markers out of an extension-stripped filename. Descriptive
+ * only; nothing here affects the score.
  */
 export function parsePhotoMarkers(text: string): PhotoMarkers {
   const segments = text.split(SEGMENT_SEPARATOR).map(s => s.trim()).filter(Boolean);
@@ -92,11 +55,8 @@ export function parsePhotoMarkers(text: string): PhotoMarkers {
 }
 
 /**
- * Which face of the coin. First side word wins.
- *
- * Word boundaries matter here: without them the "rev" abbreviation would fire
- * inside "Revolt" ("67-68 CE 1st Revolt - Obverse - 2.jpg" is an obverse
- * shot of a First Revolt coin, not a reverse shot of something).
+ * Which face of the coin. First side word wins. Word boundaries keep "rev"
+ * from matching inside "Revolt".
  */
 function findSide(text: string): ParsedSide | null {
   let bestIndex = Number.MAX_SAFE_INTEGER;
@@ -115,14 +75,8 @@ function findSide(text: string): ParsedSide | null {
 /**
  * Which shot in the series. Two accepted forms, checked in this order:
  *
- *   A. a number glued to the side word    "- Obverse 2", "Reverse 5"
- *   B. a segment that is ONLY a number    "- VF30 - 2 - Obverse"
- *
- * Form A is checked first because it is unambiguous. Form B requires the
- * number to be the WHOLE segment, which is what stops the "11" in
- * "Stamp - 11 - 3 cent" style names from being confused with something
- * meaningful -- and equally stops a year or a cert number being read as a
- * take, since neither ever sits alone in a segment as one or two digits.
+ *   A. a number after the side word       "- Obverse 2", "Reverse 5"
+ *   B. a segment that is only a number    "- VF30 - 2 - Obverse"
  */
 function findTake(text: string, segments: string[]): number | null {
   // A. "Obverse 2" / "Reverse 5" / "Obv 3"
@@ -134,8 +88,8 @@ function findTake(text: string, segments: string[]): number | null {
     }
   }
 
-  // B. a standalone numeric segment. Scan from the END, because when a name
-  //    carries several the trailing one is the shot number.
+  // B. a standalone numeric segment; scan from the end, since the trailing
+  //    one is the shot number.
   for (let i = segments.length - 1; i >= 0; i--) {
     if (!/^\d{1,2}$/.test(segments[i])) continue;
     const value = Number(segments[i]);

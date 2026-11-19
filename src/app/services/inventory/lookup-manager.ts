@@ -7,26 +7,10 @@ import { NotificationService } from '../notification.service';
 import { firstValueFrom } from 'rxjs';
 
  /*
- * LookupManager
- *
- * WHAT THIS FILE OWNS
- *   The four "reference lists" the inventory picks values from, all four of
- *   them database-backed: added and removed on the server as well as locally.
- *     * categories
- *     * coin sets     (database-backed in both directions — see the note
- *                      above addCoinSet)
- *     * denominations
- *     * mint marks
- *
- * WHY IT IS ITS OWN FILE
- *   These four follow the same shape over and over — read the list, add an
- *   entry, remove an entry, log it, tell the user if it failed — and that
- *   repetition was drowning out the interesting coin logic in
- *   InventoryService. None of it touches coins at all.
- *
- * The signals themselves still live on InventoryService (they are part of its
- * public API); this class is handed the same signal objects and writes
- * through them, so there is only ever one list.
+  * The reference lists the inventory picks from: categories, coin sets,
+  * denominations, mint marks (and catalogues), each read, added and removed both
+  * locally and on the server. The signals belong to InventoryService; this
+  * class writes through the same objects.
   */
 
 export class LookupManager {
@@ -41,14 +25,11 @@ export class LookupManager {
     private readonly notificationService: NotificationService
   ) {}
 
-  /* ---- Categories ---- */
+  /* Categories */
 
   /**
-   * Add any category names we have not seen before, and persist the new ones.
-   *
-   * Called after an import, where coins routinely arrive carrying categories
-   * that do not exist in the lookup list yet. Names already present are
-   * skipped, so this is safe to call with the full list every time.
+   * Adds category names not seen before and persists the new ones. Called after
+   * imports; existing names are skipped, so the full list can be passed.
    */
   mergeCategoryOptions(names: string[]): void {
     const current = new Set(this.categoryOptions());
@@ -90,35 +71,20 @@ export class LookupManager {
       });
   }
 
-  /* =========================================================================
-   * Coin sets
-   * -------------------------------------------------------------------------
-   * COIN SETS ARE DATABASE-BACKED, AND BOTH HALVES MUST STAY THAT WAY.
-   *
-   * There is a CoinSets table with `/api/coin-sets` GET/POST/DELETE routes
-   * behind `ApiService.getCoinSets` / `createCoinSet` / `deleteCoinSet`, and
-   * hydration READS from it (ConnectionManager.hydrate only falls back to
-   * deriving the list from the coins when that call fails). The UI also
-   * offers "Add set" with no coin attached, which a derive-from-coins model
-   * cannot persist at all.
-   *
-   * Drop the WRITE half and the user adds a set, sees it appear, reloads and
-   * finds it gone -- the next hydration replaces the local list with the
-   * database's, which was never told. An empty set created ahead of filing
-   * coins into it vanishes every time.
-   *
-   * Both methods mirror the category pattern above exactly: update the signal
-   * immediately so the UI stays responsive, then persist in the background
-   * and report a failure rather than silently diverging from the database.
-   * ======================================================================= */
+  /*
+   * Coin sets are stored in the CoinSets table (`/api/coin-sets`), and hydration
+   * reads from it (falling back to the coins' values only if the call fails).
+   * "Add set" can create an empty set, so both add and remove must persist, or a
+   * new set would vanish on reload. Same pattern as categories: update the signal
+   * immediately, persist in the background, report failures.
+   */
 
   addCoinSet(name: string): void {
     const trimmed = name.trim();
     if (!trimmed) return;
 
     const current = this.coinSets();
-    // Nothing to do if we already have it. Returning early also stops a
-    // duplicate POST, which the backend would reject as a primary-key clash.
+    // Already present: also avoids a duplicate POST (a primary-key clash).
     if (current.includes(trimmed)) return;
 
     this.coinSets.set([...current, trimmed].sort());
@@ -145,7 +111,7 @@ export class LookupManager {
       });
   }
 
-  /* ---- Denomination Management ---- */
+  /* Denominations */
 
   async loadDenominations(): Promise<void> {
     try {
@@ -159,19 +125,11 @@ export class LookupManager {
   }
 
   /**
-   * The denominations lookup, for code that needs to READ it.
-   *
-   * The signal itself belongs to InventoryService and is written only here.
-   * This getter exists because `CoinCollection.importInventoryData` has to
-   * resolve a restored coin's denomination text to an id (design §4.1) and
-   * is handed this class rather than the signal.
-   *
-   * *** RETURNS THE ARRAY, NOT A COPY. *** The resolver indexes the lookup
-   * on its ARRAY IDENTITY so that 1,161 labels are folded once per fetch
-   * rather than once per coin; handing back `[...list]` would defeat that
-   * silently, turning a restore of 2,000 coins into 2.3 million alias
-   * folds. Nothing mutates it — `loadDenominations`, `addDenomination` and
-   * `removeDenomination` all REPLACE the array.
+   * The denominations lookup for readers (the signal is written only here); used
+   * by `CoinCollection.importInventoryData` to resolve restored coins (design §4.1).
+   * Returns the array itself, not a copy: the resolver index is cached by array
+   * identity, and a copy would rebuild it per coin. It is never mutated; load, add
+   * and remove all replace the array.
    */
   denominationList(): readonly Denomination[] {
     return this.denominations();
@@ -201,7 +159,7 @@ export class LookupManager {
     }
   }
 
-  /* ---- Mint Mark Management ---- */
+  /* Mint marks */
 
   async loadMintMarks(): Promise<void> {
     try {
@@ -238,23 +196,11 @@ export class LookupManager {
     }
   }
 
-  /* =========================================================================
-   * Catalogue Management  (migration 012)
-   * -------------------------------------------------------------------------
-   * A fifth list in exactly the shape of the four above -- which is the whole
-   * design decision. Catalogues (Sear, RIC, Hendin, Krause) are reference
-   * data the user maintains, no different in kind from denominations, so
-   * they get the same four methods, the same optimistic signal update, the
-   * same background persist, and the same "tell the user, do not swallow it"
-   * error handling. Anyone who understands the denomination block understands
-   * this one.
-   *
-   * The ONE extra method is rename. Catalogues get it because the seeded
-   * names are abbreviations a user may reasonably want to expand ("RIC" ->
-   * "RIC (Roman Imperial Coinage)") without losing the attribution on every
-   * coin that points at the row -- which is exactly what remove-and-re-add
-   * would do, since the coins reference the ID.
-   * ======================================================================= */
+  /*
+   * Catalogues (migration 012): same methods and error handling as denominations,
+   * plus rename, so an abbreviation ("RIC") can be expanded without breaking the
+   * coins that reference the row by id.
+   */
 
   async loadCatalogs(): Promise<void> {
     try {
@@ -280,13 +226,8 @@ export class LookupManager {
   }
 
   /**
-   * Rename a catalogue in place, keeping its id.
-   *
-   * KEEPING THE ID IS THE POINT. Coins store `CatalogId`, so renaming the row
-   * re-labels every coin attributed to it at once; deleting it and adding a
-   * new one would silently orphan all of them (they would start reading as a
-   * bare number). That is why there is no "remove then add" shortcut in the
-   * maintenance screen.
+   * Renames a catalogue in place, keeping its id, so every coin attributed to it is
+   * relabelled (remove-and-re-add would orphan them).
    */
   async renameCatalog(id: number, name: string): Promise<void> {
     const trimmed = name.trim();
@@ -307,7 +248,8 @@ export class LookupManager {
   async removeCatalog(id: number): Promise<void> {
     try {
       await firstValueFrom(this.apiService.deleteCatalog(id));
-      this.catalogs.set(this.catalogs().filter(c => c.catalogId !== id));
+      // Kept as inactive: coins that use it still show its name.
+      this.catalogs.set(this.catalogs().map(c => (c.catalogId === id ? { ...c, isActive: false } : c)));
       this.logger.info(`Deleted catalogue: ${id}`);
       this.notificationService.showInfo('Catalogue removed');
     } catch (error) {

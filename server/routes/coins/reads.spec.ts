@@ -1,24 +1,7 @@
 /**
- * routes/coins/reads.spec.ts — HTTP tests for the read-only coin endpoints
- * (routes/coins/reads.ts).
- *
- * *** THESE ROWS ARE NO LONGER CANNED. *** They are inserted into a real
- * in-memory SQLite database built from db/schema.sql, and read back out
- * through the real query the route runs. The previous version of this file
- * queued recordsets on a hand-written mock IN CALL ORDER, which meant the
- * test's idea of how many queries the handler runs had to be kept in step by
- * hand — and meant a route could pass while naming a column the schema does
- * not have.
- *
- * The CamelCase column names below are still the point: translating them
- * into the camelCase JSON the Angular app expects is exactly what rowToCoin()
- * in db/row-mappers.ts is being tested for.
- *
- * GET /api/coins runs no image-payload read at all unless the caller passes
- * ?includeImages=true — see list-query.spec.ts for why. The single-coin
- * endpoint still returns its images inline: one coin's photographs is a few
- * megabytes at worst, which is the entire reason a per-coin endpoint exists
- * for the client to fall back to.
+ * HTTP tests for the read-only coin endpoints, against real rows. Checks the
+ * PascalCase -> camelCase mapping in rowToCoin(). The list has no image
+ * payloads (see list-query.spec.ts); a single coin includes its images.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -80,17 +63,12 @@ describe('GET /api/coins', () => {
     expect(coin.year).toBe('1921');
     expect(coin.grade).toBe('MS-65');
     expect(coin.hasCacSticker).toBe(true);
-    // NOT an empty array — THE KEY IS ABSENT. That distinction is the whole
-    // contract: a client has to be able to tell "this coin's photographs were
-    // not loaded" from "this coin has no photographs", because echoing the
-    // second one back in a PUT would delete the first one's pictures.
+    // The key is absent, not []: echoing [] back in a PUT would delete photos.
     expect(coin).not.toHaveProperty('imagePaths');
     expect(coin.imageCount).toBe(1);
-    // The tag feature is gone, so the key must not come back at all.
+    // Tags are gone.
     expect(coin).not.toHaveProperty('tags');
-    // The coin-level dealer field is gone too, so the key must not come back
-    // even if an old database still has the column. (The deal's counterparty
-    // is purchasedFrom / soldTo, which are ordinary coin fields.)
+    // The coin-level dealer field is gone too (purchasedFrom / soldTo replaced it).
     expect(coin).not.toHaveProperty('dealer');
     expect(coin.weight).toBe(0.7734);
     expect(coin.metalContent).toBe('Silver');
@@ -141,9 +119,9 @@ describe('GET /api/coins/:id', () => {
     expect(res.body.imagePaths).toEqual([]);
     expect(res.body).not.toHaveProperty('tags');
 
-    // Exactly two queries, and neither of them touches the dropped table.
+    // Coin, references and images; none touching the dropped table.
     const statements = executedSql();
-    expect(statements).toHaveLength(2);
+    expect(statements).toHaveLength(3);
     for (const statement of statements) {
       expect(statement).not.toContain('CoinTags');
     }

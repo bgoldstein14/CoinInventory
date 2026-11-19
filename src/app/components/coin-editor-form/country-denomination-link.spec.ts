@@ -1,17 +1,7 @@
 /**
- * Tests for the two-way Country <-> Denomination link in the coin editor.
- *
- * The failure modes worth testing are not the happy path. They are:
- *
- *   - a country nobody recognises emptying the dropdown, leaving the user
- *     with nothing to pick;
- *   - an inferred country overwriting one the user typed;
- *   - a saved GB denomination silently vanishing when the country is edited
- *     to the United States;
- *   - the '__OTHER__' sentinel reaching a coin record;
- *   - a two-field change going out as one wide payload.
- *
- * Every one of those has a test below.
+ * Tests for the Country <-> Denomination link: the dropdown is never emptied, a typed
+ * country is never overwritten, an existing denomination never vanishes, the sentinel never
+ * reaches a coin, and every write is a single field.
  */
 import { describe, expect, it } from 'vitest';
 import { CoinRecord, Denomination } from '../../types/coin.model';
@@ -22,11 +12,7 @@ import {
   denominationOptionGroups
 } from './country-denomination-link';
 
- /*
- * Fixtures: a miniature of the real seed data, which files US denominations
- * under 'US' and British ones under 'GB' — two-letter codes, while coins
- * store full country names. That mismatch is the thing under test.
-  */
+/* Miniature seed data: denominations use codes ('US', 'GB') while coins store full names. */
 function denomination(overrides: Partial<Denomination> = {}): Denomination {
   return {
     denominationId: 1,
@@ -52,7 +38,7 @@ function labelsOf(groups: ReturnType<typeof denominationOptionGroups>): string[]
   return groups.flatMap((group) => group.options.map((option) => option.label));
 }
 
-// COUNTRY -> DENOMINATIONS: the filter
+// Country -> denominations (filter)
 
 describe('denominationOptionGroups — narrowing by country', () => {
   it('offers only British denominations for a British coin', () => {
@@ -70,7 +56,7 @@ describe('denominationOptionGroups — narrowing by country', () => {
   });
 
   it('narrows on free text, not just the canonical spelling', () => {
-    // The Country field is a text box; the user may well type 'UK'.
+    // Free text, so 'UK' must work.
     for (const typed of ['GB', 'gb', 'UK', 'British', 'England', 'United Kingdom']) {
       expect(labelsOf(denominationOptionGroups(LOOKUP, typed, ''))).toEqual([
         'Farthing',
@@ -87,8 +73,6 @@ describe('denominationOptionGroups — narrowing by country', () => {
   });
 
   it('bridges the code/name mismatch in BOTH directions', () => {
-    // A coin stored with the code rather than the name still filters, and a
-    // denomination filed under a full name still matches a coin's code.
     expect(labelsOf(denominationOptionGroups(LOOKUP, 'GB', ''))).toContain('Sovereign');
 
     const nameFiled = [denomination({ denominationId: 9, label: 'Crown', country: 'Great Britain' })];
@@ -101,7 +85,7 @@ describe('denominationOptionGroups — narrowing by country', () => {
   });
 });
 
-// RULE 1: NEVER AN EMPTY DROPDOWN
+// Never an empty dropdown
 
 describe('denominationOptionGroups — never strands the user with nothing', () => {
   it('shows everything, grouped by country, when the country is blank', () => {
@@ -116,9 +100,7 @@ describe('denominationOptionGroups — never strands the user with nothing', () 
   });
 
   it('shows everything for a country it cannot place', () => {
-    // THE REGRESSION THIS FEATURE COULD EASILY HAVE INTRODUCED. 'Ruritania'
-    // resolves to nothing; filtering on it would leave an empty <select> and
-    // no way to pick a denomination at all.
+    // An unrecognised country shows everything.
     const groups = denominationOptionGroups(LOOKUP, 'Ruritania', '');
 
     expect(labelsOf(groups)).toHaveLength(6);
@@ -126,12 +108,10 @@ describe('denominationOptionGroups — never strands the user with nothing', () 
   });
 
   it('shows everything for a recognised country with no denominations on file', () => {
-    // Peru is in the country vocabulary but the Denominations table has no
-    // Peruvian rows. Narrowing to zero is the same user-visible disaster.
+    // Known country with no rows: show everything.
     expect(labelsOf(denominationOptionGroups(LOOKUP, 'Peru', ''))).toHaveLength(6);
 
-    // Canada is the live example: the Categories & Sets dialog offers 'CA'
-    // but the seed data has no CA rows.
+    // The dialog offers 'CA' but the seed has no CA rows.
     expect(labelsOf(denominationOptionGroups(LOOKUP, 'Canada', ''))).toHaveLength(6);
   });
 
@@ -144,13 +124,11 @@ describe('denominationOptionGroups — never strands the user with nothing', () 
   });
 });
 
-// RULE 2: AN EXISTING OUT-OF-COUNTRY DENOMINATION MUST SURVIVE
+// Existing out-of-country denomination is kept
 
 describe('denominationOptionGroups — an existing denomination from elsewhere', () => {
   it('keeps a saved GB denomination visible when the country becomes the US', () => {
-    // The data-loss case. The coin is saved as a Sovereign (GB); the user
-    // edits Country to 'United States'. If 'Sovereign' dropped out of the
-    // list the <select> would render blank and the field would look empty.
+    // A GB Sovereign on a coin now set to the US must stay listed, or the select renders blank.
     const groups = denominationOptionGroups(LOOKUP, 'United States', 'Sovereign');
 
     expect(labelsOf(groups)).toContain('Sovereign');
@@ -168,8 +146,7 @@ describe('denominationOptionGroups — an existing denomination from elsewhere',
     const extra = groups[groups.length - 1];
 
     expect(extra.options.map((option) => option.label)).toEqual(['Sovereign']);
-    // The heading names the country it actually belongs to, spelled out
-    // rather than left as the raw 'GB' code.
+    // Heading uses the readable country name, not the code.
     expect(extra.heading).toContain('Great Britain');
   });
 
@@ -181,10 +158,7 @@ describe('denominationOptionGroups — an existing denomination from elsewhere',
   });
 
   it('does not add a stray group for a custom denomination', () => {
-    // 'Trade Dollar' is in no lookup row at all, so it is a custom value and
-    // custom-option-mode.ts is what keeps it on screen — the select shows
-    // "Other" and the free-text box holds the value. Adding a group for it
-    // here would put the same thing on screen twice.
+    // Custom values are shown via the custom box, not as an extra group.
     const groups = denominationOptionGroups(LOOKUP, 'United States', 'Trade Dollar');
 
     expect(groups).toHaveLength(1);
@@ -192,7 +166,7 @@ describe('denominationOptionGroups — an existing denomination from elsewhere',
   });
 });
 
-// DENOMINATION -> COUNTRY: the auto-fill
+// Denomination -> country (auto-fill)
 
 describe('denominationChoiceUpdates — filling the country in', () => {
   it('fills in the country when it is blank', () => {
@@ -205,8 +179,7 @@ describe('denominationChoiceUpdates — filling the country in', () => {
   });
 
   it('writes the FULL NAME, never the two-letter code from the lookup row', () => {
-    // Coins store full names. Writing 'GB' into a coin would create the very
-    // mismatch this whole feature exists to bridge.
+    // Coins store full names, not codes.
     const updates = denominationChoiceUpdates('25¢', '', LOOKUP);
 
     expect(updates[1]).toEqual({ field: 'country', value: 'United States' });
@@ -218,15 +191,13 @@ describe('denominationChoiceUpdates — filling the country in', () => {
   });
 
   it('NEVER overwrites a country the user already typed', () => {
-    // The standing rule: a value the user supplied outranks an inferred one.
     const updates = denominationChoiceUpdates('Sovereign', 'United States', LOOKUP);
 
     expect(updates).toEqual([{ field: 'denomination', value: 'Sovereign' }]);
   });
 
   it('leaves even a conflicting hand-typed country alone', () => {
-    // They typed 'Canada' and picked a GB denomination. That may be a
-    // mistake, but it is their mistake to see and fix; we do not correct it.
+    // A user-entered country is never corrected.
     const updates = denominationChoiceUpdates('Farthing', 'Canada', LOOKUP);
 
     expect(updates.map((update) => update.field)).toEqual(['denomination']);
@@ -243,8 +214,7 @@ describe('denominationChoiceUpdates — filling the country in', () => {
   });
 
   it('refuses to guess when one label exists under two countries', () => {
-    // 'Crown' is a real British denomination and also a plausible Canadian
-    // one. With no way to tell which was meant, we write nothing.
+    // Ambiguous label: write nothing.
     const ambiguous = [
       ...LOOKUP,
       denomination({ denominationId: 8, label: 'Crown', country: 'GB' }),
@@ -286,19 +256,11 @@ describe('denominationChoiceUpdates — filling the country in', () => {
   });
 });
 
-// THE PAYLOAD: EVERY WRITE IS STILL ONE FIELD
+// Every write is a single field
 
 /**
- * Mimics the funnel every edit in CoinEditorForm goes through:
- *
- *     for (const update of denominationChoiceUpdates(...)) {
- *       this.updateSelectedCoin(update.field, update.value);   // strips the
- *     }                                                        // sentinel
- *
- *     updateSelectedCoin -> inv.updateCoin(id, { [field]: value })
- *
- * so what this collects is the exact sequence of payloads that reach
- * InventoryService.
+ * Mimics CoinEditorForm's save path (denominationChoiceUpdates -> updateSelectedCoin ->
+ * inv.updateCoin) and collects the payloads that would reach InventoryService.
  */
 function payloadsFor(updates: readonly CoinFieldUpdate[]): Partial<CoinRecord>[] {
   return updates.map((update) => {
@@ -310,8 +272,7 @@ function payloadsFor(updates: readonly CoinFieldUpdate[]): Partial<CoinRecord>[]
 
 describe('the payloads that reach the server', () => {
   it('sends two SEPARATE single-field updates, never one wide record', () => {
-    // A wide payload has overwritten untouched fields in this project before.
-    // "The user's action changed two fields" is not a licence to widen it.
+    // Two changed fields must still be two single-field writes.
     const payloads = payloadsFor(denominationChoiceUpdates('Sovereign', '', LOOKUP));
 
     expect(payloads).toEqual([{ denomination: 'Sovereign' }, { country: 'Great Britain' }]);
@@ -340,8 +301,7 @@ describe('the payloads that reach the server', () => {
   });
 
   it('changing the country issues NO denomination write at all', () => {
-    // Narrowing the list is pure display. The proof is structural: the filter
-    // returns groups and nothing else — it has no way to write to a coin.
+    // The filter only returns groups; it cannot write.
     const groups = denominationOptionGroups(LOOKUP, 'United States', 'Sovereign');
 
     expect(Array.isArray(groups)).toBe(true);
@@ -349,7 +309,7 @@ describe('the payloads that reach the server', () => {
   });
 });
 
-// THE '__OTHER__' SENTINEL
+// The '__OTHER__' sentinel
 
 describe('the custom-denomination sentinel', () => {
   it('is never a real denomination, so it can never infer a country', () => {
@@ -359,9 +319,7 @@ describe('the custom-denomination sentinel', () => {
   });
 
   it('is stripped before anything is persisted, even if it gets this far', () => {
-    // The component returns early on the sentinel and never reaches here, but
-    // updateSelectedCoin strips it regardless. Belt and braces: the string
-    // '__OTHER__' must not be able to land in the database by any route.
+    // updateSelectedCoin strips the sentinel as a safety net.
     const payloads = payloadsFor(denominationChoiceUpdates(CUSTOM_OPTION_SENTINEL, '', LOOKUP));
 
     expect(payloads).toEqual([{ denomination: '' }]);

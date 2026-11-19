@@ -1,9 +1,5 @@
-// Styles for TIER 2 of the batch image import: one coin and the photos that
-// are one yes/no away from it.
-//
-// Buttons / .small-button / .secondary come from the shared controls partial.
-// The warm amber palette marks a "needs you" block; a fully answered group
-// fades to the green "settled" tone the matched rows use.
+// Tier 2 of the batch image import. Amber marks a group that needs an answer;
+// a fully answered group fades to the green "settled" tone.
 @use '../../styles/controls' as *;
 
 .near-group {
@@ -20,7 +16,7 @@
   background: #f6fbf6;
 }
 
-// ---- The question, asked once for the whole coin ----
+// Group header
 
 .near-group-head {
   display: flex;
@@ -55,7 +51,7 @@
   gap: 1px;
 }
 
-// ---- One photo ----
+// One photo
 
 .near-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 
@@ -72,21 +68,8 @@
 .near-row--answered { border-color: #b9dfc0; background: #f6fbf6; }
 .near-row--skipped { opacity: 0.6; }
 
-// Preview size and fit are both deliberate.
-//
-// SIZE: the whole job of this row is "is this photo this coin?", and a 48px
-// square is too small to read a date or a mint mark, which is often the only
-// thing separating two candidate coins. 88px is roughly the smallest that
-// makes a coin's devices legible without the row becoming a gallery. It costs
-// nothing to fetch: the <img> points at the ORIGINAL multi-megabyte file via
-// createObjectURL, so the browser already decoded the full image regardless
-// of the box it is painted into.
-//
-// FIT: `contain`, never `cover`. `cover` fills the square by CROPPING, and
-// coins are round and photographed centred, so it shaves the rim off every
-// one of them -- losing exactly the edge detail, lettering and toning you
-// judge a match by. The letterboxing is the neutral tile colour, which reads
-// fine against the card.
+// 88px is about the smallest size at which a date or mint mark is legible.
+// `contain`, not `cover`: cover would crop the rim of a round coin.
 .near-thumb {
   width: 88px;
   height: 88px;

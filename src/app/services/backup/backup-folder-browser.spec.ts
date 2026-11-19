@@ -1,11 +1,4 @@
-/**
- * backup-folder-browser.spec.ts — the folder box, its picker and the
- * server's answer about it.
- *
- * Run under Node with no jsdom and no TestBed: the class is a plain
- * object holding signals and takes its one dependency as a function, for
- * the same reason BackupRunner does.
- */
+/** Tests for BackupFolderBrowser: the folder box, its picker and the server listing. */
 
 import { describe, expect, it, vi } from 'vitest';
 
@@ -30,16 +23,14 @@ const listing = (
 
 describe('BackupFolderBrowser — typing and pasting', () => {
   it('keeps whatever the user types, picker or no picker', () => {
-    // The UNC case. A convenience that cannot reach a NAS must not stop
-    // somebody pasting a path that can.
+    // UNC paths the picker can't reach must still be typeable.
     const browser = new BackupFolderBrowser(async () => listing());
     browser.setFolder('\\\\NAS\\Backups');
     expect(browser.folder()).toBe('\\\\NAS\\Backups');
   });
 
   it('throws away a listing the moment the folder is edited', () => {
-    // The same trap a stale inspection verdict is: a list of files under
-    // a path that now points somewhere else.
+    // Editing the folder discards the old listing.
     const browser = new BackupFolderBrowser(async () => listing());
     browser.listing.set(listing());
 
@@ -61,15 +52,13 @@ describe('BackupFolderBrowser — the picker, and what it cannot do', () => {
     ]);
 
     expect(browser.folder()).toBe('C:\\Users\\You\\Desktop\\Backups');
-    // *** The honesty requirement. *** The note must still be there, and
-    // must not read as though the browser supplied the path.
+    // The note must not suggest the browser supplied the path.
     expect(browser.guessNote()).toMatch(/only the folder's NAME/);
     expect(browser.guessNote()).toContain('C:\\Users\\You\\Desktop\\Backups');
   });
 
   it('leaves the box alone for an empty folder, and says why', () => {
-    // A browser reports the files in a folder, so an empty one is
-    // invisible to it. Silently doing nothing would look like a bug.
+    // An empty folder is invisible to a directory picker; say so.
     const browser = new BackupFolderBrowser(async () => listing());
     browser.setFolder('C:\\Users\\You\\Desktop');
 
@@ -80,9 +69,7 @@ describe('BackupFolderBrowser — the picker, and what it cannot do', () => {
   });
 
   it('keeps the disclosure up even after the folder lists successfully', async () => {
-    // A successful listing proves the folder EXISTS. It does not prove
-    // it is the one the user picked — C:\Desktop\Backups and D:\Backups
-    // can both be real.
+    // A successful listing proves the folder exists, not that it is the one picked.
     const browser = new BackupFolderBrowser(async () => listing());
     browser.setFolder('C:\\Users\\You\\Desktop');
     browser.acceptPick([{ name: 'one.db', webkitRelativePath: 'Backups/one.db' }]);
@@ -117,9 +104,7 @@ describe('BackupFolderBrowser — asking the server', () => {
   });
 
   it('shows the server sentence, which is what finds a typo', async () => {
-    // "There is no folder called D:\Backpus" is the whole value of the
-    // 404. A generic failure message would send the user looking for
-    // lost backups instead of at the spelling.
+    // The server's own message ("no folder called ...") is shown, so typos are obvious.
     const browser = new BackupFolderBrowser(async () => {
       throw { error: { error: 'There is no folder called D:\\Backpus' } };
     });

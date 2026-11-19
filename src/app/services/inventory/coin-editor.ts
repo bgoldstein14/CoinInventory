@@ -11,40 +11,27 @@ import { imageSourcePaths } from '../image-source-paths';
 import { firstValueFrom } from 'rxjs';
 
  /*
- * CoinEditor
- *
- * WHAT THIS FILE OWNS
- *   The "the user typed something" path, end to end:
- *     1. paint the new value on screen straight away (optimistic update),
- *     2. work out which fields are genuinely unsaved (via CoinChangeTracker),
- *     3. wait one second in case more typing follows (debounce),
- *     4. PUT only the changed fields, and
- *     5. record success / report failure.
- *
- *   ...and, since the draft fix, the one-off FIRST save of a brand new row:
- *     0. if this coin has never reached the database, do not PUT anything.
- *        Just repaint, and POST the whole record the moment it becomes good
- *        enough to save. See coin-draft-registry.ts for the state machine.
- *
- * WHY IT IS ITS OWN FILE
- *   This is the one flow in the app where a mistake silently loses the user's
- *   data, so it deserves to be readable on a single screen without the CRUD,
- *   lookup and hydration code around it.
- *
- * It owns no state of its own: the coin list lives in a signal owned by
- * InventoryService, and all save bookkeeping lives in CoinChangeTracker and
- * CoinDraftRegistry.
+  * The "user edited a field" path:
+  *   0. if the coin has never reached the database, don't PUT: repaint, and POST
+  *      the whole record once it qualifies (see coin-draft-registry.ts);
+  *   1. paint the new value immediately (optimistic update);
+  *   2. work out which fields are unsaved (CoinChangeTracker);
+  *   3. wait one second for more typing (debounce);
+  *   4. PUT only the changed fields;
+  *   5. record success or report failure.
+  * Owns no state: the coin list is InventoryService's signal, and save
+  * bookkeeping lives in CoinChangeTracker and CoinDraftRegistry.
   */
 
-/** How long to wait after the last keystroke before writing to the server. */
+/** Delay after the last keystroke before writing to the server. */
 const SAVE_DEBOUNCE_MS = 1000;
 
 export class CoinEditor {
   constructor(
-    /** The live, on-screen coin list (shared with InventoryService). */
+    /** The on-screen coin list (shared with InventoryService). */
     private readonly inventory: WritableSignal<CoinRecord[]>,
     private readonly tracker: CoinChangeTracker,
-    /** Which coins have never reached the database. See its file header. */
+    /** Which coins have never reached the database. */
     private readonly drafts: CoinDraftRegistry,
     private readonly apiService: ApiService,
     private readonly logger: LoggingService,
@@ -52,28 +39,20 @@ export class CoinEditor {
   ) {}
 
   /**
-   * Apply an edit to a coin: update the screen immediately, then save to the
-   * server one second later.
+   * Applies an edit: updates the screen at once and saves a second later.
    *
-   * There are two save routes, and picking the wrong one is how data gets
-   * lost, so the choice is made first and explicitly:
+   *   - Coin exists on the server: debounced PUT of only the changed fields. The
+   *     body is built from the dirty-field set, never the full record, so
+   *     untouched fields can't be overwritten.
+   *   - Coin is a local draft: no row to update; repaint, and once it qualifies
+   *     POST the whole record once (a full body is correct only when creating).
    *
-   *   * The coin already exists on the server  -> debounced PUT of ONLY the
-   *     changed fields. A previous refactor sent whole records and wiped out
-   *     data the user had not touched, so this is a hard rule: the PUT body
-   *     is built from the dirty-field set, never from the full record.
-   *
-   *   * The coin is still a local draft        -> no PUT is possible (there
-   *     is no row to update), so we repaint and, once it qualifies, POST the
-   *     whole record once. A full body is correct here and only here: we are
-   *     creating the record, not patching it.
-   *
-   * @param coinId - id of the coin being edited
-   * @param updates - the field(s) the user changed (keys set to `undefined`
-   *                  are ignored — they mean "no opinion", not "clear this")
+   * @param coinId id of the coin being edited
+   * @param updates the changed field(s); keys set to `undefined` are ignored
+   *                ("no opinion", not "clear")
    */
   updateCoin(coinId: string, updates: Partial<CoinRecord>): void {
-    // Strip out `undefined` values up front.
+    // Drop `undefined` values.
     const proposed = Object.fromEntries(
       Object.entries(updates).filter(([, value]) => value !== undefined)
     ) as Partial<CoinRecord>;
@@ -83,92 +62,61 @@ export class CoinEditor {
     const liveCoin = this.inventory().find(c => c.id === coinId);
 
     if (!liveCoin) {
-      // The coin isn't in the local list (shouldn't normally happen). There is
-      // nothing to diff or repaint, so just forward the request as-is.
+      // Coin not in the local list (unusual): nothing to diff or repaint; forward as-is.
       this.sendCoinUpdate(coinId, proposed);
       return;
     }
 
-    // ---- 0. Draft route -----------------------------------------------------
-    // Checked BEFORE we touch CoinChangeTracker. The tracker's whole job is to
-    // remember what the server confirmed; letting a coin the server has never
-    // seen into its maps would seed a bogus "confirmed" baseline of empty
-    // strings, and the first real save would then diff against fiction.
+    // 0. Draft route. Checked before touching CoinChangeTracker, which must only
+    // hold server-confirmed state; a draft would seed a false baseline.
     if (this.drafts.isUnsaved(coinId)) {
       this.updateDraftCoin(coinId, liveCoin, proposed);
       return;
     }
 
-    // ---- The normal route, for coins that exist in the database ------------
+    // Coins that exist in the database
 
-    // Take a snapshot of the server-confirmed state BEFORE we optimistically
-    // overwrite the local record — otherwise the snapshot would capture the
-    // unsaved value and we would be back to the original bug.
+    // Snapshot the confirmed state before the optimistic overwrite, or the snapshot
+    // would capture the unsaved value.
     const confirmed = this.tracker.confirmedSnapshot(coinId);
 
-    // ---- 1. Optimistic UI update -------------------------------------------
+    // 1. Optimistic UI update
     this.paintOptimistically(coinId, liveCoin, proposed);
 
-    // ---- 2. Recompute the dirty flags against the CONFIRMED state ----------
-    // A field is dirty when the new value differs from what the server last
-    // acknowledged. Re-typing a value that failed to save therefore stays
-    // dirty and WILL be sent again.
+    // 2. Dirty flags against the confirmed state: re-typing a value that failed to
+    // save stays dirty and is sent again.
     const dirtyCount = this.tracker.recordEdit(coinId, proposed, confirmed);
 
-    // ---- 3. Nothing unsaved? Cancel any queued write and stop. -------------
+    // 3. Nothing unsaved: cancel any queued write.
     if (dirtyCount === 0) {
       this.tracker.cancelPendingWrite(coinId);
       return;
     }
 
-    // ---- 4. Debounce the write by 1 second ---------------------------------
+    // 4. Debounce the write by 1 second
     this.tracker.schedulePendingWrite(coinId, SAVE_DEBOUNCE_MS, () => this.flushCoinUpdate(coinId));
   }
 
   /**
-   * Apply an edit and write it RIGHT NOW, resolving when the server has
-   * accepted it.
+   * Applies an edit and writes it now, resolving when the server accepts it.
    *
-   * ---- WHY THIS EXISTS ALONGSIDE `updateCoin` ----
-   * `updateCoin` above is built for a human typing: it repaints instantly and
-   * waits a second in case more keystrokes follow, so "Quarter" produces one
-   * PUT rather than seven. That debounce is kept in a Map keyed by coin id, so
-   * it is PER COIN, not global.
+   * `updateCoin` debounces per coin, which suits typing but would fire every PUT
+   * at once from a bulk loop. This does the same minimal-diff write without the
+   * timer, so a caller can await each coin in turn.
    *
-   * That is exactly right for typing and exactly wrong for a bulk maintenance
-   * pass. A loop calling `updateCoin` for four hundred coins would set four
-   * hundred independent timers inside one tick; nothing would be coalesced and
-   * nothing would be lost, but one second later all four hundred PUTs would
-   * leave at once. There would be no way to show progress, no way to say which
-   * ones failed, and a corporate network and a SQL Server would both be
-   * entitled to object.
+   * It does not cancel a debounced write already queued by the user's typing
+   * (cancelling would lose what they typed). When that timer fires, these fields
+   * are no longer dirty, so at worst identical values are resent: a duplicate,
+   * never a loss.
    *
-   * So this method does the same minimal-diff write with the timer taken out:
-   * paint, record, send, await. A caller can then loop over it sequentially and
-   * know that each coin was written exactly once before the next one starts.
+   * No toast on failure (a bulk caller would get one per coin); it rejects so the
+   * caller can summarise. Dirty flags are left as the debounced path leaves them.
    *
-   * ---- WHAT IT DELIBERATELY DOES NOT DO ----
-   * It does NOT cancel a debounced write that the user's typing may already
-   * have queued for this coin. Cancelling would be the tidier-looking choice
-   * and it would throw away whatever they just typed. Letting that timer fire
-   * on its own is harmless: by the time it does, our fields are no longer
-   * marked dirty, so it sends only the user's own fields. The worst case — the
-   * timer firing while our request is still in flight — resends the identical
-   * alloy values, which is a duplicate, not a loss. Between "might duplicate a
-   * write" and "might lose a write", this app always picks the former.
-   *
-   * It also does NOT show a toast on failure. A bulk caller would get one
-   * sticky error per failed coin; it rejects instead so the caller can report
-   * a single summary. The dirty flags are left in place exactly as the
-   * debounced path leaves them, so the user re-typing the value still retries.
-   *
-   * @param coinId - id of the coin to update
-   * @param updates - the field(s) to write. Keys set to `undefined` are
-   *                  ignored, and only fields that actually differ from the
-   *                  server-confirmed state are sent.
-   * @returns the payload that was sent (empty when there was nothing to do)
-   * @throws when the coin is a local draft (no server row to update), or when
-   *   the PUT itself fails
+   * @param coinId id of the coin to update
+   * @param updates fields to write; `undefined` keys ignored, and only fields
+   *                differing from the confirmed state are sent
+   * @returns the payload sent (empty when nothing to do)
+   * @throws when the coin is a local draft (no server row), or the PUT fails
    */
   async updateCoinNow(coinId: string, updates: Partial<CoinRecord>): Promise<Partial<CoinRecord>> {
     const proposed = Object.fromEntries(
@@ -182,27 +130,21 @@ export class CoinEditor {
       throw new Error(`Coin ${coinId} is not in the inventory`);
     }
 
-    // A draft has never reached the database, so there is no row to PUT to and
-    // a request would 404. Creating it instead is not this method's job (and
-    // would be a surprising thing for a maintenance pass to do), so this is an
-    // error the caller is expected to avoid by filtering drafts out first.
+    // A draft has no row to PUT to (it would 404); callers should filter drafts out.
     if (this.drafts.isUnsaved(coinId)) {
       throw new Error(`Coin ${coinId} has not been saved to the database yet`);
     }
 
-    // Same order as the debounced path: snapshot what the server confirmed
-    // BEFORE repainting, or the snapshot captures the new value and the diff
-    // comes out empty.
+    // Snapshot the confirmed state before repainting, as in the debounced path.
     const confirmed = this.tracker.confirmedSnapshot(coinId);
     this.paintOptimistically(coinId, liveCoin, proposed);
     this.tracker.recordEdit(coinId, proposed, confirmed);
 
-    // Build the body from `proposed` and NOT from the tracker's dirty set.
-    // The dirty set may also hold fields the user is midway through typing,
-    // and a maintenance pass must send its own fields and only its own.
+    // Built from `proposed`, not the dirty set, which may include fields the user is
+    // still typing.
     const payload: Record<string, unknown> = {};
     for (const key of Object.keys(proposed) as (keyof CoinRecord)[]) {
-      // Skip anything the server already holds — no point in a no-op write.
+      // Skip what the server already holds.
       if (confirmed && valuesEqual(confirmed[key], proposed[key])) continue;
       payload[key] = proposed[key];
     }
@@ -213,8 +155,7 @@ export class CoinEditor {
     try {
       await firstValueFrom(this.apiService.updateCoin(coinId, this.withSourcePaths(body)));
     } catch (error) {
-      // Log it here (so the app log records every failure individually) but
-      // re-throw rather than toast, and leave the dirty flags alone.
+      // Log each failure, then rethrow rather than toast; dirty flags stay.
       this.logger.error(`Failed to update coin ${coinId} in database`, describeHttpError(error));
       throw error instanceof Error ? error : new Error(describeHttpError(error));
     }
@@ -223,27 +164,18 @@ export class CoinEditor {
     return body;
   }
 
-  /* ---- DRAFT COINS — the first-ever save ---- */
+  /* Draft coins: the first save */
 
   /**
-   * Handle an edit to a coin that has never reached the database.
+   * Handles an edit to a coin that has never reached the database. The screen
+   * always updates; what is sent depends on the draft state:
    *
-   * The screen always updates. Whether anything is SENT depends on the draft
-   * state machine:
-   *
-   *   'creating'  a POST is already in flight -> send nothing. Firing a second
-   *               POST would duplicate the coin, and a PUT would race an id
-   *               the server has not acknowledged. Whatever is typed now is
-   *               reconciled by `onDraftCreated` when that POST lands.
-   *
-   *   'draft', still short of 2-of-3
-   *               -> send nothing, and cancel any create an earlier keystroke
-   *               queued (the user may have just cleared a field again).
-   *
-   *   'draft', now meeting 2-of-3
-   *               -> queue the create, debounced by the same 1s the normal
-   *               save path uses so that typing "Quarter" produces one POST
-   *               rather than seven.
+   *   'creating'  a POST is in flight: send nothing (a second POST would
+   *               duplicate the coin). `onDraftCreated` reconciles later edits.
+   *   'draft', short of 2-of-3
+   *               send nothing and cancel any queued create.
+   *   'draft', meeting 2-of-3
+   *               queue the create, debounced 1s like the normal save.
    */
   private updateDraftCoin(coinId: string, liveCoin: CoinRecord, proposed: Partial<CoinRecord>): void {
     const painted = this.paintOptimistically(coinId, liveCoin, proposed);
@@ -259,84 +191,52 @@ export class CoinEditor {
   }
 
   /**
-   * The debounce timer fired on a qualifying draft: create it for real.
+   * The debounce fired on a qualifying draft: create it. Everything is re-checked
+   * because a second of typing (or a delete) may have happened.
    *
-   * Everything is re-checked here rather than trusted from when the timer was
-   * scheduled, because a full second of typing (or a delete) can happen in
-   * between.
-   *
-   * ---- DO NOT RUN THE ALLOY / WEIGHT INFERENCE HERE ----
-   * The inference exists (services/pm-autofill.ts, triggered from
-   * components/coin-editor-form/coin-editor-form.ts) but it must not be
-   * invoked from this method, for two reasons:
-   *
-   *   1. THIS METHOD RUNS ONCE, on a coin's first save, and never again. A
-   *      user who typed "1879 $1" and later corrects it to "$20" would be
-   *      left holding an inferred weight that is now wrong and that they
-   *      never typed. pm-autofill is re-run by every later change to a key
-   *      field, so no stale inference sits unchallenged.
-   *
-   *   2. IT WOULD WRITE INTO FIELDS THE USER MAY BE INSIDE. This method fires
-   *      off a DEBOUNCE TIMER: one second after a keystroke is, by
-   *      construction, a moment the user did not choose and may well be
-   *      typing through. (This project has already destroyed a text box
-   *      mid-keystroke that way — see the header of
-   *      components/coin-editor-form/custom-option-mode.ts.) pm-autofill is
-   *      triggered by the native `change` event of the key control instead —
-   *      a commit, after the caret has left the box — never by a clock, and
-   *      it refuses to write back to the field that triggered it.
-   *
-   * There is also nothing to add: by the time the user has typed enough for a
-   * draft to qualify for saving, the key fields have each already fired their
-   * own commit event and the autofill has already run.
+   * Don't run the alloy/weight inference here (services/pm-autofill.ts). This runs
+   * once, so a later key-field change would leave a stale inferred value; and it
+   * fires from a timer, possibly while the user is typing (see
+   * components/coin-editor-form/custom-option-mode.ts). pm-autofill runs on each
+   * committed `change` event and has already run by the time a draft qualifies.
    */
   private createDraftCoin(coinId: string): void {
     const liveCoin = this.inventory().find(c => c.id === coinId);
     if (!liveCoin) {
-      // The row was deleted while the timer was pending. Nothing was ever
-      // sent, so there is nothing to clean up on the server.
+      // Deleted while the timer was pending; nothing was sent.
       this.drafts.clear(coinId);
       return;
     }
 
-    // Not a draft any more (already created, or a create is in flight).
+    // No longer a draft (created, or a create is in flight).
     if (this.drafts.stateOf(coinId) !== 'draft') return;
 
-    // The last keystroke before the timer fired may have emptied a field.
+    // The last keystroke may have emptied a field.
     if (!this.drafts.qualifiesForSave(liveCoin)) return;
 
-    // Snapshot exactly what we are about to send. This object — not whatever
-    // the screen shows a moment later — is what the server will hold, so it
-    // is what the change tracker must be seeded with on success.
+    // Snapshot exactly what is sent; this seeds the change tracker on success.
     const record: CoinRecord = { ...liveCoin };
 
     this.drafts.markCreating(coinId);
 
-    // `withSourcePaths` keeps any known original-file path on the images. For a
-    // brand new coin there usually is none, but the create path funnels through
-    // the same helper so the two writes can never disagree.
+    // Keeps known original-file paths on the images, as the update path does.
     firstValueFrom(this.apiService.createCoin(this.withSourcePaths(record)))
       .then(() => this.onDraftCreated(coinId, record))
       .catch((error) => this.onDraftCreateFailed(coinId, error));
   }
 
   /**
-   * The create succeeded. The coin graduates: from here on it is an ordinary
-   * server-backed record and every later edit takes the normal debounced,
+   * The create succeeded: from now on the coin takes the normal debounced,
    * minimal-diff PUT route.
    */
   private onDraftCreated(coinId: string, record: CoinRecord): void {
-    // Seed the change tracker with EXACTLY what we POSTed, so the very next
-    // edit diffs against what the server really holds. Do this before
-    // clearing the draft flag so no edit can slip through in between.
+    // Seed the tracker with exactly what was POSTed, before clearing the draft flag,
+    // so the next edit diffs against what the server holds.
     this.tracker.seedConfirmed(record);
     this.drafts.clear(coinId);
 
-    // The row only starts rendering an <img> now that it is server-backed,
-    // and the POST carried the photographs, so the first request will
-    // succeed. The bump is here anyway so that a coin which somehow picked
-    // up a cached 404 while it was still a draft gets a fresh URL rather
-    // than a permanent broken thumbnail.
+    // The row only renders an <img> once server-backed; the bump avoids a cached 404
+    // from the draft period leaving a broken thumbnail.
     if (coinPhotoCount(record) > 0) coinThumbnailRevisions.bump(coinId);
 
     this.logger.info(`Created coin ${coinId} in database`);
@@ -344,17 +244,14 @@ export class CoinEditor {
     const liveCoin = this.inventory().find(c => c.id === coinId);
 
     if (!liveCoin) {
-      // The user deleted the row while the create was in flight. deleteCoin()
-      // skipped the server call (the coin was still unsaved at the time), so
-      // the row we just created would be orphaned — remove it now.
+      // Deleted while the create was in flight (deleteCoin skipped the server), so
+      // remove the newly created row.
       this.deleteOrphanedCoin(coinId);
       return;
     }
 
-    // The user may have kept typing while the POST was in flight. Those
-    // keystrokes were painted on screen but deliberately not sent. Now that
-    // the row exists, replay the difference through the normal edit path,
-    // which produces a minimal PUT carrying only those fields.
+    // Edits typed while the POST was in flight were painted but not sent; replay
+    // the difference through the normal path as a minimal PUT.
     const drift: Record<string, unknown> = {};
     for (const key of Object.keys(record) as (keyof CoinRecord)[]) {
       if (!valuesEqual(liveCoin[key], record[key])) drift[key] = liveCoin[key];
@@ -365,32 +262,23 @@ export class CoinEditor {
   }
 
   /**
-   * The create failed (server down, duplicate id, validation).
-   *
-   * The coin goes back to being a DRAFT. That is the important part: marking
-   * it saved would mean the next edit PUTs to a row that does not exist and
-   * the coin is lost forever. As a draft, the next qualifying edit simply
-   * tries the POST again — and nothing was written to the change tracker, so
-   * there is no phantom "confirmed" state to unwind.
+   * The create failed (server down, duplicate id, validation). The coin goes back
+   * to being a draft, so the next qualifying edit retries the POST. Marking it
+   * saved would make later edits PUT to a row that doesn't exist.
    */
   private onDraftCreateFailed(coinId: string, error: unknown): void {
     const message = describeHttpError(error);
     this.logger.error(`Failed to create coin ${coinId} in database`, message);
 
-    // The user deleted the row while the create was in flight. The failure no
-    // longer matters to anyone — don't resurrect its draft state and don't
-    // nag about a row that is gone.
+    // Deleted while the create was in flight: nothing to restore or report.
     if (!this.inventory().some(c => c.id === coinId)) return;
 
-    // Record the reason BEFORE going back to 'draft'. The toast below is
-    // shown once and then gone; the row itself has to keep saying that it is
-    // not in the database and why, because "the row looked saved" is the
-    // whole of the bug this guards. Recording first also means the state
-    // change that follows is what re-renders the chip's tooltip.
+    // Record the reason before returning to 'draft': the row's chip keeps showing
+    // why it isn't saved after the toast is gone, and the state change re-renders it.
     this.drafts.recordCreateFailure(coinId, message);
     this.drafts.markDraft(coinId);
 
-    // One toast per coin until it saves successfully.
+    // One toast per coin until it saves.
     if (!this.drafts.shouldNotifyCreateFailure(coinId)) return;
 
     this.notificationService.showError(
@@ -399,7 +287,7 @@ export class CoinEditor {
     );
   }
 
-  /** Best-effort cleanup for a row created after the user had deleted it. */
+  /** Best-effort cleanup for a row created after the user deleted it. */
   private deleteOrphanedCoin(coinId: string): void {
     firstValueFrom(this.apiService.deleteCoin(coinId))
       .then(() => this.logger.info(`Removed coin ${coinId}: deleted while its create was in flight`))
@@ -409,14 +297,11 @@ export class CoinEditor {
       ));
   }
 
-  /* ---- Shared internals ---- */
+  /* Shared internals */
 
   /**
-   * Write the proposed values into the on-screen list and return the coin as
-   * it now looks.
-   *
-   * Only touches the signal if something visible actually changes, so we
-   * don't trigger needless re-renders.
+   * Writes the proposed values into the on-screen list and returns the coin as it
+   * now looks; only updates the signal if something visibly changes.
    */
   private paintOptimistically(
     coinId: string,
@@ -437,10 +322,7 @@ export class CoinEditor {
     return painted;
   }
 
-  /**
-   * Fire the debounced PUT for a coin, using the current value of every
-   * dirty field. Called by the debounce timer.
-   */
+  /** Sends the debounced PUT with the current value of every dirty field. */
   private flushCoinUpdate(coinId: string): void {
     const payload = this.tracker.buildDirtyPayload(coinId);
     if (Object.keys(payload).length === 0) return;
@@ -448,7 +330,7 @@ export class CoinEditor {
     this.sendCoinUpdate(coinId, payload);
   }
 
-  /** Send a partial-update PUT and wire up the success/failure bookkeeping. */
+  /** Sends a partial-update PUT with success/failure bookkeeping. */
   private sendCoinUpdate(coinId: string, payload: Partial<CoinRecord>): void {
     firstValueFrom(this.apiService.updateCoin(coinId, this.withSourcePaths(payload)))
       .then(() => this.onCoinUpdateSaved(coinId, payload))
@@ -456,39 +338,21 @@ export class CoinEditor {
   }
 
   /**
-   * Attach each image's ORIGINAL FILE PATH to an outgoing `imagePaths` array.
+   * Attaches known original-file paths to an outgoing `imagePaths` array.
    *
-   * WHY THIS EXISTS — and why it is a fix, not a feature
-   * ----------------------------------------------------
-   * `PUT /api/coins/:id` REPLACES a coin's image set: it deletes the rows and
-   * re-inserts whatever `imagePaths` contains. The backend accepts two forms
-   * for each entry (see server/routes/coins/image-payload.ts) — a bare base64
-   * string, which stores `SourcePath NULL`, or `{ imageData, sourcePath }`.
-   *
-   * The app keeps `imagePaths` as plain strings, because that array is bound
-   * straight to `<img [src]>` in several components. So without this step,
-   * every operation that sends the array — re-ordering a photo, deleting one,
-   * the batch import appending more — would rewrite every OTHER image on the
-   * coin as a bare string and silently erase its recorded path. Doing the
-   * conversion here, in the single place all of those writes funnel through,
-   * means a path survives all of them once it is known.
-   *
-   * ONLY the `imagePaths` key is ever touched. The payload still carries
-   * exactly the fields the change tracker marked dirty and nothing else — the
-   * partial-update guarantee is about WHICH fields are sent, and that is
-   * unchanged here.
-   *
-   * When no path is known for any of the images, the payload is returned
-   * completely untouched, so the plain-string form the server has always
-   * received stays the normal case.
+   * `PUT /api/coins/:id` replaces the coin's image set; each entry can be a bare
+   * base64 string (stores `SourcePath NULL`) or `{ imageData, sourcePath }` (see
+   * server/routes/coins/image-payload.ts). The app keeps plain strings (bound to
+   * `<img [src]>`), so this converts them in the one place all writes pass through.
+   * Only `imagePaths` is touched; the set of fields sent is unchanged. With no
+   * known paths the payload is returned untouched.
    */
   private withSourcePaths(payload: Partial<CoinRecord>): Partial<CoinRecord> {
     const imagePaths = payload.imagePaths;
     if (!Array.isArray(imagePaths) || imagePaths.length === 0) return payload;
     if (!imageSourcePaths.hasAnyPathFor(imagePaths)) return payload;
 
-    // The cast is the one place the two shapes meet. `CoinRecord.imagePaths` is
-    // `string[]` for the app's own use; the wire format is deliberately wider.
+    // `CoinRecord.imagePaths` is `string[]` in the app; the wire format is wider.
     return {
       ...payload,
       imagePaths: imageSourcePaths.enrich(imagePaths) as unknown as string[]
@@ -499,31 +363,23 @@ export class CoinEditor {
   private onCoinUpdateSaved(coinId: string, payload: Partial<CoinRecord>): void {
     this.tracker.markSaved(coinId, payload);
 
-    // THE GRID THUMBNAIL. This line, and not the optimistic paint above, is
-    // the moment the server actually has the new photographs — so it is the
-    // only correct moment to change the thumbnail URL. Bumping at paint time
-    // would hand the browser a new URL a second before there is anything
-    // behind it, which is the bug in a different costume. See
-    // coin-thumbnail-revision.ts.
+    // Change the thumbnail URL only now, when the server has the new photos;
+    // bumping at paint time would request it too early (see coin-thumbnail-revision.ts).
     if (writeTouchesImages(payload)) coinThumbnailRevisions.bump(coinId);
 
     this.logger.info(`Updated coin ${coinId} in database (${Object.keys(payload).join(', ')})`);
   }
 
   /**
-   * The server rejected (or never received) the change.
-   *
-   * We deliberately do NOT clear the dirty flags and do NOT roll the screen
-   * back — the user keeps seeing what they typed, and because the confirmed
-   * snapshot still holds the old value, the very next edit (even re-entering
-   * the identical value) will produce a fresh request.
+   * The server rejected (or never got) the change. Dirty flags stay and the screen
+   * isn't rolled back; since the confirmed snapshot still holds the old value, the
+   * next edit (even re-entering the same value) sends a fresh request.
    */
   private onCoinUpdateFailed(coinId: string, error: unknown): void {
     const message = describeHttpError(error);
     this.logger.error(`Failed to update coin ${coinId} in database`, message);
 
-    // One toast per coin until it saves successfully again — otherwise every
-    // keystroke during an outage would stack up another sticky error.
+    // One toast per coin until it saves again, so an outage doesn't stack errors.
     if (!this.tracker.shouldNotifySaveFailure(coinId)) return;
 
     this.notificationService.showError(
@@ -532,7 +388,7 @@ export class CoinEditor {
     );
   }
 
-  /** Short human label for a coin, used in error messages. */
+  /** Short label for a coin, used in error messages. */
   private describeCoin(coinId: string): string {
     const coin = this.inventory().find(c => c.id === coinId);
     if (!coin) return `coin ${coinId}`;

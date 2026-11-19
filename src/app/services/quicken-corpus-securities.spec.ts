@@ -1,55 +1,21 @@
  /*
- * quicken-corpus-securities.spec.ts
- *
- * WHAT THIS FILE PROVES
- *   That the QIF importer works against A WHOLE ACCOUNT, security name by
- *   security name, rather than against a handful of tidy examples. Every
- *   string in the table below is one of the 44 distinct `Y` (security name)
- *   lines of `testing/qif-corpus/GoldCoins.QIF`, copied without tidying --
- *   and the corpus file holds exactly those 44 and nothing else.
- *
- *   THE AWKWARDNESS IS THE POINT, AND IT IS NOT DECORATION. Every one of
- *   these 44 is the same shape as a security name in the owner's own export,
- *   because that export is where the shapes came from: the years, mints,
- *   grades and grading companies were permuted away one attribute at a time,
- *   and nothing else about the strings was touched (see the header of
- *   `testing/qif-corpus/generate-corpus.mjs`). So the missing space in
- *   "1898 $20 NGC/CAC MS64", the "G$" prefixes, the bare "1874 $5" with no
- *   grade, the "Open 3" variety text and the lone non-US entry are all here
- *   for the same reason they were there: each of them broke something.
- *
- *   Nothing here should be "cleaned up", and nothing here should be
- *   REGENERATED CARELESSLY: if you re-run the corpus generator, this table
- *   and the `.QIF` have to move together or the file is testing strings the
- *   importer will never meet.
- *
- *   This follows the precedent set by
- *   `services/image-matching/real-filenames.spec.ts`, which does the same
- *   thing for photo filenames: the other spec files cover the ALGORITHM, this
- *   one covers a whole file's worth of awkward input.
- *
- * ---- THE TWO FAILURES THIS FILE GUARDS AGAINST ----
- *   1. Metal / Composition / PM % / PM weight not filled in on import. Every
- *      row below asserts them, because getting an alloy wrong is a silent
- *      error -- it produces a plausible-looking but wrong melt value.
- *
- *   2. "1967 Peru 100 Soles - PCGS MS65" not importing at all. With the
- *      country hard-coded to "United States" and no idea what a Sol is, the
- *      record carries a Year and nothing else, fails the 2-of-3 completeness
- *      rule, and lands in the exceptions list.
- *
- * `expectedCoinType: ''` is never an oversight. It means the parser is
- * SUPPOSED to leave Coin Type blank, which is an accepted outcome: the coin
- * type is left blank when nothing in the name can settle it.
+  * Runs the QIF importer over a whole account: the 44 distinct `Y` lines of
+  * testing/qif-corpus/GoldCoins.QIF, copied verbatim. The shapes come from a real
+  * export (see testing/qif-corpus/generate-corpus.mjs), so quirks such as the
+  * missing hyphen in "1898 $20 NGC/CAC MS64", "G$" prefixes, the bare "1874 $5",
+  * "Open 3" and the one non-US entry each matter. Don't tidy them; if the corpus
+  * is regenerated, update this table with it. (Same approach as
+  * image-matching/real-filenames.spec.ts.)
+  *
+  * Guards against: alloy fields not filled on import, and "1967 Peru 100 Soles"
+  * failing the 2-of-3 rule. `expectedCoinType: ''` means Coin Type is correctly
+  * left blank.
   */
 
 import { describe, expect, it } from 'vitest';
 import { QuickenImportService } from './quicken-import.service';
 
-/**
- * Runs one real security name through the FULL parse -- not a private helper
- * -- so these assertions cover the same code path the import button uses.
- */
+/** Runs one security name through the full parse, as the import button does. */
 function parseSecurity(securityName: string) {
   const service = new QuickenImportService();
   const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY${securityName}\nT100.00\n^\n`;
@@ -57,7 +23,7 @@ function parseSecurity(securityName: string) {
   return result;
 }
 
-/** The parsed record, asserting it was actually importable. */
+/** The parsed record, asserting it was importable. */
 function importedCoin(securityName: string) {
   const result = parseSecurity(securityName);
   expect(
@@ -69,39 +35,28 @@ function importedCoin(securityName: string) {
 }
 
 interface SecurityCase {
-  /** One of the 44 security names in qif-corpus/GoldCoins.QIF. Do not edit
-   * without regenerating the corpus -- the two have to agree. */
+  /** One of the 44 names in qif-corpus/GoldCoins.QIF; keep in step with the corpus. */
   name: string;
   year: string;
   denomination: string;
-  /** '' means "correctly left blank" -- see the header. */
+  /** '' means correctly left blank. */
   coinType: string;
   country: string;
   metal: string;
   pmPercent: number;
-  /** Weight of the PURE gold, in grams. */
+  /** Weight of the pure gold, in grams. */
   pmWeightGrams: number;
   /**
-   * Weight of the WHOLE COIN, in grams — alloy included. Always strictly
-   * larger than `pmWeightGrams`, and the two must agree with `pmPercent`;
-   * both of those are asserted below, on every row.
+   * Weight of the whole coin in grams; must exceed `pmWeightGrams` and agree with
+   * `pmPercent` (both checked on every row).
    */
   grossWeightGrams: number;
 }
 
-/* ---------------------------------------------------------------------------
- * ALL 44 SECURITIES IN qif-corpus/GoldCoins.QIF
- *
- * Grouped by denomination so the year bands in pm-reference.ts are easy to
- * check by eye. Every one of them is gold except where noted; this is a gold
- * collection.
- * ------------------------------------------------------------------------- */
+/* All 44 securities, grouped by denomination to match pm-reference.ts's year bands. */
 const GOLD_SECURITIES: SecurityCase[] = [
-  // --- Gold Dollar ($1 gold, 1849-1889) ----------------------------------
-  // THE COLLISION THAT GETS THESE WRONG: "$1" in these years is both a
-  // 26.73 g SILVER dollar and a 1.67 g GOLD dollar. Read as the silver one,
-  // all three import as "Liberty Seated" with 24.06 g of silver attached.
-  // The word "Gold" and the "G$" shorthand are what settle it.
+  // Gold Dollar ($1 gold, 1849-1889). "$1" in these years is also the silver
+  // dollar; "Gold" and "G$" settle it.
   {
     name: '1850-S $1 Gold - ANACS XF40',
     year: '1850', denomination: '$1', coinType: 'Liberty Head', country: 'United States',
@@ -109,9 +64,8 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 1.672
   },
   {
-    // 1856 is a Gold Dollar TRANSITION year (Type 1 / Type 2 / Type 3 all sit
-    // in 1854-1856), so Coin Type is deliberately blank. Year + Denomination
-    // still satisfy the 2-of-3 rule, so the coin imports anyway.
+    // A Gold Dollar transition year (types overlap 1854-1856), so Coin Type is
+    // blank; Year + Denomination still pass the 2-of-3 rule.
     name: '1856 G$1 - NGC/CAC AU53',
     year: '1856', denomination: '$1', coinType: '', country: 'United States',
     metal: 'Gold', pmPercent: 90, pmWeightGrams: 1.50,
@@ -124,7 +78,7 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 1.672
   },
 
-  // --- Quarter Eagle ($2.50) ---------------------------------------------
+  // Quarter Eagle ($2.50)
   {
     name: '1873 Open 3 G$2.50 - ANACS AU55',
     year: '1873', denomination: '$2.50', coinType: 'Coronet', country: 'United States',
@@ -150,7 +104,7 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 4.18
   },
 
-  // --- Three Dollar ($3, 1854-1889, one specification) --------------------
+  // Three Dollar ($3, 1854-1889, one specification)
   {
     name: '1854 G$3 - NGC/CAC AU53',
     year: '1854', denomination: '$3', coinType: 'Indian Princess', country: 'United States',
@@ -206,11 +160,9 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 5.015
   },
 
-  // --- Half Eagle ($5) ----------------------------------------------------
+  // Half Eagle ($5)
   {
-    // 1836 is a CLASSIC HEAD half eagle: the Act of 1834 cut the planchet and
-    // set the fineness to 0.8992, so this is the one coin in the account that
-    // is NOT 90% fine.
+    // A Classic Head half eagle (Act of 1834): 0.8992 fine, the one coin here not 90%.
     name: '1836 $5 - PCGS/CAC XF40',
     year: '1836', denomination: '$5', coinType: 'Classic Head', country: 'United States',
     metal: 'Gold', pmPercent: 89.92, pmWeightGrams: 7.52,
@@ -223,8 +175,7 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 8.359
   },
   {
-    // "PCI" is a grading company this parser does not know, which is fine --
-    // certCompany is not one of the three main details.
+    // "PCI" is an unknown grading company; certCompany isn't a main detail.
     name: '1893 $5 - PCI AU53',
     year: '1893', denomination: '$5', coinType: 'Coronet', country: 'United States',
     metal: 'Gold', pmPercent: 90, pmWeightGrams: 7.52,
@@ -273,7 +224,7 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 8.359
   },
 
-  // --- Eagle ($10) --------------------------------------------------------
+  // Eagle ($10)
   {
     name: '1899 $10 - ANACS MS62',
     year: '1899', denomination: '$10', coinType: 'Coronet', country: 'United States',
@@ -299,10 +250,9 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 16.718
   },
 
-  // --- Double Eagle ($20) -------------------------------------------------
+  // Double Eagle ($20)
   {
-    // NOTE the missing hyphen before "NGC" -- this one is written differently
-    // from every other row in the file and must still parse.
+    // No hyphen before "NGC", unlike every other row; must still parse.
     name: '1898 $20 NGC/CAC MS64',
     year: '1898', denomination: '$20', coinType: 'Coronet', country: 'United States',
     metal: 'Gold', pmPercent: 90, pmWeightGrams: 30.09,
@@ -381,11 +331,9 @@ const GOLD_SECURITIES: SecurityCase[] = [
     grossWeightGrams: 33.436
   },
 
-  // --- THE ONE NON-US COIN IN THE FILE ------------------------------------
+  // The one non-US coin in the file
   {
-    // A non-US record: country, denomination and alloy all come out of the
-    // name. Coin Type is blank because the Peruvian 100 Soles has no
-    // sub-type to infer.
+    // Country, denomination and alloy all come from the name; no sub-type to infer.
     name: '1967 Peru 100 Soles - PCGS MS65',
     year: '1967', denomination: '100 Soles', coinType: '', country: 'Peru',
     metal: 'Gold', pmPercent: 90, pmWeightGrams: 42.13,
@@ -411,8 +359,7 @@ describe('GoldCoins.QIF — every security name in the account', () => {
       it('fills in Metal, Composition, PM % and PM weight', () => {
         const coin = importedCoin(testCase.name);
         expect(coin.metalContent).toBe(testCase.metal);
-        // Composition is free text, but it must be present and must name the
-        // metal -- a blank Composition was exactly the reported defect.
+        // Composition must be present and name the metal.
         expect(coin.composition, 'composition should not be blank').toBeTruthy();
         expect(coin.composition?.toLowerCase()).toContain(testCase.metal.toLowerCase());
         expect(coin.pmPercent).toBeCloseTo(testCase.pmPercent, 2);
@@ -420,22 +367,17 @@ describe('GoldCoins.QIF — every security name in the account', () => {
       });
 
       it('fills in the coin\'s GROSS weight, in grams', () => {
-        /* THE FIFTH FIELD. `weight` is in GRAMS from migration 008 onward,
-         * the same unit as pmWeightGrams, so the two can be compared
-         * directly -- and must be, because confusing them is the mistake
-         * behind the melt-value bug in the README. */
+        /* `weight` (grams since migration 008) is compared with pmWeightGrams; they must
+         * not be confused. */
         const coin = importedCoin(testCase.name);
         expect(coin.weight, 'weight should not be blank').toBeDefined();
         expect(coin.weight).toBeCloseTo(testCase.grossWeightGrams, 3);
 
-        // The whole coin always outweighs the gold inside it. Trivially true
-        // and worth asserting: it is what fails loudly if the two fields are
-        // ever wired to each other's source.
+        // The whole coin outweighs its gold; fails if the two fields are swapped.
         expect(coin.weight!).toBeGreaterThan(coin.pmWeightGrams!);
 
-        // ...and the three numbers agree. Tolerance 0.01 g because
-        // pmWeightGrams is published rounded to two decimals -- see the long
-        // note on the same invariant in pm-reference.spec.ts.
+        // ...and all three agree, to 0.01 g (pmWeightGrams has two decimals; see
+        // pm-reference.spec.ts).
         expect(Math.abs(coin.weight! * (coin.pmPercent! / 100) - coin.pmWeightGrams!))
           .toBeLessThanOrEqual(0.01);
       });
@@ -443,30 +385,17 @@ describe('GoldCoins.QIF — every security name in the account', () => {
   }
 });
 
-/* ===========================================================================
- * THE FILL CENSUS — HOW MUCH OF A REAL ACCOUNT GETS FILLED IN
- * ---------------------------------------------------------------------------
- * Of the 44 distinct securities in the Gold Coins account, how many come out
- * of the import with each of the five fields populated? The answer is 44 of
- * 44 for all five, and this block is what keeps it that way.
- *
- * A census rather than a spot check on purpose: a change to pm-reference.ts
- * that quietly stopped matching, say, the Classic Head half eagle would drop
- * one coin out of the count, and the per-coin tests above would report it as
- * one failure among forty-four passes. This reports it as "43 of 44".
- *
- * It is driven off GOLD_SECURITIES rather than off the .QIF on disk, which
- * is the same choice `image-matching/real-filenames.spec.ts` makes: the data
- * is a verbatim copy of the file's `Y` lines, but it lives in the test so
- * this spec needs no filesystem and typechecks under tsconfig.spec.json
- * without Node types. `testing/qif-accounts.fixture.ts` is the one place
- * that opens the corpus, and it is the one place that needs `node`.
- * ======================================================================== */
+/*
+ * Fill census: all five fields populated for 44 of 44 securities. A census
+ * reports a regression as "43 of 44". Driven from GOLD_SECURITIES rather than
+ * the .QIF, so the spec needs no filesystem or Node types
+ * (testing/qif-accounts.fixture.ts is the one place that opens the corpus).
+ */
 describe('GoldCoins.QIF — fill rate across all 44 securities', () => {
-  /** The five fields, in the order the editor shows them. */
+  /** The five fields, in editor order. */
   const FIELDS = ['metalContent', 'composition', 'pmPercent', 'pmWeightGrams', 'weight'] as const;
 
-  /** Blank means undefined, null, '' or NaN. A 0 would count as filled. */
+  /** Blank means undefined, null, '' or NaN; 0 counts as filled. */
   function isFilled(value: unknown): boolean {
     if (value === undefined || value === null) return false;
     if (typeof value === 'string') return value.trim() !== '';
@@ -474,7 +403,7 @@ describe('GoldCoins.QIF — fill rate across all 44 securities', () => {
     return true;
   }
 
-  /** How many of the 44 come out with `field` populated. */
+  /** How many of the 44 have `field` populated. */
   function fillCount(field: (typeof FIELDS)[number]): number {
     return GOLD_SECURITIES.filter((testCase) => {
       const coin = importedCoin(testCase.name) as unknown as Record<string, unknown>;
@@ -490,8 +419,7 @@ describe('GoldCoins.QIF — fill rate across all 44 securities', () => {
   }
 
   it('fills every one of the five on every one of the 44', () => {
-    // The same claim stated once, so a regression names the coins rather than
-    // just a count.
+    // Names the incomplete coins rather than just a count.
     const incomplete: string[] = [];
     for (const testCase of GOLD_SECURITIES) {
       const coin = importedCoin(testCase.name) as unknown as Record<string, unknown>;
@@ -502,12 +430,7 @@ describe('GoldCoins.QIF — fill rate across all 44 securities', () => {
   });
 });
 
-/* ===========================================================================
- * THE PERU RECORD, IN DETAIL
- * ===========================================================================
- * The one non-US coin in the corpus, given its own section because every
- * part of it used to fail for a different reason.
- * ======================================================================== */
+/* The Peru 100 Soles in detail. */
 describe('the Peru 100 Soles — the record that would not import', () => {
   const PERU = '1967 Peru 100 Soles - PCGS MS65';
 
@@ -537,24 +460,20 @@ describe('the Peru 100 Soles — the record that would not import', () => {
   });
 
   it('fills in the gold content, matching the published AGW for the series', () => {
-    // The Peruvian 100 Soles carries 1.3544 troy ounces of gold.
+    // The Peruvian 100 Soles contains 1.3544 troy ounces of gold.
     const coin = importedCoin(PERU);
     expect(coin.metalContent).toBe('Gold');
     expect(coin.pmPercent).toBe(90);
     expect(coin.pmWeightGrams).toBeCloseTo(42.13, 2);
-    // 42.13 g / 31.1035 g-per-troy-oz = 1.3545 oz, i.e. the published figure.
+    // 42.13 g / 31.1035 g per troy oz = 1.3545 oz.
     expect((coin.pmWeightGrams ?? 0) / 31.1035).toBeCloseTo(1.3544, 3);
   });
 });
 
-/* ===========================================================================
- * THE COUNTRY / FOREIGN-DENOMINATION VOCABULARY, BEYOND THIS FILE
- * ===========================================================================
- * Peru is the only non-US coin in GoldCoins.QIF today, but world gold turns
- * up constantly, so the vocabulary is deliberately broader than one country.
- * These cases are NOT from the export -- they are written in the same style
- * as the real ones so that whatever turns up next already works.
- * ======================================================================== */
+/*
+ * Other non-US coins. Not from the export; written in the same style so other
+ * world coins work.
+ */
 describe('other non-US coins the vocabulary now handles', () => {
   const cases: { name: string; country: string; denomination: string }[] = [
     { name: '1947 Mexico 50 Pesos - NGC MS63',       country: 'Mexico',        denomination: '50 Pesos' },
@@ -577,25 +496,23 @@ describe('other non-US coins the vocabulary now handles', () => {
   }
 
   it('reads a currency unit that names its own country, with no country word', () => {
-    // "Soles" has exactly one issuer, so it proves Peru on its own.
+    // "Soles" has one issuer, so it proves Peru.
     const coin = importedCoin('1965 100 Soles - NGC MS64');
     expect(coin.country).toBe('Peru');
     expect(coin.denomination).toBe('100 Soles');
   });
 
   it('reads a SHARED currency unit as a denomination but NOT as a country', () => {
-    // France, Belgium, Switzerland and Luxembourg all struck 20 Francs. The
-    // denomination is certain; the country is not, so it is left at the
-    // collection's default rather than guessed.
+    // Several countries struck 20 Francs: the denomination is certain, the country
+    // stays at the default.
     const coin = importedCoin('1875 20 Francs - NGC MS63');
     expect(coin.denomination).toBe('20 Francs');
     expect(coin.country).toBe('United States'); // i.e. not guessed as France
   });
 
   it('does not report a non-US alloy it has no reference data for', () => {
-    // We can read the country and the denomination off a 20 Francs, but the
-    // table carries no French entry, so Metal and Composition stay blank
-    // rather than borrowing the US figures.
+    // Country and denomination are read, but there is no French table entry, so
+    // Metal and Composition stay blank.
     const coin = importedCoin('1913 France 20 Francs - PCGS MS64');
     expect(coin.metalContent).toBeUndefined();
     expect(coin.composition).toBeUndefined();
@@ -603,20 +520,15 @@ describe('other non-US coins the vocabulary now handles', () => {
   });
 });
 
-/* ===========================================================================
- * THINGS THAT MUST *NOT* BE READ AS COUNTRIES OR METALS
- * ===========================================================================
- * Every one of these is a US coin whose name contains a word that looks like
- * a country or a metal. Each was checked deliberately when the vocabulary was
- * built; see the comments in coin-countries.ts.
- * ======================================================================== */
+/*
+ * US coins whose names contain words that look like a country or metal (see
+ * coin-countries.ts).
+ */
 describe('false-positive guards', () => {
   /**
-   * Country is asserted on whichever list the record landed in. Two of these
-   * fixtures deliberately do NOT import -- the Panama-Pacific $50 has a face
-   * value the US denomination table does not carry, so it fails the 2-of-3
-   * rule and goes to the exceptions panel. Its COUNTRY still has to be right,
-   * because that is what this block is testing.
+   * Country from whichever list the record landed in. The Panama-Pacific $50
+   * doesn't import (its face value isn't in the US table, so it fails 2-of-3),
+   * but its country must still be right.
    */
   function parsedCountry(securityName: string): string {
     const result = parseSecurity(securityName);
@@ -640,9 +552,7 @@ describe('false-positive guards', () => {
   }
 
   it('does not read the CAC GOLD STICKER as the coin being gold', () => {
-    // "CAC Gold" is CAC's top sticker tier. It sits on silver coins all the
-    // time, and reading it as a metal would turn an 1875 twenty-cent piece
-    // (90% SILVER) into gold.
+    // "CAC Gold" is a sticker tier; this 1875 twenty-cent piece is silver.
     const coin = importedCoin('1875 20¢ - PCGS XF40 CAC Gold');
     expect(coin.denomination).toBe('20¢');
     expect(coin.metalContent).toBe('Silver');
@@ -655,8 +565,7 @@ describe('false-positive guards', () => {
   });
 
   it('does not mistake a four-digit year for a denomination quantity', () => {
-    // "1967" is bound to nothing, and a bare number means nothing -- the same
-    // rule denomination-units.ts enforces for photo filenames.
+    // A bare number ("1967") is not a denomination.
     const coin = importedCoin('1967 Peru 100 Soles - PCGS MS65');
     expect(coin.denomination).toBe('100 Soles');
     expect(coin.year).toBe('1967');

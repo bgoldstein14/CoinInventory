@@ -1,39 +1,21 @@
 /*
- * reference-data.model.ts — the wire shapes the maintenance screen reads
- * WHY A TYPES FILE AND NOT A DECLARATION BESIDE EACH USE
- * Two unrelated layers need these shapes — `services/api.service.ts`, which
- * fetches them, and the pure modules under `components/category-modal/`,
- * which group, count and validate them. Declaring them in the component
- * folder would make ApiService import from a component, which is backwards;
- * declaring them twice would make the HTTP layer and the screen disagree the
- * first time either is edited, silently, because TypeScript is structural
- * and two compatible-today shapes compile fine right up until they are not.
+ * Wire shapes for the reference-data maintenance screen. Shared by
+ * services/api.service.ts and components/category-modal/, so they live here
+ * rather than in a component folder.
  *
- * Everything here mirrors a table created by
- * migrations/011-add-issuers-and-denomination-links.sql. Where a column is
- * nullable, the field is `| null` rather than optional: `undefined` and
- * `null` would then be two spellings of the same absence and every reader
- * would have to handle both.
+ * Mirrors the tables from migrations/011-add-issuers-and-denomination-links.sql.
+ * Nullable columns are `| null`, not optional.
  */
 
 /**
- * `Issuers.Kind NVARCHAR(20)`.
- *
- * Three values, enumerated here rather than left as a string, because the UI
- * switches on them and the column has NO CHECK CONSTRAINT — SQL Server would
- * store 'imaginary' without complaint and the screen would then hold a row
- * it cannot group or label.
+ * `Issuers.Kind NVARCHAR(20)`. The column has no CHECK constraint, so the
+ * allowed values are enforced here.
  */
 export type IssuerKind = 'modern' | 'historical' | 'ancient';
 
 /**
- * The three kinds.
- *
- * NO LONGER THE ORDER A PICKER OFFERS THEM IN — there is no picker. The form
- * asks for the year span and DERIVES the kind from it
- * (components/category-modal/issuer-kind.ts), because `kind` drives no
- * behaviour and the span already carries it. This array is still the
- * column's domain, which is what validation and the parity spec need.
+ * The column's allowed values, for validation. The form derives the kind from
+ * the year span (components/category-modal/issuer-kind.ts) rather than offering a picker.
  */
 export const ISSUER_KINDS: readonly IssuerKind[] = ['modern', 'historical', 'ancient'] as const;
 
@@ -41,11 +23,8 @@ export const ISSUER_KINDS: readonly IssuerKind[] = ['modern', 'historical', 'anc
 export const ISSUER_NAME_MAX_LENGTH = 100;
 
 /**
- * One row of `Issuers` as `GET /api/issuers` returns it.
- *
- * The two counts are not columns. They are computed by the endpoint, and
- * they are the reason the maintenance screen can say what removing an issuer
- * would cost before it offers to do it (design §4.6).
+ * One row of `Issuers` as `GET /api/issuers` returns it. The counts are computed
+ * by the endpoint so the screen can show what removal would affect.
  */
 export interface IssuerRecord {
   issuerId: number;
@@ -53,7 +32,7 @@ export interface IssuerRecord {
   /** Null for every ancient and most historical states, permanently. */
   isoCode: string | null;
   kind: IssuerKind;
-  /** Plain INT years. NEGATIVE MEANS BC: the Roman Republic starts at -509. */
+  /** Plain INT years; negative means BC (Roman Republic starts at -509). */
   validFrom: number | null;
   validTo: number | null;
   sortOrder: number;
@@ -65,12 +44,8 @@ export interface IssuerRecord {
 }
 
 /**
- * An issuer on its way to `POST /api/issuers` — no id yet, no counts yet.
- *
- * NO `kind`. The server derives it from the year span on write (see
- * server/routes/lookups/issuer-kind.ts) and returns the derived value in the
- * `IssuerRecord` it answers with. Sending one would be the client asserting
- * a classification the server is about to recompute anyway.
+ * Body for `POST /api/issuers`. No `kind`: the server derives it from the
+ * year span (server/routes/lookups/issuer-kind.ts).
  */
 export interface NewIssuer {
   name: string;
@@ -80,44 +55,23 @@ export interface NewIssuer {
 }
 
 /**
- * What `POST /api/issuers` answers with — a CREATION or a REVIVAL.
- *
- * *** REMOVAL IS A SOFT DELETE, SO A REMOVED ISSUER STILL HOLDS ITS NAME. ***
- * Adding it again therefore cannot insert a second row: `UQ_Issuers_Name`
- * forbids it, and a new id would orphan every denomination filed under the
- * old one. The server revives the existing row instead, keeping the id, and
- * says so here.
- *
- * `revived` is absent on a plain creation rather than `false`, because the
- * creation path's body is unchanged and the client reads it as truthy.
+ * Response from `POST /api/issuers`. Removal is a soft delete, so re-adding a
+ * removed name revives the existing row (same id) instead of inserting.
  */
 export interface IssuerCreationResult extends IssuerRecord {
-  /** True when an existing, soft-deleted row came back rather than a new one. */
+  /** True when a soft-deleted row was revived; absent on a plain creation. */
   revived?: boolean;
   /**
-   * How many of its denominations came back with it.
-   *
-   * ZERO IS A REAL ANSWER and a different sentence: the issuer is back but
-   * empty, and the user has to be told which of the two happened. It also
-   * decides whether the online lookup runs — proposing labels the issuer
-   * already has would invite a duplicate under one issuer, which resolves
-   * every coin carrying that text to NULL.
+   * How many of its denominations came back with it. Zero means the issuer is
+   * back but empty, which also triggers the online denomination lookup.
    */
   denominationsRestored?: number;
 }
 
 /**
- * What `DELETE /api/issuers/:id` reports it actually did.
- *
- * The removal CASCADES — the issuer's denominations go with it and every
- * coin using one has its `DenominationId` cleared — so a bare 204 would
- * leave the screen unable to say how much it just changed. Both numbers are
- * read back to the user, and they come from the transaction rather than
- * from the counts the confirmation quoted, which is the difference between
- * reporting what happened and repeating what was predicted.
- *
- * `Coins.Denomination` is NOT among the things that changed. The coins keep
- * the text they already recorded; only the link goes.
+ * What `DELETE /api/issuers/:id` actually did. The removal cascades to the
+ * issuer's denominations and clears `DenominationId` on their coins
+ * (`Coins.Denomination` text is kept). Counts come from the transaction.
  */
 export interface IssuerRemovalResult {
   issuerId: number;
@@ -126,55 +80,35 @@ export interface IssuerRemovalResult {
 }
 
 /**
- * What `GET /api/denomination-lookup` said happened.
+ * Outcome of `GET /api/denomination-lookup`.
  *
  *   results      candidates came back
- *   none         the source answered and had nothing. THE COMMON CASE for
- *                ancient and small issuers, and not an error
+ *   none         the source had nothing (common for ancient/small issuers)
  *   unavailable  no network, a timeout, or the endpoint refused
- *
- * `none` and `unavailable` are kept apart even though the screen sends the
- * user down the same manual path for both, because "they had nothing" and
- * "we could not ask" are different facts and the user can act on the
- * second one.
  */
 export type DenominationLookupOutcome = 'results' | 'none' | 'unavailable';
 
-/**
- * One lookup's answer.
- *
- * It is declared HERE and not beside the screen that renders it for the
- * reason at the top of this file: ApiService fetches it, so a type living
- * in a component folder would make the HTTP layer import from a component.
- */
+/** One denomination lookup's answer. */
 export interface DenominationLookupResult {
   outcome: DenominationLookupOutcome;
   /** What to call the source on screen, e.g. 'Wikidata'. */
   source: string;
-  /** Candidate labels. PROPOSALS — nothing is written from these. */
+  /** Candidate labels; proposals only, nothing is written from these. */
   proposals: string[];
   /** Why it was unavailable, for the one-line message. Never an error. */
   reason: string | null;
 }
 
 /**
- * A key -> "how many coins" map.
- *
- * KEYS ARE ALWAYS STRINGS, including for the id-keyed types. JSON, template
- * interpolation and `Object.keys` all produce strings somewhere in the round
- * trip, and a count stored under the number 103 but read with the string
- * '103' answers zero — which on this screen reads as "nothing is using it".
+ * Key -> coin count. Keys are always strings, even for ids, because the
+ * round trip through JSON and `Object.keys` yields strings.
  */
 export type UsageIndex = Record<string, number>;
 
 /**
- * Everything `GET /api/reference-usage` returns: one index per type.
- *
- * Categories, sets, mint marks and metal contents are keyed by their TEXT,
- * because that is what the coin stores (`Coins.Category`, `Coins.CoinSet`,
- * `Coins.MintMark` — the mint mark's LABEL, not its id —  and
- * `Coins.MetalContent`). Denominations and catalogues are keyed by id,
- * because those are real foreign keys.
+ * `GET /api/reference-usage`: one index per type. Categories, sets, mint marks
+ * (by label) and metals are keyed by the text the coin stores; denominations
+ * and catalogues by id.
  */
 export interface ReferenceUsageCounts {
   categories: UsageIndex;
@@ -182,10 +116,6 @@ export interface ReferenceUsageCounts {
   denominations: UsageIndex;
   mintMarks: UsageIndex;
   catalogs: UsageIndex;
-  /**
-   * Keyed by the metal name as the coin spells it. `Coins.MetalContent` is
-   * an NVARCHAR column and not a foreign key, so a metal removed from the
-   * reference list leaves every coin's own text exactly where it was.
-   */
+  /** Keyed by metal name. Not a foreign key, so removing a metal leaves coin text unchanged. */
   metalContents: UsageIndex;
 }

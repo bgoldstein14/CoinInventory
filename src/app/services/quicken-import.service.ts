@@ -1,17 +1,12 @@
 /**
- * Parses Quicken Interchange Format (QIF) investment-transaction exports
- * and normalizes them into coin import records.
+ * Parses Quicken Interchange Format (QIF) investment-transaction exports into
+ * coin import records.
  *
- * Quicken's QIF investment fields are single-letter codes with specific,
- * well-defined meanings (see the Quicken Interchange Format reference).
- * The two easiest to get wrong -- because their letters read like other
- * things -- are:
- *   - `N` is the transaction ACTION (Buy, Sell, ShrsIn, ReinvDiv, ...),
- *     not a free-text name.
- *   - `Y` is the SECURITY name, which for a coin-tracking Quicken account
- *     is where the coin's description actually lives.
+ * QIF investment fields are single-letter codes. Two read like something else:
+ *   - `N` is the transaction action (Buy, Sell, ShrsIn, ReinvDiv, ...), not a name.
+ *   - `Y` is the security name, which in a coin account holds the coin's description.
  *
- * Full investment field-line reference used here:
+ * Field lines used here:
  *   D  Date
  *   N  Action (Buy, Sell, ShrsIn, ShrsOut, ReinvDiv, ReinvLg, ReinvSh, ...)
  *   Y  Security name
@@ -26,30 +21,17 @@
  */
 import { Injectable } from '@angular/core';
 import { AmbiguousReading, QuickenImportRecord } from '../types/coin.model';
-// Proof detection has exactly one implementation, shared with the image
-// matcher. Do not write a second one here: two readers of the same slab label
-// drift apart.
+import { cacStickerFor } from '../types/cac-sticker';
+// Proof detection is shared with the image matcher; don't duplicate it here.
 import { detectStrike } from './image-matching/proof-strike';
-// `composePmFields` asks pm-reference.ts "what is this coin made of?" -- for
-// BOTH precious and base metal coins -- and returns it already named the way a
-// coin record names it: Metal Content / Composition / PM % / PM weight. It
-// lives in pm-fill.ts rather than inline because Settings > Maintenance
-// "backfill precious-metal data" needs the identical mapping for coins that
-// pre-date this import.
+// Maps pm-reference.ts's answer onto coin fields; shared with the Settings PM backfill.
 import { composePmFields } from './pm-fill';
-// Country and foreign-denomination vocabulary -- see coin-countries.ts for
-// why "1969 Peru 100 Soles" needs its own reader.
 import { detectCountry, detectForeignDenomination } from './coin-countries';
-// The 2-of-3 "is this really a coin?" rule is shared with the manual
-// add-a-coin flow -- see the re-export block further down.
+// The 2-of-3 completeness rule, shared with the manual add-coin flow.
 import { checkMainCoinDetails } from './coin-completeness';
-// "Has this record been sold?" -- one definition, shared with the CSV and
-// Excel imports, so the tick box means the same thing in all three dialogs.
-// See services/import-sold.ts; in particular a sold price of 0 counts.
+// The shared "has this record been sold?" rule (CSV, Excel and QIF).
 import { isSoldRecord } from './import-sold';
-// The three words the hobby uses for a counterfeit, defined once. Imported
-// as DATA ONLY -- see AUTHENTICITY_MARKER_PATTERNS below for why reusing the
-// vocabulary is not the same thing as reusing the matcher's exclusion.
+// Counterfeit words, imported as data only (see AUTHENTICITY_MARKER_PATTERNS).
 import { COUNTERFEIT_MARKER_WORDS } from './image-matching/filename-vocabulary';
 
 interface CoinTypeRange {
@@ -135,10 +117,7 @@ const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
   '$2.50': [
     { min: 1796, max: 1807, coinType: 'Draped Bust' },
     { min: 1808, max: 1834, coinType: 'Capped Bust' },
-    // The Classic Head years were a gap in this table, so an 1835 or 1836
-    // gold piece came out with a blank Coin Type. They are the coins struck
-    // under the Act of 1834, which cut the weight and set the fineness to
-    // 0.8992 -- see the matching year bands in pm-reference.ts.
+    // Classic Head: struck under the Act of 1834 (see the year bands in pm-reference.ts).
     { min: 1835, max: 1839, coinType: 'Classic Head' },
     { min: 1840, max: 1907, coinType: 'Coronet' },
     { min: 1908, max: 1929, coinType: 'Indian Head' },
@@ -149,8 +128,7 @@ const COIN_TYPE_BY_DENOMINATION: Record<string, CoinTypeRange[]> = {
   '$5': [
     { min: 1795, max: 1807, coinType: 'Draped Bust' },
     { min: 1807, max: 1834, coinType: 'Capped Bust' },
-    // Same Classic Head gap as the quarter eagle above: this collection
-    // contains an "1835 $5 - NGC/CAC XF45" that had no Coin Type at all.
+    // Classic Head, as for the quarter eagle above.
     { min: 1835, max: 1838, coinType: 'Classic Head' },
     { min: 1839, max: 1908, coinType: 'Coronet' },
     { min: 1908, max: 1929, coinType: 'Indian Head' },
@@ -180,78 +158,62 @@ function inferCoinTypeByYear(denomination: string, year: number): string {
 }
 
  /*
- * A BARE "3¢": SILVER OR NICKEL?
- *
- * There were two three-cent pieces, and a name that just says "3¢" (or "3c",
- * or "three cent") does not say which one is in the holder:
- *
- *     THREE CENT SILVER   "3CS", the trime   struck 1851 - 1873
- *     THREE CENT NICKEL   "3CN"              struck 1865 - 1889
- *
- * They OVERLAP from 1865 to 1873, so for those nine years the date tells you
- * nothing. Hence three bands, two of them certain:
- *
- *   year <= 1864   ->  3CS, CERTAIN.  The nickel did not exist yet.
- *   year >= 1874   ->  3CN, CERTAIN.  The silver had ended.
- *   1865 - 1873    ->  a GUESS, and flagged as one.
- *
- * The tie-break inside the overlap is scarcity, with proofs as the exception:
- * three-cent SILVER business strikes after 1862 are tiny (hundreds a year)
- * against three-cent NICKEL business strikes in the millions -- but three-cent
- * silver PROOFS kept being struck in normal quantities right through 1873. So
- * a proof designation means 3CS and anything else means 3CN.
- *
- * A name with no year at all is treated as the widest possible ambiguity (the
- * whole 1851-1889 span) and gets the same tie-break and the same flag.
- *
- * Whether the guess is right is not this function's problem: it returns the
- * guess AND the reasoning, the preview shows both, and the user re-points or
- * drops the row. Do NOT collapse this back to a bare year comparison with no
- * flag -- that makes a guess indistinguishable from a fact, and it also robs
- * the image matcher of its own refusal path for this pair
- * (`describeUndecidedGeneric` in match-decider.ts), because by the time the
- * matcher sees the record the choice has already been made for it.
+  * A bare "3¢" (or "3c", "three cent"): silver or nickel?
+  *
+  *     Three Cent Silver  "3CS", the trime  struck 1851-1873
+  *     Three Cent Nickel  "3CN"             struck 1865-1889
+  *
+  *   year <= 1864   3CS, certain (the nickel didn't exist yet)
+  *   year >= 1874   3CN, certain (the silver had ended)
+  *   1865-1873      a guess, flagged as one
+  *
+  * Inside the overlap, scarcity decides: 3CS business strikes after 1862 were
+  * tiny against millions of 3CN, but 3CS proofs continued normally, so a proof
+  * means 3CS and anything else 3CN. A name with no year is treated as the
+  * whole 1851-1889 span, with the same tie-break and flag.
+  *
+  * The guess and its reasoning are returned so the preview can show them and
+  * the user can correct it. Keep the flag: without it a guess looks like a fact,
+  * and the image matcher's own refusal path for this pair
+  * (`describeUndecidedGeneric` in match-decider.ts) is lost.
   */
 
-/** First year the three-cent SILVER was struck. Nothing before it. */
+/** First year of the three-cent silver. */
 const THREE_CENT_SILVER_FIRST_YEAR = 1851;
-/** Last year the three-cent SILVER was struck. Nothing after it. */
+/** Last year of the three-cent silver. */
 const THREE_CENT_SILVER_LAST_YEAR = 1873;
-/** First year the three-cent NICKEL was struck -- and the overlap's start. */
+/** First year of the three-cent nickel (start of the overlap). */
 const THREE_CENT_NICKEL_FIRST_YEAR = 1865;
-/** Last year the three-cent NICKEL was struck. */
+/** Last year of the three-cent nickel. */
 const THREE_CENT_NICKEL_LAST_YEAR = 1889;
 
 /**
- * Decide what a bare three-cent reading means, and say whether it was a guess.
+ * Decides what a bare three-cent reading means, and whether it was a guess.
  *
- * @param yearNum       The parsed year, or 0 when the name carried none.
- * @param securityName  The untouched Quicken security name -- handed to
- *                      `detectStrike` as the descriptive text.
- * @param grade         The grade already parsed out of that name ("PF64").
- * @returns the denomination, plus an `AmbiguousReading` when -- and only
- *          when -- the answer was not forced by the date.
+ * @param yearNum       the parsed year, or 0 when the name has none
+ * @param securityName  the untouched security name, passed to `detectStrike`
+ * @param grade         the grade parsed from that name ("PF64")
+ * @returns the denomination, plus an `AmbiguousReading` only when the date
+ *          didn't force the answer
  */
 function resolveBareThreeCent(
   yearNum: number,
   securityName: string,
   grade: string
 ): { denomination: string; ambiguity?: AmbiguousReading } {
-  // CERTAIN: before the nickel existed, a three-cent piece is a trime.
+  // Certain: before the nickel existed.
   if (yearNum && yearNum < THREE_CENT_NICKEL_FIRST_YEAR) {
     return { denomination: '3CS' };
   }
 
-  // CERTAIN: after the silver ended, a three-cent piece is a nickel.
+  // Certain: after the silver ended.
   if (yearNum && yearNum > THREE_CENT_SILVER_LAST_YEAR) {
     return { denomination: '3CN' };
   }
 
-  /* THE OVERLAP (or an undated name). The date is worthless here, so fall
-   * back to the owner's scarcity rule, with proofs as its stated exception.
-   * `detectStrike` returns 'business' for silence -- he writes the proof
-   * designation whenever it applies -- which is precisely the behaviour this
-   * rule wants, so no extra handling is needed for an unmarked name. */
+  /* The overlap (or no date): scarcity rule, with proofs as the exception.
+   * `detectStrike` returns 'business' when nothing is said, which is what this
+   * rule wants for an unmarked name. */
   const isProof = detectStrike(securityName, grade) === 'proof';
   const chosen = isProof ? '3CS' : '3CN';
 
@@ -272,34 +234,24 @@ function resolveBareThreeCent(
     ambiguity: {
       field: 'denomination',
       chosen,
-      // Both members, always, in series order -- so the preview can offer the
-      // one we did NOT pick without having to work out what it is.
+      // Both members in series order, so the preview can offer the other one.
       alternatives: ['3CS', '3CN'],
       why: `${situation}; ${reasoning}. Check this one.`
     }
   };
 }
 
-/* ---------------------------------------------------------------------------
- * CERTIFICATION (GRADING) COMPANIES
+/*
+ * Grading companies that appear in security names, e.g. "1927 $20 - PCGS MS64",
+ * "1875 20¢ - ANACS VG8", "1909 S-VDB 1¢ - PCGS/CAC AU58".
  *
- * The third-party grading services that actually appear in this collection's
- * Quicken security names, e.g. "1927 $20 - PCGS MS64", "1875 20¢ - ANACS VG8",
- * "1909 S-VDB 1¢ - PCGS/CAC AU58".
- *
- * Regexes, not plain `includes()`: a substring test would fire on "NGC" buried
- * inside a longer word, and would be case-sensitive against hand-typed names.
- * Each token is anchored with `\b` on both sides so it matches as a whole
- * token -- the separators these names use (space, hyphen, slash, backslash,
- * parenthesis) are all non-word characters, so "- PCGS", "-PCGS", "PCGS/CAC"
- * and "(CLEANED/PCGS)" all match while "XPCGSY" does not.
- *
- * ORDER MATTERS ONLY FOR CACG, listed first so "CACG MS65" is credited to CACG
- * rather than to another company that also appeared in the name.
- * ------------------------------------------------------------------------- */
+ * Whole-token, case-insensitive regexes: the separators used (space, hyphen,
+ * slash, backslash, parenthesis) are non-word characters, so "- PCGS", "-PCGS",
+ * "PCGS/CAC" and "(CLEANED/PCGS)" match while "XPCGSY" doesn't. CACG is listed
+ * first so "CACG MS65" is credited to CACG.
+ */
 const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
-  // CAC's own grading service (a slab), NOT the CAC sticker (a sticker on
-  // someone else's slab). Deliberately first -- see note above.
+  // CAC's own grading service (a slab), not the CAC sticker.
   { token: 'CACG',  pattern: /\bCACG\b/i },
   { token: 'PCGS',  pattern: /\bPCGS\b/i },
   { token: 'NGC',   pattern: /\bNGC\b/i },
@@ -309,75 +261,38 @@ const CERT_COMPANY_PATTERNS: readonly { token: string; pattern: RegExp }[] = [
   { token: 'NNC',   pattern: /\bNNC\b/i },
 ];
 
-/* ---------------------------------------------------------------------------
- * THE CAC STICKER  (`hasCacSticker`)
+/*
+ * The CAC sticker (`hasCacSticker`): CAC's sticker on another company's slab,
+ * separate from the grading company. Written as "PCGS/CAC AU58", `CAC`,
+ * `CAC'd`, `CACd`, `w/CAC`, `+CAC`, `(CAC)`, `CAC Gold` / `Gold CAC`.
  *
- * CAC (Certified Acceptance Corporation) puts a small green sticker on a slab
- * it agrees is solid for the grade. It is a SEPARATE thing from the grading
- * company, and it is the most common "extra" in this collection's Quicken
- * names -- usually written with a slash after the grader ("PCGS/CAC AU58"),
- * but also seen as `CAC`, `CAC'd`, `CACd`, `w/CAC`, `+CAC`, `(CAC)`, and
- * `CAC Gold` / `Gold CAC`.
- *
- * *** CAC vs CACG -- the one trap in this file ***
- * `CACG` is CAC's GRADING SERVICE. A CACG-slabbed coin is not a CAC-stickered
- * coin, so "CACG" must set `certCompany = 'CACG'` and leave `hasCacSticker`
- * FALSE. The whole-token `\b` gives that for free: "G" is a word character, so
- * there is no boundary after "CAC" in "CACG" and `\bCAC\b` does not match.
- *
- * The optional `(?:'?d)?` group exists only to accept `CAC'd` and `CACd`,
- * which `\bCAC\b` would otherwise reject for that same reason. Widening this
- * pattern any further risks swallowing CACG.
- * ------------------------------------------------------------------------- */
+ * `CACG` is CAC's grading service, not a sticker: it sets `certCompany = 'CACG'`
+ * and leaves `hasCacSticker` false. `\bCAC\b` can't match "CACG" (no boundary
+ * before "G"); the `(?:'?d)?` group exists only for `CAC'd` / `CACd`. Widening
+ * the pattern further risks matching CACG.
+ */
 const CAC_STICKER_PATTERN = /\bCAC(?:'?d)?\b/i;
 
-/* ---------------------------------------------------------------------------
- * AUTHENTICITY WORDING -- "FAKE", "Counterfeit", "Replica", "not genuine"
+/*
+ * Authenticity wording: "FAKE", "Counterfeit", "Replica", "not genuine".
  *
- * *** THIS IS AN IMPORT RULE AND IT IS NOT AN EXCLUSION. ***
- * A counterfeit the owner keeps in a drawer is a thing he owns, so it is a
- * row in his inventory like any other, and it imports like any other. The
- * ONLY job of this list here is to make sure the word that distinguishes it
- * from the genuine coin of the same date and grade SURVIVES THE IMPORT.
+ * Not an exclusion: a counterfeit the user owns imports like any other coin.
+ * The wording is kept in Variety so the record differs from the genuine coin
+ * of the same date and grade (e.g. "1855 3CS - VF - FAKE"). Variety, not Notes:
+ * it describes the object, and Notes holds only the Quicken memo.
  *
- * Before this existed the wording was dropped on the floor. "1855 3CS - VF -
- * FAKE" imported as a 1855 three-cent silver in VF with an EMPTY Variety
- * field -- byte for byte the same record as the genuine one two rows above
- * it. Five records in the QIF corpus are in exactly that state.
- *
- * WHY VARIETY AND NOT NOTES. Variety is the coin-describing free-text field:
- * it already carries "Type I", "DDO", "Repunched Date". "This one is a fake"
- * is the same KIND of fact -- a statement about the object -- and it is one
- * the owner needs to see in the grid. Notes is reserved for the Quicken memo
- * column and may not be synthesised into; see the `notes:` assignment in
- * `parse` and the comment on it.
- *
- * *** DO NOT CONFUSE THIS WITH THE IMAGE MATCHER'S EXCLUSION. ***
- * `filename-vocabulary.ts` uses the same three words to keep a counterfeit
- * PHOTOGRAPH out of the AUTOMATED matching run, and that exclusion is
- * matcher-only by policy: such a photo stays listable, searchable and
- * attachable by hand. Nothing here changes that, and nothing there may be
- * read as a reason to refuse an import.
- *
- * The three single words are REUSED from that module rather than re-typed,
- * so "what counts as the word fake" has one definition (and so "copy" stays
- * absent on both sides -- see the long note there). "not genuine" is added
- * only here: it is a phrase a Quicken security name can carry, and it is not
- * a shape the filename side's word list can express.
- * ------------------------------------------------------------------------- */
+ * The photo matcher uses the same words to match a fake photo only to a fake
+ * record. The single words are reused from filename-vocabulary.ts; "not
+ * genuine" is added here only.
+ */
 const AUTHENTICITY_MARKER_PATTERNS: readonly RegExp[] = [
   ...COUNTERFEIT_MARKER_WORDS.map(word => new RegExp(`\\b${word}\\b`, 'i')),
   /\bnot\s+genuine\b/i
 ];
 
 /**
- * The authenticity wording a security name carries, VERBATIM, or '' when it
- * carries none -- which is the overwhelmingly common case.
- *
- * The matched text is returned exactly as the owner typed it ("FAKE" stays
- * "FAKE") rather than normalised to a canonical spelling: Variety is a field
- * he reads, and rewriting his own word in it would be a change he did not
- * ask for.
+ * The authenticity wording in a security name, verbatim ("FAKE" stays "FAKE"),
+ * or '' (the usual case).
  */
 function detectAuthenticityWording(securityName: string): string {
   const found: string[] = [];
@@ -388,7 +303,7 @@ function detectAuthenticityWording(securityName: string): string {
   return found.join(' ');
 }
 
-/** Action codes that represent acquiring a position -- i.e. a coin entering the collection. */
+/** Action codes for acquiring a position (a coin entering the collection). */
 const ACQUISITION_ACTIONS = new Set([
   'buy',
   'buyx',
@@ -404,51 +319,25 @@ const ACQUISITION_ACTIONS = new Set([
   'margint'
 ]);
 
-/** Action codes that represent disposing of a position -- a coin that has left the collection. */
+/** Action codes for disposing of a position (a coin leaving the collection). */
 const DISPOSITION_ACTIONS = new Set(['sell', 'sellx', 'shrsout', 'shtsell', 'rtrncap']);
 
-/** Action codes for cash-only transfers — no security involved, skip silently. */
+/** Cash-only transfers with no security; skipped silently. */
 const CASH_TRANSFER_ACTIONS = new Set(['xin', 'xout']);
 
-/* ---------------------------------------------------------------------------
- * QUICKEN'S TRANSFER BOILERPLATE, AND WHY IT IS THE ONLY THING STRIPPED
+/*
+ * Quicken's own transfer memo. Moving a holding between accounts makes Quicken
+ * write `Xfr From: Misc. Coins` / `Xfr To: Odd Type Set`, which the user never
+ * typed and doesn't want in Notes.
  *
- * When a holding is moved between two Quicken accounts, Quicken writes the
- * memo itself: `Xfr From: Misc. Coins` on the receiving side and
- * `Xfr To: Odd Type Set` on the sending side. The owner never typed either
- * one, and he is explicit about what they are worth in his inventory:
- *
- *     "Do not put in that 'Xfr From....' note. It's not really helpful. If
- *      there's a note/memo field from the QIF then use it, otherwise leave
- *      Notes as blank."
- *
- * Measured over the QIF corpus before this rule existed: 66 of 457 imported
- * coins carried a note and ALL 66 of them were `Xfr From: …`. Not most --
- * all. The Notes column was, in practice, a column of Quicken's bookkeeping.
- *
- * *** THE RULE IS A SHAPE, NOT A SUBJECT. ***
- * It matches a memo that IS the boilerplate: `Xfr`, then `From` or `To`,
- * then a colon, then the account name -- from the very start of the memo.
- * It deliberately does NOT look for the words "transfer", "xfr" or "from"
- * anywhere in a memo, because a memo is the one field on the record the
- * owner wrote himself and a filter that reads its subject matter will
- * eventually eat one. These all SURVIVE, and there are tests saying so:
- *
- *     "Opening transfer"              -- the corpus's own wording
- *     "Transferred from the bank box"
- *     "Xfr paperwork mislaid"         -- starts with the word and is still a memo
- *     "Sold to pay for the xfr to NGC"
- *
- * Only the generated line goes. Anything else is used verbatim, and a block
- * with no memo at all leaves Notes blank -- there is no fallback and nothing
- * is synthesised. See the `notes:` assignment in `parse`.
- * ------------------------------------------------------------------------- */
+ * Matched by shape, not subject: `Xfr`, `From` or `To`, a colon, from the start
+ * of the memo. Memos that merely mention a transfer are kept (tests cover
+ * "Opening transfer", "Transferred from the bank box", "Xfr paperwork mislaid",
+ * "Sold to pay for the xfr to NGC").
+ */
 const QUICKEN_TRANSFER_MEMO = /^\s*xfr\s+(?:from|to)\s*:/i;
 
-/**
- * The memo to write into Notes: the owner's own words, or '' when the memo
- * line is Quicken's transfer boilerplate or absent altogether.
- */
+/** The memo for Notes: the user's own words, or '' for Quicken's transfer memo or no memo. */
 export function memoForNotes(memo: string | undefined): string {
   const text = (memo ?? '').trim();
   if (!text) return '';
@@ -456,24 +345,18 @@ export function memoForNotes(memo: string | undefined): string {
 }
 
 /**
- * Did this block state a money amount at all?
- *
- * `resolveAmount` below answers 0 for a block that stated none, which is
- * the right answer for a cost basis and the WRONG one for a sale price: the
- * import's "is this sold?" rule counts a price of 0 as a real price (a coin
- * given away), so a transfer with no amount must leave the field unset
- * rather than claim nothing was paid. Mirrors `resolveAmount`'s own two
- * sources so the two cannot disagree about what "stated" means.
+ * Whether this block stated a money amount. `resolveAmount` answers 0 when none
+ * was stated, which is wrong for a sale price (0 counts as a real price in the
+ * sold rule), so an amount-less transfer must leave it unset. Uses the same
+ * sources as `resolveAmount`.
  */
 function statesAmount(fields: ParsedInvestmentFields): boolean {
   if (fields.amount !== undefined || fields.altAmount !== undefined) return true;
   return fields.price !== undefined && fields.quantity !== undefined;
 }
 
-/* The 2-of-3 main-detail rule lives in `coin-completeness.ts` because the
- * manual "Add coin" button needs the same rule to decide when a half-typed row
- * is worth saving. These re-exports keep this service's public surface
- * unchanged for callers that still import it from here. */
+/* The 2-of-3 rule lives in coin-completeness.ts (shared with "Add coin");
+ * re-exported here for existing importers. */
 export {
   MINIMUM_MAIN_DETAILS,
   isCoinDetailPresent,
@@ -482,49 +365,31 @@ export {
 export type { CoinDetailCheck } from './coin-completeness';
 
 /**
- * A coin that parsed successfully but did not carry enough detail to import.
- * These are surfaced to the user as "exceptions" -- never silently dropped --
- * so they can see exactly which QIF rows were skipped and why.
+ * A coin that parsed but lacks enough detail to import. Shown to the user as an
+ * exception, never silently dropped.
  */
 export interface QuickenRejectedRecord {
-  /** The raw `Y` (security name) line the coin came from. */
+  /** The raw `Y` (security name) line. */
   securityName: string;
-  /** What we *were* able to parse, so the user can judge / override. */
+  /** What could be parsed, so the user can judge or override. */
   record: QuickenImportRecord;
   present: string[];
   missing: string[];
   reason: string;
 }
 
-/**
- * What the caller may switch on for one parse.
- *
- * One option today, and it is deliberately an object rather than a fourth
- * positional boolean: `parse(text, accounts, choices, true)` at a call site
- * says nothing about what is true.
- */
+/** Options for one parse (an object rather than positional booleans). */
 export interface QuickenParseOptions {
   /**
-   * Leave out coins that have been SOLD.
+   * Leave out sold coins.
    *
-   * "Sold" is the one rule every import path uses -- the record has a sold
-   * date, a sold price or a buyer (services/import-sold.ts). In a QIF none
-   * of those three is a column; what a Quicken investment account has is a
-   * Buy and, later, a Sell / SellX / ShrsOut. So net quantity <= 0 is how
-   * this parser DETECTS a disposal, and when it finds one it writes the
-   * disposal's date and proceeds onto the record, which is what makes the
-   * coin satisfy the shared rule from then on.
+   * "Sold" follows the shared rule (sold date, sold price or buyer;
+   * import-sold.ts). A QIF has none of those columns, so a net quantity <= 0
+   * (Buy then Sell / SellX / ShrsOut) detects a disposal, and the disposal's date
+   * and proceeds are written onto the record.
    *
-   * *** DEFAULT FALSE: EVERYTHING COMES IN, SOLD COINS INCLUDED. ***
-   * This is the opposite of what this parser used to do unconditionally, and
-   * the reversal is the point. The owner wants the coins he USED TO OWN in
-   * the database so he can report on them: what he paid, what he got, what
-   * passed through his hands. Dropping them made 379 of the QIF corpus's 484
-   * coin records unimportable with no way to ask for them -- and the modal
-   * never even displayed the list, so they vanished silently.
-   *
-   * Switch it on and the old behaviour is back, reported in
-   * `skippedRecords` rather than discarded.
+   * Default false: sold coins are imported too, so past holdings can be reported
+   * on. When on, held-back coins are reported in `skippedRecords`.
    */
   excludeSold?: boolean;
 }
@@ -532,24 +397,16 @@ export interface QuickenParseOptions {
 export interface QuickenParseResult {
   importedRecords: QuickenImportRecord[];
   /**
-   * Coins held OUT of the import by `excludeSold`. Empty -- always -- when
-   * that option is off, because then nothing is being held out.
-   *
-   * This is NOT "the sold coins"; for that, see `soldSecurityNames`, which
-   * is populated either way.
+   * Coins held out by `excludeSold`; always empty when it is off. For the sold
+   * coins themselves see `soldSecurityNames`.
    */
   skippedRecords: QuickenImportRecord[];
   /** Coins failing the 2-of-3 main-detail rule. */
   rejectedRecords: QuickenRejectedRecord[];
   /**
-   * The security name of every coin whose net quantity came out <= 0 --
-   * sold, or transferred out to another account.
-   *
-   * Reported REGARDLESS of `excludeSold`, because the caller needs it in
-   * both directions: to say how many rows the option is hiding when it is
-   * on, and to mark the imported coins as Sold rather than Owned when it is
-   * off. A coin imported as Owned that the owner parted with in 2013 would
-   * be counted in his collection's total and put on his insurance schedule.
+   * Security names of every coin whose net quantity is <= 0 (sold or transferred
+   * out). Reported regardless of `excludeSold`, so the caller can count what the
+   * option hides, or mark imported coins as Sold rather than Owned.
    */
   soldSecurityNames: string[];
   warnings: string[];
@@ -571,39 +428,22 @@ interface ParsedInvestmentFields {
 @Injectable({ providedIn: 'root' })
 export class QuickenImportService {
   /**
-   * Parses raw QIF text into normalized coin import records.
+   * Parses raw QIF text into coin import records.
    *
-   * Net quantity: acquisitions and dispositions are both tracked so the net
-   * holding per security is known. BY DEFAULT IT CHANGES NOTHING ABOUT WHAT
-   * IMPORTS -- a coin that has been sold is still a coin the owner had, and
-   * it comes in with every other. The names of those coins are reported in
-   * `soldSecurityNames`. Pass `{ excludeSold: true }` to leave them out, in
-   * which case they are reported in `skippedRecords` instead.
+   * Acquisitions and dispositions are both tracked to get each security's net
+   * holding. By default sold coins still import; their names are reported in
+   * `soldSecurityNames`. With `{ excludeSold: true }` they go to `skippedRecords`.
    *
-   * @param qifText Raw contents of a `.qif` export.
-   * @param selectedAccounts When provided, only transactions under a
-   *   matching `!Account` block are imported; all discovered account
-   *   names are still returned via `accounts` so the caller can build an
-   *   account picker.
-   * @param denominationChoices The user's answers to readings this parser
-   *   flagged as GUESSES, keyed on the raw Quicken security name. See
-   *   `AmbiguousReading` in coin.model.ts.
-   *
-   *   WHY THE ANSWER COMES IN HERE RATHER THAN BEING PAINTED ON AFTERWARDS.
-   *   A denomination is not a loose label; the coin type and all five alloy /
-   *   weight fields are computed FROM it. Flipping "3CN" to "3CS" in the
-   *   caller would leave a trime carrying the copper-nickel composition and
-   *   the nickel's 1.94 g weight. Handing the choice to the parser instead
-   *   means the single existing derivation path produces every dependent
-   *   field, so they cannot disagree.
-   *
-   *   A choice is honoured ONLY for a security whose reading was actually
-   *   flagged, and only when the value is one the parser itself offered. A
-   *   stale entry -- for a security that has since been renamed in Quicken,
-   *   or a value nobody offered -- is ignored rather than trusted. This is
-   *   not a back door for editing arbitrary fields during import.
-   * @param options See `QuickenParseOptions`. Omitted means every default,
-   *   and the defaults are "import everything".
+   * @param qifText raw contents of a `.qif` export
+   * @param selectedAccounts when given, only transactions under a matching
+   *   `!Account` block are imported; all account names are still returned in
+   *   `accounts` for the account picker
+   * @param denominationChoices the user's answers to readings flagged as guesses,
+   *   keyed on the raw security name (see `AmbiguousReading` in coin.model.ts).
+   *   Applied during parsing because coin type and all alloy/weight fields derive
+   *   from the denomination. A choice is used only for a security whose reading was
+   *   flagged and only if it is one of the offered values; stale entries are ignored.
+   * @param options see `QuickenParseOptions`; defaults import everything
    */
   parse(
     qifText: string,
@@ -616,29 +456,20 @@ export class QuickenImportService {
     const accounts = new Set<string>();
     let currentAccount: string | null = null;
 
-    // Net-quantity tracking map: security name -> { qty, latestRecord,
-    // latestDate, and the LATEST DISPOSAL's date and proceeds }.
-    //
-    // The disposal half is what lets a QIF-detected sale satisfy the same
-    // "has a sold date, a sold price or a buyer" rule a CSV row satisfies:
-    // the sale is in the file, on the Sell / SellX / ShrsOut block, and
-    // without reading it off that block the importer would know a coin was
-    // gone and be unable to say when or for how much.
-    // We track all transactions (acquisitions and dispositions) to determine
-    // which coins are still held (net qty > 0).
+    // Security name -> { qty, latest record and date, and the latest disposal's
+    // date and proceeds }. The disposal lets a QIF sale satisfy the same sold rule
+    // as a CSV row. Net qty > 0 means still held.
     const netQuantityMap = new Map<
       string,
       {
         qty: number;
         latestRecord: QuickenImportRecord | null;
         latestDate: string;
-        /** Date of the most recent disposal, '' when there has been none. */
+        /** Date of the latest disposal; '' when none. */
         soldDate: string;
         /**
-         * Proceeds of that same disposal, UNDEFINED when the block stated
-         * no amount. A `ShrsOut` transfer to another account carries a
-         * quantity and nothing else: there were no proceeds, and writing a
-         * 0 would be claiming the coin was given away.
+         * Proceeds of that disposal; undefined when the block stated no amount (e.g. a
+         * `ShrsOut` transfer). 0 would claim the coin was given away.
          */
         soldPrice: number | undefined;
       }
@@ -668,14 +499,12 @@ export class QuickenImportService {
         continue;
       }
 
-      // Optimize: Skip !Type:Prices blocks immediately without parsing fields.
-      // Price history is not relevant for coin inventory import.
+      // Price history isn't needed for an inventory import.
       if (firstLine.startsWith('!Type:Prices')) {
         continue;
       }
 
-      // A bare header line (e.g. `!Type:Invst`) with nothing else in the
-      // block carries no transaction data.
+      // A bare header line (e.g. `!Type:Invst`) carries no transaction data.
       if (firstLine.startsWith('!Type') && lines.length === 1) {
         continue;
       }
@@ -695,15 +524,13 @@ export class QuickenImportService {
 
       const actionKey = (fields.action ?? '').toLowerCase();
 
-      // Skip cash-only transfers (no security involved)
+      // Skip cash-only transfers.
       if (CASH_TRANSFER_ACTIONS.has(actionKey)) {
         continue;
       }
 
-      // Parse attributes from security name. The user's answer to any
-      // previously flagged guess for THIS security goes in with it, so the
-      // coin type and the alloy below are derived from the corrected
-      // denomination rather than from the parser's original assumption.
+      // The user's answer to a flagged guess for this security goes in too, so coin
+      // type and alloy derive from the corrected denomination.
       const attrs = this.parseAttributes(
         fields.security,
         denominationChoices?.[fields.security]
@@ -716,64 +543,34 @@ export class QuickenImportService {
         continue;
       }
 
-      // NOTE: there is deliberately NO "is this coin detailed enough?" test
-      // here. That rule lives in exactly one place -- the final assembly loop
-      // below -- so that no code path can reach `importedRecords` without
-      // passing it.
+      // No completeness check here; it happens once, in the final assembly loop.
 
       const purchaseDate = fields.date ? this.normalizeDate(fields.date) : '';
 
        /*
-       * WHAT IS IT MADE OF?
-       *
-       * The alloy follows from the country, the denomination and the YEAR --
-       * a 1964 quarter is 90% silver and a 1965 quarter has none, and the
-       * only difference between them is the date. pm-reference.ts owns all of
-       * those rules; `composePmFields` (pm-fill.ts) is the single shared
-       * adapter that renames its answer into coin-record fields, and the
-       * Settings backfill calls the very same function.
-       *
-       * `attrs.metalHint` is passed through because a handful of face values
-       * existed in two metals at once (the 1849-1889 "$1" was struck as both
-       * a silver dollar and a gold dollar). When the security name says
-       * "Gold" or "G$1" out loud, that settles it; when nothing at all does,
-       * the fields stay blank on purpose. An empty field is something the user
-       * can see and fix -- a wrong purity silently produces a wrong melt
-       * value.
+        * The alloy follows from country, denomination and year (a 1964 quarter is 90%
+        * silver, a 1965 one has none); rules in pm-reference.ts, mapped by
+        * `composePmFields` (also used by the Settings backfill). `attrs.metalHint`
+        * settles face values struck in two metals (the 1849-1889 "$1") when the name
+        * says "Gold" or "G$1"; otherwise those fields stay blank.
         */
       const alloy = composePmFields(
         attrs.denomination,
         attrs.year,
         attrs.country,
         attrs.metalHint,
-         /*
-         * THE COARSE FALLBACK'S EXTRA EVIDENCE.
-         *
-         * The reference table is keyed on denomination + year, so an issue it
-         * carries no row for -- foreign gold, an unusual face value, a type
-         * not yet tabulated -- would otherwise import with all four alloy
-         * fields blank. The COIN TYPE is what makes the metal obvious in
-         * those cases ("Gold Eagle", "Saint-Gaudens", "Double Eagle"), so it
-         * is handed over too.
-         *
-         * It only gets a turn when `lookupCoinAlloy` has already declined,
-         * and all it can add is Metal Content. There is no composition on a
-         * brand-new import, so that half is always empty here; the Settings
-         * backfill is where it earns its keep.
-          */
+         // Coin type is extra evidence for the coarse metal fallback ("Gold Eagle",
+         // "Saint-Gaudens") when the table has no row; it can add Metal Content only.
         { coinType: attrs.coinType }
       );
 
-      // Build the import record
       const record: QuickenImportRecord = {
         id: crypto.randomUUID(),
         denomination: attrs.denomination,
         year: attrs.year,
         coinType: attrs.coinType,
         grade: attrs.grade,
-        // Grading service + CAC sticker, both read out of the same security
-        // name as everything else above. `hasCacSticker` is always a real
-        // boolean so it can be bound straight to the BIT NOT NULL column.
+        // From the same security name. `hasCacSticker` is always a boolean (BIT NOT NULL column).
         certCompany: attrs.certCompany,
         hasCacSticker: attrs.hasCacSticker,
         mintMark: attrs.mintMark,
@@ -782,104 +579,39 @@ export class QuickenImportService {
         purchaseDate,
         purchasePrice,
         currentValue: purchasePrice,
-        // Read from the security name when it names a country, falling back
-        // to this collection's long-standing default. See parseAttributes.
+        // From the security name when it names a country, else the default (see parseAttributes).
         country: attrs.country,
-        /* NOTES IS THE QUICKEN MEMO COLUMN (`M`) AND NOTHING ELSE -- AND
-         * NOT EVEN ALL OF THAT.
-         *
-         * No fallback, no synthesis, no concatenation: a block with no `M`
-         * line produces a BLANK Notes field, even though the security name,
-         * the payee, the account and the action are all sitting right here
-         * and any of them could be made to read like a note. They are not
-         * the owner's note, and a field he did not write is a field he
-         * cannot trust.
-         *
-         * `memoForNotes` applies the one subtraction: Quicken's OWN
-         * generated `Xfr From: …` / `Xfr To: …` transfer memo is dropped,
-         * because the owner did not write that either. It was 66 of the 66
-         * notes this import used to produce. A memo he DID write is used
-         * verbatim, including one that happens to mention a transfer; see
-         * QUICKEN_TRANSFER_MEMO for why the rule matches a shape and not a
-         * subject.
-         *
-         * In particular the authenticity wording ("FAKE") does NOT come
-         * here -- it is a description of the coin and it goes to Variety;
-         * see AUTHENTICITY_MARKER_PATTERNS. */
+        /* Notes is the Quicken memo (`M`) only: no fallback or synthesis, so a block
+         * without a memo gives blank Notes. `memoForNotes` drops Quicken's generated
+         * `Xfr From/To:` memo (see QUICKEN_TRANSFER_MEMO). Authenticity wording goes to
+         * Variety, not here. */
         notes: memoForNotes(fields.memo),
-         /* ---- THE PAYEE IS NOT A DEALER, SO NOBODY IS WRITTEN HERE ----
-         *
-         * *** `purchasedFrom`, `soldTo` AND `transactionNotes` ARE ABSENT
-         * FROM THIS LITERAL ON PURPOSE. *** Not forgotten, not deferred:
-         * this importer has no honest source for any of them and writing a
-         * plausible value would be worse than writing none.
-         *
-         * WHAT A QIF ACTUALLY OFFERS. The only counterparty-shaped line in
-         * an investment block is `P`, the payee -- and in an investment
-         * register Quicken fills it with whatever the transaction was filed
-         * against, which is routinely THE ACCOUNT ITSELF: "Misc. Coins",
-         * "Odd Type Set". Copied into Purchased From that gives the owner a
-         * wrong name on every coin he then has to clear by hand. In his
-         * words, less than useless.
-         *
-         * WHY NOT FILTER THE ACCOUNT NAMES OUT AND KEEP THE REST? Because
-         * the test cannot be made to hold. A `!Account` block names the
-         * accounts THIS FILE declares, so a one-account export -- which is
-         * what the import modal invites -- cannot recognise a payee that is
-         * another account's name, and nothing distinguishes a dealer called
-         * "Westmarch Coin Co." from an account called "Westmarch Coin Co.".
-         * A rule that catches some of them leaves the rest behind under a
-         * field that now looks trustworthy, which is the worse failure: an
-         * empty field is visibly empty and a wrong one has to be noticed
-         * first. Same judgement as the `Xfr From:` memo rule above, applied
-         * to a different field.
-         *
-         * MEASURED, AND THE MEASUREMENT HAS A HOLE WORTH KNOWING ABOUT. In
-         * `testing/qif-corpus/` 84% of acquisition blocks carry a `P` and
-         * every distinct value is a dealer name, because the generator
-         * invents dealers (`DEALERS` in generate-corpus.mjs). So the corpus
-         * would score a payee -> Purchased From rule at 100% correct while
-         * the owner's own export -- the file this rule exists for -- scores
-         * it near 0%. The corpus cannot referee this decision and must not
-         * be cited as though it had.
-         *
-         * `transactionNotes` is the same answer for a simpler reason: the
-         * memo line already has a destination (`notes`, above), and there
-         * is no second memo on a QIF block to put here.
-         *
-         * THE MECHANICAL GUARANTEE. `parseInvestmentFields` has no `case
-         * 'P'`, so the payee is never read off the file at all -- there is
-         * no variable in scope here that could be assigned by accident.
-         * quicken-payee-not-a-dealer.spec.ts holds both halves down. */
+         /* `purchasedFrom`, `soldTo` and `transactionNotes` are deliberately not set.
+          * The only counterparty line in a QIF investment block is `P`, the payee, which
+          * Quicken routinely fills with the account name ("Misc. Coins"), and account
+          * names can't be reliably filtered out (a one-account export doesn't declare
+          * the others). A wrong name is worse than a blank. The test corpus invents
+          * dealer payees, so it can't judge this rule. `transactionNotes`: the memo
+          * already goes to `notes`. `parseInvestmentFields` has no `case 'P'`, so the
+          * payee is never read (see quicken-payee-not-a-dealer.spec.ts). */
         source: 'quicken',
-        // All five alloy / weight fields come from the single lookup above,
-        // so they can never disagree with each other. Three outcomes: the
-        // reference table knew the coin and all five are filled; only the
-        // coarse metal inference could answer and `metalContent` alone is
-        // filled; or neither would commit and all five stay undefined.
+        // All five alloy/weight fields come from the one lookup: all filled, only
+        // `metalContent` (coarse fallback), or all undefined.
         metalContent: alloy?.metalContent,
         composition: alloy?.composition,
         pmWeightGrams: alloy?.pmWeightGrams,
         pmPercent: alloy?.pmPercent,
-        // The coin's GROSS weight in grams -- the whole coin, not just the
-        // precious metal in it. It comes from the same reference row as the
-        // other four, so a coin can never end up claiming 30.09 g of gold
-        // inside a planchet that weighs less than that.
+        // Gross weight from the same reference row as the other four.
         weight: alloy?.weight,
-        /* The raw Quicken name, carried only so the import preview has a key
-         * that survives a re-parse (`id` does not -- it is a fresh UUID every
-         * time). Never copied onto CoinRecord, never stored. */
+        /* Kept only as a preview key that survives a re-parse (`id` is a new UUID each
+         * time); never stored on CoinRecord. */
         securityName: fields.security,
-        /* WHAT THE PARSE GUESSED AT.
-         *
-         * Undefined -- not [] -- on the overwhelming majority of coins, so a
-         * reader can test `record.ambiguities?.length` and get an honest
-         * answer. When it IS set, the row still imports: an ambiguous reading
-         * is a flag, NOT a rejection. See `AmbiguousReading` in coin.model.ts. */
+        /* Undefined (not []) on most coins, so `record.ambiguities?.length` is honest.
+         * An ambiguous reading is a flag, not a rejection (see `AmbiguousReading`). */
         ambiguities: attrs.ambiguities.length > 0 ? attrs.ambiguities : undefined
       };
 
-      // Track net quantity: acquisitions add +1, dispositions add -1
+      // Net quantity: acquisitions +1, dispositions -1.
       const existing = netQuantityMap.get(fields.security) ?? {
         qty: 0,
         latestRecord: null,
@@ -889,29 +621,18 @@ export class QuickenImportService {
       };
 
       if (DISPOSITION_ACTIONS.has(actionKey)) {
-        // Disposition: decrement quantity, and remember WHEN and FOR HOW
-        // MUCH. `purchaseDate` / `purchasePrice` are this block's date and
-        // amount; on a Sell block those are the sale's, which is exactly
-        // what the record's Sold Date and Sold Price are.
+        // Disposition: on a Sell block this block's date and amount are the sale's.
         existing.qty -= 1;
-        // The LATEST disposal wins, matching how the latest acquisition
-        // wins for the record itself. `>=` so that two disposals on one day
-        // settle on the last one in the file rather than the first.
+        // The latest disposal wins; `>=` so same-day disposals settle on the last in the file.
         if (purchaseDate >= existing.soldDate) {
           existing.soldDate = purchaseDate;
-          /* NO AMOUNT MEANS NO PRICE, NOT A PRICE OF ZERO.
-           * A `ShrsOut` transfer to another Quicken account carries a
-           * quantity and no `T`/`U`/`I` line at all. `resolveAmount`
-           * answers 0 for it, which here would read as "sold for nothing"
-           * -- a claim the file never made, and one the import filter
-           * treats as PRESENT (see services/import-sold.ts, where 0 is a
-           * real price). So the amount is written only when the block
-           * actually stated one. */
+          /* No amount means no price, not a price of 0. A `ShrsOut` transfer has no
+           * `T`/`U`/`I` line; 0 would count as a real price in import-sold.ts. */
           existing.soldPrice = statesAmount(fields) ? purchasePrice : undefined;
         }
         netQuantityMap.set(fields.security, existing);
       } else if (ACQUISITION_ACTIONS.has(actionKey)) {
-        // Acquisition: increment quantity and update latest record if newer
+        // Acquisition: increment and keep the newest record.
         existing.qty += 1;
         if (purchaseDate >= existing.latestDate) {
           existing.latestRecord = record;
@@ -919,7 +640,7 @@ export class QuickenImportService {
         }
         netQuantityMap.set(fields.security, existing);
       } else {
-        // Unrecognized action: treat as acquisition but warn
+        // Unrecognised action: treated as an acquisition, with a warning.
         warnings.push(
           `Imported "${fields.security}" with an unrecognized action code (${fields.action}); please verify the cost basis.`
         );
@@ -932,22 +653,11 @@ export class QuickenImportService {
       }
     }
 
-    // THE SINGLE CHOKE POINT.
-    //
-    // Every record that ends up in `importedRecords` passes through this one
-    // loop, so this is the only place the import rules need to be enforced.
-    // Two gates, in order:
-    //   1. Sold, AND ONLY IF THE CALLER ASKED FOR IT. A coin fully sold or
-    //      transferred out (qty <= 0) is no longer held, but it is still a
-    //      coin the owner had, and by default it imports like any other --
-    //      see QuickenParseOptions.excludeSold for why the default changed.
-    //      Either way its security name is recorded in `soldSecurityNames`
-    //      so the caller can tell the two apart, and its Sold Date / Sold
-    //      Price are written onto the record from the disposal block.
-    //   2. Main-detail rule: a coin still needs at least 2 of
-    //      Year / Coin Type / Denomination, or it goes to `rejectedRecords`
-    //      (an exception the user can see -- and optionally override in the
-    //      import modal) rather than being silently dropped.
+    // Every imported record passes through this loop, the one place the rules apply:
+    //   1. Sold, only if requested: a coin with qty <= 0 imports by default; its
+    //      name goes in `soldSecurityNames` and its sold date/price are recorded.
+    //   2. 2-of-3 rule: at least two of Year / Coin Type / Denomination, else it goes
+    //      to `rejectedRecords` (shown to the user, optionally overridable).
     const importedRecords: QuickenImportRecord[] = [];
     const skippedRecords: QuickenImportRecord[] = [];
     const rejectedRecords: QuickenRejectedRecord[] = [];
@@ -956,26 +666,13 @@ export class QuickenImportService {
     for (const [securityName, data] of netQuantityMap.entries()) {
       const record = data.latestRecord;
       if (!record) {
-        // Only dispositions were seen for this security -- there was never an
-        // acquisition to build a record from, so there is nothing to report.
+        // Only dispositions were seen; there is no acquisition to build a record from.
         continue;
       }
 
-      /* Gate 1, part one: HOW A QIF SAYS A COIN IS GONE.
-       *
-       * Net quantity, and nothing else. A Quicken investment account has no
-       * "sold" flag -- what it has is a Buy and, later, a Sell / SellX /
-       * ShrsOut, and a coin whose acquisitions and disposals net to zero or
-       * less is one the owner no longer holds. That is the honest reading
-       * of the document, so it stays the DETECTOR.
-       *
-       * What it is no longer allowed to be is a SECRET. The sale it found
-       * is written onto the record -- the date of the last disposal, and
-       * its proceeds when the block stated any -- so the coin arrives
-       * carrying the same evidence a CSV row would carry, and the filter
-       * below can ask every import path the one question in
-       * services/import-sold.ts. Before this, a QIF-imported coin was known
-       * to be sold and had no sold date to show for it. */
+      /* Gate 1, part one: a QIF has no "sold" flag, so net quantity <= 0 detects a
+       * disposal. The sale's date and proceeds (when stated) are written onto the
+       * record so the shared sold rule can read them. */
       const soldByNetQuantity = data.qty <= 0;
       if (soldByNetQuantity) {
         soldSecurityNames.push(securityName);
@@ -983,20 +680,15 @@ export class QuickenImportService {
         if (data.soldPrice !== undefined) record.soldPrice = data.soldPrice;
       }
 
-      /* Gate 1, part two: THE FILTER, which keys on the shared rule.
-       *
-       * `isSoldRecord` is the same predicate the CSV and Excel imports
-       * apply, so "only coins I still own" means one thing in all three
-       * dialogs. `soldByNetQuantity` is kept alongside it rather than being
-       * replaced by it: a disposal block with no `D` line leaves nothing
-       * for the rule to read, and a coin Quicken says is gone must not slip
-       * back into an import the user asked to be free of them. */
+      /* Gate 1, part two: `isSoldRecord` is the shared rule used by CSV and Excel too.
+       * `soldByNetQuantity` is kept alongside it because a disposal without a `D`
+       * line leaves nothing for the rule to read. */
       if (excludeSold && (soldByNetQuantity || isSoldRecord(record))) {
         skippedRecords.push(record);
         continue;
       }
 
-      // Gate 2: the 2-of-3 main-detail rule.
+      // Gate 2: the 2-of-3 rule.
       const detailCheck = checkMainCoinDetails(record);
       if (!detailCheck.passes) {
         rejectedRecords.push({
@@ -1022,16 +714,15 @@ export class QuickenImportService {
     };
   }
 
-  /** Reads the account name out of an `!Account` block's `N` line. */
+  /** The account name from an `!Account` block's `N` line. */
   private extractAccountName(lines: string[]): string {
     const nameLine = lines.find((line) => line.startsWith('N'));
     return nameLine?.slice(1).trim() || 'Unknown Account';
   }
 
   /**
-   * Extracts the known investment field codes from a transaction block.
-   * Returns `null` when the block contains none of them, meaning it is
-   * not an investment transaction this parser understands.
+   * Extracts the known investment field codes from a transaction block; null when
+   * there are none (not an investment transaction this parser understands).
    */
   private parseInvestmentFields(lines: string[]): ParsedInvestmentFields | null {
     const isInvestmentBlock = lines.some((line) => /^[DNYIQTUMO]/.test(line));
@@ -1086,9 +777,8 @@ export class QuickenImportService {
   }
 
   /**
-   * Determines the transaction's dollar amount, preferring an explicit
-   * `T`/`U` amount field and falling back to price x quantity + commission
-   * when Quicken only recorded the trade legs.
+   * The transaction's dollar amount: an explicit `T`/`U` field, else price x
+   * quantity + commission.
    */
   private resolveAmount(fields: ParsedInvestmentFields): number {
     const amountText = fields.amount ?? fields.altAmount;
@@ -1104,7 +794,7 @@ export class QuickenImportService {
     return 0;
   }
 
-  /** Parses a QIF numeric value, tolerating thousands separators. */
+  /** Parses a QIF number, tolerating thousands separators. */
   private parseAmount(value: string): number {
     const cleaned = value.replace(/,/g, '').trim();
     const parsed = Number.parseFloat(cleaned);
@@ -1112,9 +802,8 @@ export class QuickenImportService {
   }
 
   /**
-   * Normalizes a QIF date (`M/D/YYYY`, `M/D'YY`, `MM-DD-YYYY`, etc.) into
-   * an ISO `YYYY-MM-DD` string. Falls back to the original text when the
-   * shape is unrecognized rather than guessing.
+   * Normalises a QIF date (`M/D/YYYY`, `M/D'YY`, `MM-DD-YYYY`, ...) to ISO
+   * `YYYY-MM-DD`; unrecognised shapes are returned unchanged.
    */
   private normalizeDate(value: string): string {
     const cleaned = value.replace(/'/g, '/').trim();
@@ -1128,9 +817,8 @@ export class QuickenImportService {
     let year: string;
 
     if (/^\d{4}$/.test(parts[0])) {
-      // Already ISO-ish (`YYYY-MM-DD`). Some exporters -- and our own test
-      // fixtures -- use this; reading it as M/D/Y yields dates like
-      // "2001-2024-02" that then compare wrongly against the date filters.
+      // Already ISO (`YYYY-MM-DD`), as some exporters and test fixtures write; reading
+      // it as M/D/Y would produce dates like "2001-2024-02".
       [year, month, day] = parts;
     } else {
       // Quicken's native order: M/D/Y.
@@ -1138,7 +826,7 @@ export class QuickenImportService {
     }
 
     if (year.length <= 2) {
-      // Quicken writes 2-digit years; 00-50 -> 2000s, 51-99 -> 1900s.
+      // Two-digit years: 00-50 -> 2000s, 51-99 -> 1900s.
       const yearNumber = Number.parseInt(year, 10);
       if (Number.isNaN(yearNumber)) return value;
       year = String(yearNumber <= 50 ? 2000 + yearNumber : 1900 + yearNumber);
@@ -1155,7 +843,7 @@ export class QuickenImportService {
       dayNumber < 1 ||
       dayNumber > 31
     ) {
-      // Unrecognized shape -- return the original text rather than guessing.
+      // Unrecognised shape: return the original text.
       return value;
     }
 
@@ -1163,38 +851,29 @@ export class QuickenImportService {
   }
 
   /**
-   * Parses structured attributes from a Quicken security name.
-   *
-   * Typical Quicken security name format for coins:
+   * Parses structured attributes from a Quicken security name, e.g.
    *   "1875S 20c-XF"
    *   "1921 Morgan Dollar MS63"
    *   "1916D Mercury Dime VF/XF"
    *
-   * Extraction rules:
-   * - Year: Leading 4-digit number (e.g., "1875", "1921")
-   * - Mintmark: Single letter immediately after 4-digit year with no space (e.g., "1875S" -> "S")
-   * - Grade: After "-" or space, patterns like VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F,
-   *          plus modifiers like AU58, MS63, CH+AU, VF/EF, VF/XF
-   * - CertCompany: Whole-token match against the known grading services
-   *          (PCGS, NGC, ANACS, ICG, SEGS, CACG, NNC)
-   * - HasCacSticker: Whole-token "CAC" (and its spelling variants), which is a
-   *          DIFFERENT thing from the CACG grading service
-   * - Denomination: Pattern match to symbolic format (3CS→3CS, 20c→20¢, half→50¢, etc.)
-   * - Variety: Only if explicit keywords (Type I, Type II, DDO, DDR)
-   * - CoinType: Left blank (determined later by UI or enrichment)
+   * - Year: leading 4 digits ("1875"), with an overdate suffix ("1862/1")
+   * - Mint mark: letters right after the year ("1875S" -> "S")
+   * - Grade: VF, EF, XF, AU, MS, PR, PF, Unc, AG, G, VG, F, with numbers and
+   *   modifiers (AU58, MS63, CH+AU, VF/EF) and designations (PF65RB)
+   * - Cert company: whole-token PCGS, NGC, ANACS, ICG, SEGS, CACG, NNC
+   * - CAC sticker: whole-token "CAC" and variants (not CACG)
+   * - Denomination: to symbolic form (3CS, 20c -> 20¢, half -> 50¢, ...)
+   * - Variety: explicit keywords only (Type I, Type II, DDO, DDR), plus
+   *   authenticity wording
+   * - Coin type: from name keywords or denomination + year
    *
-   * NOTE: every rule below reads the ORIGINAL `securityName`. Nothing is
-   * stripped or rewritten as we go, so the rules cannot interfere with each
-   * other. That is what keeps "PCGS MS63" yielding BOTH certCompany "PCGS"
-   * and grade "MS63" -- detecting the company never consumes the grade.
+   * Every rule reads the original `securityName`; nothing is stripped as it goes,
+   * so "PCGS MS63" yields both certCompany "PCGS" and grade "MS63".
    *
-   * @param securityName The security name (Y field) from Quicken
-   * @param chosenDenomination The user's answer to a reading this parser
-   *   previously flagged as a guess. Applied after the denomination ladder
-   *   and BEFORE the coin type is inferred, so everything derived from the
-   *   denomination follows the corrected value. Ignored unless this name
-   *   really did produce a denomination ambiguity offering that value.
-   * @returns Parsed attributes
+   * @param securityName the `Y` field
+   * @param chosenDenomination the user's answer to a previously flagged guess;
+   *   applied after the denomination ladder and before the coin type, and ignored
+   *   unless this name produced a denomination ambiguity offering that value
    */
   private parseAttributes(securityName: string, chosenDenomination?: string): {
     year: string;
@@ -1207,11 +886,7 @@ export class QuickenImportService {
     hasCacSticker: boolean;
     country: string;
     metalHint: string;
-    /**
-     * Readings this parse was NOT sure about. Empty on nearly every name --
-     * see `AmbiguousReading` in coin.model.ts for what goes in here and why
-     * it is a general list rather than a per-coin special case.
-     */
+    /** Readings this parse wasn't sure about; empty for nearly every name (see `AmbiguousReading`). */
     ambiguities: AmbiguousReading[];
   } {
     let year = '';
@@ -1223,14 +898,13 @@ export class QuickenImportService {
     let certCompany = '';
     const ambiguities: AmbiguousReading[] = [];
 
-    // Extract year, including an overdate suffix when present (e.g. 1862/1).
+    // Year, including an overdate suffix (e.g. 1862/1).
     const yearMatch = securityName.match(/^(\d{4}(?:\/\d{1,2})?)/);
     if (yearMatch) {
       year = yearMatch[1];
     }
 
-    // Extract mintmark immediately after the year, with or without a hyphen.
-    // Common mintmarks: S, D, O, CC, C, W, P, etc.
+    // Mint mark right after the year, with or without a hyphen (S, D, O, CC, C, W, P...).
     const mintMarkMatch = securityName.match(/^(?:\d{4}(?:\/\d{1,2})?)[-\s]?([A-Z]{1,2})(?:\b|[-\s])/i);
     if (mintMarkMatch) {
       const discovered = mintMarkMatch[1].toUpperCase();
@@ -1239,29 +913,17 @@ export class QuickenImportService {
       }
     }
 
-    // Extract grade (after "-" or space).
-    //
-    // Two passes, because a single expression could not cover both cases
-    // without either missing designations or mis-parsing plain grades.
-    //
-    // PASS 1 handles a numeric grade carrying a DESIGNATION suffix:
-    //   PF65RB, PF64Cameo, PF65 Cameo, PF69DCAM, MS64DMPL, MS70-FS, MS64+
-    //
-    //   The trailing `(?![A-Z0-9])` must NOT be replaced by `\b`: in "PF65RB"
-    //   there is no word boundary between "5" and "R" (both are word
-    //   characters), so `\b` loses the grade entirely -- and proof and copper
-    //   coins are overwhelmingly graded with designations. `(?![A-Z0-9])`
-    //   also succeeds after a "+" (MS64+), which `\b` cannot.
-    //
-    // PASS 2 is the plain-grade expression, used only when pass 1 finds
-    // nothing. It keeps XF, AU53, VF/EF and CH+AU working.
+    // Grade (after "-" or a space), in two passes:
+    //   Pass 1: a numeric grade with a designation suffix: PF65RB, PF64Cameo,
+    //     PF65 Cameo, PF69DCAM, MS64DMPL, MS70-FS, MS64+. The trailing `(?![A-Z0-9])`
+    //     must not become `\b`: there is no word boundary inside "PF65RB", and `\b`
+    //     fails after a "+".
+    //   Pass 2: plain grades (XF, AU53, VF/EF, CH+AU), only if pass 1 finds nothing.
     const GRADE_CORE =
       String.raw`(?:CH\+)?(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G)` +
       String.raw`(?:\/(?:BU|UNC|VF|EF|XF|AU|MS|PR|PF|AG|VG|F|G))?`;
 
-    // Standard numismatic designations. Longer alternatives come first so
-    // that, e.g., "CAMEO" is preferred over the shorter "CAM" and "DMPL"
-    // over "PL".
+    // Standard designations, longer alternatives first (CAMEO before CAM, DMPL before PL):
     //   Colour (copper):  RD red, RB red-brown, BN brown
     //   Proof surfaces:   CAMEO/CAM cameo, DCAM deep cameo, UCAM ultra cameo
     //   Mirror:           DMPL deep mirror prooflike, DPL, PL prooflike
@@ -1282,25 +944,13 @@ export class QuickenImportService {
     );
 
     if (gradeMatch) {
-      // Collapse any internal separator so "PF65 Cameo" and "PF65Cameo"
-      // both normalise to the same stored value.
+      // "PF65 Cameo" and "PF65Cameo" normalise to the same value.
       grade = gradeMatch[1].toUpperCase().replace(/[-\s]+/g, '');
     }
 
-    // -----------------------------------------------------------------------
-    // Extract the certification (grading) company.
-    //
-    // First whole-token hit wins. We store the BARE token in its canonical
-    // upper-case spelling ("pcgs" in the QIF becomes "PCGS") and nothing else:
-    // the CertCompany column is NVARCHAR(100), but the coin editor's input is
-    // capped at 10 characters, so storing something like
-    // "PCGS (with CAC sticker)" would produce a value the user cannot edit.
-    //
-    // This runs AFTER the grade above and reads the untouched security name,
-    // so a company sitting immediately before a grade -- "PCGS MS63",
-    // "ANACS VG8", "NGC PF65RB", "ANACS PF69 DCAM", "NGC PF64Cameo" -- leaves
-    // the already-extracted grade completely alone.
-    // -----------------------------------------------------------------------
+    // Cert company: the first whole-token hit, stored as the bare upper-case token.
+    // (The editor's input is capped at 10 characters.) Reads the untouched name, so
+    // "PCGS MS63", "NGC PF65RB" etc. keep their already-extracted grade.
     for (const candidate of CERT_COMPANY_PATTERNS) {
       if (candidate.pattern.test(securityName)) {
         certCompany = candidate.token;
@@ -1308,21 +958,11 @@ export class QuickenImportService {
       }
     }
 
-    // -----------------------------------------------------------------------
-    // Extract the CAC sticker flag.
-    //
-    // Remember: CAC (a green sticker on someone else's slab) is NOT CACG
-    // (CAC's own grading service). The whole-token pattern is what enforces
-    // that -- "CACG" cannot match `\bCAC\b` because there is no word boundary
-    // between the "C" and the "G". See CAC_STICKER_PATTERN for the full
-    // explanation.
-    //
-    // Always a boolean, never undefined: the database column is
-    // BIT NOT NULL DEFAULT 0 and the UI renders a checkbox from it.
-    // -----------------------------------------------------------------------
+    // CAC sticker flag (not CACG; see CAC_STICKER_PATTERN). Always a boolean: the
+    // column is BIT NOT NULL DEFAULT 0.
     const hasCacSticker = CAC_STICKER_PATTERN.test(securityName);
 
-    // Extract variety (explicit keywords only)
+    // Variety: explicit keywords only.
     if (/Type\s*I\b/i.test(securityName)) {
       variety = 'Type I';
     } else if (/Type\s*II\b/i.test(securityName)) {
@@ -1333,150 +973,85 @@ export class QuickenImportService {
       variety = 'DDR';
     }
 
-    /* AUTHENTICITY WORDING JOINS THE VARIETY, IT DOES NOT REPLACE IT.
-     *
-     * Appended rather than written with `else if` above, because the two
-     * facts are independent: "1861 3CS DDO - FAKE" is a doubled-die
-     * counterfeit and both halves have to survive. A name carrying only the
-     * marker gets the marker alone, which is the case all five corpus rows
-     * are in. See AUTHENTICITY_MARKER_PATTERNS for why this is not an
-     * exclusion and why it is not written into Notes. */
+    /* Authenticity wording is appended to the variety, not a replacement:
+     * "1861 3CS DDO - FAKE" is a doubled-die counterfeit and both facts are kept.
+     * See AUTHENTICITY_MARKER_PATTERNS. */
     const authenticity = detectAuthenticityWording(securityName);
     if (authenticity) {
       variety = variety ? `${variety} ${authenticity}` : authenticity;
     }
 
-    /* -----------------------------------------------------------------------
-     * COUNTRY
-     *
-     * `detectCountry` reads a country named in the text, and failing that
-     * accepts a currency unit that can only belong to one country ("Soles"
-     * proves Peru on its own). When it finds nothing we default to the United
-     * States, because this is an American collector's export -- but do not
-     * hard-code that default in place of the lookup: "1969 Peru 100 Soles"
-     * then imports as a US coin and fails the 2-of-3 rule on denomination.
-     * --------------------------------------------------------------------- */
+    /* Country: named in the text, or implied by a single-issuer currency unit
+     * ("Soles" -> Peru); otherwise United States. Don't hard-code the default in
+     * place of the lookup, or "1969 Peru 100 Soles" fails the 2-of-3 rule. */
     const country = detectCountry(securityName) || 'United States';
 
-    /* -----------------------------------------------------------------------
-     * METAL HINT
-     *
-     * A few face values existed in two metals at the same time -- above all
-     * the "$1", struck as a 26.73 g SILVER dollar and a 1.67 g GOLD dollar in
-     * the same years (1849-1889). pm-reference.ts refuses to guess between
-     * them, so when the security name settles the question we pass the answer
-     * along. Three forms appear in this collection:
-     *
+    /*
+     * Metal hint: some face values existed in two metals at once (the 1849-1889
+     * "$1": 26.73 g silver and 1.67 g gold), and pm-reference.ts won't guess. Forms
+     * seen in security names:
      *     "1849-O $1 Gold - ANACS XF45"       the word
-     *     "1855 G$1 - PCGS/CAC AU50"          the "G$" shorthand
+     *     "1855 G$1 - PCGS/CAC AU50"          "G$" shorthand
      *     "1873 Open 3 G$2.50 - ANACS AU53"   ditto
-     *
-     * *** THE TRAP ***
-     * "CAC Gold" and "Gold CAC" do NOT describe the coin's metal. They
-     * describe CAC's gold STICKER -- the tier above its usual green one --
-     * and they sit on silver coins all the time:
-     *
-     *     "1875 20¢ - PCGS XF40 CAC Gold"     a SILVER twenty-cent piece
-     *
-     * Those pairings are scrubbed before the metal words are read, or that
-     * coin would be imported as gold.
-     * --------------------------------------------------------------------- */
+     * "CAC Gold" / "Gold CAC" is CAC's gold sticker tier, not the metal, and appears
+     * on silver coins ("1875 20¢ - PCGS XF40 CAC Gold"), so it is removed first.
+     */
     const metalHint = this.detectMetalHint(securityName);
 
-    // Extract denomination (convert to symbolic format)
+    // Denomination, converted to symbolic form.
     const lowerName = securityName.toLowerCase();
     const yearNum = parseInt(year, 10) || 0;
 
-    /* -----------------------------------------------------------------------
-     * FOREIGN DENOMINATION -- "100 Soles", "20 Francs", "50 Pesos"
-     *
-     * Read BEFORE the US table below, but only used ahead of it when the coin
-     * is not American. The US table understands "$20" and "50¢"; it has no
-     * idea what a Sol is. For a US coin the foreign reader almost never
-     * fires, and if it somehow did we would rather trust the US table --
-     * hence the country test.
-     * --------------------------------------------------------------------- */
+    /* Foreign denomination ("100 Soles", "20 Francs"): read first but used ahead of
+     * the US table only for non-US coins. */
     const foreign = detectForeignDenomination(securityName);
 
-    /* -----------------------------------------------------------------------
-     * ISRAELI SHEQALIM, WRITTEN AS A BARE "S"
-     *
-     * "1982 Israel Qumran 5S - ANACS PF69DCAM" is five sheqalim, but the unit
-     * is abbreviated to a single letter with no space -- so the general
-     * number-and-unit reader in coin-countries.ts cannot see it. That reader
-     * deliberately requires a separator between the count and the unit,
-     * because a bare letter glued to a number is exactly the shape of a grade
-     * suffix or a mintmark, and loosening it there would cost far more than
-     * this one coin is worth.
-     *
-     * The rule is narrow ON PURPOSE: the name must ALSO say Israel. Without
-     * that guard "5S" would start claiming sheqalim across every account.
-     * --------------------------------------------------------------------- */
+    /* Israeli sheqalim written as a bare "S" ("1982 Israel Qumran 5S - ANACS
+     * PF69DCAM"). The general reader in coin-countries.ts requires a separator,
+     * since a letter glued to a number looks like a grade suffix or mint mark, so
+     * this is a narrow rule that also requires the name to say Israel. */
     const sheqalim = /\bisrael/i.test(securityName)
       ? /\b(\d{1,4})\s?S\b/.exec(securityName)
       : null;
 
-    // A non-US coin whose name carries a "<number> <currency unit>" reading
-    // is settled here -- "1969 Peru 100 Soles" is a 100 Soles, full stop.
+    // A non-US coin with a "<number> <currency unit>" reading is settled here.
     if (foreign && country !== 'United States') {
       denomination = foreign.denomination;
-    // See the `sheqalim` read above for why this one is guarded on Israel.
+    // Guarded on Israel (see the `sheqalim` read above).
     } else if (sheqalim) {
       denomination = `${sheqalim[1]} Sheqalim`;
-    // Explicit silver/nickel three-cent variants (words or abbreviations)
+    // Explicit silver or nickel three-cent (words or abbreviations).
     } else if (/three[\s-]?cent[\s-]?silver|3cs\b/i.test(lowerName)) {
       denomination = '3CS';
     } else if (/three[\s-]?cent[\s-]?nickel|3cn\b/i.test(lowerName)) {
       denomination = '3CN';
-    /* A bare 3¢ / "three cent" / "3c" with no silver-or-nickel qualifier.
-     * The date settles it outside 1865-1873 and is worthless inside it, so
-     * this delegates to `resolveBareThreeCent` above -- which returns the
-     * guess AND, when it really was a guess, the flag that says so. */
+    /* A bare 3¢ / "three cent" / "3c": `resolveBareThreeCent` returns the reading
+     * and, when it was a guess, the flag. */
     } else if (/3¢/.test(securityName) || /three[\s-]?cent/i.test(lowerName) || /\b3c\b/.test(lowerName)) {
       const threeCent = resolveBareThreeCent(yearNum, securityName, grade);
       denomination = threeCent.denomination;
       if (threeCent.ambiguity) {
         ambiguities.push(threeCent.ambiguity);
       }
-    /* -----------------------------------------------------------------------
-     * SYMBOL-BASED DENOMINATIONS (½¢, ½10¢, 1¢, 2¢, 5¢, 10¢, 20¢, 25¢, 50¢)
+    /*
+     * Symbol denominations (½¢, ½10¢, 1¢, 2¢, 5¢, 10¢, 20¢, 25¢, 50¢).
      *
-     * THE ORDER OF THESE BRANCHES IS THE WHOLE RULE: LONGEST SPELLING FIRST.
-     *
-     * This is an if/else ladder over SUBSTRING tests, so a shorter cent
-     * spelling that sits inside a longer one wins whenever it is tried first:
-     *
-     *   "1868 25¢ - NGC/CAC PF64 Cameo"  CONTAINS "5¢", so with /5¢/ tried
-     *                                    first a QUARTER imports as a
-     *                                    five-cent piece
-     *   "1860 ½10¢ - PCGS/CAC PF64"      with no half-dime branch at all it
-     *                                    falls through to /10¢/ and a HALF
-     *                                    DIME imports as a DIME
-     *
-     * Both failures are silent, and both do damage downstream: a mis-read
-     * denomination collides with the real coins of that denomination in the
-     * same account, and the image matcher then cross-files the photographs.
-     *
-     * RULE FOR ANYONE ADDING A ROW: put it above every spelling it contains
-     * a copy of. "½10¢" contains "10¢"; "25¢" contains "5¢". When in doubt,
-     * longest first.
-     * --------------------------------------------------------------------- */
+     * Order matters: this ladder uses substring tests, so the longest spelling must
+     * come first. "1868 25¢" contains "5¢" (a quarter would import as a five-cent
+     * piece), and "1860 ½10¢" contains "10¢" (a half dime would import as a dime).
+     * Put any new row above every spelling it contains.
+     */
     } else if (/½¢|1\/2¢/.test(securityName) || /half[\s-]?cent/i.test(lowerName)) {
       denomination = '½¢';
-    /* THE HALF DIME, written as half of a dime: "Half Dime can be ½10¢ or
-     * 5¢". It is literal -- a half dime IS half of ten cents -- and it must
-     * be tried before /10¢/ below, which would otherwise read the trailing
-     * "10¢" and report twice the face value. The matcher's own reader,
-     * denomination-units.ts, carries the same rule and ordering warning. */
+    /* The half dime, written "½10¢" (or 5¢); must precede /10¢/. The matcher's
+     * denomination-units.ts has the same ordering rule. */
     } else if (/½\s*10¢|1\/2\s*10¢/.test(securityName) || /half[\s-]?dime/i.test(lowerName)) {
       denomination = '5¢';
-    /* ATB -- "America the Beautiful". Every coin in the series is a QUARTER,
-     * including the five-ounce silver pieces, whose bullion weight says
-     * nothing about the face value stamped on them ("2011 5oz. ATB
-     * Vicksburg"). Matched case-SENSITIVELY, as an initialism. */
+    /* ATB ("America the Beautiful"): every coin is a quarter, including the 5 oz
+     * silver pieces ("2011 5oz. ATB Vicksburg"). Case-sensitive initialism. */
     } else if (/\bATB\b/.test(securityName)) {
       denomination = '25¢';
-    /* 25¢ ABOVE 5¢, because "25¢" contains "5¢". */
+    /* 25¢ above 5¢, because "25¢" contains "5¢". */
     } else if (/25¢/.test(securityName) || /\bquarter\b/i.test(lowerName) || /\b25c\b/.test(lowerName)) {
       denomination = '25¢';
     } else if (/5¢/.test(securityName) || /\bnickel\b/i.test(lowerName)) {
@@ -1494,54 +1069,34 @@ export class QuickenImportService {
     // Dollar-based denominations
     } else if (/\b8\s*real/i.test(lowerName)) {
       denomination = '8 Reales';
-    /* -----------------------------------------------------------------------
-     * THE EAGLES, AND WHY THEY NEED THEIR OWN ORDERING
-     *
-     * "Eagle" is not one denomination, it is a family, and the metal and the
-     * YEAR decide which member you are holding:
-     *
-     *   Silver Eagle        $1      (bullion, whatever else the name says)
-     *   Quarter Eagle       $2.50   gold
-     *   Half Eagle          $5      gold
-     *   Eagle               $10     gold, the classic series
-     *   Double Eagle        $20     gold
-     *   modern Gold Eagle   $50     one-ounce bullion, struck only since 1986
-     *
-     * Silver must therefore be asked about FIRST (a bare "eagle" test
-     * swallows "Proof Silver Eagle" and imports it as a $10 gold piece), the
-     * modern gold year-rule second, leaving the classic $10 Eagle as the
-     * fall-through.
-     * --------------------------------------------------------------------- */
-    /* A multi-coin SET is the one eagle that is deliberately given NOTHING.
-     *
-     * "1987 2-coin Proof American Gold Eagle Set (1.5 troy oz.)" is a $50 AND
-     * a $25 in one holding, so no single denomination is correct. This has to
-     * be its own branch that assigns '' rather than merely declining to set
-     * $50: an if/else ladder that only SKIPS a branch carries on down, and
-     * the generic eagle test below would then label the set a $10 gold piece
-     * -- the same class of silent damage as the half dimes that came in as
-     * dimes. Blank sends it to the exceptions list, where the owner says what
-     * he means. */
+    /*
+     * The Eagles: a family, decided by metal and year:
+     *   Silver Eagle       $1     bullion
+     *   Quarter Eagle      $2.50  gold
+     *   Half Eagle         $5     gold
+     *   Eagle              $10    gold, classic series
+     *   Double Eagle       $20    gold
+     *   modern Gold Eagle  $50    one-ounce bullion, since 1986
+     * Silver is tested first (a bare "eagle" test would make "Proof Silver Eagle" a
+     * $10 gold piece), then the modern gold year rule, then the classic $10.
+     */
+    /* A multi-coin set gets no denomination: "1987 2-coin Proof American Gold Eagle
+     * Set" is a $50 and a $25. It needs its own branch assigning '' (skipping would
+     * fall through to the $10 test), and blank sends it to the exceptions list. */
     } else if (/gold\s*eagle/i.test(securityName) && /\bsets?\b/i.test(securityName)) {
       denomination = '';
-    // Silver Eagle (and the collector's abbreviation ASE) is the $1 bullion
-    // coin, whatever else the name says. 'ASE' is matched case-SENSITIVELY:
-    // it is an initialism, and a lowercase "ase" is far likelier to be the
-    // tail of an ordinary word than a denomination.
+    // Silver Eagle / ASE is the $1 bullion coin. 'ASE' is case-sensitive (an
+    // initialism; lowercase "ase" is usually part of a word).
     } else if (/silver\s*eagle/i.test(securityName) || /\bASE\b/.test(securityName)) {
       denomination = '$1';
     } else if (/double\s*eagle|[\$£]20\b/i.test(securityName)) {
       denomination = '$20';
-    /* The modern one-ounce Gold Eagle carries a $50 face value and has been
-     * struck only since 1986, so the year settles it with no ambiguity. Sets
-     * never reach here -- they were stopped above. */
+    /* The one-ounce Gold Eagle is a $50, struck only since 1986. Sets were handled above. */
     } else if (/gold\s*eagle/i.test(securityName) && yearNum >= 1986) {
       denomination = '$50';
     } else if (/\beagle\b|[\$£]10\b/i.test(securityName)) {
       denomination = '$10';
-    /* $50 and $25 ABOVE $5 and $2.50, per this ladder's longest-first rule.
-     * These two are the modern bullion face values -- the $50 one-ounce gold
-     * (Eagle and Buffalo) and the $25 half-ounce. */
+    /* $50 and $25 (modern bullion face values) above $5 and $2.50, longest first. */
     } else if (/[\$£]50\b/.test(securityName)) {
       denomination = '$50';
     } else if (/[\$£]25\b/.test(securityName)) {
@@ -1552,9 +1107,7 @@ export class QuickenImportService {
       denomination = '$3';
     } else if (/[\$£]2\.50\b/.test(securityName)) {
       denomination = '$2.50';
-    /* SBA -- the Susan B. Anthony dollar. Another initialism the owner uses
-     * on its own ("1999 SBA - PF"), with no other denomination word in the
-     * name to fall back on. Case-SENSITIVE for the same reason as ASE. */
+    /* SBA (Susan B. Anthony dollar), used alone ("1999 SBA - PF"). Case-sensitive like ASE. */
     } else if (/\bSBA\b/.test(securityName)) {
       denomination = '$1';
     } else if (/[\$£]1\b|\bdollar\b|\bpound\b|\bsovereign\b/i.test(securityName)) {
@@ -1566,81 +1119,58 @@ export class QuickenImportService {
     } else if (/\bpence\b|\bpenny\b.*\b(?:british|uk|gb)\b|\b(?:british|uk|gb)\b.*\bpenny\b/i.test(lowerName)) {
       denomination = '1d';
     } else if (foreign) {
-      // Last chance: the US table recognised nothing, but the name does carry
-      // a number bound to a currency unit. This is the path a coin takes when
-      // its denomination is foreign but its name never says which country --
-      // "1915 20 Francs" gets a denomination even though France, Belgium and
-      // Switzerland all struck one and we refuse to guess which.
+      // Fallback: the US table found nothing but the name has a number bound to a
+      // currency unit, e.g. "1915 20 Francs" (country left blank: several issuers).
       denomination = foreign.denomination;
     } else {
       denomination = '';
     }
 
-    /* -----------------------------------------------------------------------
-     * THE USER OVERRULES THE GUESS.
-     *
-     * This sits HERE -- after the ladder, before anything derived from the
-     * denomination -- for one reason: the coin type below and the alloy /
-     * weight fields back in `parse` are both computed from `denomination`, so
-     * correcting it any later would leave them describing the coin the parser
-     * guessed rather than the coin the user says it is.
-     *
-     * TWO GUARDS, AND THEY MATTER. The value is accepted only when
-     *   (a) this name actually produced a denomination ambiguity -- a
-     *       certain reading is not up for negotiation, and
-     *   (b) the value is one of the alternatives the parser itself listed.
-     * Without them a stale entry from an earlier QIF, or a hand-edited one,
-     * could set any denomination on any row. Correcting a guess is not the
-     * same thing as free-text editing the import; the coin editor is where
-     * the latter belongs.
-     * --------------------------------------------------------------------- */
+    /*
+     * The user's correction to a flagged guess. Applied here, after the ladder and
+     * before anything derived from the denomination (coin type here, alloy fields
+     * in `parse`), so those follow the corrected value.
+     * Accepted only when (a) this name produced a denomination ambiguity and
+     * (b) the value is one of the parser's listed alternatives, so a stale or
+     * hand-edited entry can't set an arbitrary denomination.
+     */
     if (chosenDenomination) {
       const flagged = ambiguities.find(
         a => a.field === 'denomination' && a.alternatives.includes(chosenDenomination)
       );
       if (flagged) {
         denomination = chosenDenomination;
-        // Keep the flag itself truthful: it still records that this reading
-        // was ambiguous and what the candidates were, but `chosen` now says
-        // what is actually on the record.
+        // The flag still records the ambiguity and candidates; `chosen` says what was applied.
         flagged.chosen = chosenDenomination;
       }
     }
 
-    // Infer coinType from explicit name keywords or denomination + year.
-    // `metalHint` matters here too: a "$1" that says Gold is a Gold Dollar,
-    // a completely different series from the silver dollar of the same date.
+    // Coin type from name keywords or denomination + year. `metalHint` matters: a
+    // "$1" that says Gold is a Gold Dollar, not a silver dollar.
     coinType = this.inferCoinType(securityName, denomination, year, metalHint);
 
-    // NOTE: certCompany and hasCacSticker are deliberately NOT part of the
-    // 2-of-3 "main details" completeness rule (Year / Coin Type /
-    // Denomination) enforced in `coin-completeness.ts`. A slab label tells you
-    // who graded the coin, not what the coin is, so a row carrying only
-    // "PCGS MS64" is still an exception, exactly as before this was added.
+    // certCompany and hasCacSticker are not part of the 2-of-3 rule: a slab label
+    // says who graded the coin, not what it is.
     return {
-      year, mintMark, grade, denomination, variety, coinType, certCompany, hasCacSticker,
+      year, mintMark, grade, denomination, variety, coinType, certCompany,
+      // CAC only applies to a graded coin.
+      hasCacSticker: cacStickerFor(grade, hasCacSticker),
       country, metalHint, ambiguities
     };
   }
 
   /**
-   * Reads the coin's METAL out of the security name, when the name says it.
-   *
-   * Returns one of the canonical Metal values ('Gold', 'Silver', ...) or ''
-   * when the name is silent -- which is the normal case. See the long comment
-   * at the call site in `parseAttributes` for why the CAC scrub matters.
+   * The coin's metal when the security name states it: a canonical Metal value
+   * ('Gold', 'Silver', ...) or '' (the usual case).
    */
   private detectMetalHint(securityName: string): string {
-    // Remove "CAC Gold" / "Gold CAC" (and the slashed and hyphenated
-    // spellings) BEFORE looking for a metal word. That phrase is CAC's gold
-    // sticker tier, not the coin's metal, and it appears on silver coins.
+    // Remove "CAC Gold" / "Gold CAC" (slashed and hyphenated too) first: a sticker
+    // tier, not the metal.
     const scrubbed = securityName
       .replace(/\bCAC\b\s*[-/]?\s*\bGold\b/gi, 'CAC')
       .replace(/\bGold\b\s*[-/]?\s*\bCAC\b/gi, 'CAC');
 
-    // "G$1", "G$2.50", "G$3" -- the collector shorthand for GOLD dollar,
-    // gold quarter eagle and three-dollar gold. Four of this collection's
-    // coins are written this way.
+    // "G$1", "G$2.50", "G$3": collector shorthand for the gold issues.
     if (/\bG\$/i.test(securityName)) return 'Gold';
 
     if (/\bgold\b/i.test(scrubbed)) return 'Gold';
@@ -1659,19 +1189,19 @@ export class QuickenImportService {
     const lowerName = securityName.toLowerCase();
     const yearNum = parseInt(year, 10) || 0;
 
-    // Check for set-type coins (e.g., "Proof Set", "Maundy Set") — coinType IS the set name
+    // Set-type coins ("Proof Set", "Maundy Set"): the coin type is the set name.
     if (/\bproof\s+set\b/i.test(lowerName)) return 'Proof Set';
     if (/\bmint\s+set\b/i.test(lowerName)) return 'Mint Set';
     if (/\bmaundy\s+set\b/i.test(lowerName)) return 'Maundy Set';
 
-    // Explicit issue names should win over year-based denomination heuristics.
-    // This keeps commemoratives and special issues from being mislabeled by their date.
+    // Explicit issue names win over year-based rules, so commemoratives aren't
+    // mislabelled by their date.
     if (/\boregon\s*(?:trail)?\b/i.test(lowerName)) return 'Oregon Trail';
     if (/\bcap\s*&\s*rays?\b|cap\s+and\s+rays\b/i.test(lowerName)) return 'Cap & Rays';
     if (/\bcommemorative\b/i.test(lowerName) && /\btrail\b/i.test(lowerName)) return 'Oregon Trail';
     if (/\b8\s*reales\b|\b8\s*real\b/i.test(lowerName)) return 'Cap & Rays';
 
-    // Explicit coin type names in the security name
+    // Explicit coin type names
     if (/\bmorgan\b/i.test(lowerName)) return 'Morgan';
     if (/\bpeace\b/i.test(lowerName)) return 'Peace';
     if (/\bwalking\s*liberty\b/i.test(lowerName)) return 'Walking Liberty';
@@ -1701,39 +1231,23 @@ export class QuickenImportService {
 
     if (!yearNum) return '';
 
-    /* -----------------------------------------------------------------------
-     * THE GOLD DOLLAR.
-     *
-     * "$1" between 1849 and 1889 is two completely different coins: the
-     * silver dollar (Liberty Seated, then Morgan) and the Gold Dollar, a
-     * 13 mm sliver of 90% gold. The year-based table below only knows the
-     * silver series, so without this check "1849-O $1 Gold" comes out a
-     * "Liberty Seated" with 24 g of silver attached to it.
-     *
-     * The three Gold Dollar types:
+    /*
+     * The Gold Dollar. A "$1" from 1849-1889 is either a silver dollar or the Gold
+     * Dollar; the year table below knows only the silver series.
      *   Type 1  1849-1854  Liberty Head
      *   Type 2  1854-1856  Indian Princess, Small Head
      *   Type 3  1856-1889  Indian Princess, Large Head
-     *
-     * 1854 through 1856 is left BLANK on purpose: those dates overlap two
-     * (in 1854, three) types and a Quicken name does not say which. Blank is
-     * fine -- Year and Denomination already satisfy the 2-of-3 rule, so the
-     * coin still imports and the user picks the type.
-     *
-     * We deliberately do NOT route that blank through `AmbiguousReading`.
-     * That channel exists so a GUESS can be shown to the user as a guess;
-     * this branch declines rather than guesses, and the decline is already
-     * visible as an em dash in the preview's Coin Type column. The field
-     * union does include 'coinType', so the channel stays available if
-     * declining ever stops being good enough.
-     * --------------------------------------------------------------------- */
+     * 1854-1856 is left blank because types overlap there. Year and Denomination
+     * still satisfy the 2-of-3 rule, so the coin imports and the user picks the type.
+     * This is a decline, not a guess, so it isn't reported as an `AmbiguousReading`.
+     */
     if (denomination === '$1' && metalHint === 'Gold') {
       if (yearNum >= 1849 && yearNum <= 1853) return 'Liberty Head';
       if (yearNum >= 1857 && yearNum <= 1889) return 'Indian Princess';
       return '';
     }
 
-    // Year-based inference by denomination
+    // Year-based inference by denomination.
     return inferCoinTypeByYear(denomination, yearNum);
   }
 }

@@ -1,41 +1,15 @@
 /**
- * log-rotation.ts — the naming, rolling and retention POLICY for app logs.
+ * Naming, rolling and retention policy for app logs:
  *
- * A single append-only `app.log` solved neither of the two problems rotation
- * exists for:
- *
- *   SUPPORT  A user who hits a bug is asked for their log. Nobody can attach
- *            an unbounded file to a GitHub issue, and nobody is going to find
- *            the interesting twelve lines in forty thousand.
- *
- *   PRIVACY  Every line that carries a path carries the Windows username and,
- *            via connection strings, the machine name. An append-only file
- *            accumulates those forever.
- *
- * Retention is therefore not tidiness. It is the privacy control: things the
- * user has forgotten about age out on their own.
- *
- * THE SHAPE
  *   app-2026-11-08.log      the day's log
- *   app-2026-11-08.1.log    …and its continuation once the first hit the cap
- *   app-2026-11-08.2.log
+ *   app-2026-11-08.1.log    continuation once the first hits the size cap
  *
- * One file per UTC day, each capped, roughly fourteen days kept.
+ * One file per UTC day (lines are stamped in UTC, so the file name matches
+ * its contents), each capped, about 14 days kept. Retention keeps logs small
+ * enough to attach and lets paths and usernames age out.
  *
- * WHY UTC AND NOT LOCAL TIME
- * Every line the logger writes is stamped with `new Date().toISOString()`,
- * which is UTC. If the FILE name used local dates, a log opened on its own
- * would disagree with its own contents near midnight — `app-2026-11-08.log`
- * would open on lines stamped `2026-11-09T02:...`. For a support artefact
- * somebody else reads out of context, self-consistency beats matching the
- * user's wall clock.
- *
- * WHY THE PARSER IS STRICT
- * `pruneLogDirectory` DELETES. `parseLogFileName` is the only thing between it
- * and an unrelated file somebody left in the log folder, so it rejects
- * anything that is not exactly one of our own names — wrong extension, wrong
- * prefix, impossible month, non-numeric sequence. A forgiving parser here is a
- * data-loss bug, not a convenience.
+ * parseLogFileName is strict because pruning deletes whatever it accepts;
+ * anything not exactly one of our names is left alone.
  */
 
 import fs from 'node:fs';
@@ -49,32 +23,15 @@ const FILE_SUFFIX = '.log';
 export const LEGACY_LOG_NAME = 'app.log';
 
 /**
- * How many days of logs are kept, counting today as day one.
- *
- * Two weeks is long enough that a user who notices a problem on Monday and
- * gets round to reporting it the following week still has the evidence, and
- * short enough that a path they have since stopped using does not sit on disk
- * indefinitely.
+ * Days of logs kept, counting today. Long enough to report a problem a week
+ * later, short enough that old paths don't linger.
  */
 export const DEFAULT_RETENTION_DAYS = 14;
 
-/**
- * Hard cap on one file.
- *
- * Sized so that even a pathological day splits into a couple of files that are
- * each still trivially attachable to an issue (the worst observed single log
- * is around 8 MB). The cap's real job is to contain a runaway loop — a retry
- * storm can produce more in an hour than a year of normal use.
- */
+/** Hard cap on one file: keeps files attachable and contains runaway logging. */
 export const DEFAULT_MAX_FILE_BYTES = 5 * 1024 * 1024;
 
-/**
- * Upper bound on the sequence search in `resolveActiveLogFile`.
- *
- * At the 5 MB cap this is 5 GB of logging in a single day, which is not a
- * situation worth continuing to serve. Without a bound, a directory somehow
- * full of sequence files would turn one log line into an unbounded stat loop.
- */
+/** Upper bound on the sequence search in resolveActiveLogFile (5 GB/day at the cap). */
 const MAX_SEQUENCE = 1000;
 
 /** One rotated log on disk. Names and sizes only — never contents. */
@@ -83,13 +40,7 @@ export interface RotatedLog {
   bytes: number;
 }
 
-/**
- * The UTC calendar day a timestamp belongs to, as `YYYY-MM-DD`.
- *
- * Implemented off `toISOString()` rather than `getUTCFullYear()` + padding
- * because it is the same call the logger uses to stamp the line, so the two
- * cannot drift.
- */
+/** The UTC day of a timestamp as `YYYY-MM-DD`, via toISOString() like the line stamps. */
 export function formatLogDateKey(when: Date): string {
   return when.toISOString().slice(0, 10);
 }
@@ -102,11 +53,8 @@ export function logFileName(dateKey: string, seq = 0): string {
 }
 
 /**
- * Strict inverse of `logFileName`. Returns null for ANYTHING else.
- *
- * The calendar check (`month <= 12`, `day <= 31`) is deliberate: a file named
- * `app-2026-13-08.log` is not something this module produced, so whatever it
- * is, it is not ours to delete.
+ * Strict inverse of `logFileName`; returns null for anything else, including
+ * impossible dates like `app-2026-13-08.log`.
  */
 export function parseLogFileName(name: string): { dateKey: string; seq: number } | null {
   const match = /^app-(\d{4})-(\d{2})-(\d{2})(?:\.(\d+))?\.log$/.exec(name);
@@ -125,13 +73,8 @@ export function parseLogFileName(name: string): { dateKey: string; seq: number }
 }
 
 /**
- * Whole days from `fromKey` to `toKey`, negative when `fromKey` is in the
- * future.
- *
- * Date.UTC() is used rather than `new Date(key)` arithmetic so that daylight
- * saving cannot make a "day" 23 or 25 hours long and shift the boundary by
- * one. The retention window is counted in days, so it has to be counted in
- * days that are all the same length.
+ * Whole days from `fromKey` to `toKey` (negative if `fromKey` is in the
+ * future). Uses Date.UTC so daylight saving can't shift the boundary.
  */
 function daysBetweenKeys(fromKey: string, toKey: string): number {
   const [fy, fm, fd] = fromKey.split('-').map(Number);
@@ -142,18 +85,9 @@ function daysBetweenKeys(fromKey: string, toKey: string): number {
 }
 
 /**
- * Which of `names` have aged out, given today and a retention window.
- *
- * Two deliberate refusals:
- *
- *   - Anything `parseLogFileName` does not recognise is never returned. See
- *     the module header; this function's output is fed straight to unlink().
- *   - A FUTURE-dated log is never expired. Clock skew and users changing
- *     their system date both happen, and `age` then goes negative. Deleting a
- *     file because we cannot explain its date is the wrong way round.
- *
- * The window is inclusive of its oldest day: with `retentionDays = 14`, a log
- * 14 days old is the fourteenth of the fourteen and is kept.
+ * Which of `names` have aged out. Unrecognised names are never returned (the
+ * result is deleted), and future-dated logs (clock skew) are never expired.
+ * Inclusive: with 14 days, a log 14 days old is kept.
  */
 export function selectExpiredLogs(
   names: readonly string[],
@@ -174,7 +108,7 @@ export function selectExpiredLogs(
   return expired;
 }
 
-/** Directory listing that never throws — a missing log folder is normal on first run. */
+/** Directory listing that never throws; a missing log folder is normal on first run. */
 function safeReaddir(dir: string): string[] {
   try {
     return fs.readdirSync(dir);
@@ -193,14 +127,9 @@ function safeSize(file: string): number | null {
 }
 
 /**
- * The file the next line should be appended to.
- *
- * Walks the sequence for `dateKey` until it finds one that is missing or still
- * under the cap. Note the comparison is `size < maxBytes` on the file BEFORE
- * the write, so a file can finish slightly over the cap — by at most one log
- * line. Measuring the line first and splitting it across two files would be
- * worse: a stack trace torn in half is harder to read than a 5 MB + 400 byte
- * file is to attach.
+ * The file the next line should go to: the first in the sequence for
+ * `dateKey` that is missing or under the cap. Checked before the write, so a
+ * file can exceed the cap by one line rather than splitting a line.
  */
 export function resolveActiveLogFile(dir: string, dateKey: string, maxBytes: number): string {
   for (let seq = 0; seq < MAX_SEQUENCE; seq++) {
@@ -209,19 +138,13 @@ export function resolveActiveLogFile(dir: string, dateKey: string, maxBytes: num
     if (size === null || size < maxBytes) return candidate;
   }
 
-  // Ran off the end of the sequence. Returning the last one keeps logging
-  // working (over-cap, but working); losing log lines entirely would be worse
-  // than a large file, and this is a situation that should never occur.
+  // Ran off the end: keep logging to the last file rather than losing lines.
   return path.join(dir, logFileName(dateKey, MAX_SEQUENCE - 1));
 }
 
 /**
- * Delete every expired log in `dir`. Returns the names actually removed.
- *
- * Failures are swallowed on purpose. Pruning runs on the logging path, and a
- * file locked by an editor or an antivirus scanner must not turn into an
- * exception thrown out of `logInfo()`. The file will simply be considered
- * again next time.
+ * Deletes every expired log in `dir` and returns the names removed. Failures
+ * are swallowed (this runs on the logging path); the file is retried later.
  */
 export function pruneLogDirectory(
   dir: string,
@@ -235,20 +158,14 @@ export function pruneLogDirectory(
       fs.unlinkSync(path.join(dir, name));
       removed.push(name);
     } catch {
-      // Locked, already gone, or permission-denied. Try again tomorrow.
+      // Locked, gone, or permission denied. Try again next time.
     }
   }
 
   return removed;
 }
 
-/**
- * Every rotated log in `dir`, newest first, with sizes.
- *
- * NAMES AND SIZES ONLY. This feeds the support report's "what logs exist"
- * section, which is explicitly a count-and-size inventory — the contents go
- * through redaction, this listing does not need to.
- */
+/** Every rotated log in `dir`, newest first, with sizes. Names and sizes only. */
 export function listRotatedLogs(dir: string): RotatedLog[] {
   const logs: Array<RotatedLog & { dateKey: string; seq: number }> = [];
 
@@ -260,16 +177,8 @@ export function listRotatedLogs(dir: string): RotatedLog[] {
     logs.push({ name, bytes, dateKey: parsed.dateKey, seq: parsed.seq });
   }
 
-  /*
-   * Newest first: later date wins, and within a date the HIGHER SEQUENCE is
-   * the more recent file.
-   *
-   * Sorted on the parsed fields rather than on the string, because a plain
-   * descending string sort gets the second clause backwards:
-   * 'app-2026-11-08.log' sorts after 'app-2026-11-08.1.log' (the character
-   * after the date is 'l' in one and '1' in the other, and 'l' > '1'), so the
-   * OLDER half of the day would be listed as the newest file.
-   */
+  // Newest first: later date, then higher sequence. Sorted on parsed fields
+  // because a string sort puts 'app-…08.log' after 'app-…08.1.log'.
   logs.sort((a, b) =>
     a.dateKey === b.dateKey ? b.seq - a.seq : b.dateKey.localeCompare(a.dateKey)
   );
@@ -278,18 +187,8 @@ export function listRotatedLogs(dir: string): RotatedLog[] {
 }
 
 /**
- * Rename a pre-rotation `app.log` into the dated scheme.
- *
- * NOT "ignore the old file": an existing app.log is full of the user's name
- * and the absolute paths of their photo library. If rotation merely stopped
- * writing to it, that file would never age out — permanently outside the
- * retention rule that is the whole privacy control. Renaming it in means the
- * ordinary fourteen-day rule finally applies to it.
- *
- * The date used is the file's last-modified time, which is the closest thing
- * available to "the last day this log was true". Adoption picks the first free
- * sequence so it can never clobber a genuine rotated log.
- *
+ * Renames a pre-rotation `app.log` into the dated scheme so the retention rule
+ * applies to it. Uses the file's modified date and the first free sequence.
  * Returns the new name, or null when there was nothing to adopt.
  */
 export function adoptLegacyLog(dir: string, legacyName: string = LEGACY_LOG_NAME): string | null {
@@ -312,7 +211,7 @@ export function adoptLegacyLog(dir: string, legacyName: string = LEGACY_LOG_NAME
       fs.renameSync(legacy, target);
       return name;
     } catch {
-      // Locked by something else. Leave it; the next startup can try again.
+      // Locked; the next startup can try again.
       return null;
     }
   }

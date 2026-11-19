@@ -1,19 +1,7 @@
 /**
- * backup/restore.spec.ts — THE REFUSALS, AND THE PROMISE THAT THE OLD
- * COLLECTION IS STILL THERE.
- *
- * Real files throughout, for the same reason backup.spec.ts uses them: a
- * mocked restore proves that restore.ts called rename with the arguments
- * restore.ts was written to call it with. What is in question is whether
- * the user's coins are readable afterwards and whether the file they had
- * before still exists — and only a real swap on a real disk answers that.
- *
- * The structure follows the danger:
- *
- *   1. what it REFUSES, with the collection untouched afterwards
- *   2. what it does with the OLD collection when it accepts
- *   3. what the user can see BEFORE committing
- *   4. the rollback
+ * Restore tests against real files: what it refuses (leaving the collection
+ * untouched), what happens to the old collection, what the user sees before
+ * committing, and the rollback.
  */
 
 import fs from 'fs';
@@ -21,8 +9,7 @@ import path from 'path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { DB_BINDINGS, readDatabaseFileFacts } from '../db';
-// The data layer's own opener, not a second import of `node:sqlite` —
-// db/driver-isolation.spec.ts would (correctly) fail the build for that.
+// Use the data layer's opener; only db/ imports node:sqlite.
 import { openSqliteDatabase } from '../db/driver';
 import { getPool, resetPool } from '../db/pool';
 import {
@@ -51,11 +38,8 @@ async function takeBackup(): Promise<string> {
 
 /** Rewrites a file's `PRAGMA user_version` by hand, to fake another build. */
 function forceSchemaVersion(filePath: string, version: number): void {
-  // Byte offset 60 of the SQLite header IS user_version, big-endian. Written
-  // directly rather than through a connection so the test does not depend on
-  // the application being willing to write that number — which it is not:
-  // db/schema.ts refuses to stamp a version DOWN, and refusing is the
-  // behaviour under test elsewhere.
+  // Byte offset 60 of the SQLite header is user_version (big-endian). Written
+  // directly because the app refuses to stamp a version downwards.
   const handle = fs.openSync(filePath, 'r+');
   try {
     const buffer = Buffer.alloc(4);
@@ -90,9 +74,8 @@ describe('restore — what it refuses, with the collection untouched', () => {
   });
 
   it('refuses an EMPTY file, which SQLite would happily adopt', async () => {
-    // A zero-length file is a valid SQLite database as far as the driver is
-    // concerned: opening one creates a schema in it. Restoring from it would
-    // produce an empty collection that passed every other check.
+    // SQLite treats a zero-length file as an empty database; restoring it would
+    // produce an empty collection.
     database = await useFileDatabase('restore-empty');
     await insertCoins(5);
 
@@ -107,10 +90,7 @@ describe('restore — what it refuses, with the collection untouched', () => {
     database = await useFileDatabase('restore-foreign');
     await insertCoins(5);
 
-    // A real, valid, perfectly healthy SQLite file — just not ours. Built by
-    // taking one of our backups and dropping a table out of it, so it is
-    // indistinguishable from a Coin Inventory backup in every way except the
-    // one that matters.
+    // A valid SQLite file that isn't ours: one of our backups minus a table.
     const foreign = await takeBackup();
     const connection = await getPool();
     void connection; // the live handle stays open; the edit is on the copy
@@ -124,12 +104,7 @@ describe('restore — what it refuses, with the collection untouched', () => {
     expect(inspection.decision.missingTables).toContain('Denominations');
   });
 
-  /**
-   * *** THE REFUSAL WITH NO WAY ROUND IT. ***
-   * There is no migration runner, so a file from a later build cannot be
-   * read down. Accepting it would mean moving the user's good collection
-   * aside to make room for something this build will silently mis-read.
-   */
+  /** A newer build's file can't be read safely, so it is refused before anything moves. */
   it('refuses a backup from a NEWER build, by number, before anything moves', async () => {
     database = await useFileDatabase('restore-newer');
     await insertCoins(5);
@@ -141,8 +116,7 @@ describe('restore — what it refuses, with the collection untouched', () => {
       /newer version of Coin Inventory/i
     );
 
-    // Untouched, and still OURS — not renamed, not moved aside, not partly
-    // replaced.
+    // Untouched and not moved aside.
     expect(await liveCoinCount()).toBe(5);
     expect(fs.existsSync(database.file)).toBe(true);
     expect(fs.readdirSync(database.directory).filter((n) => n.includes('replaced'))).toEqual([]);
@@ -165,34 +139,30 @@ describe('restore — the old collection is moved aside, never overwritten', () 
     await insertCoins(3, 'original');
     const backupPath = await takeBackup();
 
-    // ...and then it changes. These twelve coins are what the user is about
-    // to lose, and what the aside file has to keep recoverable.
+    // Later changes, which the aside file must keep recoverable.
     await insertCoins(12, 'later');
     expect(await liveCoinCount()).toBe(15);
 
-    // LOCAL time, on purpose: the aside name is read by a human looking at
-    // their own folder, so backup/names.ts builds it from local time. A UTC
-    // literal here would make this spec pass or fail by timezone.
+    // Local time, since backup/names.ts uses local time; a UTC literal would be timezone-dependent.
     const result = await performRestore(backupPath, new Date(2026, 10, 14, 16, 20, 30));
 
     // The live collection is now the backup's.
     expect(await liveCoinCount()).toBe(3);
     expect(result.coinCount).toBe(3);
 
-    // *** AND THE OLD ONE IS STILL THERE. ***
+    // And the old one is still there.
     expect(result.previousCollectionMovedTo).not.toBeNull();
     const aside = result.previousCollectionMovedTo!;
     expect(fs.existsSync(aside)).toBe(true);
     expect(path.basename(aside)).toBe('coin-inventory.replaced-2026-11-14-162030.db');
     expect(readDatabaseFileFacts(aside).coinCount).toBe(15);
 
-    // Next to the collection, so the user finds it where they are told to
-    // look, and still a .db so copying it back is the whole recovery.
+    // In the same folder and still a .db, so copying it back is the recovery.
     expect(path.dirname(aside)).toBe(path.dirname(database.file));
   });
 
   it('is recoverable BY HAND — copying the aside file back undoes it', async () => {
-    // The actual promise being made to the user, performed.
+    // The undo the user is told about, performed.
     database = await useFileDatabase('restore-undo');
     await insertCoins(2, 'in-backup');
     const backupPath = await takeBackup();
@@ -201,10 +171,7 @@ describe('restore — the old collection is moved aside, never overwritten', () 
     const result = await performRestore(backupPath);
     expect(await liveCoinCount()).toBe(2);
 
-    // The user realises their mistake and does the one obvious thing:
-    // closes the app and copies the file the message named back over the
-    // collection. (`resetPool()` is this spec standing in for "closes the
-    // app"; the file copy is exactly what the user does.)
+    // The user closes the app (resetPool() here) and copies the aside file back.
     await resetPool();
     fs.copyFileSync(result.previousCollectionMovedTo!, database.file);
 
@@ -212,8 +179,7 @@ describe('restore — the old collection is moved aside, never overwritten', () 
   });
 
   it('leaves no sidecar of the OLD database beside the new one', async () => {
-    // A -wal belonging to the database that was just renamed away would be
-    // applied to the restored one. That is a corruption, not an error.
+    // A stale -wal from the old database must not be applied to the restored one.
     database = await useFileDatabase('restore-sidecars');
     await insertCoins(4, 'in-backup');
     const backupPath = await takeBackup();
@@ -236,8 +202,7 @@ describe('restore — the old collection is moved aside, never overwritten', () 
     const result = await performRestore(backupPath);
     expect(result.serverRestartRequired).toBe(false);
 
-    // No reset, no reopen, no restart: an ordinary query through the
-    // ordinary pool, which is exactly what the next API call will do.
+    // No restart needed: the next ordinary query reopens the file.
     expect(await liveCoinCount()).toBe(6);
   });
 
@@ -273,20 +238,15 @@ describe('restore — what the user is told before committing', () => {
   });
 
   /**
-   * *** CONSEQUENCE OF PORTABILITY #1: REFERENCED PHOTOGRAPHS. ***
-   * In 'referenced' mode the database holds only a SourcePath into a folder
-   * on the machine the import ran on. Carried to another PC that folder is
-   * not there, and the user gets a grid of broken pictures with no
-   * explanation. This is the explanation, delivered before the restore
-   * rather than discovered after it.
+   * Referenced photos are only paths into folders on the importing machine;
+   * the user is warned about missing folders before the restore.
    */
   it('warns that referenced photographs point at folders that are not on this machine', async () => {
     database = await useFileDatabase('inspect-photos');
     await insertCoins(2, 'photo');
 
     const connection = await getPool();
-    // Two referenced-only photos (a path, no picture) in a folder that does
-    // not exist here, and one stored photo, which travels fine.
+    // Two referenced-only photos in a folder that doesn't exist here, and one stored photo.
     await connection.request().query(
       `INSERT INTO CoinImages (CoinId, ImageData, SortOrder, SourcePath) VALUES
          ('photo-0', NULL, 0, 'Z:\\OtherPC\\Coins\\obverse.jpg'),
@@ -306,8 +266,7 @@ describe('restore — what the user is told before committing', () => {
     expect(folders[0]!.folder).toBe('Z:\\OtherPC\\Coins');
     expect(folders[0]!.presentOnThisMachine).toBe(false);
 
-    // And the same facts come back out of the restore, so the "after" panel
-    // can repeat the warning rather than leaving the user to remember it.
+    // The restore result repeats the warning for the "after" panel.
     const result = await performRestore(backupPath);
     expect(result.referencedOnlyImageCount).toBe(2);
     expect(result.missingPhotoFolders).toEqual(['Z:\\OtherPC\\Coins']);
@@ -334,8 +293,7 @@ describe('restore — what the user is told before committing', () => {
   });
 
   it('does not leave -wal / -shm litter beside a file it merely LOOKED at', async () => {
-    // Inspecting is something the user does while deciding. It must not
-    // make files appear next to their backup.
+    // Inspecting must not create sidecar files next to the backup.
     database = await useFileDatabase('inspect-clean');
     await insertCoins(1);
     const backupPath = await takeBackup();
@@ -348,24 +306,11 @@ describe('restore — what the user is told before committing', () => {
 });
 
 /**
- * *** WHY THE ROLLBACK IS TESTED THROUGH swapInRestoredCollection() AND
- * NOT THROUGH performRestore(). ***
- *
- * Because it cannot be reached through performRestore(), and that is good
- * news rather than a gap. Every way a bad FILE can fail is caught by the
- * validation before anything moves — measured against this build: a
- * truncated backup, a half-copied one and one with a falsified page count
- * are all rejected at inspection with "database disk image is malformed",
- * so none of them ever gets as far as the swap. (An earlier version of
- * this test truncated the backup to 100 bytes to force a mid-copy failure
- * and got a REFUSAL instead, which is the system working.)
- *
- * What can still fail at the swap is the environment, not the file: a disk
- * that fills up, a USB stick pulled out, a scanner holding the destination
- * open. None of those can be staged in a spec. So the write — the one
- * genuinely unstageable step — is injected, and everything else below is
- * the production code doing the real thing to real files: the real rename,
- * the real rollback, the real sidecar handling.
+ * The rollback is tested through swapInRestoredCollection() with an injected
+ * failing write, because bad files are already rejected at inspection and
+ * can't reach the swap. What can fail there is the environment (disk full,
+ * drive removed); everything else is the real rename, rollback and sidecar
+ * handling.
  */
 describe('restore — rollback', () => {
   it('puts the previous collection back when the write fails', async () => {
@@ -381,26 +326,21 @@ describe('restore — rollback', () => {
         databasePath: database.file,
         asidePath,
         write: async () => {
-          // The disk filled up, the stick was pulled out, the scanner had
-          // the file. The collection has already been renamed away at this
-          // point, which is the state the rollback exists for.
+          // Simulated environment failure after the collection was renamed away.
           throw new Error('ENOSPC: no space left on device');
         },
         verify: () => 0,
       })
     ).rejects.toThrow(/nothing was changed/i);
 
-    // *** BACK EXACTLY WHERE THEY STARTED. ***
+    // Back exactly where they started.
     expect(fs.existsSync(database.file)).toBe(true);
     expect(fs.existsSync(asidePath)).toBe(false);
     expect(await liveCoinCount()).toBe(10);
   });
 
   it('rolls back when what landed does not match what was promised', async () => {
-    // The other half: the write SUCCEEDED and produced the wrong thing.
-    // A short write or a truncated copy shows up here as a coin count that
-    // disagrees, and must roll back rather than become a quietly
-    // incomplete collection.
+    // The write succeeded but produced the wrong thing (coin count mismatch).
     database = await useFileDatabase('restore-verify-fails');
     await insertCoins(8, 'precious');
 
@@ -425,14 +365,12 @@ describe('restore — rollback', () => {
   });
 
   it('moves the old database\'s sidecars with it, never leaving them behind', async () => {
-    // A -wal belonging to the renamed-away database would be applied to
-    // whatever is written in its place. That is a corruption, not an error,
-    // and it is why moveAside() deals with all three files.
+    // A stale -wal must move with the old database, not stay beside the new one.
     database = await useFileDatabase('restore-sidecar-move');
     await insertCoins(5, 'precious');
     await resetPool();
 
-    // Stage the state a killed process leaves behind: a stale sidecar.
+    // A stale sidecar, as a killed process might leave.
     fs.writeFileSync(`${database.file}-wal`, 'stale write-ahead log');
 
     const asidePath = path.join(database.directory, 'coin-inventory.replaced-test.db');

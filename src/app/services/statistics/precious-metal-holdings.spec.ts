@@ -1,25 +1,7 @@
  /*
- * precious-metal-holdings.spec.ts
- *
- * "How much gold do I actually hold?" is the question a bullion-minded
- * collector asks first, and it is the one most easily answered wrongly,
- * because there are THREE weights on a coin record and only one of them is
- * the right one:
- *
- *     weight            gross — the whole coin, alloy included
- *     pmPercent         the fineness
- *     pmWeightGrams     the PURE precious metal — THIS one
- *
- * pm-reference.ts works the example through on a $20 Saint-Gaudens: 33.436 g
- * gross, 90% fine, 30.09 g of actual gold. Summing `weight` would overstate
- * the holding by the alloy; multiplying `pmWeightGrams` by `pmPercent` would
- * understate it by the purity a second time — the exact bug that was fixed in
- * computeMeltValue and is documented at length in inventory-columns.ts.
- *
- * The other half of these tests is the honest gap: `pmWeightGrams` is
- * optional and frequently blank. A coin recorded as "Gold" with no weight is
- * NOT zero grams of gold. It is a coin whose gold weight is unknown, and the
- * panel has to say so.
+  * Holdings use `pmWeightGrams` (pure metal), not `weight` (gross) and not
+  * `pmWeightGrams * pmPercent` (purity applied twice). A coin with no recorded
+  * weight is unknown, not zero grams.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -50,8 +32,8 @@ describe('computePreciousMetalHoldings — the pure weight', () => {
   it('sums pmWeightGrams and NOT the gross weight', () => {
     const saint = statsCoin({
       metalContent: 'Gold',
-      weight: 33.436,       // gross — must be ignored
-      pmWeightGrams: 30.09, // pure — the answer
+      weight: 33.436,       // gross; ignored
+      pmWeightGrams: 30.09, // pure; the answer
       pmPercent: 90
     });
 
@@ -62,8 +44,7 @@ describe('computePreciousMetalHoldings — the pure weight', () => {
   });
 
   it('does NOT apply pmPercent a second time', () => {
-    // 30.09 * 0.90 = 27.081. If this test ever sees 27.081 the purity bug is
-    // back; see inventory-metrics.ts.
+    // 30.09 * 0.90 = 27.081 would mean purity was applied twice.
     const held = computePreciousMetalHoldings([
       statsCoin({ metalContent: 'Gold', pmWeightGrams: 30.09, pmPercent: 90 })
     ]);
@@ -84,10 +65,7 @@ describe('computePreciousMetalHoldings — the pure weight', () => {
   });
 
   it('matches the metal by keyword exactly as computeMeltValue does', () => {
-    // "90% Silver", "Silver (.900)" and "silver" are all silver, because
-    // computeMeltValue tests with `metal.includes('silver')`. If these two
-    // ever disagree, a coin can have a melt value and no holding, or the
-    // reverse.
+    // Metal matching must agree with computeMeltValue (`includes('silver')`).
     const held = computePreciousMetalHoldings([
       statsCoin({ metalContent: 'Silver (.900 fine)', pmWeightGrams: 10 }),
       statsCoin({ metalContent: 'silver', pmWeightGrams: 5 })
@@ -128,8 +106,7 @@ describe('computePreciousMetalHoldings — the honest gaps', () => {
   });
 
   it('gives a NULL weight when a metal is held but no coin of it has a weight', () => {
-    // Three gold coins, none weighed. "0.00 g of gold" would be a flat lie
-    // about a collection that might hold a kilo.
+    // Three unweighed gold coins: unknown, not 0.00 g.
     const held = computePreciousMetalHoldings([
       statsCoin({ metalContent: 'Gold' }),
       statsCoin({ metalContent: 'Gold' }),
@@ -151,9 +128,7 @@ describe('computePreciousMetalHoldings — the honest gaps', () => {
   });
 
   it('counts a coin whose metal is recorded but unpriceable separately', () => {
-    // Palladium is in the app's metal list and has no spot price, so it can
-    // never produce a melt value. It is not a gap in the data; it is a gap in
-    // the app, and the two read differently to a user.
+    // Palladium has no spot price: reported separately from missing data.
     const held = computePreciousMetalHoldings([
       statsCoin({ metalContent: 'Palladium', pmWeightGrams: 31.1 }),
       statsCoin({ metalContent: 'Bronze' })

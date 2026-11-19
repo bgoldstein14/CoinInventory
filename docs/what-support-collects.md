@@ -26,12 +26,8 @@ There are two screens, not three.
    recent log beside it if you asked for one — and your browser is at a
    pre-filled issue. Nothing has been uploaded.
 
-The report text used to be a compulsory middle screen with an editable box. It
-was removed because a wall of generated markup that most people cannot
-evaluate does not help anyone decide anything — it just teaches you to click
-past it. Nothing about what is collected or what is replaced changed with it:
-the list is still shown, the exact text is still one click away, and nothing
-is written until you press the button.
+The report text is read-only. If you could edit it, the box might show
+something different from what is written.
 
 ---
 
@@ -65,7 +61,7 @@ Log lines contain file paths, and file paths contain your name. A real line
 looks like this:
 
 ```
-Connecting to SQL Server at MYSERVER\SQLEXPRESS/CoinInventory
+Opening database C:\Users\devuser\AppData\Local\CoinInventory\coin-inventory.db on MYPC
   at formatDate (C:/Users/devuser/source/dev/server/server.ts:130:12)
 ```
 
@@ -83,7 +79,7 @@ Before the report is built, these are replaced:
 So the lines above become:
 
 ```
-Connecting to SQL Server at <MACHINE>\SQLEXPRESS/CoinInventory
+Opening database C:\Users\<USER>\AppData\Local\CoinInventory\coin-inventory.db on <MACHINE>
   at formatDate (C:/Users/<USER>/source/dev/server/server.ts:130:12)
 ```
 
@@ -144,7 +140,7 @@ paragraphs that say what went wrong.
 
 ## Attaching your own files
 
-**The app cannot do this for you, and it no longer pretends to.**
+**The app cannot do this for you.**
 
 There is no file picker in the dialog. GitHub has no official way for a
 program to put a file on an issue, and the app holds no GitHub credential —
@@ -161,17 +157,14 @@ never have to go looking for it.
 Nothing you drag in is edited or redacted by anyone. The redaction described
 above applies to the report the app writes — not to a file you add yourself.
 
-This is not a theoretical worry. QIF exports from this project's own author
-turned out to contain stock holdings, a 401K, a street address and a private
-company name. They were removed from this repository for exactly that reason.
+This is not a theoretical worry. A Quicken export usually holds a whole
+financial profile: stock holdings, retirement accounts, bank registers, even a
+street address.
 
 So: **open the file and look at it first.** A spreadsheet or a QIF can hold far
 more than coins.
 
 ### Why there is no zip
-
-The app used to put the report and your files into a `.zip`. It does not any
-more.
 
 Zipping a report gains nothing — it is already text — and zipping a photo
 actively hides it: GitHub displays an image you drag onto an issue right there
@@ -220,8 +213,8 @@ same replacements already made. It opens in Notepad too.
 ## Logs
 
 The app keeps **one log file per day**, each capped at 5 MB, and deletes them
-after about **two weeks**. They live beside the application data, not inside
-your collection.
+after about **two weeks**. They live in the app's `logs` folder, not inside
+your collection file.
 
 That limit is partly practical — nobody can send a log that grows forever — and
 partly about privacy: anything a log remembers about where your files used to

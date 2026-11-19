@@ -42,9 +42,7 @@
   }
 }
 
-// Shown only while every price is still zero. Deliberately an advisory
-// amber note rather than a red error: nothing is broken, the app has simply
-// never been told what metal is worth.
+// Shown while every price is zero; advisory amber, not an error.
 .spot-empty-note {
   margin: 10px 0 0;
   padding: 8px 10px;

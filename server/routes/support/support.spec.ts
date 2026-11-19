@@ -1,32 +1,10 @@
 /**
- * routes/support/support.spec.ts — the three endpoints, over real HTTP.
- *
- * WHAT THESE TESTS ARE FOR
- * The units underneath (redaction, report, report-file) are tested on their
- * own. What is left, and what can only be tested here, is the WIRING:
- *
- *  - the preview answers even when the database is down, because "the
- *    database is down" is the single most likely reason somebody is filing
- *    a report in the first place;
- *  - nothing is written to disk by the preview — the user has not consented
- *    to anything yet;
- *  - the write endpoint writes exactly one PLAIN MARKDOWN file, where it says
- *    it did, and tells the caller both the real path (for the screen) and a
- *    redacted one (for the public issue body);
- *  - the config endpoint reports whether a real repository is configured, so
- *    the dialog never renders a link to a 404;
- *  - a marker seeded into the environment does not come back out of the
- *    HTTP response or land in the file.
- *
- * THERE IS NO ZIP AND NO ATTACHMENT ENDPOINT ANY MORE. The archive writer and
- * the base64 upload were deleted: the app cannot upload to GitHub, so with no
- * archive there was nowhere for a staged file to go. The tests that covered
- * them went with them rather than being softened.
- *
- * The collection counts come out of the REAL in-memory SQLite database (the
- * only database access the whole feature makes), and COIN_LOG_DIR /
- * COIN_SUPPORT_OUTPUT_DIR are pointed at throwaway directories so no test
- * touches the developer's real log or their real Desktop.
+ * The three support endpoints over HTTP; the redaction and report modules
+ * have their own tests. Checks the wiring: preview works with the database
+ * down and writes nothing; the write endpoint produces plain files and returns
+ * real and redacted paths; config reports whether a real repository is set;
+ * and a seeded marker never leaks. Counts come from the in-memory database;
+ * log and output directories are temp folders.
  */
 
 import { describe, it, expect, afterEach, beforeEach, afterAll, vi } from 'vitest';
@@ -36,9 +14,8 @@ import os from 'node:os';
 import path from 'node:path';
 
 /**
- * Both directories have to be set BEFORE server.ts (and through it the
- * logger) is imported, and ES imports are hoisted above ordinary statements.
- * vi.hoisted is the supported way to run setup ahead of them.
+ * Both directories must be set before server.ts (and the logger) is imported;
+ * vi.hoisted runs this ahead of the hoisted imports.
  */
 const dirs = vi.hoisted(() => {
   const fsMod = require('node:fs') as typeof import('node:fs');
@@ -58,8 +35,7 @@ import {
   withTestDb,
 } from '../../test-support/sqlite-test-db';
 import { app } from '../../server';
-// Seeds real lines into the throwaway log directory, so the log-file tests
-// read the same path the endpoint does rather than a fixture of their own.
+// Seeds lines into the temp log directory that the endpoint reads.
 import { logInfo } from '../../logger';
 
 /** Set by the test that drops a table on purpose. */
@@ -84,13 +60,8 @@ afterAll(() => {
 });
 
 /**
- * The report `.md` the write endpoint just produced.
- *
- * Picked BY NAME rather than by being the only file in the directory: the
- * endpoint now writes a redacted log `.txt` beside it whenever the reporter
- * ticked "Include recent log", which is the default. How many files exist is
- * asserted on its own, by the tests that care, rather than smuggled into
- * every read.
+ * The report `.md` the write endpoint produced, picked by name (a log `.txt`
+ * is usually written beside it).
  */
 function writtenReport(): string {
   const files = fs.readdirSync(dirs.outDir).filter(f => f.endsWith('.md'));
@@ -108,12 +79,7 @@ function writtenLog(): string | null {
 
 // GET /api/support/config
 
-/**
- * The dialog needs the repository URL on its FIRST screen, so it can offer a
- * real clickable link next to "attach your files on GitHub". Getting it out
- * of the preview response instead would mean building the whole report —
- * reading the log, querying the database — just to render a hyperlink.
- */
+/** The dialog needs the repository URL on its first screen. */
 describe('GET /api/support/config', () => {
   it('reports where issues are filed and where the file will go', async () => {
     const res = await request(app).get('/api/support/config');
@@ -124,11 +90,7 @@ describe('GET /api/support/config', () => {
     expect(res.body.outputDirectory).toBe(dirs.outDir);
   });
 
-  /**
-   * LOAD-BEARING. While SUPPORT_REPO_URL is still the shipped placeholder the
-   * dialog must say the repository is not configured rather than hand the
-   * user a link to a 404 and tell them their report has been filed.
-   */
+  /** While SUPPORT_REPO_URL is the placeholder, the dialog must not link to a 404. */
   it('says the repository is NOT configured while the placeholder stands', async () => {
     const original = process.env['SUPPORT_REPO_URL'];
     delete process.env['SUPPORT_REPO_URL'];
@@ -173,11 +135,7 @@ describe('POST /api/support/preview', () => {
   });
 
   it('includes the collection counts when the database answers', async () => {
-    // Real rows, and three DIFFERENT counts on purpose: the report's three
-    // COUNT(*) subqueries are easy to transpose, and a fixture where coins
-    // and photos were both 2140 (as the mocked one was) could not have
-    // detected it. The third count was `transactions` until that table was
-    // dropped; it is `soldCoins` now and is still a bare COUNT(*).
+    // Three different counts, so transposed COUNT(*) subqueries would be caught.
     await insertCoin({ CoinId: 'c-1', Denomination: '$1' });
     await insertCoin({ CoinId: 'c-2', Denomination: '$1' });
     await insertCoin({ CoinId: 'c-3', Denomination: '$1' });
@@ -201,18 +159,9 @@ describe('POST /api/support/preview', () => {
     expect(res.body.markdown).toContain('- soldCoins: 1');
   });
 
-  /**
-   * THE MOST IMPORTANT TEST IN THIS FILE. If the report needed a working
-   * database, it would be unavailable in precisely the situation it exists
-   * for. The packaging design calls a support channel that silently fails
-   * worse than no support channel at all; one that loudly fails is no
-   * better.
-   */
+  /** The report must work when the database doesn't, since that's often why it's filed. */
   it('still produces a report when the database is unreachable', async () => {
-    // Broken for real: the counts query reads Coins, and the table is not
-    // there. (It used to be a mocked ECONNREFUSED, an mssql-era socket error
-    // that cannot occur against a local file.) The table is rebuilt in
-    // afterEach.
+    // A real failure: the Coins table is dropped (rebuilt in afterEach).
     await withTestDb((database) => database.exec('DROP TABLE Coins'));
     databaseNeedsRebuilding = true;
 
@@ -239,12 +188,7 @@ describe('POST /api/support/preview', () => {
     expect(res.body.markdown).toContain('It crashes when I click Export.');
   });
 
-  /**
-   * The app has no picker any more, so it has nothing to list — and must not
-   * invent one. A report claiming to carry files the app never saw would be
-   * read on an issue that may well have files dragged onto it, where nobody
-   * could then tell which of them the app put there.
-   */
+  /** The app attaches nothing and the report says so. */
   it('states that the app attached nothing', async () => {
     const res = await request(app).post('/api/support/preview').send({});
 
@@ -261,12 +205,7 @@ describe('POST /api/support/preview', () => {
     expect(JSON.stringify(res.body.receipt)).not.toContain('hunter2');
   });
 
-  /**
-   * UNTICKED MEANS NO LOG CONTENT, BODY INCLUDED. Leaving the 150-line tail
-   * in the report while the dialog says the log is not included would make
-   * the unticked state a half-truth — and a user who turned it off because
-   * they did not want log lines in a public issue would publish 150 of them.
-   */
+  /** Unticked means no log content, including the tail in the body. */
   it('leaves the log tail out of the body when the log was not asked for', async () => {
     logInfo('preview marker PREVIEWNOLOG');
 
@@ -281,11 +220,7 @@ describe('POST /api/support/preview', () => {
     expect(withoutLog.body.markdown).not.toContain('preview marker PREVIEWNOLOG');
   });
 
-  /**
-   * "Not included" and "not available" are different facts. The first sends
-   * the owner back to ask for a log; the second sends them hunting a logging
-   * bug that does not exist.
-   */
+  /** "Left out by the reporter" and "not available" are different facts. */
   it('says the reporter chose to leave it out, not that none was available', async () => {
     const res = await request(app).post('/api/support/preview').send({ includeLog: false });
 
@@ -293,7 +228,7 @@ describe('POST /api/support/preview', () => {
     expect(res.body.markdown).not.toMatch(/No log lines were available/i);
   });
 
-  /** Nothing has been consented to yet, so nothing may exist on disk yet. */
+  /** Nothing is written before the user confirms. */
   it('writes nothing to disk', async () => {
     await request(app).post('/api/support/preview').send({});
     expect(fs.readdirSync(dirs.outDir)).toEqual([]);
@@ -316,10 +251,7 @@ describe('POST /api/support/report', () => {
     expect(fs.readdirSync(dirs.outDir)).toHaveLength(1);
   });
 
-  /**
-   * The owner's instruction, end to end: no archive. A user who opens this
-   * file gets the report, not a prompt to extract something.
-   */
+  /** A plain file, not an archive. */
   it('the file is plain readable markdown, not a zip', async () => {
     await request(app).post('/api/support/report').send({ markdown: 'it broke at step four' });
 
@@ -345,10 +277,8 @@ describe('POST /api/support/report', () => {
   });
 
   /**
-   * TWO PATHS, TWO AUDIENCES, AND THEY MUST NOT BE SWAPPED.
-   * `path` is shown on the user's own screen and goes in the server log, so
-   * it is the real one. `redactedPath` goes in the issue body, which is
-   * PUBLIC, so it must not carry the user name.
+   * `path` (screen and server log) is real; `redactedPath` (public issue body)
+   * must not contain the user name.
    */
   it('returns a real path for the screen and a redacted one for the issue', async () => {
     const res = await request(app).post('/api/support/report').send({ markdown: 'x' });
@@ -369,11 +299,7 @@ describe('POST /api/support/report', () => {
     expect(JSON.stringify(res.body.receipt)).not.toContain('hunter2');
   });
 
-  /**
-   * The in-app picker is gone and so is the endpoint that took files. An
-   * `attachments` array is now meaningless input; it must be ignored rather
-   * than silently acted upon, and above all nothing extra may be written.
-   */
+  /** An `attachments` array is ignored and nothing extra is written. */
   it('ignores an attachments array — there is nowhere for a file to go', async () => {
     const res = await request(app).post('/api/support/report').send({
       markdown: 'see attached',
@@ -392,19 +318,9 @@ describe('POST /api/support/report', () => {
 // The log file — "Include recent log"
 
 /**
- * WHY THIS BLOCK EXISTS. Removing the zip removed the only REDACTED log a
- * user could share: the report body carries 150 lines, and the 2,000-line
- * tail that sat in the archive went with it. What was left to drag into a
- * PUBLIC issue was the raw `app.log`, full of the account name, the machine
- * name and photo paths. The checkbox closes that gap, so the things these
- * tests hold down are safety properties, not conveniences:
- *
- *  - ticked writes a SECOND file and unticked writes NOTHING extra;
- *  - unticked also removes the log tail from the report body, or the
- *    unticked state would be a half-truth;
- *  - both files are redacted by the SAME redactor, so the same path reads
- *    identically in each;
- *  - the log path that travels to the issue is the redacted one.
+ * The optional redacted log file: ticked writes a second file, unticked writes
+ * nothing extra and removes the tail from the body; both files share one
+ * redactor; the issue gets the redacted log path.
  */
 describe('POST /api/support/report — the optional log file', () => {
   /** Something recognisable in today's log for the log file to pick up. */
@@ -427,7 +343,7 @@ describe('POST /api/support/report — the optional log file', () => {
     expect(writtenLog()).toContain('log marker ticked-case');
   });
 
-  /** Two draggable files, not an archive. The zip is not coming back. */
+  /** Plain text, not an archive. */
   it('the log file is plain readable text, not an archive', async () => {
     seedLog('plain-text-case');
     await request(app).post('/api/support/report').send({ markdown: 'x', includeLog: true });
@@ -437,10 +353,7 @@ describe('POST /api/support/report — the optional log file', () => {
     expect(log).toMatch(/Coin Inventory/);
   });
 
-  /**
-   * Both files are named from ONE instant, so the pair is obviously a pair on
-   * a Desktop that may already hold three of each.
-   */
+  /** Both files share one timestamp. */
   it('names both files from the same timestamp', async () => {
     const res = await request(app)
       .post('/api/support/report')
@@ -463,11 +376,7 @@ describe('POST /api/support/report — the optional log file', () => {
     expect(writtenLog()).toBeNull();
   });
 
-  /**
-   * TWO PATHS, TWO AUDIENCES — the same rule the report file already follows.
-   * `log.path` is for the user's own screen, so it is real. `log.redactedPath`
-   * goes in the public issue body, so it must not carry the user name.
-   */
+  /** Real log path for the screen, redacted one for the issue. */
   it('returns a real log path for the screen and a redacted one for the issue', async () => {
     const res = await request(app)
       .post('/api/support/report')
@@ -481,16 +390,9 @@ describe('POST /api/support/report — the optional log file', () => {
   });
 
   /**
-   * THE SHARED REDACTOR, END TO END. Two independently-redacted files would
-   * allocate placeholders in their own first-seen order, so the same folder
-   * could be <USER2> in the report and <USER3> in the log — and the pair
-   * would then actively mislead a reader into believing two different
-   * accounts were involved.
-   *
-   * `alice` and `bob` are strangers to this machine, so neither gets the
-   * reserved <USER>; they are exactly the values a second redactor would
-   * number differently. The report mentions them in one order and the log
-   * (through the seeded line) in another.
+   * The shared redactor end to end. `alice` and `bob` aren't this machine's
+   * user, so independent redactors could number them differently; they are
+   * mentioned in different orders in the report and the log.
    */
   it('redacts both files with ONE redactor, so a path means the same in each', async () => {
     logInfo('later saw C:\\Users\\bob\\Pictures and C:\\Users\\alice\\Pictures');
@@ -504,7 +406,7 @@ describe('POST /api/support/report — the optional log file', () => {
     const report = writtenReport();
     const log = writtenLog()!;
 
-    // Whatever aliases were handed out, they must be the same two in both.
+    // The same aliases in both files.
     const reportAlice = /Users\\(<USER\d*>)\\Pictures then/.exec(report)![1];
     const reportBob = /then C:\\Users\\(<USER\d*>)\\Pictures/.exec(report)![1];
     const logBob = /saw C:\\Users\\(<USER\d*>)\\Pictures and/.exec(log)![1];
@@ -549,10 +451,8 @@ describe('canary: a marker in the environment does not reach the response', () =
   });
 
   /**
-   * `path` is deliberately NOT part of this assertion: it is the real local
-   * path, shown only on the user's own screen, and redacting it there would
-   * tell them to look somewhere that does not exist. `redactedPath` is the
-   * one that travels, and it is checked separately below.
+   * `path` is excluded: it's the real local path shown only to the user.
+   * `redactedPath` is checked separately.
    */
   it('is absent from the file on disk', async () => {
     await request(app).post('/api/support/report').send({
@@ -572,15 +472,9 @@ describe('canary: a marker in the environment does not reach the response', () =
   });
 
   /**
-   * THE NEW FILE GETS ITS OWN CANARY, and it has to: the log file exists
-   * precisely so that the user has something redacted to drag into a public
-   * issue INSTEAD of the raw `app.log`. A log file that carried the account
-   * name would be the raw log with extra steps, and would be worse than not
-   * offering one, because the dialog tells the user it is safe.
-   *
-   * The marker is planted in all three places the redactor reads — the user
-   * name, the machine name, and a path — and in the LOG itself, which is
-   * where the real risk lives.
+   * The log file is offered as the safe alternative to app.log, so it gets its
+   * own canary: the marker is in the user name, machine name, a path, and the
+   * log itself.
    */
   it('is absent from the log file the user is invited to attach', async () => {
     logInfo(
@@ -596,7 +490,7 @@ describe('canary: a marker in the environment does not reach the response', () =
     expect(res.status).toBe(200);
     const log = writtenLog();
     expect(log).not.toBeNull();
-    // It really did read the seeded line — otherwise this asserts nothing.
+    // It really read the seeded line.
     expect(log).toContain('<USER>');
     expect(log).not.toContain(CANARY);
   });

@@ -1,26 +1,8 @@
 /**
- * Turning parsed worksheet grids into the header-row-plus-data-rows shape the
- * CSV importer already understands.
- *
- * WHY THIS SHAPE AND NOT A NEW ONE
- *
- * The CSV path has a mapping UI, a completeness rule, a preview and an
- * exceptions list, all built on `headers: string[]` + `rows: string[][]`.
- * The Excel work is worth doing only if it converges on that, so everything
- * in this file is in service of producing exactly those two arrays per
- * worksheet. Nothing downstream needs to know the data came from a workbook.
- *
- * WHAT A REAL SPREADSHEET DOES THAT A CSV DOES NOT
- *
- *   - a merged title banner across the top, so row 1 is not the header row
- *   - merged header cells, which leave the neighbouring header BLANK
- *   - blank rows used as visual separators between groups of coins
- *   - trailing columns that were formatted once and never filled in
- *   - a "Notes", "Price Guide" or "Totals" tab that is not inventory at all
- *   - an entirely empty tab left over from the default three-sheet workbook
- *
- * Every one of those has to degrade into something the user can see and
- * correct, never into an exception that loses the other twelve good sheets.
+ * Tests for toWorkbookSheets: worksheet grids become the `headers` + `rows`
+ * shape the CSV importer uses. Covers title banners, merged header cells,
+ * blank separator rows, empty trailing columns, non-inventory tabs and empty
+ * tabs. None of these may make the whole workbook fail.
  */
 import { describe, expect, it } from 'vitest';
 import { toWorkbookSheets } from './workbook-sheets';
@@ -49,9 +31,7 @@ describe('toWorkbookSheets', () => {
   });
 
   it('skips a merged title banner and finds the real header row', () => {
-    // A merged A1:C1 title arrives as one filled cell followed by blanks.
-    // Treating it as the header row would give a one-column sheet called
-    // "My Coin Collection" and nothing would map.
+    // A merged A1:C1 title is one filled cell then blanks; it isn't the header row.
     const [sheet] = toWorkbookSheets([
       {
         sheet: 'Inventory',
@@ -69,10 +49,8 @@ describe('toWorkbookSheets', () => {
   });
 
   it('names a blank header cell after its column letter instead of dropping it', () => {
-    // A merged header cell leaves its neighbour empty. Dropping the column
-    // would shift every cell to its right one place left -- the worst
-    // possible outcome, because the data still looks plausible. Naming it
-    // keeps the columns aligned and gives the user something to point at.
+    // A merged header leaves its neighbour blank. Dropping the column would shift
+    // every cell to its right, so it is kept and named.
     const [sheet] = toWorkbookSheets([
       {
         sheet: 'Gold',
@@ -113,9 +91,7 @@ describe('toWorkbookSheets', () => {
   });
 
   it('drops trailing columns that have no header and no data', () => {
-    // Excel readily reports a sheet as being wider than its content, because
-    // somebody once formatted column H. Carrying those through would put
-    // four empty dropdowns on the mapping screen.
+    // Excel may report formatted-but-empty columns; they are dropped.
     const [sheet] = toWorkbookSheets([
       {
         sheet: 'Silver',
@@ -131,8 +107,7 @@ describe('toWorkbookSheets', () => {
   });
 
   it('keeps an unheaded trailing column that DOES hold data', () => {
-    // The opposite case, and the reason the rule is "header and data", not
-    // "header". Data under a blank heading is still the user's data.
+    // Data under a blank heading is kept.
     const [sheet] = toWorkbookSheets([
       {
         sheet: 'Silver',
@@ -148,14 +123,8 @@ describe('toWorkbookSheets', () => {
   });
 
   it('squares off every row, padding short ones and widening for long ones', () => {
-    // mapRowToCoin walks the header array and indexes into the row, so a row
-    // shorter than the headers must not throw.
-    //
-    // A row LONGER than the heading row widens the sheet rather than being
-    // truncated, and that choice is deliberate: truncating would silently
-    // discard a column of the user's data, whereas widening surfaces it with
-    // a column-letter name they can map or skip. Same rule, same reason, as
-    // the unheaded trailing column above.
+    // Rows shorter than the headers must not throw. A longer row widens the sheet
+    // (named by column letter) rather than losing data.
     const [sheet] = toWorkbookSheets([
       {
         sheet: 'Silver',
@@ -217,8 +186,7 @@ describe('sheets that are not inventory', () => {
   });
 
   it('marks a sheet whose only content is one cell unimportable', () => {
-    // A "Notes" tab with a sentence in A1 has no header row by the
-    // two-filled-cells rule, so there is nothing to map.
+    // A "Notes" tab with a sentence in A1 has no header row (needs two filled cells).
     const [sheet] = toWorkbookSheets([
       { sheet: 'Notes', data: [['Remember to insure the gold'], [null]] }
     ]);
@@ -228,8 +196,7 @@ describe('sheets that are not inventory', () => {
   });
 
   it('still imports every other sheet when one is junk', () => {
-    // The point of the whole exercise: one bad tab must not cost the user
-    // the twelve good ones.
+    // One bad tab must not lose the good ones.
     const sheets = toWorkbookSheets([
       { sheet: 'Price Guide', data: [] },
       { sheet: 'Silver', data: [['Coin Type', 'Year'], ['Morgan Dollar', 1881]] }
@@ -242,9 +209,7 @@ describe('sheets that are not inventory', () => {
   });
 
   it('counts how many headings it recognised, so a non-inventory tab shows up', () => {
-    // Used to decide which sheets are ticked by default. A tab of totals
-    // recognises nothing; it is still listed and still tickable, because a
-    // guess about what is inventory is only a guess.
+    // A totals tab recognises nothing but is still listed and tickable.
     const [coins, totals] = toWorkbookSheets([
       {
         sheet: 'Coins',

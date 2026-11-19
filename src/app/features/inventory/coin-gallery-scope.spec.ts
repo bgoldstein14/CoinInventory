@@ -1,22 +1,10 @@
 /*
- * A coin's gallery must show that coin's photos and no others.
+ * A coin's gallery shows that coin's photos and no others, including after
+ * edits and batch imports (services/image-import/attach-runner.ts).
  *
- * The first three groups pin that down as a property: the gallery renders
- * `coin().imagePaths` and nothing else, the App shell binds `coin` to the
- * single selected coin, the server groups image rows strictly by CoinId
- * (server/routes/coins/list-query.ts), and the batch import buckets its rows
- * by `selectedCoinId` and merges each bucket into that coin's own array
- * (services/image-import/attach-runner.ts). A change that introduces a leak
- * fails here.
- *
- * The last group is about something that LOOKS like a leak and is not: THE
- * MATCHER LEGITIMATELY PILES A WHOLE FOLDER ONTO ONE COIN. The auto-match
- * gates are per-FILE; nothing caps how many files may land on the same
- * record. A folder of 20-cent photos matched against an inventory holding
- * one 20-cent record puts all of them on that record — including shots of a
- * DIFFERENT physical coin whose filename happens not to contradict it. That
- * is a matching-accuracy question, not a scoping bug, and the behaviour is
- * captured below so a future tuning change is visible.
+ * The last group documents matcher behaviour that can look like a leak: the
+ * auto-match gates are per file, so many files, even of a different physical
+ * coin, can legitimately land on one record.
  */
 
 import 'fake-indexeddb/auto';
@@ -81,15 +69,11 @@ describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
 
     expect(morgan).toEqual([MORGAN_OBVERSE, MORGAN_REVERSE]);
     expect(eagle).toEqual([EAGLE_OBVERSE]);
-    // The property itself, stated directly rather than implied by the two
-    // assertions above: not one image appears in both galleries.
     expect(morgan.filter(p => eagle.includes(p))).toEqual([]);
   });
 
   it('switches the whole set when the selected coin changes', () => {
-    // This is what the Images button on a table row does: select the coin,
-    // then open the overlay. The gallery is bound to the selected coin, so
-    // selecting a different one replaces the contents outright.
+    // Mirrors the row's Images button: select, then open.
     const { inv, store } = createTwoCoinInventory();
 
     inv.selectedCoinId.set('morgan');
@@ -101,9 +85,6 @@ describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
   });
 
   it('does not alias one array across records — a change to one is invisible to the other', () => {
-    // The aliasing check. If any part of the load or merge path handed two
-    // coins THE SAME array object, deleting a photo from one would delete it
-    // from the other, and every gallery would end up showing the same list.
     const { inv, store } = createTwoCoinInventory();
 
     inv.selectedCoinId.set('morgan');
@@ -127,8 +108,6 @@ describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
   });
 
   it('re-orders only the selected coin when a main photo is chosen', () => {
-    // setMainImage rewrites an array in place of another; the sibling coins
-    // must not notice.
     const { inv, store } = createTwoCoinInventory();
     inv.selectedCoinId.set('morgan');
 
@@ -142,9 +121,6 @@ describe('a coin\'s gallery shows that coin\'s photos and no others', () => {
 
 describe('the gallery opens for a coin with no photos', () => {
   it('lets a coin with an empty gallery be opened, so a first photo can be added', () => {
-    // The gallery owns the only per-coin "Add images" picker and the only
-    // per-coin drop target, so refusing to open it for a photo-less coin
-    // would make a first photo impossible to add.
     const { inv, store } = createTwoCoinInventory();
     inv.selectedCoinId.set('empty');
 
@@ -152,8 +128,6 @@ describe('the gallery opens for a coin with no photos', () => {
 
     store.openImageGallery();
     expect(store.showImageGallery()).toBe(true);
-    // ...and it is still showing nothing but this coin's (zero) photos, which
-    // is what the template's `@empty` branch renders.
     expect(inv.selectedCoin()!.imagePaths).toEqual([]);
   });
 
@@ -220,11 +194,8 @@ describe('runAttach keeps each coin\'s new photos to that coin', () => {
     ]);
     const attach = vi.fn();
 
-    // `existingPhotoMode: 'add'` because both coins already have a photo, and
-    // the default ('leave') now writes nothing to a coin that does. The
-    // property under test here — one write per coin, never one carrying both
-    // coins' photos — is unchanged; it just needs a mode that writes at all.
-    // See services/image-import/existing-photo-mode.ts.
+    // 'add' because the default ('leave') writes nothing to a coin that
+    // already has photos. See services/image-import/existing-photo-mode.ts.
     await runAttach(
       [makeRow('morgan-rev.jpg', 'morgan'), makeRow('eagle-rev.jpg', 'eagle')],
       { files, inventory, attach, encode: stubEncode, existingPhotoMode: 'add' }
@@ -240,15 +211,11 @@ describe('runAttach keeps each coin\'s new photos to that coin', () => {
     expect(written.get('morgan')).toEqual([MORGAN_OBVERSE, 'data:image/jpeg;base64,SHRUNK-morgan-rev.jpg']);
     expect(written.get('eagle')).toEqual([EAGLE_OBVERSE, 'data:image/jpeg;base64,SHRUNK-eagle-rev.jpg']);
 
-    // The property: nothing written for one coin appears in the other's array.
     const overlap = written.get('morgan')!.filter(p => written.get('eagle')!.includes(p));
     expect(overlap).toEqual([]);
   });
 
   it('gives each coin a fresh array rather than a shared one', async () => {
-    // Even with identical starting contents, the two merged arrays must be
-    // distinct objects. A shared array is the specific defect that would make
-    // every gallery show the same photos.
     const inventory = [
       makeCoin({ id: 'morgan', imagePaths: [] }),
       makeCoin({ id: 'eagle', imagePaths: [] })
@@ -265,16 +232,12 @@ describe('runAttach keeps each coin\'s new photos to that coin', () => {
 
     const [first, second] = attach.mock.calls.map(call => call[1] as string[]);
     expect(first).not.toBe(second);
-    // And neither is the array that was sitting on the inventory record.
     expect(first).not.toBe(inventory[0].imagePaths);
   });
 });
 
 describe('the import can legitimately pile a whole folder onto one coin', () => {
-  /**
-   * ONE twenty-cent record, plus two unrelated coins so the runner-up margin
-   * has something to measure against.
-   */
+  /** One twenty-cent record, plus two unrelated coins for the runner-up margin. */
   const inventory: CoinRecord[] = [
     makeCoin({
       id: 'twenty-cent', denomination: 'Twenty Cent', coinType: 'Liberty Seated',
@@ -287,10 +250,7 @@ describe('the import can legitimately pile a whole folder onto one coin', () => 
   ];
 
   it('auto-attaches every shot of the same coin to it — which is correct', () => {
-    // Obverse, reverse, slab label, a derivative and a retake are five files
-    // of ONE physical coin. They SHOULD all land on it, and they do. This is
-    // the benign half of "all images": a coin with ten photos looks alarming
-    // but is exactly right.
+    // Five files of one physical coin.
     const files = [
       '1875-S 20-cent ANACS XF40 - Obverse.jpg',
       '1875-S 20-cent ANACS XF40 - Reverse.jpg',
@@ -305,20 +265,10 @@ describe('the import can legitimately pile a whole folder onto one coin', () => 
   });
 
   it('ALSO auto-attaches a different physical coin whose filename says nothing to the contrary', () => {
-    // THE PROBLEM CASE, and the reason "only show this coin's images" could
-    // not be fixed in the gallery: this is a photo of the PHILADELPHIA 1875
-    // twenty-cent piece, a different coin from the 1875-S in the inventory.
-    // It auto-attaches anyway, because the filename states no mint mark, so
-    // the one attribute that would contradict the match is simply not
-    // comparable — and with no other twenty-cent record in the inventory
-    // there is nothing close enough to trip the runner-up gate either.
-    //
-    // The gallery is right to show it: it genuinely is attached to that coin.
-    // Fixing it means either tightening the matcher (which would send a lot
-    // of correct matches to manual review) or adding the missing records to
-    // the inventory. Flagged here rather than silently changed, because the
-    // thresholds in matching-thresholds.ts are tuned against a census of the
-    // owner's real filenames and must not be nudged on a hunch.
+    // A Philadelphia 1875 photo matches the 1875-S record: the filename has no
+    // mint mark to contradict it, and no other twenty-cent record competes.
+    // Thresholds (matching-thresholds.ts) are tuned on real filenames; change
+    // them deliberately, not to make this pass.
     const [result] = new ImageMatchingService().matchImages(
       ['1875 20-cent - Obverse.jpg'],
       inventory
@@ -329,23 +279,8 @@ describe('the import can legitimately pile a whole folder onto one coin', () => 
   });
 
   it('does hold the line when a competing attribute actually contradicts', () => {
-    /* The gates are not useless: a stated mint mark that disagrees, or a year
-     * that disagrees, both keep the file out of auto-match. So the
-     * over-attachment above is specifically a MISSING-information problem,
-     * not a broken one.
-     *
-     * THE TWO CASES NOW LAND IN DIFFERENT PLACES, and the difference is the
-     * point of the hard vetoes added in match-vetoes.ts:
-     *
-     *   1875-CC  -> 'review'. Only the MINT MARK disagrees, and a mint mark
-     *               is not one of the three vetoes. The coin stays on the
-     *               shortlist and the user decides.
-     *   1876     -> 'none'.   The YEAR disagrees, and the domain rule is
-     *               that a year conflict is not a close match at all. The
-     *               1875 record is disqualified outright, so there is nothing
-     *               left to offer and nothing to click.
-     *
-     * Both still attach nothing, which is what this test was really guarding. */
+    // 1875-CC -> 'review': a mint-mark conflict isn't a hard veto.
+    // 1876    -> 'none':   a year conflict disqualifies the record (match-vetoes.ts).
     const results = new ImageMatchingService().matchImages(
       ['1875-CC 20-cent Choice F - Obverse.jpg', '1876 20-cent PCGS MS63 - Obverse.jpg'],
       inventory
@@ -354,8 +289,7 @@ describe('the import can legitimately pile a whole folder onto one coin', () => 
     expect(results.map(r => r.status)).toEqual(['review', 'none']);
     expect(results.map(r => r.matchedRecordId)).toEqual([null, null]);
 
-    // The year-vetoed file names the coin it was disqualified against, so the
-    // "Not imported" list can explain itself instead of shrugging.
+    // The reason names the disqualifying year for the "Not imported" list.
     expect(results[1].candidates).toEqual([]);
     expect(results[1].reason).toContain('disqualified');
     expect(results[1].reason).toContain('1876');

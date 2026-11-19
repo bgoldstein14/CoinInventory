@@ -1,12 +1,6 @@
 /**
- * Tests for import-progress.ts — the busy/progress vocabulary of the batch
- * image import.
- *
- * These are plain function tests on purpose. The suite runs under Node with no
- * jsdom, so there is no way to assert "the spinner appeared"; what CAN be
- * asserted, and what actually matters, is that every long stage produces a
- * progress object, that `isBusy` is true for all of them, and that the label
- * and the bar width describe that object honestly.
+ * Tests for import-progress.ts: every long stage produces a progress object,
+ * `isBusy` is true for each, and the labels and bar width describe it.
  */
 import { describe, expect, it } from 'vitest';
 import { BatchImportProgress } from '../../types/coin.model';
@@ -36,9 +30,6 @@ function attaching(overrides: Partial<BatchImportProgress> = {}): BatchImportPro
   };
 }
 
- /*
- * THE FACTORIES — one per long stage, so no stage can go unannounced
-  */
 describe('import-progress — the stage factories', () => {
   it('announces the folder scan before a single file has been classified', () => {
     const progress = scanningProgress(2140);
@@ -66,14 +57,7 @@ describe('import-progress — the stage factories', () => {
     expect(isBusy(progress)).toBe(true);
   });
 
-  /**
-   * THE BUG THIS TEST EXISTS FOR.
-   *
-   * The Save button used to stay enabled for the whole of the first file,
-   * because nothing set `progress` until the first file had been read and
-   * downscaled — several seconds for a 46 MB JPEG on a network share. A second
-   * click in that window started the entire import again.
-   */
+  // Busy before the first read, so Save can't be clicked twice.
   it('announces attaching at zero files done, so busy is true before the first read', () => {
     const progress = startingAttachProgress(317);
 
@@ -86,9 +70,6 @@ describe('import-progress — the stage factories', () => {
   });
 });
 
- /*
- * isBusy — what disables the buttons
-  */
 describe('import-progress — isBusy', () => {
   it('is false when nothing is running', () => {
     expect(isBusy(null)).toBe(false);
@@ -107,9 +88,6 @@ describe('import-progress — isBusy', () => {
   });
 });
 
- /*
- * THE BAR
-  */
 describe('import-progress — progressPercent', () => {
   it('is the share of files finished', () => {
     expect(progressPercent(attaching({ processed: 50, total: 200 }))).toBe(25);
@@ -128,11 +106,7 @@ describe('import-progress — progressPercent', () => {
     expect(progressPercent(attaching({ processed: -5, total: 200 }))).toBe(0);
   });
 
-  /**
-   * Scanning and building have no countable unit of work, so a bar that sat at
-   * 0% would read as "stuck". They are flagged indeterminate instead, and the
-   * template animates the track rather than filling it.
-   */
+  // Scanning and building have no countable work, so the bar is animated.
   it('reports the countless stages as indeterminate', () => {
     expect(isIndeterminate(scanningProgress(2140))).toBe(true);
     expect(isIndeterminate(buildingProgress(1780))).toBe(true);
@@ -142,9 +116,6 @@ describe('import-progress — progressPercent', () => {
   });
 });
 
- /*
- * THE WORDS
-  */
 describe('import-progress — progressLabel', () => {
   it('says nothing when nothing is running', () => {
     expect(progressLabel(null)).toBe('');
@@ -163,11 +134,7 @@ describe('import-progress — progressLabel', () => {
     expect(progressLabel(buildingProgress(1780))).toBe('Building the review list… 1,780 photos');
   });
 
-  /**
-   * One-based, because "Processing 0 of 317" is what a user reads as frozen.
-   * `processed` counts files FINISHED, so the file being worked on right now
-   * is `processed + 1`.
-   */
+  // One-based: `processed` counts finished files, so the current one is +1.
   it('counts the file being worked on, not the ones already finished', () => {
     expect(progressLabel(startingAttachProgress(317))).toBe('Processing 1 of 317…');
     expect(progressLabel(attaching({ processed: 41, total: 317 }))).toBe('Processing 42 of 317…');
@@ -199,24 +166,8 @@ describe('import-progress — progressDetail', () => {
 });
 
  /*
- * THE SAVE BUTTON'S OWN LABEL
- *
- * THE BUG THIS EXISTS TO FIX
- * The indicator the rest of this file describes was built, worked, and the
- * owner still reported "no busy indicator when Save Images is hit".
- *
- * It was rendering correctly -- at the TOP of the modal. The Save button sits
- * at the BOTTOM, under a review list that routinely runs to hundreds of rows,
- * inside a scrolling dialog. So he clicked Save, the feedback appeared several
- * screens above the viewport, and the screen looked exactly as dead as it had
- * before any of this was built.
- *
- * The lesson is that an indicator is only an indicator where it can be SEEN.
- * Feedback has to appear where the click happened, so the button now reports
- * progress itself -- which cannot scroll away from the control you just
- * pressed, because it IS the control you just pressed. (The top indicator is
- * also pinned now, but this is the part that does not depend on scroll
- * position at all.)
+ * The Save button shows progress itself, since it sits below a long
+ * scrolling review list and the top indicator may be out of view.
   */
 describe('import-progress — saveButtonLabel', () => {
   it('counts the photos to be saved when idle', () => {
@@ -231,24 +182,18 @@ describe('import-progress — saveButtonLabel', () => {
     expect(saveButtonLabel(null, 1284)).toBe('Save 1,284 photos');
   });
 
-  /** The whole point: real progress, on the control that was pressed. */
   it('reports live progress while attaching', () => {
     expect(saveButtonLabel(attaching({ processed: 41, total: 317 }), 317))
       .toBe('Saving 42 of 317…');
   });
 
   it('never counts past the total on the final file', () => {
-    // `processed` counts files FINISHED, and the label is one-based, so the
-    // last file would otherwise read "Saving 318 of 317".
+    // One-based label; must not read "Saving 318 of 317".
     expect(saveButtonLabel(attaching({ processed: 317, total: 317 }), 317))
       .toBe('Saving 317 of 317…');
   });
 
-  /**
-   * The earlier stages have their own indicator at the top of the dialog and
-   * are not the button's business -- but the button is disabled during them,
-   * so it must not keep advertising an action that cannot be taken.
-   */
+  // The button is disabled during earlier stages, so it says "Working…".
   it('says it is working during the stages before attaching', () => {
     expect(saveButtonLabel(matchingProgress(1, 2), 317)).toBe('Working…');
     expect(saveButtonLabel(scanningProgress(50), 317)).toBe('Working…');
@@ -256,8 +201,6 @@ describe('import-progress — saveButtonLabel', () => {
   });
 
   it('returns to the idle label once the run is done', () => {
-    // `done` is not a busy phase, so the button is live again and should say
-    // what pressing it would do.
     expect(saveButtonLabel(attaching({ phase: 'done' }), 317)).toBe('Save 317 photos');
   });
 });

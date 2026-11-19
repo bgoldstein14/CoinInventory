@@ -1,15 +1,6 @@
 /**
- * backup-runner.spec.ts — watching a job that takes minutes.
- *
- * No Angular, no DOM, no real waiting: the runner takes its `delay` as a
- * dependency precisely so these can run instantly and deterministically.
- * What is worth asserting is the three things a poller gets wrong, in the
- * order of how badly each one bites in a desktop app the user leaves open
- * all day:
- *
- *   1. it stops when the dialog closes
- *   2. it survives a dropped poll without declaring a false failure
- *   3. it never reports success it did not see
+ * Tests for BackupRunner (scripted polls, no real waiting): it stops when the
+ * dialog closes, survives a dropped poll, and never reports unseen success.
  */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -132,16 +123,14 @@ describe('BackupRunner — when the server refuses', () => {
     expect(deps.poll).not.toHaveBeenCalled();
     expect(runner.error).toBe('There is no folder called D:\\Backpus on this computer.');
     expect(runner.running).toBe(false);
-    // *** AND IT DOES NOT CLAIM A BACKUP EXISTS. ***
+    // ...and does not claim a backup exists.
     expect(runner.result).toBeNull();
   });
 });
 
 describe('BackupRunner — a dropped poll is not a failed backup', () => {
   it('survives a hiccup in the middle of a long copy', async () => {
-    // The backup is running on the SERVER. One dropped request says
-    // nothing about whether the file is being written, and giving up on
-    // watching would report a false failure for a file about to appear.
+    // One dropped poll says nothing about the server-side job.
     const { runner } = makeRunner([
       status({ percent: 20 }),
       new Error('network'),
@@ -165,9 +154,7 @@ describe('BackupRunner — a dropped poll is not a failed backup', () => {
     await runner.run('C:\\dir', 'backup.db');
 
     expect(deps.poll).toHaveBeenCalledTimes(MAX_CONSECUTIVE_POLL_FAILURES);
-    // *** THE WORDING IS THE POINT. *** Telling the user the backup FAILED
-    // when the file is about to appear makes them do it again — and a
-    // second backup of a 600 MB database is not a free mistake.
+    // "Lost contact", not "failed": the file may still appear.
     expect(runner.error).toMatch(/lost contact/i);
     expect(runner.error).toMatch(/may still be running/i);
     expect(runner.running).toBe(false);
@@ -176,8 +163,7 @@ describe('BackupRunner — a dropped poll is not a failed backup', () => {
 
 describe('BackupRunner — dispose', () => {
   it('stops polling when the dialog closes', async () => {
-    // Without this a closed dialog leaves a timer firing an HTTP request
-    // every 400 ms for the rest of the session.
+    // A closed dialog must not leave a polling timer running.
     let polls = 0;
     const runner = new BackupRunner({
       start: async () => status(),
@@ -239,8 +225,7 @@ describe('BackupRunner — cancelling', () => {
   });
 
   it('swallows a failed cancel request rather than showing an error', async () => {
-    // The job is still running and the next poll will say so, which is
-    // more honest than an error about a button press.
+    // The job is still running and the next poll will say so.
     const runner = new BackupRunner({
       start: async () => status(),
       poll: async () => done,

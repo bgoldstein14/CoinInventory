@@ -1,26 +1,8 @@
 /**
- * support/redaction.spec.ts
- *
- * THE CANARY TESTS ARE THE POINT OF THIS FILE
- * Everything else here is a unit test of a regular expression. The canary
- * block at the bottom is the only thing that demonstrates the FEATURE works,
- * and it works by seeding one marker string into
- * a username, a machine name, a folder path, a file name and a connection
- * string, run the real report text through the real redactor, then assert the
- * marker does not appear anywhere in the output — not in the text, not in the
- * receipt, not in a key, not in a count.
- *
- * Testing "does the username rule replace the username" proves the rule
- * exists. Only the canary proves nothing LEAKED, which is the actual promise
- * being made to somebody about to paste this into a public issue.
- *
- * STABILITY IS A REQUIREMENT, NOT A NICETY
- * These reports are read in order to reproduce bugs. If the same path were
- * replaced with a different placeholder each time it occurred, two log lines
- * about the same folder would read as two different folders and the report
- * would actively mislead. So the same input always maps to the same
- * placeholder, and — importantly — two DIFFERENT users do not collapse onto
- * the same one.
+ * Redaction rules. The canary block at the bottom is the key test: one marker
+ * is planted in every channel (username, machine name, paths, file names,
+ * connection strings) and must not appear anywhere in the output or receipt.
+ * Placeholders must also be stable, and distinct for different users.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -62,14 +44,12 @@ describe('identityFromEnvironment', () => {
     const identity = identityFromEnvironment({}, 'linux-box', '/home/dev');
     expect(identity.machineName).toBe('linux-box');
     expect(identity.homeDir).toBe('/home/dev');
-    // No USERNAME/USER: the last segment of the home directory is the best
-    // guess available, and a wrong guess here only over-redacts.
+    // Falls back to the home directory's last segment; a wrong guess only over-redacts.
     expect(identity.username).toBe('dev');
   });
 
   it('ignores blank environment values rather than treating them as a name', () => {
-    // A rule built from '' would match the empty string between every pair of
-    // characters and destroy the whole document.
+    // A rule built from '' would match everywhere.
     const identity = identityFromEnvironment({ USERNAME: '   ', COMPUTERNAME: '' }, 'host', '/root');
     expect(identity.username).toBe('root');
     expect(identity.machineName).toBe('host');
@@ -96,10 +76,7 @@ describe('the Windows username', () => {
     expect(r('login failed for devuser')).toBe('login failed for <USER>');
   });
 
-  /**
-   * THE WHOLE REASON THE PLACEHOLDER IS STABLE. The reader needs to see that
-   * these two lines are about the same folder.
-   */
+  /** The same folder must read as the same folder. */
   it('maps the same user to the same placeholder every time', () => {
     const out = r('C:/Users/devuser/a and C:/Users/devuser/b');
     expect(out).toBe('C:/Users/<USER>/a and C:/Users/<USER>/b');
@@ -118,17 +95,11 @@ describe('the Windows username', () => {
   });
 
   it('leaves a name that merely contains the username alone', () => {
-    // 'devuser2' is somebody else. Substring matching would rewrite it to
-    // '<USER>2', which reads as the same person with a digit after them.
+    // 'devuser2' is someone else and must not become '<USER>2'.
     expect(r('account devuser2 locked')).toBe('account devuser2 locked');
   });
 
-  /**
-   * A one or two character username ('jd', 'a') cannot be matched safely —
-   * it occurs inside ordinary English and inside every other identifier in a
-   * stack trace. Over-redaction destroys the report; this rule steps aside
-   * and the path rule still covers the dangerous case.
-   */
+  /** Very short usernames would match inside ordinary words; the path rule still covers them. */
   it('skips a username too short to match safely', () => {
     const out = redact('a quick brown fox at C:\\Users\\a\\pics', { username: 'a' }).text;
     expect(out).toBe('a quick brown fox at C:\\Users\\<USER>\\pics');
@@ -157,12 +128,7 @@ describe('the machine name', () => {
     expect(r('at OFFICEPC\\SQLEXPRESS')).toBe('at <MACHINE2>\\SQLEXPRESS');
   });
 
-  /**
-   * The alias rules fire on "a host name in a UNC path / SQL instance", and
-   * `localhost` matches that shape. Replacing it would be pure loss: it names
-   * nobody, and "the app could not reach <MACHINE2>" hides the single most
-   * useful fact in the line, which is that it was talking to itself.
-   */
+  /** Loopback names identify nobody and show the app was talking to itself. */
   it('leaves loopback names alone — they identify nobody and they are useful', () => {
     expect(r('\\\\localhost\\share')).toBe('\\\\localhost\\share');
     expect(r('at localhost\\SQLEXPRESS')).toBe('at localhost\\SQLEXPRESS');
@@ -170,9 +136,7 @@ describe('the machine name', () => {
   });
 
   it('leaves loopback alone in a connection string too', () => {
-    // One assertion per rule that could alias a host. The connection-string
-    // rule is a separate code path from the UNC and instance rules above,
-    // and a mutation proved the exemption there was untested.
+    // The connection-string rule is a separate code path from the UNC and instance rules.
     expect(r('Server=localhost;Database=CoinInventory;')).toBe('Server=localhost;Database=CoinInventory;');
     expect(r('Data Source=127.0.0.1,1433;')).toBe('Data Source=127.0.0.1,1433;');
   });
@@ -186,12 +150,7 @@ describe('secrets', () => {
       .toBe('Server=<MACHINE2>;Database=CoinInventory;User Id=<REDACTED>;Password=<REDACTED>;');
   });
 
-  /**
-   * FOUND ON THE REAL LOG, not imagined. `HOMEPC\SQLEXPRESS` was already
-   * caught by the SQL-instance rule, but the plain `Server=HOMEPC;` form
-   * — no named instance — went through untouched. It is not this machine,
-   * so the bare-machine-name rule does not cover it either.
-   */
+  /** `Server=HOMEPC;` without an instance name isn't caught by the instance or machine-name rules. */
   it('aliases the host in a bare Server= with no instance name', () => {
     expect(r('Server=HOMEPC;Database=CoinInventory;')).toBe('Server=<MACHINE2>;Database=CoinInventory;');
   });
@@ -200,12 +159,7 @@ describe('secrets', () => {
     expect(r('Data Source=tcp:OFFICEPC,1433;')).toBe('Data Source=tcp:<MACHINE2>,1433;');
   });
 
-  /**
-   * `Address`, `Addr` and `Network Address` are all real mssql
-   * connection-string synonyms for `Server`. Covered explicitly because an
-   * alternative in a regex that no test exercises is a rule nobody can tell
-   * is broken.
-   */
+  /** `Address`, `Addr` and `Network Address` are connection-string synonyms for `Server`. */
   it('aliases the other connection-string spellings of "host"', () => {
     expect(r('Address=OFFICEPC;')).toBe('Address=<MACHINE2>;');
     expect(r('Addr=OFFICEPC;')).toBe('Addr=<MACHINE2>;');
@@ -234,11 +188,8 @@ describe('secrets', () => {
   });
 
   /**
-   * ADDED AFTER A MUTATION SURVIVED. Disabling the dedicated
-   * `Authorization:` rule left every existing test green, because the Bearer
-   * rule happened to cover the one example they used. It does not cover
-   * this one: `Basic` credentials are a bare base64 blob with no keyword to
-   * key off, so without the Authorization rule the whole header survives.
+   * `Basic` credentials have no "Bearer" keyword, so only the dedicated
+   * Authorization rule catches them.
    */
   it('blanks a Basic authorization header, where there is no "Bearer" to key off', () => {
     expect(r('Authorization: Basic ZGF2ZTpsZXRtZWlu')).toBe('Authorization: <REDACTED>');
@@ -285,12 +236,7 @@ describe('the receipt', () => {
     expect(redact('a perfectly ordinary line', IDENTITY).receipt).toEqual([]);
   });
 
-  /**
-   * THE RECEIPT IS PART OF THE REPORT. A receipt that said
-   * "replaced 'devuser' 4 times" would hand over the very thing it claims to
-   * have removed — a mistake that is extremely easy to make and completely
-   * invisible until somebody reads a published issue.
-   */
+  /** A receipt that named the value would leak it. */
   it('never names the value it replaced', () => {
     const { receipt } = redact('C:/Users/devuser/x MYSERVER Password=hunter2;', IDENTITY);
     const asText = JSON.stringify(receipt);
@@ -336,14 +282,13 @@ describe('createRedactor — one allocation table for a whole bundle', () => {
   });
 });
 
-// *** THE CANARIES ***
+// The canaries
 
 describe('canary: a seeded marker must not survive into the report', () => {
   /**
-   * One marker, planted in every channel a secret can reach the report
-   * through. If ANY of these paths is unredacted, this string shows up and
-   * the test fails — including paths nobody thought to write a rule for,
-   * because the assertion is "the marker is absent", not "rule N fired".
+   * One marker in every channel a secret can reach the report through. The
+   * assertion is "the marker is absent", so it also catches paths nobody wrote
+   * a rule for.
    */
   const CANARY = 'CANARYLEAK7391';
 
@@ -380,8 +325,7 @@ describe('canary: a seeded marker must not survive into the report', () => {
   });
 
   it('still leaves a report worth reading', () => {
-    // Over-redaction is also a failure: a bundle of nothing but <REDACTED>
-    // cannot be debugged. The structural parts must survive.
+    // Over-redaction is a failure too: the structure must survive.
     expect(result.text).toContain('Node version: v24.0.0');
     expect(result.text).toContain('SQLEXPRESS');
     expect(result.text).toContain('server.ts:130:12');
@@ -389,8 +333,7 @@ describe('canary: a seeded marker must not survive into the report', () => {
   });
 
   it('the canary in a FILE NAME is caught too', () => {
-    // Attachment and photo file names are part of the report body. A rule set
-    // that only looked at folder segments would miss this one.
+    // File names in the body, not just folder segments.
     const out = redact(`Attached file: statement-${CANARY}.qif`, {
       username: CANARY,
       machineName: 'PC'

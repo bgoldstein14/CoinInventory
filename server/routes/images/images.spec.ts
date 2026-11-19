@@ -1,18 +1,7 @@
 /**
- * routes/images/images.spec.ts — tests for the original-image-file endpoints
- * (routes/images/file.ts and routes/images/exists.ts).
- *
- * Unlike every other spec in this backend these tests touch the REAL
- * filesystem, because that is the thing under test: "is this file still on
- * disk, and can we hand it to the browser?" is not a question a mock can answer
- * meaningfully. A throwaway directory is created in the OS temp area in
- * beforeAll and deleted in afterAll, so nothing is left behind and no path
- * inside the project is written to.
- *
- * The SQLite test harness is imported purely for its side effect: importing
- * server.ts pulls in the whole database layer, and the harness is what points
- * that layer at an in-memory database instead of the owner's real collection.
- * Neither endpoint under test goes anywhere near it.
+ * Tests for the original-image endpoints (file.ts, exists.ts) against the real
+ * filesystem, using a temp directory removed in afterAll. The SQLite harness
+ * is imported only so loading server.ts uses an in-memory database.
  */
 
 import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
@@ -41,16 +30,13 @@ let missingPath = '';
 let directoryNamedLikeImage = '';
 
 beforeAll(() => {
-  // mkdtempSync appends random characters, so parallel runs cannot collide.
   tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'coin-images-spec-'));
 
-  // A space in the filename is deliberate: real coin photos live in folders
-  // like "C:\Coin Pictures\", and a space is exactly the kind of character
-  // that breaks naive URL handling.
+  // A space in the name, as in real folders like "C:\Coin Pictures\".
   pngPath = path.join(tempDir, '1921 morgan obverse.png');
   fs.writeFileSync(pngPath, PNG_BYTES);
 
-  // Windows filenames routinely arrive shouting from a camera.
+  // Upper-case extension, as cameras produce.
   upperCaseJpgPath = path.join(tempDir, 'IMG_0042.JPG');
   fs.writeFileSync(upperCaseJpgPath, 'jpeg-bytes');
 
@@ -60,18 +46,16 @@ beforeAll(() => {
   textPath = path.join(tempDir, 'notes.txt');
   fs.writeFileSync(textPath, 'not an image');
 
-  // Never created — this is the "the user moved the file" case.
+  // Never created: the "file was moved" case.
   missingPath = path.join(tempDir, 'deleted-yesterday.png');
 
-  // A directory whose name ends in .jpg. Unusual, but streaming a directory
-  // handle would fail mid-response, so the route has to reject it up front.
+  // A directory named like an image; the route must reject it up front.
   directoryNamedLikeImage = path.join(tempDir, 'looks-like-a-file.jpg');
   fs.mkdirSync(directoryNamedLikeImage);
 });
 
 afterAll(() => {
-  // force:true so a failed test that left the directory half-built cannot turn
-  // cleanup into a second failure.
+  // force: true so a half-built directory can't fail cleanup too.
   fs.rmSync(tempDir, { recursive: true, force: true });
 });
 
@@ -82,18 +66,16 @@ describe('GET /api/images/file', () => {
     const res = await request(app)
       .get('/api/images/file')
       .query({ path: pngPath })
-      // responseType('blob') stops superagent trying to parse the body as text,
-      // so res.body is the raw Buffer the server actually sent.
+      // So res.body is the raw Buffer sent.
       .responseType('blob');
 
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toContain('image/png');
 
-    // Content-Length is what lets the browser show download progress on a
-    // 46 MB original instead of spinning with no feedback.
+    // Lets the browser show progress on large originals.
     expect(res.headers['content-length']).toBe(String(PNG_BYTES.length));
 
-    // The bytes must survive the trip unmodified.
+    // The bytes arrive unmodified.
     expect(Buffer.from(res.body).equals(PNG_BYTES)).toBe(true);
   });
 
@@ -108,9 +90,7 @@ describe('GET /api/images/file', () => {
   });
 
   it('serves .tif even though browsers may only offer to download it', async () => {
-    // Deliberate: the point of the feature is to let the user REACH the
-    // original file. What the browser then chooses to do with a TIFF is its
-    // business, not ours.
+    // Served even though browsers download TIFFs rather than display them.
     const res = await request(app)
       .get('/api/images/file')
       .query({ path: tifPath })
@@ -121,7 +101,7 @@ describe('GET /api/images/file', () => {
   });
 
   it('returns 404 when the original file is no longer there', async () => {
-    // This is the state the UI renders as a greyed-out, non-clickable filename.
+    // The UI shows this as a greyed-out filename.
     const res = await request(app).get('/api/images/file').query({ path: missingPath });
 
     expect(res.status).toBe(404);
@@ -150,18 +130,15 @@ describe('GET /api/images/file', () => {
   });
 
   it('returns 400 (not a crash) when path arrives as something other than a string', async () => {
-    // Express's query parser turns `?path[key]=x` into the OBJECT { key: 'x' }.
-    // Calling .trim() on that would throw a TypeError inside the handler, which
-    // the global error handler would then report as a 500.
+    // A bracketed key must give a 400, not a TypeError and 500.
     const res = await request(app).get('/api/images/file?path[key]=C:%5Ca.png');
 
     expect(res.status).toBe(400);
   });
 
   it('returns 400 for a disallowed extension, even though the file exists', async () => {
-    // The extension allowlist is the only thing narrowing this route, so it
-    // must be enforced regardless of whether the file is readable. notes.txt
-    // really is on disk here — a 404 would mean the check was skipped.
+    // The allow-list applies even to readable files (notes.txt exists, so a
+    // 404 would mean the check was skipped).
     const res = await request(app).get('/api/images/file').query({ path: textPath });
 
     expect(res.status).toBe(400);
@@ -181,8 +158,7 @@ describe('GET /api/images/file', () => {
 
 describe('POST /api/images/exists', () => {
   it('reports true/false per path in a single request', async () => {
-    // The batching is the point: a coin with eight photos must cost ONE
-    // request, not eight.
+    // One request for all of a coin's photos.
     const res = await request(app)
       .post('/api/images/exists')
       .send({ paths: [pngPath, missingPath, upperCaseJpgPath] });
@@ -203,13 +179,8 @@ describe('POST /api/images/exists', () => {
   });
 
   /**
-   * A bare count — "4 missing" — is a dead end for whoever reads it: it says
-   * a problem exists but not which file, so there is no telling a renamed
-   * folder from a dropped share from a stale database row.
-   *
-   * The assertion is on `console.log` rather than on the logger module
-   * because the terminal is where this message is actually read, and `log()`
-   * echoes every level there.
+   * The log names each missing path, not just a count. Asserted on
+   * console.log, where log() echoes every level.
    */
   it('names each unreadable path in the log, not just a count', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -223,11 +194,10 @@ describe('POST /api/images/exists', () => {
 
       // The missing one is named...
       expect(logged).toContain(missingPath);
-      // ...flagged as something to act on...
+      // ...at WARN...
       expect(logged).toMatch(/WARN/);
-      // ...and the one that is fine is NOT reported as unreadable. (It may
-      // still appear in the routine "checked N paths" line, so this asserts
-      // on the warning block specifically.)
+      // ...and the readable one isn't in the warning block (it may appear in
+      // the routine summary line).
       const warnBlock = consoleSpy.mock.calls
         .map((args) => String(args[0]))
         .filter((line) => line.includes('could not be read'))
@@ -240,8 +210,7 @@ describe('POST /api/images/exists', () => {
   });
 
   it('caps the named list but keeps the count exact when many are missing', async () => {
-    // A disconnected network share can make every path in the request fail at
-    // once. The log must stay readable without lying about the scale.
+    // Many missing at once (a dropped share): capped, with an exact count.
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     try {
@@ -263,9 +232,7 @@ describe('POST /api/images/exists', () => {
   });
 
   it('answers false rather than throwing for malformed or unreachable paths', async () => {
-    // Every one of these makes the OS unhappy in a different way (illegal
-    // characters, a reserved device name, a share that is not there). None of
-    // them may produce a 500 — "we cannot open it" is just false.
+    // Illegal characters, a reserved name, a missing share: all false, never 500.
     const nonsense = 'C:\\<>|?*\\nope.png';
     const reserved = '\\\\?\\bad\\path\\x.png';
     const deadShare = '\\\\no-such-host-12345\\share\\x.png';
@@ -282,8 +249,7 @@ describe('POST /api/images/exists', () => {
   });
 
   it('de-duplicates repeated paths', async () => {
-    // The same original file can back more than one image row; checking it
-    // twice is pointless because the response is keyed by path.
+    // Duplicates are checked once; the response is keyed by path.
     const res = await request(app)
       .post('/api/images/exists')
       .send({ paths: [pngPath, pngPath, pngPath] });

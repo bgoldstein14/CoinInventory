@@ -1,21 +1,7 @@
  /*
- * coin-photos.spec.ts — the two questions every screen asks about a coin's
- * photographs, now that the list endpoint no longer carries them.
- *
- *   "How many photographs does this coin have?"  -> coinPhotoCount
- *   "Give me the photographs themselves"         -> makeCoinImageLoader
- *
- * Both have to work across the ONE distinction that matters:
- *
- *   imagePaths is an ARRAY   -> loaded. Its length is the truth, and the
- *                               strings are the photographs.
- *   imagePaths is ABSENT     -> NOT loaded. `imageCount` answers the first
- *                               question for free; the second needs a fetch.
- *
- * Note what is NOT in that list: there is no "empty array means unknown"
- * case. An empty array means the coin genuinely has no photographs, and
- * conflating the two is how a save deletes somebody's pictures — see
- * services/inventory/photo-safety.spec.ts.
+  * coinPhotoCount and makeCoinImageLoader across the two states that matter:
+  * imagePaths present (loaded) and absent (not loaded; imageCount known).
+  * An empty array means "no photos", never "unknown" (see photo-safety.spec.ts).
   */
 import { describe, expect, it, vi } from 'vitest';
 import { coinHasPhotos, coinPhotoCount, makeCoinImageLoader } from './coin-photos';
@@ -45,8 +31,7 @@ describe('coinPhotoCount', () => {
   });
 
   it('prefers the loaded array over a stale imageCount', () => {
-    // The user just deleted two photographs. The array is what is true now;
-    // `imageCount` is what the server said when the page loaded.
+    // The array reflects deletions since load; imageCount is the stale snapshot.
     expect(coinPhotoCount(loaded(['a'], 3))).toBe(1);
   });
 
@@ -57,7 +42,7 @@ describe('coinPhotoCount', () => {
 
 describe('coinHasPhotos', () => {
   it('is true for a coin the server says has photographs, with none loaded', () => {
-    // This is the grid's case: it must answer without fetching anything.
+    // The grid's case: must answer without fetching.
     expect(coinHasPhotos(notLoaded(2))).toBe(true);
   });
 
@@ -88,11 +73,7 @@ describe('makeCoinImageLoader', () => {
   });
 
   it('does NOT fetch for a coin the server says has no photographs', async () => {
-    /* ---------------------------------------------------------------------
-     * The whole-collection saving. A printed report over 105 coins where 60
-     * have no pictures must not make 60 round trips to be told so: the list
-     * already said `imageCount: 0`, and that answer cannot be improved on.
-     * ------------------------------------------------------------------- */
+    // Coins the list reported with imageCount 0 must not be fetched.
     const fetchFromServer = vi.fn(async () => ['NEVER']);
     const load = makeCoinImageLoader([notLoaded(0)], fetchFromServer);
 
@@ -112,8 +93,7 @@ describe('makeCoinImageLoader', () => {
   });
 
   it('fetches for a coin it has never heard of, rather than answering empty', async () => {
-    // "I have no record of this coin" must not be reported as "this coin has
-    // no photographs" — the second is a claim we have no basis for.
+    // An unknown coin is not the same as a coin with no photos.
     const fetchFromServer = vi.fn(async () => ['SERVER']);
     const load = makeCoinImageLoader([], fetchFromServer);
 
@@ -122,13 +102,8 @@ describe('makeCoinImageLoader', () => {
   });
 
   it('lets a fetch failure propagate instead of reporting "no photographs"', async () => {
-    /* ---------------------------------------------------------------------
-     * A rejection has to stay a rejection. A loader that swallowed the error
-     * and returned `[]` would tell its caller the coin has no pictures — and
-     * the batch import's "append" path builds the array it is about to SAVE
-     * out of exactly this answer. Turning a network blip into an empty array
-     * there deletes photographs.
-     * ------------------------------------------------------------------- */
+    // A rejection must stay a rejection: returning [] would let the batch
+    // import's append mode save an empty array and delete photos.
     const fetchFromServer = vi.fn(async () => { throw new Error('offline'); });
     const load = makeCoinImageLoader([notLoaded(4)], fetchFromServer);
 

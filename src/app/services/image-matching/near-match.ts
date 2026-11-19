@@ -1,83 +1,20 @@
- /*
- * near-match.ts
+/*
+ * Sorts every decided match result into an import tier, so the review screen
+ * only asks questions it can ask cheaply:
  *
- * WHAT THIS FILE OWNS
- *   STAGE 4: sorting every already-decided match result into one of THREE
- *   IMPORT TIERS, so the review screen can ask the user a cheap question
- *   instead of an expensive one (or no question at all).
+ *   'matched'      all auto gates passed; nothing to ask.
+ *   'near'         file and coin agree on year, coin type, denomination and
+ *                  grade, but something else is off (mint mark, cert number,
+ *                  several equally good coins). Asked as a yes/no.
+ *   'not-imported' the four-attribute test failed for every candidate
+ *                  (includes 'none' and weak 'review' rows). Shown in a
+ *                  read-only list with the reason it was skipped.
  *
- *     'matched'      the matcher is certain  -> attach it, nothing to ask
- *     'near'         one yes/no away         -> ask, but only yes/no
- *     'not-imported' nothing to ask about    -> skip it and report it
- *
- *   Public entry points:
- *     `assignImportTier`  - the stage itself: result in, result + tier out.
- *     `assessNearMatch`   - the four-attribute test for ONE file/coin pair.
- *
- *   `compareGrades` and the grade-equivalence tables live in
- *   grade-tolerance.ts, so that match-scorer.ts can apply the SAME tolerance
- *   when it scores a pair. They are re-exported from here unchanged.
- *
- *   WHETHER TWO STATED YEARS OR DENOMINATIONS CONFLICT IS NOT THIS FILE'S
- *   BUSINESS either. Those tests, plus the proof-against-business-strike
- *   rule, live in match-vetoes.ts so that the scorer, the decider and this
- *   file all read one answer. `assessNearMatch` adopts that verdict and only
- *   adds the ABSENCE checks, which are stricter than any veto.
- *
- * WHY THIS IS A SEPARATE FILE AND NOT AN EDIT TO match-decider.ts
- *
- *   match-decider.ts owns the three AUTO-ASSIGN GATES, and those gates embody
- *   the standing rule that silently filing an image under the wrong coin is
- *   much worse than asking.
- *   NOTHING IN THIS FILE MAY WEAKEN THOSE GATES, and nothing in it can: this
- *   stage runs AFTER the decision is made, reads `status` without ever writing
- *   it, and never sets `matchedRecordId`. A 'near' row arrives at the review
- *   screen with no coin attached and leaves it with no coin attached unless the
- *   user presses a button. The tiers exist to make the ASKING cheaper, not to
- *   make the matcher braver.
- *
- *   Keeping it in its own module (with its own spec) means the caution in
- *   match-decider.ts and the convenience rules in here can each be reviewed on
- *   their own, and a future change to one cannot quietly change the other.
- *
- * WHY THE TIERS ARE SPLIT WHERE THEY ARE
- *
- *   The photo library is ~2,140 files. With only two buckets -- "attached
- *   automatically" and "a human must look at this" -- everything the matcher
- *   has no opinion about (a group shot, a stamp, a camera-default name like
- *   IM000025.JPG, an ancient with no year) lands in the same manual list as a
- *   genuine 1881-S / 1881-O Morgan near-miss and costs the same attention. At
- *   2,140 files that is not a review screen, it is a second job.
- *
- *   The split below is therefore about WHAT QUESTION CAN BE ASKED:
- *
- *   TIER 1 'matched'
- *       All three auto gates passed. No question. (The user can still untick
- *       or Skip a photo -- it is one of only two places a Skip button appears.)
- *
- *   TIER 2 'near'
- *       The filename and the coin agree on all FOUR identifying attributes --
- *       year, coin type, denomination and grade -- so we are looking at the
- *       same coin; but something ELSE is off (a mint mark that disagrees, a
- *       variety, a cert number, or simply two coins fitting equally well), so
- *       the gates would not let it through. That is a question with a yes/no
- *       answer: "this one?" The user answers it in one click, or picks a
- *       different coin from the short list of other near matches, or skips.
- *
- *   TIER 3 'not-imported'
- *       The four-attribute test failed against every candidate, so there is no
- *       apparent match and therefore no yes/no question to ask -- asking would
- *       just be making the user do the matcher's job by hand, 203 times. These
- *       are skipped automatically and shown in a READ-ONLY list with no
- *       buttons, exactly like the "Not imported" panels in the QIF and CSV
- *       importers. Nothing is silently dropped: every row is listed with its
- *       filename, what the matcher managed to read out of it, and why it was
- *       skipped.
- *
- *   Note that tier 3 contains both of the old 'none' rows AND the 'review'
- *   rows that cannot clear the four-attribute bar. That second group is where
- *   the saving comes from.
-  */
+ * This stage runs after the decision and never writes `status` or
+ * `matchedRecordId`, so it cannot loosen the gates in match-decider.ts.
+ * Conflict tests come from match-vetoes.ts; this file adds only the
+ * stricter "must be present" checks.
+ */
 
 import {
   ImageMatchResult,
@@ -98,20 +35,8 @@ import { COIN_TYPE_STRONG_SIMILARITY } from './matching-thresholds';
 import { mintLabel } from './reference-tables';
 import { titleCase } from './text-tokens';
 
- /*
- * THE GRADE TOLERANCE -- LIVES IN grade-tolerance.ts, RE-EXPORTED HERE
- *
- * It is a leaf module because match-scorer.ts needs it too, and the scorer
- * cannot import this file: THIS file imports the scorer (for
- * `diceSimilarity`), so the two would form a cycle.
- *
- * ONE IMPLEMENTATION, TWO DOORS. The re-export below exists only so that the
- * long-standing `import { compareGrades } from './near-match'` keeps working
- * -- the same arrangement match-scorer.ts has with `formatYear`. Do not copy
- * the comparison back in here: two implementations of "are these the same
- * grade?" would drift, and the day they drifted the scorer would be rewarding
- * a pairing this file refuses.
-  */
+// Grade tolerance lives in grade-tolerance.ts (shared with match-scorer.ts);
+// re-exported for existing importers.
 export {
   NEAR_MATCH_EXTRA_DESIGNATIONS,
   GRADE_DESIGNATION_SYNONYMS,
@@ -119,11 +44,6 @@ export {
   compareGrades
 } from './grade-tolerance';
 export type { GradeDesignationGroup, GradeRelation, GradeComparison } from './grade-tolerance';
-
-
- /*
- * THE FOUR-ATTRIBUTE NEAR-MATCH TEST
-  */
 
 /** Why one file/coin pair is (or is not) a near match. */
 export interface NearMatchVerdict {
@@ -133,59 +53,32 @@ export interface NearMatchVerdict {
   blockers: string[];
   /** How the two grades relate. */
   grade: GradeComparison;
-  /**
-   * What is OFF despite the four agreeing -- the reason this is "near" rather
-   * than automatic. A mint mark that disagrees, a cert number, a variety.
-   */
+  /** What is off despite the four agreeing (mint mark, cert number, variety). */
   discrepancies: string[];
 }
 
 /**
- * Is this coin a NEAR MATCH for this filename?
+ * Is this coin a near match for this filename?
  *
- * All four of year, coin type, denomination and grade must agree. If any of
- * them is ABSENT on either side, that is a failure too, not a free pass:
- * "absence is not agreement" is the matcher's oldest rule and it holds here.
- * A filename with no grade therefore cannot produce a near match, which is
- * deliberate -- without the grade there is nothing holding the pairing
- * together except a year and a denomination that dozens of coins share.
- *
- * WHERE THE CONFLICT TESTS LIVE
- *
- * Whether two years or two denominations disagree is decided in
- * match-vetoes.ts, which the scorer and the decider also consult; this
- * function adopts their answer rather than forming its own. Two copies of "do
- * these conflict?" eventually drift, and the day they drift is the day a coin
- * this test has refused is still sitting in the candidate list waiting to be
- * clicked.
- *
- * What stays here is the part the veto deliberately does NOT do: the ABSENCE
- * checks. A veto needs both sides to state something and contradict; this
- * tier is stricter still and requires all four attributes to be PRESENT and
- * to agree. So "the filename carries no year" is a blocker here while it is
- * not a veto anywhere else.
+ * Year, coin type, denomination and grade must all be present on both sides
+ * and agree; a missing attribute is a blocker. Stated conflicts come from
+ * the shared vetoes in match-vetoes.ts.
  */
 export function assessNearMatch(file: Signature, coin: Signature): NearMatchVerdict {
   const blockers: string[] = [];
   const discrepancies: string[] = [];
 
-  /* ---- 0. THE HARD VETOES ---------------------------------------------
-   * A stated year conflict, a stated denomination conflict, or a proof
-   * against a business strike. Listed first because they are categorical:
-   * whatever else agrees, this is not the coin. */
+  // 0. Hard vetoes.
   blockers.push(...findVetoes(file, coin).reasons);
 
-  // ---- 1. YEAR IS PRESENT ON BOTH SIDES --------------------------------
-  // Whether two STATED years disagree is the veto's business, above.
+  // 1. Year present on both sides (conflicts handled by the veto).
   if (file.year === null) {
     blockers.push('the filename carries no year');
   } else if (coin.year === null) {
     blockers.push('the coin record has no year');
   }
 
-  // ---- 2. COIN TYPE ----------------------------------------------------
-  // "Agrees" uses the same bar the scorer uses for a STRONG coin-type
-  // agreement, so the two parts of the system cannot drift apart.
+  // 2. Coin type, using the scorer's strong-agreement bar.
   if (file.coinTypeTokens.length === 0) {
     blockers.push('the filename names no coin type');
   } else if (coin.coinTypeTokens.length === 0) {
@@ -197,26 +90,21 @@ export function assessNearMatch(file: Signature, coin: Signature): NearMatchVerd
         `coin type "${titleCase(file.coinTypeTokens.join(' '))}" does not match "${titleCase(coin.coinTypeTokens.join(' '))}"`
       );
     } else if (similarity < 1) {
-      // Same coin, but the two descriptions are not word-for-word. Worth
-      // mentioning, not worth refusing over.
+      // Not word-for-word: worth mentioning, not refusing over.
       discrepancies.push(
         `the coin type is written differently: "${titleCase(file.coinTypeTokens.join(' '))}" vs "${titleCase(coin.coinTypeTokens.join(' '))}"`
       );
     }
   }
 
-  /* ---- 3. DENOMINATION IS PRESENT ON BOTH SIDES ------------------------
-   * As with the year, whether two STATED denominations conflict is decided by
-   * the shared veto above -- including the "3¢ is equivalent to 3CS or 3CN"
-   * rule, which this test must not second-guess. Only absence is handled
-   * here. */
+  // 3. Denomination present on both sides (conflicts handled by the veto).
   if (!file.denomination) {
     blockers.push('the filename carries no denomination');
   } else if (!coin.denomination) {
     blockers.push('the coin record has no denomination');
   }
 
-  // ---- 4. GRADE (with the "extra information" tolerance) ---------------
+  // 4. Grade, tolerating extra detail on one side.
   const grade = compareGrades(file.grade, coin.grade);
   if (grade.relation === 'missing' || grade.relation === 'different') {
     blockers.push(asClause(grade.description));
@@ -224,9 +112,7 @@ export function assessNearMatch(file: Signature, coin: Signature): NearMatchVerd
     discrepancies.push(asClause(grade.description));
   }
 
-  /* ---- what else is off ------------------------------------------------
-   * These never block a near match -- they are the "but something else seems
-   * off", and they are the reason the user is being asked rather than told. */
+  // Discrepancies never block a near match; they are why the user is asked.
   if (file.mintMark && coin.mintMark && file.mintMark !== coin.mintMark) {
     discrepancies.push(`mint mark ${mintLabel(file.mintMark)} differs from ${mintLabel(coin.mintMark)}`);
   }
@@ -250,34 +136,21 @@ export function assessNearMatch(file: Signature, coin: Signature): NearMatchVerd
   return { isNear: blockers.length === 0, blockers, grade, discrepancies };
 }
 
-/**
- * Turn a standalone sentence into a clause that can be joined with others by
- * "; " — no capital at the front, no full stop at the back. Every blocker and
- * discrepancy ends up inside a longer sentence, so they all have to read as
- * clauses or the skip reasons come out as "..., but The filename does not...".
- */
+/** Turn a sentence into a clause for joining with "; " (lowercase start, no full stop). */
 function asClause(sentence: string): string {
   const trimmed = sentence.replace(/\.$/, '');
   return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
 }
 
-/* ===========================================================================
- * STAGE 4 ITSELF
- * ========================================================================= */
-
 /**
- * Stamp an import tier onto a decided match result.
- *
- * This is a pure function of its inputs and it NEVER touches `status`,
- * `matchedRecordId`, `confidence` or `candidates`. The only fields it writes
- * are `tier`, `nearMatch` and `skipReason`, all of which are new and advisory.
- * That is what makes it impossible for this stage to attach anything.
+ * Stamp an import tier onto a decided match result. Pure; writes only the
+ * advisory `tier`, `nearMatch` and `skipReason` fields.
  */
 export function assignImportTier(
   result: ImageMatchResult,
   coinSignatures: readonly CoinSignature[]
 ): ImageMatchResult {
-  // TIER 1. The gates in match-decider.ts already said yes. Nothing to add.
+  // Tier 1: the gates already said yes.
   if (result.status === 'auto') {
     return { ...result, tier: 'matched', nearMatch: null, skipReason: null };
   }
@@ -288,8 +161,8 @@ export function assignImportTier(
   const near: Array<{ candidate: RankedImageMatch; verdict: NearMatchVerdict }> = [];
   let topVerdict: NearMatchVerdict | null = null;
 
-  // Candidates arrive best-first, so the first one that passes is the one we
-  // suggest and the rest become the dropdown.
+  // Candidates arrive best-first: the first that passes is suggested, the
+  // rest become the dropdown.
   for (const candidate of result.candidates) {
     const entry = byId.get(candidate.coinId);
     if (!entry) continue;
@@ -298,8 +171,7 @@ export function assignImportTier(
     if (verdict.isNear) near.push({ candidate, verdict });
   }
 
-  // TIER 3. No candidate agreed on all four, so there is no apparent match and
-  // no yes/no question worth asking. Skip it, but say exactly why.
+  // Tier 3: no candidate agreed on all four. Skip it and say why.
   if (near.length === 0) {
     return {
       ...result,
@@ -309,15 +181,13 @@ export function assignImportTier(
     };
   }
 
-  // TIER 2. Same coin on all four attributes, something else off.
+  // Tier 2: same coin on all four attributes, something else off.
   const best = near[0];
   const alternatives = near.length - 1;
 
   const discrepancies = [...best.verdict.discrepancies];
   if (alternatives > 0) {
-    /* Several coins fit one filename. The alternatives are offered as a
-     * dropdown rather than as more cards, because they are all answers to the
-     * SAME question. */
+    // Several coins fit; alternatives go in the dropdown.
     discrepancies.push(
       `${alternatives} other coin${alternatives === 1 ? '' : 's'} in your inventory fit${alternatives === 1 ? 's' : ''} this filename just as well`
     );
@@ -326,8 +196,7 @@ export function assignImportTier(
   const nearMatch: NearMatchDetail = {
     suggestedCoinId: best.candidate.coinId,
     suggestedCoinLabel: best.candidate.coinLabel,
-    // Only the candidates that independently passed the four-attribute test.
-    // Offering the rest would be offering a coin we have already judged wrong.
+    // Only candidates that passed the four-attribute test.
     candidates: near.map(entry => entry.candidate),
     gradeRelation: best.verdict.grade.relation === 'exact' ? 'exact' : 'extra-detail',
     gradeNote: best.verdict.grade.description,
@@ -337,18 +206,12 @@ export function assignImportTier(
   return { ...result, tier: 'near', nearMatch, skipReason: null };
 }
 
-/**
- * One honest sentence for the read-only "Not imported" list. Nothing is
- * dropped silently: every row says what it is and why it is there.
- */
+/** The skip reason shown in the read-only "Not imported" list. */
 function describeSkip(result: ImageMatchResult, topVerdict: NearMatchVerdict | null): string {
   const parsed = result.parsed;
 
-  /* Checked BEFORE isNonCoin, because the two overlap and this one is more
-   * specific. "Group PHOTO-2023-06-02-13-15-48.jpg" is both -- `group` is a
-   * GROUP_SHOT_WORD and a multi-coin marker -- and the honest sentence is the
-   * one that says it was held out of the automated run on purpose, not the
-   * generic "this is not one coin". */
+  // Checked before isNonCoin: the two can overlap ("Group PHOTO-....jpg")
+  // and this reason is more specific.
   if (parsed.excludedFromAutoImport) {
     return parsed.autoImportExclusionReason?.trim()
       || 'Held out of the automated import. You can still attach it to a coin by hand.';
@@ -361,26 +224,12 @@ function describeSkip(result: ImageMatchResult, topVerdict: NearMatchVerdict | n
     return 'Nothing about a coin could be read from the filename.';
   }
   if (result.candidates.length === 0) {
-    /* An empty candidate list usually means nothing scored well. But there
-     * are two other ways to arrive here, and in BOTH of them a coin came
-     * very close indeed, so "nothing came close" would be untrue:
-     *
-     *   DISQUALIFIED  every coin was thrown out by a hard veto (wrong year,
-     *                 wrong denomination, a proof against a business strike).
-     *   UNIDENTIFIED  several coins fit, and the FILENAME could not say which
-     *                 -- it gave no year, or no denomination, or only the
-     *                 vague "3-cent" where the inventory holds both a 3CS and
-     *                 a 3CN. See match-decider.ts.
-     *
-     * In each case the decider has already written the honest sentence, which
-     * names the closest coin and says exactly what went wrong, so it is
-     * passed through rather than paraphrased. */
+    /* No candidates usually means nothing scored well, but it can also mean
+     * every coin was vetoed (DISQUALIFIED) or the filename did not say which
+     * coin (UNIDENTIFIED). The decider's reason is passed through for those. */
     const unidentified = result.reason.indexOf(UNIDENTIFIED_PHRASE);
     if (unidentified >= 0) {
-      /* Only the tail is wanted here. The full sentence also walks through
-       * which auto-assign gate was missed, which is true but beside the
-       * point in a one-line "why was this left out?" column: the answer is
-       * that the NAME was not specific enough, and the rest is noise. */
+      // Only the tail; the gate-by-gate part is noise in a one-line column.
       return result.reason.slice(unidentified).trim();
     }
     return result.reason.includes(DISQUALIFIED_PHRASE)
@@ -391,18 +240,8 @@ function describeSkip(result: ImageMatchResult, topVerdict: NearMatchVerdict | n
   const top = result.candidates[0];
   const percent = Math.round(top.score * 100);
 
-  /* THE LABEL SHOT GETS ITS OWN SENTENCE, AND IT COMES FIRST.
-   *
-   * A photograph of the slab's certification label may ride along with a coin
-   * photo but never identify a coin on its own, so a coin whose ONLY
-   * photograph is a label shot is not attached automatically.
-   *
-   * That must not happen silently. A label shot usually agrees with its coin
-   * on every attribute there is -- it is a picture of the words, after all --
-   * so the four-attribute blockers below would often be EMPTY and this line
-   * would read "not enough of the filename could be tied to it", which is the
-   * opposite of the truth. Saying the real reason is also actionable: the fix
-   * is to photograph the coin, or to attach this one by hand. */
+  // Label shots usually have no blockers, so give the real reason instead of
+  // the generic fallback below.
   if (result.parsed.side === 'label') {
     return `Closest coin is ${top.coinLabel} at ${percent}%, but ${LABEL_ONLY_PHRASE}. ` +
       'Attach it by hand, or import a photo of the coin itself and this one will follow it.';
@@ -412,8 +251,5 @@ function describeSkip(result: ImageMatchResult, topVerdict: NearMatchVerdict | n
     ? topVerdict.blockers.join('; ')
     : 'not enough of the filename could be tied to it';
 
-  // Naming the closest coin AND the reason is what lets the user fix the
-  // underlying data: usually the record is missing the grade, or the filename
-  // is missing the denomination.
   return `Closest coin is ${top.coinLabel} at ${percent}%, but ${why}.`;
 }

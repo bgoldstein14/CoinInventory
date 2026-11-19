@@ -1,23 +1,12 @@
  /*
  * existing-photo-attach.spec.ts
  *
- * runAttach, for coins that ALREADY have photos.
+ * runAttach for coins that already have photos:
  *
- * THE BUG: adding a few coin images to a folder that has already been
- * imported makes the program try to import every image in it again, even
- * though most of the coins already have images attached.
- *
- * Two separate defences are tested here, and they are independent:
- *
- *   1. THE MODE. What the user chose should happen to coins that already have
- *      photos — leave them alone (the default), replace what they have, or
- *      keep both. See existing-photo-mode.ts.
- *   2. THE SKIP. Even under "keep both", a file that is already on the coin is
- *      not attached again. Compared by the ORIGINAL file's path, which is the
- *      only thing that identifies a source file. See already-attached.ts.
- *
- * Without (2), re-importing a folder where 290 of 300 photos were already
- * attached would attach all 300 again — the mode alone does not fix the bug.
+ *   1. The mode: leave them alone (default), replace, or keep both.
+ *      See existing-photo-mode.ts.
+ *   2. The skip: under "keep both", a file already on the coin (by source
+ *      path) is not attached again. See already-attached.ts.
   */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -77,10 +66,6 @@ function twoCoinSetup() {
   return { files, inventory, rows };
 }
 
-// ===========================================================================
-// 1. THE MODE
-// ===========================================================================
-
 describe('runAttach — existingPhotoMode "leave" (the default)', () => {
   it('writes nothing at all to a coin that already has photos', async () => {
     const { files, inventory, rows } = twoCoinSetup();
@@ -96,9 +81,7 @@ describe('runAttach — existingPhotoMode "leave" (the default)', () => {
   });
 
   it('is what you get when no mode is passed at all', async () => {
-    // The default has to live in the runner too, not only in the UI: a caller
-    // that forgets the option must not fall back to the duplicating
-    // behaviour this feature exists to remove.
+    // The default lives in the runner too, not only in the UI.
     const { files, inventory, rows } = twoCoinSetup();
     const attach = vi.fn();
 
@@ -109,8 +92,6 @@ describe('runAttach — existingPhotoMode "leave" (the default)', () => {
   });
 
   it('does not even READ the file for a coin it is leaving alone', async () => {
-    // The whole value of the default is that it is cheap: no 46 MB read off
-    // the share, no canvas decode, for a coin we are not going to touch.
     const { files, inventory, rows } = twoCoinSetup();
     const encode = vi.fn(stubEncode);
 
@@ -139,8 +120,7 @@ describe('runAttach — existingPhotoMode "leave" (the default)', () => {
 
 describe('runAttach — existingPhotoMode "replace"', () => {
   it('writes ONLY the new photos, dropping the coin s current ones', async () => {
-    // PUT /api/coins/:id deletes and re-inserts the whole image set, so an
-    // imagePaths array without the old entries IS the delete.
+    // PUT replaces the whole image set, so omitting the old entries deletes them.
     const { files, inventory, rows } = twoCoinSetup();
     const attach = vi.fn();
 
@@ -168,10 +148,8 @@ describe('runAttach — existingPhotoMode "replace"', () => {
   });
 
   it('does NOT skip a file that is already attached', async () => {
-    // Under replace the existing rows are being deleted, so "already
-    // attached" is about to stop being true. Skipping would leave the coin
-    // with NO copy of that photo at all — the one way this feature could
-    // destroy something outright.
+    // Under replace the existing rows are deleted, so skipping would leave
+    // the coin without that photo.
     const files = new Map([['a.jpg', pickedFile('a.jpg', 'a.jpg')]]);
     const attach = vi.fn();
 
@@ -208,10 +186,6 @@ describe('runAttach — existingPhotoMode "add"', () => {
     ]);
   });
 });
-
-// ===========================================================================
-// 2. THE SKIP — files already attached to that coin
-// ===========================================================================
 
 describe('runAttach — skipping files already attached to the coin', () => {
   /** Three files; the first two are already on the coin. */
@@ -251,9 +225,7 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('does not read the files it is going to skip', async () => {
-    // This IS the fix for "wanted to try importing all the images again": the
-    // expensive part is the read and the canvas decode, and a skipped file
-    // must cost neither.
+    // A skipped file costs no read or decode.
     const { files, rows, inventory } = reimportSetup();
     const encode = vi.fn(stubEncode);
 
@@ -270,8 +242,6 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('matches stored paths whose case and separators differ', async () => {
-    // The two sides of this comparison are produced by different code at
-    // different times, so neither casing nor separator style can be relied on.
     const { files, rows, inventory } = reimportSetup();
     const attach = vi.fn();
 
@@ -291,9 +261,6 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('writes nothing when EVERY file is already attached', async () => {
-    // The usual situation for most coins on a re-import. An import that
-    // re-saves a coin with an identical image list is a pointless round trip
-    // and a pointless delete-and-reinsert of its CoinImages rows.
     const { files, rows, inventory } = reimportSetup();
     const attach = vi.fn();
 
@@ -334,9 +301,7 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('attaches everything when no source paths were supplied at all', async () => {
-    // FAILS OPEN. If the bulk lookup could not run, the import behaves exactly
-    // as it did before this feature. Skipping photos on no evidence would be
-    // data loss dressed up as a convenience.
+    // Fails open when the source-path lookup didn't run.
     const { files, rows, inventory } = reimportSetup();
     const attach = vi.fn();
 
@@ -349,9 +314,7 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('attaches everything when there is no base folder to build a path from', async () => {
-    // With no base folder every candidate path is null, so nothing can be
-    // identified and nothing may be skipped. Importing without recording
-    // paths is a legitimate, long-standing choice.
+    // No base folder means null candidate paths, so nothing can be skipped.
     const { files, rows, inventory } = reimportSetup();
     const attach = vi.fn();
 
@@ -367,8 +330,6 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('reports a skipped-because-already-attached file as skipped, not failed', async () => {
-    // It is not an error and must never show up in the failures list, which
-    // is the thing the user reads to find out what went wrong.
     const { files, rows, inventory } = reimportSetup();
 
     const summary = await runAttach(rows, {
@@ -383,10 +344,7 @@ describe('runAttach — skipping files already attached to the coin', () => {
   });
 
   it('counts only the files it will really read in the progress total', async () => {
-    // The progress bar's denominator used to be "every ticked row". With most
-    // of them skipped it would crawl to 1/300 and then jump to done, which
-    // reads as a hang on the exact screen this feature exists to keep
-    // responsive.
+    // Skipped files are excluded from the progress total.
     const { files, rows, inventory } = reimportSetup();
     const seen: number[] = [];
 

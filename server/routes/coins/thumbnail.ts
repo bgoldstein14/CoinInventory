@@ -1,45 +1,18 @@
 /**
- * routes/coins/thumbnail.ts — GET /api/coins/:id/thumbnail
+ * GET /api/coins/:id/thumbnail: one coin's main photo (SortOrder 0) as binary
+ * image bytes, for the grid's Photo column.
  *
- * ONE coin's main photograph, as binary image bytes, for the Photo column of
- * the main grid.
+ * One binary response per coin rather than a batched JSON endpoint: many
+ * coins' base64 in one JSON string can exceed V8's maximum string length
+ * (see routes/coins/list-query.ts). Per-coin responses also work with lazy
+ * loading and cache per coin.
  *
- * ONE BINARY RESPONSE PER COIN, deliberately NOT a batched JSON endpoint.
- * Putting N coins' base64 in one JSON array rebuilds the exact string that
- * exceeds V8's maximum string length (see routes/coins/list-query.ts), so
- * batching would move that outage rather than fix it. Batching is right for
- * short strings — see image-source-paths.ts — and wrong for blobs. One
- * response per coin also lets the grid's `loading="lazy"` skip rows below the
- * fold, costs nothing for coins the client already knows have no photos
- * (`imageCount` from the list), and caches per coin rather than invalidating
- * everything when one photograph changes.
+ * Stored photos are decoded from base64 before sending (a third smaller).
+ * Referenced photos (ImageData NULL, SourcePath set) stream the original file
+ * instead (see routes/images/reference-url.ts). There is no resizing; the
+ * stored copy is already downscaled (~1600 px).
  *
- * WHAT KEEPS IT SMALL
- * `ORDER BY SortOrder LIMIT 1` — one row, and specifically the row
- * the rest of the app calls the main photo (array position 0 IS SortOrder 0;
- * see CoinImagesStore.setMainImage). A coin with twenty photographs costs the
- * same as a coin with one.
- *
- * The bytes are sent DECODED. ImageData is stored as base64 text (4 characters
- * per 3 bytes), so decoding before sending makes the response a third smaller
- * and is what `<img src>` needs anyway.
- *
- * REFERENCED PHOTOGRAPHS. When the user has chosen (in Settings) to keep
- * photos on disk rather than in the database, ImageData is NULL and the only
- * thing the row holds is SourcePath. This route then streams that original
- * file instead of decoding a stored copy, so the Photo column looks and
- * behaves the same in both storage modes. See routes/images/reference-url.ts.
- *
- * There is no re-sizing step, and that is a limitation rather than a choice:
- * the stored copy is already downscaled (~1600px, ~250 KB) and the server has
- * no image library to shrink it further. If one is ever added, this is the
- * single place a real 160px thumbnail would be generated and cached.
- *
- * Every database call goes through `withDb()` and there is no resetPool()
- * call — see db/index.ts for why that matters.
- *
- * The alternatives weighed against one-response-per-coin are in
- * docs/rationale/server.md.
+ * Alternatives considered are in docs/rationale/server.md.
  */
 
 import { Router, Request, Response } from 'express';
@@ -53,27 +26,15 @@ import { toSingleValue } from '../param-utils';
 const router = Router();
 
 /**
- * What we serve when the stored data URL does not say what it is.
- *
- * Rows written before the `data:` URL convention settled hold raw base64 with
- * no MIME type at all. Every photograph this app stores is produced by the
- * same downscaler and is a JPEG, so that is the honest guess — and browsers
- * sniff the magic bytes regardless, so being wrong costs nothing visible.
+ * Served when a stored value has no MIME type (older rows hold bare base64).
+ * All stored photos are JPEGs from the same downscaler, and browsers sniff anyway.
  */
 const DEFAULT_IMAGE_MIME = 'image/jpeg';
 
 /**
- * Only these MIME types are echoed back from the stored data URL.
- *
- * ImageData is written by this app's own importer, so in practice it is
- * always one of these. The allow-list is here because the value ends up in a
- * `Content-Type` header: letting an arbitrary string out of the database and
- * into a response header invites header injection and content-type confusion
- * for no benefit whatsoever. Anything unrecognised falls back to JPEG rather
- * than failing — the picture is still the picture.
- *
- * Deliberately narrower than routes/images/allowed-types.ts, which governs
- * ORIGINAL files picked off disk by the user. These are files WE wrote.
+ * MIME types echoed back from a stored data URL. An allow-list because the
+ * value goes into a Content-Type header; anything else falls back to JPEG.
+ * Narrower than routes/images/allowed-types.ts, which covers user files on disk.
  */
 const ALLOWED_IMAGE_MIMES = new Set([
   'image/jpeg',
@@ -90,20 +51,14 @@ interface DecodedImage {
 }
 
 /**
- * Turn a stored ImageData value into bytes we can put on the wire.
+ * Turns a stored ImageData value into bytes, accepting the same shapes as
+ * routes/coins/image-payload.ts:
  *
- * Two accepted shapes, matching what routes/coins/image-payload.ts accepts on
- * the way in:
+ *   "data:image/jpeg;base64,/9j/4AAQ..."   current form
+ *   "/9j/4AAQ..."                          legacy bare base64
  *
- *   "data:image/jpeg;base64,/9j/4AAQ..."   the normal, current form
- *   "/9j/4AAQ..."                          legacy rows: bare base64
- *
- * Returns null for anything that does not decode to at least one byte. The
- * caller turns that into a 404, NOT a 500: an unreadable row is a gap in the
- * data, and a 500 would put a stack trace in the log for every paint of a
- * grid containing one bad coin.
- *
- * Exported for direct unit testing.
+ * Returns null if nothing decodes; the caller answers 404, not 500, so one
+ * bad row doesn't log a stack trace on every grid paint. Exported for tests.
  */
 export function decodeStoredImage(stored: unknown): DecodedImage | null {
   if (typeof stored !== 'string' || stored.trim().length === 0) return null;
@@ -111,8 +66,7 @@ export function decodeStoredImage(stored: unknown): DecodedImage | null {
   let payload = stored;
   let contentType = DEFAULT_IMAGE_MIME;
 
-  // `data:<mime>[;charset=...][;base64],<payload>` — take the MIME type from
-  // between the colon and the first semicolon or comma.
+  // `data:<mime>[;charset=...][;base64],<payload>`: MIME is before the first ; or ,.
   const match = /^data:([^;,]*)[^,]*,/.exec(stored);
   if (match) {
     payload = stored.slice(match[0].length);
@@ -120,9 +74,7 @@ export function decodeStoredImage(stored: unknown): DecodedImage | null {
     if (ALLOWED_IMAGE_MIMES.has(declared)) contentType = declared;
   }
 
-  // Buffer.from(..., 'base64') never throws: it stops at the first character
-  // it cannot use and returns what it had. So "did this decode" has to be
-  // answered by the length, not by a try/catch.
+  // Buffer.from(..., 'base64') never throws; check the decoded length instead.
   const bytes = Buffer.from(payload, 'base64');
   if (bytes.length === 0) return null;
 
@@ -130,21 +82,11 @@ export function decodeStoredImage(stored: unknown): DecodedImage | null {
 }
 
 /**
- * Serve a REFERENCED photograph's thumbnail by streaming the original file.
- *
- * The three rules this borrows from routes/images/file.ts, which serves the
- * same files to the photo viewer:
- *
- *   - the extension allow-list decides what may be read at all;
- *   - the bytes are STREAMED, because an original can be 46 MB and a grid
- *     asks for a screenful of them at once;
- *   - a stream error after the headers are out destroys the response rather
- *     than trying to set a status, which would throw on an I/O callback and
- *     take the process down.
- *
- * It never throws. A missing file is a 404 — exactly what a coin with no
- * photograph produces — so the grid shows its ordinary empty cell and does
- * not need to know which storage mode the photo used.
+ * Serves a referenced photo's thumbnail by streaming the original file, with
+ * the same rules as routes/images/file.ts: extension allow-list, streaming
+ * (originals can be ~46 MB), and destroying the response on a late stream
+ * error rather than setting a status. Never throws; a missing file is a 404,
+ * as for a coin with no photo.
  */
 async function streamOriginalThumbnail(
   res: Response,
@@ -168,8 +110,7 @@ async function streamOriginalThumbnail(
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', String(stats.size));
-    // Same "ask before reusing" rule as the stored path: a photograph the
-    // user has just replaced on disk must not keep appearing in the grid.
+    // Revalidate so a replaced file shows immediately.
     res.setHeader('Cache-Control', 'no-cache');
 
     const stream = fs.createReadStream(sourcePath);
@@ -188,9 +129,7 @@ async function streamOriginalThumbnail(
   } catch (err) {
     const code = (err as { code?: string } | null)?.code;
     if (code === 'ENOENT' || code === 'ENOTDIR') {
-      // The original has been moved or deleted. For a referenced photograph
-      // that means the picture is gone — there is no copy in the database to
-      // fall back to, which is the whole trade-off of the mode.
+      // The original was moved or deleted; referenced mode has no stored copy.
       logWarn(`Referenced thumbnail missing on disk for coin ${coinId}`);
       res.status(404).json({ error: 'No image available for this coin.' });
       return;
@@ -206,24 +145,17 @@ async function streamOriginalThumbnail(
 // GET /api/coins/:id/thumbnail
 //
 // 200  the image bytes
-// 404  the coin has no photographs, does not exist, or its first row holds
-//      nothing decodable
-// 500  the database itself failed
+// 404  no photos, no such coin, or nothing decodable
+// 500  the database failed
 //
-// "No photos" and "no such coin" deliberately share the 404 here, unlike
-// GET /:id/images which separates them. That endpoint answers a question the
-// UI acts on ("show the gallery empty state" vs "this coin is gone"); this one
-// feeds an `<img>` tag with one failure behaviour either way, so the second
-// query the distinction needs would be an extra round trip per grid row.
+// "No photos" and "no such coin" share the 404 (unlike GET /:id/images): an
+// <img> behaves the same either way, and telling them apart costs a query per row.
 router.get('/:id/thumbnail', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
   try {
     const row = await withDb(async (db) => {
-      // TOP 1 + ORDER BY SortOrder: one row, and the one the gallery calls
-      // the main photo. The id is BOUND, never interpolated — it arrives from
-      // the URL and the spec sends a `'; DROP TABLE Coins; --` id to keep
-      // that honest.
+      // The main photo only. The id is bound (the spec tries an injection string).
       const result = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
         .query(
@@ -235,27 +167,15 @@ router.get('/:id/thumbnail', async (req: Request, res: Response) => {
 
     const image = row ? decodeStoredImage(row['ImageData']) : null;
 
-     /*
-     * REFERENCED PHOTOGRAPHS — ImageData is NULL on purpose.
-     *
-     * The user chose, in Settings, to keep the picture on disk rather than
-     * in the database. There is nothing to decode, so the grid's Photo
-     * column is served by STREAMING the original file instead. Streaming,
-     * never readFile: these are camera originals up to ~46 MB and a grid
-     * paints a screenful of rows at once (design §4.9a.3).
-     *
-     * Only reached when the row holds no picture, so a stored photograph
-     * still costs exactly what it did before: one decode, no disk access.
-      */
+    // Referenced photo: nothing stored to decode, so stream the original.
+    // Stored photos never touch the disk.
     if (!image && typeof row?.['SourcePath'] === 'string' && row['SourcePath'].trim()) {
       await streamOriginalThumbnail(res, row['SourcePath'].trim(), id);
       return;
     }
 
     if (!image) {
-      // Logged at warn, not error, and without the id in a hot loop message:
-      // a collection where half the coins have no photograph is a perfectly
-      // normal collection, and this must not drown the log.
+      // Warn, not error: coins without photos are normal.
       logWarn(`No thumbnail available for coin ${id}`);
       res.status(404).json({ error: 'No image available for this coin.' });
       return;
@@ -263,10 +183,8 @@ router.get('/:id/thumbnail', async (req: Request, res: Response) => {
 
     res.setHeader('Content-Type', image.contentType);
     res.setHeader('Content-Length', String(image.bytes.length));
-    // "Cache it, but ask me before you reuse it." Combined with the ETag
-    // Express computes from the body, scrolling back up the grid costs a 304
-    // with no body, while a photograph the user just replaced still appears
-    // immediately. A max-age would make the grid show the old picture.
+    // Cache but revalidate: with Express's ETag, scrolling back is a 304, and
+    // a replaced photo still shows immediately.
     res.setHeader('Cache-Control', 'no-cache');
 
     logInfo(`Served thumbnail for coin ${id} (${image.bytes.length} bytes)`);

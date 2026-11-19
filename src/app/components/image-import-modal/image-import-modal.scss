@@ -1,35 +1,16 @@
 @use '../../styles/modal' as *;
-// The base-folder box is an ordinary labelled field, so it reuses the shared
-// `.detail-field` look rather than inventing a third input style. Angular
-// scopes component styles, which is why each component has to `@use` the
-// partial itself.
 @use '../../styles/field' as *;
 
-// ---- Batch image import (inside modal) ----
-// Card-level styling for one MATCHED coin's photos lives in
-// coin-image-group.scss, and for one NEAR-MATCH coin's photos in
-// near-match-review.scss. What is left here is the page furniture: the
-// base-folder box, the tier summary, the progress bar and the read-only
-// "not imported" table.
+// ---- Batch image import ----
+// Matched-coin cards: coin-image-group.scss. Near-match cards: near-match-review.scss.
 
 // ---- Where the originals live ----
-
-// A slightly louder hint for "no base folder given, so no path will be saved".
 .hint-text--warn {
   color: #8a5a22;
 }
 
-// The base-folder guard's refusal.
-//
-// Styled distinctly from `.source-path-example` above on purpose. That one is
-// advisory and sits in the page's warm palette; this one is a STOP — the
-// import the user just asked for did not happen. Red, solid-bordered and
-// higher contrast, so the two are never mistaken for each other at a glance.
-//
-// `white-space: pre-line` because the message is two paragraphs separated by a
-// blank line: the failing path on its own first, then the explanation. Run
-// together they are much harder to read, and the path is the part that makes
-// the mistake obvious.
+// Base-folder guard refusal: styled as a hard stop, distinct from the advisory
+// path example. pre-line keeps the path and the explanation on separate lines.
 .import-blocked {
   margin: 0 0 12px;
   padding: 10px 12px;
@@ -40,13 +21,10 @@
   font-size: 0.85rem;
   line-height: 1.45;
   white-space: pre-line;
-  // The path is the first line and the thing worth reading first.
   word-break: break-all;
 }
 
-// The live "this is what will be stored" example. Deliberately prominent and
-// monospaced: it is the only chance the user gets to spot a wrong base folder
-// before hundreds of rows are written with it.
+// Example of the path that will be stored; prominent so a wrong folder is noticed.
 .source-path-example {
   margin: 0 0 12px;
   padding: 8px 10px;
@@ -74,11 +52,7 @@
   margin-bottom: 4px;
 }
 
-// ---- "How much work is this?" ----
-// The first thing on the screen once a folder has been matched. Phrased as a
-// sentence rather than a row of chips because with 2,140 files the user's real
-// question is "is this two minutes or an afternoon", and a sentence answers it
-// in one read.
+// ---- Tier summary ----
 
 .tier-summary {
   margin-bottom: 14px;
@@ -108,12 +82,7 @@
   line-height: 1.45;
 }
 
-// ---- "These coins already have photos" — the three-way choice ----
-//
-// Only rendered when at least one matched coin really has photos. The visual
-// weight is deliberate: this is the one control on the screen that can delete
-// something, and the counts inside it are the only warning the user gets
-// before the confirmation dialog.
+// ---- Existing photos choice ----
 
 .existing-photos {
   margin: 0 0 14px;
@@ -164,8 +133,7 @@
   line-height: 1.4;
 }
 
-// The count of photos about to be DELETED. Bigger and in the danger colour:
-// this number has to be unmissable.
+// Count of photos that "Replace" would delete.
 .existing-photos-count {
   font-size: 1.05rem;
   color: #9b2c1f;
@@ -217,22 +185,8 @@
 
 // ---- Progress ----
 
-// PINNED, and that is the whole point of these three properties.
-//
-// This block renders near the TOP of the dialog. The Save button is at the
-// BOTTOM, below a review list that routinely runs to hundreds of rows, and
-// `.modal` is the scrolling container. Unpinned, the user scrolls down,
-// presses Save, and the indicator updates several screens above the
-// viewport, so the import looks as though it has no busy indicator at all.
-//
-// `top: 52px` clears the sticky modal header, matching the offset already used
-// by the section headings further down this file. The opaque background is
-// required: a translucent one would let review rows scroll visibly through
-// the bar.
-//
-// The Save button also reports progress in its own label, which is the
-// defence that does not depend on scroll position at all. Both are deliberate;
-// see saveButtonLabel() in services/image-import/import-progress.ts.
+// Sticky so the indicator stays visible while the user is scrolled down to Save.
+// top: 52px clears the sticky modal header; the background must be opaque.
 .import-progress {
   position: sticky;
   top: 52px;
@@ -256,24 +210,17 @@
 }
 
 .import-progress-label {
-  font-variant-numeric: tabular-nums; // so "9 of 317" -> "10 of 317" does not jiggle
+  font-variant-numeric: tabular-nums;
 }
 
 .import-progress-file {
   color: #8a7a63;
   font-size: 0.72rem;
-  padding-left: 22px; // line up under the label, clear of the spinner
+  padding-left: 22px;
   overflow-wrap: anywhere;
 }
 
-// The one piece of the indicator that moves on its own.
-//
-// Everything else here is driven by a count, and the two stages with no count
-// (reading the folder, building the review list) would otherwise be a static
-// sentence. A CSS animation keeps turning without any JavaScript, which is
-// precisely what is wanted: it is still turning during the slice of work
-// between two of the session's yields, so it says "alive" even at the moments
-// the main thread is busy.
+// CSS animation keeps turning even while the main thread is busy between yields.
 .import-spinner {
   flex: none;
   width: 14px;
@@ -303,9 +250,7 @@
   transition: width 0.1s linear;
 }
 
-// Stages with no countable unit of work. A determinate bar pinned at 0% is
-// read as "stuck" — the frozen screen again, with a rectangle on it — so the
-// track sweeps instead and the fill is taken out of the picture.
+// Stages with no countable progress sweep the track instead of showing 0%.
 .import-progress-track--indeterminate {
   background: linear-gradient(90deg, #e8dccb 0%, #c7ad85 50%, #e8dccb 100%);
   background-size: 200% 100%;
@@ -319,9 +264,7 @@
   to { background-position: -100% 0; }
 }
 
-// Honest feedback for the pickers the session is currently refusing. The
-// `[disabled]` on the hidden <input> is what actually stops the file dialog
-// opening; this is only so the label does not still look clickable.
+// The hidden input's [disabled] blocks the dialog; this just makes the label look disabled.
 .file-picker--disabled {
   opacity: 0.5;
   cursor: progress;
@@ -329,8 +272,6 @@
   &:hover { background: #f2ece2; }
 }
 
-// Respect the OS "reduce motion" setting: the count and the bar still carry
-// the information, so nothing is lost by holding the animations still.
 @media (prefers-reduced-motion: reduce) {
   .import-spinner,
   .import-progress-track--indeterminate {
@@ -359,8 +300,7 @@
   }
 }
 
-// Whole-batch bulk controls. Sticky so they stay reachable while scrolling a
-// long list of coin groups.
+// Sticky so bulk controls stay reachable in a long list.
 .batch-bulk-bar {
   display: flex;
   flex-wrap: wrap;
@@ -402,19 +342,8 @@
   font-size: 0.74rem;
 }
 
-// ---- TIER 3: the read-only "not imported" table ----
-// Deliberately styled like the exception panels in the QIF and CSV importers:
-// a plain table, muted, with almost no interactive affordance in it. The
-// visual flatness is the point - this is a report you are meant to be able to
-// scroll past, not a queue.
-//
-// The one control, "Attach anyway", is styled as a plain underlined link in
-// the muted body colour rather than as a button, and it sits in the last and
-// narrowest column. That is the whole trick to keeping the list unobtrusive:
-// a column of real buttons would read as a list of things to do, which is
-// exactly what tier 3 must not become. See the comment on the control in
-// image-import-modal.html for why it exists despite the near-match bar
-// staying strict.
+// ---- Tier 3: read-only "not imported" table ----
+// Kept visually flat, with "Attach anyway" as a quiet link, so it reads as a report.
 
 .skipped-table-wrap {
   max-height: 360px;
@@ -461,8 +390,7 @@
 .skipped-reason { color: #8a7a63; line-height: 1.4; }
 .skipped-nothing { color: #a3917a; font-style: italic; }
 
-// "What we read from the file name" chips. The same look the near-match rows
-// use, so the two places that show a parse show it identically.
+// Same chip style as the near-match rows.
 .parsed-chips { display: flex; flex-wrap: wrap; gap: 4px; }
 
 .parsed-chip {
@@ -475,7 +403,39 @@
   white-space: nowrap;
 }
 
-// ---- TIER 3's opt-in escape hatch ----
+// ---- Tier 3 photo sets ----
+.photo-set-name {
+  display: block;
+  font-family: monospace;
+  font-weight: 600;
+}
+
+.photo-set-count {
+  font-size: 0.75rem;
+  color: #6b6b6b;
+  margin-right: 6px;
+}
+
+.photo-set-shots {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 2px;
+}
+
+// Neutral pill naming a shot; hover shows the filename.
+.photo-set-shot {
+  font-size: 0.7rem;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #eef1f5;
+  color: #3b4a5c;
+  border: 1px solid #d5dce6;
+  white-space: nowrap;
+  cursor: default;
+}
+
+// ---- Tier 3 "Attach anyway" ----
 
 .skipped-action-head { width: 1%; }
 
@@ -485,8 +445,6 @@
   vertical-align: middle;
 }
 
-// A link, not a button. Quiet enough that 200 of them down the page still
-// look like a report, obvious enough to find when you want one.
 .rescue-link {
   background: none;
   border: none;
@@ -503,11 +461,7 @@
   &:focus-visible { color: #7a4b16; text-decoration-style: solid; }
 }
 
-// A counterfeit or multi-coin photo: no hatch at all, because the policy is
-// never to OFFER these as attachable in the automated import. Styled as
-// plain muted prose rather than as a control, so the eye reads it as a
-// statement about the row and never tries to click it — but it is still
-// SAID, so the user can see the importer looked and chose not to act.
+// Counterfeit or multi-coin photo: plain text, not a control.
 .skipped-manual-only {
   font-size: 0.7rem;
   color: #a3917a;
@@ -515,8 +469,7 @@
   white-space: nowrap;
 }
 
-// The resolved state, worded and coloured like a settled tier-2 row so the
-// two tiers read the same once a decision has been made.
+// Resolved state, matching a settled tier-2 row.
 .skipped-badge {
   font-size: 0.7rem;
   padding: 1px 8px;
@@ -529,7 +482,6 @@
 
 .skipped-row--rescued td { background: #f6fbf4; }
 
-// The panel only ever exists for the ONE row the user opened.
 .skipped-rescue-row > td {
   background: #fbf6ee;
   border-bottom: 1px solid #ecdcc0;

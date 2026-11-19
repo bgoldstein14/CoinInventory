@@ -1,27 +1,14 @@
 /**
- * backup/names.ts — every file name §16 invents, in one pure module.
+ * File names the backup feature creates:
  *
- * Three names get made up by this feature and all three are read by a human
- * at the worst possible moment — the user is looking at a folder trying to
- * work out which file is which, or which one used to be their collection.
- * So they are built here, together, where they can be kept consistent and
- * tested without a filesystem.
+ *   coin-inventory-backup-2026-11-14-1432.db      a backup
+ *   coin-inventory.replaced-2026-11-14-143215.db  the old collection, after a restore
  *
- *   coin-inventory-backup-2026-11-14-1432.db      what a backup is called
- *   coin-inventory.replaced-2026-11-14-143215.db  what the OLD collection
- *                                                 is renamed to by a restore
- *
- * LOCAL TIME, NOT UTC. These are shown to one person on one desktop, and a
- * backup taken at nine in the evening that is called `...-2100Z` is a file
- * they will not recognise. ISO-8601 belongs in the metadata INSIDE the file
- * (backup/metadata.ts), where a machine reads it; the name is for the human.
- *
- * NO COLONS, NO SPACES. Windows forbids `:` in a file name outright, and a
- * space turns every command-line and log line that mentions the path into
- * something that needs quoting.
+ * Local time (they're read by the user; the ISO timestamp lives inside the
+ * file, see backup/metadata.ts). No colons or spaces.
  */
 
-/** The extension every backup gets. One file, and it looks like a database. */
+/** The extension every backup gets. */
 export const BACKUP_EXTENSION = '.db';
 
 /** The stem of a suggested backup file name. */
@@ -32,13 +19,7 @@ export const REPLACED_MARKER = 'replaced';
 
 const pad = (value: number, width = 2): string => String(value).padStart(width, '0');
 
-/**
- * `2026-11-14-1432` — local date and time to the minute.
- *
- * To the MINUTE for a backup name, because that is what a user recognises
- * and a second backup in the same minute is vanishingly rare (and is handled
- * by uniqueFileName() below rather than by a longer name on every file).
- */
+/** `2026-11-14-1432`: local date and time to the minute. Collisions are handled by uniqueFileName(). */
 export function minuteStamp(now: Date): string {
   return (
     `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}` +
@@ -46,14 +27,7 @@ export function minuteStamp(now: Date): string {
   );
 }
 
-/**
- * `2026-11-14-143215` — local date and time to the second.
- *
- * To the SECOND for the displaced-collection name, where uniqueness is not
- * a nicety: two restores a minute apart must not produce the same aside
- * name, because the second one would be refused (or, far worse on a
- * platform that allows it, would overwrite the first user's rescue copy).
- */
+/** `2026-11-14-143215`: local time to the second, so two restores a minute apart get different aside names. */
 export function secondStamp(now: Date): string {
   return `${minuteStamp(now)}${pad(now.getSeconds())}`;
 }
@@ -64,22 +38,10 @@ export function backupFileName(now: Date): string {
 }
 
 /**
- * What the CURRENT collection is renamed to when a restore displaces it:
+ * What the current collection is renamed to when a restore displaces it:
  * `coin-inventory.db` -> `coin-inventory.replaced-2026-11-14-143215.db`.
- *
- * *** THE NAME IS PART OF THE SAFETY FEATURE. *** The single most likely
- * mistake in this whole feature is a user restoring the wrong file over a
- * good collection, so the displaced file has to be something they can find
- * and recognise without being told twice. It therefore:
- *
- *   - keeps the original stem, so it sorts next to `coin-inventory.db`
- *     in the same folder and is obviously related to it;
- *   - keeps the `.db` extension, so double-clicking it does something
- *     sensible and so copying it back over `coin-inventory.db` is the
- *     entire recovery procedure;
- *   - says `replaced` rather than `old`, `bak` or `~`, because the user
- *     did not make this file and needs to know what happened to it, not
- *     what it is for.
+ * Keeps the stem (sorts next to the original) and the `.db` extension, so
+ * recovery is copying it back.
  */
 export function asideFileName(currentFileName: string, now: Date): string {
   const dot = currentFileName.lastIndexOf('.');
@@ -89,17 +51,9 @@ export function asideFileName(currentFileName: string, now: Date): string {
 }
 
 /**
- * The first of `name`, `name (2)`, `name (3)`... that `taken` says is free.
- *
- * *** A BACKUP MUST NEVER SILENTLY OVERWRITE A BACKUP. *** Two backups in
- * the same minute land on the same suggested name, and the obvious
- * behaviour — write it anyway — destroys the earlier one. The earlier one
- * may be the good copy of a collection the user has since broken, which is
- * the exact situation in which they are pressing Backup repeatedly.
- *
- * `taken` is injected rather than being `fs.existsSync` so this stays pure.
- * The suffix is Windows Explorer's ` (2)` and goes before the extension,
- * where Explorer puts it, so the file still opens as a database.
+ * The first of `name`, `name (2)`, `name (3)`... that `taken` says is free,
+ * so a backup never overwrites an earlier one. The suffix goes before the
+ * extension, as Windows Explorer does. `taken` is injected to keep this pure.
  */
 export function uniqueFileName(
   desired: string,
@@ -117,8 +71,7 @@ export function uniqueFileName(
     if (!taken(candidate)) return candidate;
   }
 
-  // A thousand files with the same name in one folder is not a situation to
-  // paper over with a random suffix; it means something is badly wrong.
+  // This many collisions means something is badly wrong.
   throw new Error(`Could not find a free name for ${desired} after ${limit} attempts.`);
 }
 
@@ -126,14 +79,9 @@ export function uniqueFileName(
 const ILLEGAL_NAME_CHARACTERS = /[<>:"/\\|?*\u0000-\u001f]/;
 
 /**
- * Why a destination path is unusable, or null when it looks fine.
- *
- * Pure, and deliberately NOT a filesystem check — whether the folder exists
- * is a separate question answered against the real disk in
- * backup/run-backup.ts. This catches the shapes that are wrong before any
- * disk is touched: a blank box, a relative path (which would resolve
- * against the server's working directory and put the file somewhere the
- * user will never find), a folder, and a name Windows cannot store.
+ * Why a destination is unusable, or null. Checks only its shape (blank,
+ * relative, a folder, illegal characters); whether it exists is checked in
+ * backup/run-backup.ts.
  */
 export function describeBadDestination(destination: string, fileName: string): string | null {
   if (destination.trim().length === 0) {
@@ -155,12 +103,8 @@ export function describeBadDestination(destination: string, fileName: string): s
 }
 
 /**
- * Absolute on Windows (`C:\...`, `\\server\share`) or on POSIX (`/...`).
- *
- * `path.isAbsolute` is not used, because it answers for the platform the
- * SERVER is running on and `C:\Users\You\Desktop` is not absolute to a
- * POSIX Node — which would make every spec on a CI box disagree with the
- * machine the feature ships to.
+ * Absolute on Windows (`C:\...`, `\server\share`) or POSIX (`/...`).
+ * Not path.isAbsolute, which only knows the platform the server runs on.
  */
 export function isAbsolutePath(value: string): boolean {
   const trimmed = value.trim();

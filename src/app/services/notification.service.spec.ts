@@ -1,15 +1,6 @@
 import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 import { NotificationService } from './notification.service';
 
-/**
- * Tests for NotificationService.
- *
- * This service manages UI notifications (toast messages) with:
- * - Three severity levels: info, warning, error
- * - Auto-dismiss with configurable duration
- * - Manual dismiss
- * - Notification stacking (multiple visible at once)
- */
 describe('NotificationService', () => {
   let service: NotificationService;
 
@@ -69,7 +60,6 @@ describe('NotificationService', () => {
 
     expect(service.notifications()).toHaveLength(1);
 
-    // Fast-forward time by 5 seconds
     vi.advanceTimersByTime(5000);
 
     expect(service.notifications()).toHaveLength(0);
@@ -80,10 +70,9 @@ describe('NotificationService', () => {
 
     expect(service.notifications()).toHaveLength(1);
 
-    // Fast-forward time by 10 seconds
     vi.advanceTimersByTime(10000);
 
-    // Notification should still be present (manual dismiss only)
+    // Errors are dismissed manually only.
     expect(service.notifications()).toHaveLength(1);
   });
 
@@ -118,12 +107,10 @@ describe('NotificationService', () => {
 
     expect(service.notifications()).toHaveLength(2);
 
-    // Fast-forward by 1 second - first notification should dismiss
     vi.advanceTimersByTime(1000);
     expect(service.notifications()).toHaveLength(1);
     expect(service.notifications()[0].message).toBe('Long timer');
 
-    // Fast-forward by 4 more seconds - second notification should dismiss
     vi.advanceTimersByTime(4000);
     expect(service.notifications()).toHaveLength(0);
   });

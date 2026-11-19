@@ -1,15 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseDenominationValue } from './denomination-sort';
 
-/**
- * Longest-match ordering.
- *
- * `parseDenominationValue` scans a table of patterns. Taking the first whose
- * text appears anywhere in the label lets a short pattern shadow a longer
- * one starting the same way, and the failure is silent: nothing throws, rows
- * are just sorted into the wrong place. The inline notes below name the
- * pattern each assertion stops winning.
- */
+// Inline notes name the shorter pattern that must not win.
 describe('parseDenominationValue — a short pattern must not shadow a longer one', () => {
   it('reads the dollar denominations at their real value', () => {
     expect(parseDenominationValue('$1')).toBe(1);
@@ -32,8 +24,6 @@ describe('parseDenominationValue — a short pattern must not shadow a longer on
   });
 
   it('sorts the US series into ascending order', () => {
-    // The property that actually matters to the user: the dropdown and the
-    // sorted grid read low to high.
     const series = ['$50', '25¢', '$10', '1¢', '$2.50', '$20', '$25', '5¢'];
     const sorted = [...series].sort((a, b) => parseDenominationValue(a) - parseDenominationValue(b));
 

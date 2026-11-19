@@ -1,14 +1,6 @@
 /**
- * routes/coins/image-payload.spec.ts — unit tests for the image payload
- * normalizer (routes/coins/image-payload.ts).
- *
- * This is the one place that decides what "an image" sent by the client means,
- * and all three write paths funnel through it (POST /api/coins,
- * PUT /api/coins/:id, POST /api/coins/:id/images). The bare-string form is the
- * compatibility path the un-migrated Angular client still uses, so the tests
- * covering it are regression guards rather than ordinary coverage.
- *
- * No mocks needed: these are pure functions with no database involvement.
+ * Unit tests for the image payload normalizer, which every write path uses.
+ * The bare-string form must keep working.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -20,7 +12,7 @@ import {
 
 describe('normalizeImageEntry', () => {
   it('treats a bare base64 string as an image with no known source path', () => {
-    // *** THE COMPATIBILITY PATH *** — what the current client sends.
+    // The bare-string form.
     expect(normalizeImageEntry('data:image/png;base64,abc')).toEqual({
       imageData: 'data:image/png;base64,abc',
       sourcePath: null,
@@ -37,16 +29,13 @@ describe('normalizeImageEntry', () => {
   });
 
   it('accepts `image` and `data` as aliases for imageData', () => {
-    // A gradually-migrating client might reasonably reach for either name;
-    // accepting them avoids a confusing silent skip.
+    // Aliases for imageData.
     expect(normalizeImageEntry({ image: 'x' })?.imageData).toBe('x');
     expect(normalizeImageEntry({ data: 'y' })?.imageData).toBe('y');
   });
 
   it('returns null for anything that carries neither a picture nor a path', () => {
-    // `{ sourcePath }` is DELIBERATELY not in this list any more: an entry
-    // with a path and no picture is now a REFERENCED photograph, which is a
-    // real thing to store. See the referenced describe block below.
+    // `{ sourcePath }` alone is a referenced photo now, so it isn't junk.
     for (const junk of [null, undefined, '', 0, 42, true, [], {}, { imageData: '' }]) {
       expect(normalizeImageEntry(junk)).toBeNull();
     }
@@ -54,21 +43,15 @@ describe('normalizeImageEntry', () => {
 });
 
 /*
- * REFERENCED PHOTOGRAPHS — "store where it is, not what it looks like".
- *
- * The user picks the mode in Settings. These tests pin the two things that
- * make it a real mode rather than a label: the database must not end up with
- * the picture, and nothing may be stored that has neither a picture nor a
- * path (that would be a photograph silently thrown away).
+ * Referenced photos: the database must not end up with the picture, and an
+ * entry with neither picture nor path must not be stored.
  */
 describe('normalizeImageEntry — referenced photographs', () => {
   const REFERENCE = '/api/images/file?path=C%3A%5Cpics%5Ca.jpg';
   const ABSOLUTE = `http://localhost:3000${REFERENCE}`;
 
   it('stores a path and NO picture when the entry is a reference URL', () => {
-    // THE MUTATION THIS CATCHES: letting the URL fall through to the
-    // bare-string branch, which would write the URL text into ImageData and
-    // make "referenced" a lie.
+    // The URL must not fall through to the bare-string branch and land in ImageData.
     expect(normalizeImageEntry(REFERENCE)).toEqual({
       imageData: null,
       sourcePath: 'C:\\pics\\a.jpg'
@@ -76,8 +59,7 @@ describe('normalizeImageEntry — referenced photographs', () => {
   });
 
   it('recognises the reference with an origin in front of it', () => {
-    // The client builds the absolute form, because a relative URL would be
-    // fetched from the dev server (:4200) rather than the API (:3000).
+    // The client sends an absolute URL (a relative one would hit the dev server).
     expect(normalizeImageEntry(ABSOLUTE)).toEqual({
       imageData: null,
       sourcePath: 'C:\\pics\\a.jpg'
@@ -102,9 +84,7 @@ describe('normalizeImageEntry — referenced photographs', () => {
   });
 
   it('refuses a reference that points nowhere', () => {
-    // Neither a picture nor a location. Storing the row would lose the
-    // photograph quietly; dropping it is what every other unusable entry
-    // gets, and the import reports it.
+    // Neither picture nor location: dropped, like other unusable entries.
     expect(normalizeImageEntry('/api/images/file?path=')).toBeNull();
     expect(normalizeImageEntry({ imageData: '/api/images/file?path=', sourcePath: '  ' })).toBeNull();
   });
@@ -119,12 +99,12 @@ describe('normalizeImageEntry — referenced photographs', () => {
 
 describe('normalizeSourcePath', () => {
   it('trims surrounding whitespace', () => {
-    // Paths pasted out of Explorer often arrive with a trailing space.
+    // Paths pasted from Explorer often have a trailing space.
     expect(normalizeSourcePath('  C:\\pics\\a.jpg  ')).toBe('C:\\pics\\a.jpg');
   });
 
   it('collapses every flavour of "unknown" to null', () => {
-    // One representation of "we do not know where the original is", not two.
+    // One representation of "unknown".
     for (const empty of ['', '   ', undefined, null, 42, {}]) {
       expect(normalizeSourcePath(empty)).toBeNull();
     }
@@ -152,8 +132,7 @@ describe('normalizeImageEntries', () => {
   });
 
   it('returns an empty array for a missing or non-array argument', () => {
-    // Callers write `normalizeImageEntries(body.imagePaths)` with no guard of
-    // their own, so undefined has to be safe.
+    // Callers pass body.imagePaths unguarded.
     expect(normalizeImageEntries(undefined)).toEqual([]);
     expect(normalizeImageEntries(null)).toEqual([]);
     expect(normalizeImageEntries('not an array')).toEqual([]);

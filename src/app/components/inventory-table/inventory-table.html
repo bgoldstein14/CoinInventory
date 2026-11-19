@@ -6,21 +6,7 @@
         <span class="selection-badge">{{ selection().selectionCount() }} selected</span>
       }
     </h2>
-    <!-- GROUP BY, THEN THE ONE EXPAND/COLLAPSE CONTROL, THEN COLUMNS.
-         Grouping sits beside Columns because both answer "how is this grid
-         arranged", and neither changes which coins are in it — that is the
-         filter bar's job, a row further up.
-
-         The menu offers every groupable column, not only the visible ones:
-         grouping by Country with the Country column switched off is
-         sensible (the value is on the heading), and a menu that changed as
-         the user ticked boxes elsewhere would be the stranger of the two.
-         Prices and weights are not offered at all — grouping by a price
-         gives one group per coin. See GROUPING_COLUMN_KINDS.
-
-         The expand/collapse button appears only when there is a grouping,
-         and it is ONE button that reads the current state rather than two
-         with one of them always a no-op. -->
+    <!-- Grid arrangement: Group by, expand/collapse, reorder hint/reset, Columns. -->
     <div class="inventory-header__controls">
       <label class="group-by">
         <span class="group-by__label">Group by</span>
@@ -49,27 +35,13 @@
         </button>
       }
 
-      <!-- THE GROUPS CAN BE PUT IN THE USER'S OWN ORDER, AND HE HAS TO BE
-           TOLD SO. A drag gesture with nothing on screen to suggest it is a
-           feature only the person who wrote it knows about, and the keyboard
-           half (Alt+Up / Alt+Down on a focused heading) is invisible without
-           saying it out loud. The hint appears only when there is more than
-           one movable group, so it never advertises something that cannot
-           happen. -->
+      <!-- Shown only when there is more than one movable group. -->
       @if (filters().canReorderGroups()) {
         <span class="group-order-hint">Drag a heading, or Alt+↑/↓, to reorder</span>
       }
 
-      <!-- A CUSTOM ORDER WITH NO WAY BACK IS A ONE-WAY DOOR, so the reset is
-           a visible control and not a hidden gesture.
-
-           IT IS ALSO THE HONEST SIGNAL THAT THE ORDER IS PER COLUMN. Orders
-           are kept for every column the user has arranged, and only the
-           current column's is ever applied — so switching from Country to
-           Grade makes this button vanish (there is no custom order here) and
-           switching back brings it and the arrangement with it. The button's
-           presence is the statement that an order is in force; its wording
-           names the column so there is no doubt which one is being undone. -->
+      <!-- Group order is stored per column; this appears only when the current
+           column has a custom order. -->
       @if (filters().hasCustomGroupOrder()) {
         <button
           type="button"
@@ -88,13 +60,7 @@
     </div>
   </div>
 
-  <!-- WHAT A REORDER SOUNDS LIKE.
-       A keyboard user pressing Alt+Down sees nothing: the rows shuffle below
-       the heading he is standing on and his focus stays put. This region is
-       the only feedback that reaches him, and it carries the POSITION —
-       "Mexico moved to position 3 of 12" — because a direction is something
-       he already knows he asked for. Empty until something moves, so it says
-       nothing on load. -->
+  <!-- Screen-reader announcement of a group's new position after a keyboard move. -->
   <p class="visually-hidden" role="status" aria-live="polite">{{ filters().groupOrderAnnouncement() }}</p>
 
   @if (columns().showColumnPicker()) {
@@ -108,12 +74,13 @@
     </div>
   }
 
+  @if (filters().gridRows().length > 0) {
+    <p class="grid-tip">Click a coin to open it in the editor.</p>
+  }
+
   <div class="inventory-table-wrap">
-    <!-- role="grid" rather than the implicit role="table": the rows are
-         focusable and are operated with the arrow keys, Enter and Space,
-         which is exactly what the grid role tells a screen reader to expect.
-         A plain table announces none of that, and the keyboard support would
-         arrive unannounced. See features/inventory/grid-keyboard.ts. -->
+    <!-- role="grid" tells screen readers the rows are focusable and operated
+         with the arrow keys, Enter and Space. -->
     <table class="inventory-table" role="grid">
       <thead>
         <tr>
@@ -121,14 +88,8 @@
             <input type="checkbox" [checked]="selection().allVisibleSelected()" (change)="selection().toggleAllCoins()" title="Select all" />
           </th>
           <th class="thumb-column">Photo</th>
-          <!-- `column-<key>` is the ONLY hook stylesheets have for sizing an
-               individual column: the whole grid is one @for over
-               visibleInventoryColumns(), so there is no per-column <th> to
-               hang a width on, and nth-child is useless because the user can
-               switch columns on and off, which changes every index. The
-               matching class goes on the <td> below so the header and its
-               cells agree on a width.
-               See `Per-column widths` in inventory-table.scss. -->
+          <!-- `column-<key>` (also on each <td>) is the hook for per-column
+               widths; nth-child cannot work because columns can be toggled. -->
           @for (column of columns().visibleInventoryColumns(); track column) {
             <th class="sortable-header column-{{ column }}" (click)="filters().setSortColumn(column)">
               {{ columns().inventoryColumnLabels[column] }}
@@ -139,45 +100,14 @@
         </tr>
       </thead>
       <tbody>
-        <!-- ONE @for OVER A LIST OF ROWS, EACH A HEADING OR A COIN.
-             With no grouping chosen `gridRows()` is one coin row per coin
-             and nothing else, so this draws the identical flat grid it
-             always has — not a grid wrapped in a single group. Grouping
-             only changes what is in the list.
-
-             The alternative (a second @for inside an @if) would mean two
-             copies of the hundred lines of coin-row markup below, which is
-             how one of them quietly stops matching the other.
+        <!-- One list of heading and coin rows; ungrouped, it is just the coin rows.
              See features/inventory/grid-grouping.ts. -->
         @for (row of filters().gridRows(); track row.key) {
           @if (row.group; as group) {
-            <!-- A GROUP HEADING.
-                 It is a real <button>, not a <tr> with a click handler, for
-                 two reasons: Tab reaches it with no work and no tabindex,
-                 and grid-keyboard.ts already answers "not ours" for a key
-                 pressed on a BUTTON — so Enter and Space open the group
-                 without the row handler ever seeing them.
-
-                 THE COUNT AND THE MONEY ARE THE POINT. Sixty collapsed
-                 country headings have to answer "how much Mexico have I
-                 got, and what is it worth" without being opened, or the
-                 grouping has only replaced one scroll with another. The
-                 money is held coins only — see CoinGroup.heldValue.
-
-                 The empty bucket is muted and parenthesised so it cannot
-                 be read as a country called "(No Country)".
-
-                 IT IS ALSO THE ONE HEADING THAT CANNOT BE MOVED. No grip,
-                 no `draggable`, no Alt+Arrow and no drop highlight — see
-                 `canDragGroup`. It is pinned last on purpose: on an imported
-                 collection it is routinely the biggest group there is, and
-                 one careless drag to the top would bury every real heading
-                 under a screenful of unattributed coins.
-
-                 `data-group-heading` is how the component finds this button
-                 again to restore focus after a keyboard move, for the same
-                 reason the coin rows carry `data-coin-row`: a group label is
-                 arbitrary user text and must not be built into a selector. -->
+            <!-- Group heading. A real <button> so Tab reaches it and the row key
+                 handler ignores it. The empty bucket cannot be moved (see
+                 canDragGroup). `data-group-heading` lets focus be restored
+                 after a keyboard move. -->
             <tr class="group-row"
               [class.group-row--empty-bucket]="group.isEmptyBucket"
               [class.group-row--dragging]="draggedGroupLabel() === group.label"
@@ -211,30 +141,10 @@
             </tr>
           }
           @if (row.coin; as coin) {
-            <!-- `is-draft` marks a row that exists on screen only: it has not
-                 reached the database yet because it still needs 2 of
-                 Year / Coin Type / Denomination. See InventoryService.isDraftCoin. -->
-            <!-- THE ROW IS THE CONTROL.
-                 Clicking it opens the Details panel for that coin; so does
-                 Enter or Space once it has focus. It used to only highlight,
-                 with a per-row "Details" button doing the opening, so a click
-                 on a row did nothing a user could see.
-
-                 It is NOT a toggle: clicking the row you are already reading
-                 must not make the panel vanish. Close is the way out.
-
-                 `tabindex` is a ROVING tabindex — exactly one row is in the
-                 tab order and the arrows move which one. Putting 0 on all 105
-                 rows would mean 105 presses of Tab to get past the table.
-
-                 `data-coin-row` is how the component finds the element to
-                 focus after an arrow key; see focusRowElement().
-
-                 ANYTHING IN HERE THAT MUST NOT OPEN THE PANEL NEEDS
-                 `$event.stopPropagation()`. The checkbox cell and the Images
-                 button already have it; before this change it only suppressed
-                 a harmless highlight, and now it is what stops ticking a box
-                 throwing the sidebar open. -->
+            <!-- Coin row: click or Enter/Space opens its details. Roving tabindex
+                 keeps one row in the tab order. Inner controls that must not
+                 open the panel call $event.stopPropagation(). `is-draft` marks
+                 a row not yet saved to the database. -->
             <tr
               [class.selected]="inv.selectedCoinId() === coin.id"
               [class.multi-selected]="selection().isCoinSelected(coin.id)"
@@ -250,33 +160,8 @@
                 <input type="checkbox" [checked]="selection().isCoinSelected(coin.id)" (click)="selection().toggleCoinSelection(coin.id, $event)" />
               </td>
               <td class="thumb-column">
-                <!--
-                  THE ROW THUMBNAIL. Three decisions here, all load-bearing.
-
-                  1. `hasPhoto(coin)` is answered from `imageCount`, which the
-                     list endpoint computes with a SQL COUNT(*) and sends for
-                     free. A coin with no photographs renders no <img> and
-                     therefore makes NO REQUEST — on a real collection that is
-                     a large fraction of the rows.
-
-                  2. The src is a URL, not inline image data. The list response
-                     must never carry image bytes; one image per HTTP response
-                     cannot be concatenated into an oversized JSON string.
-
-                  3. `loading="lazy"` is the reason a long grid is not one
-                     request per row on load: the browser fetches only the rows
-                     near the viewport, and caches each one, so scrolling back
-                     up costs a 304. Deleting that attribute re-opens the
-                     problem quietly, and a test asserts it is still here.
-
-                  4. The gate is `showsThumbnail(coin)`, NOT `hasPhoto(coin)`.
-                     An unsaved row's photographs live only in this browser, so
-                     asking the server for one is a guaranteed 404 — that is
-                     the "No thumbnail available for coin ..." line one minute
-                     after a refused create in the owner's log. The placeholder
-                     says "Unsaved" for that case rather than claiming there is
-                     no photo.
-                -->
+                <!-- Thumbnail: no request for coins without photos or unsaved
+                     coins; loading="lazy" so only rows near the viewport load. -->
                 @if (showsThumbnail(coin)) {
                   <img [src]="thumbnailUrl(coin)" alt="" class="row-thumb" loading="lazy" decoding="async" />
                 } @else {
@@ -285,20 +170,7 @@
               </td>
               @for (column of columns().visibleInventoryColumns(); track column; let firstColumn = $first) {
                 <td class="column-{{ column }}">
-                  <!-- The "Unsaved" chip rides in the first visible column so it
-                       reads as part of the row rather than as an extra column.
-
-                       THE PHRASE BESIDE IT IS NOT DECORATION. The chip's whole
-                       message used to live in its `title`, and a tooltip is a
-                       footnote: it needs a mouse, a pause, and the guess that
-                       hovering would say anything. A row the user is still
-                       typing is an expected state, not an error, so it gets a
-                       quiet visible line saying what to type next — never a
-                       red toast. See services/inventory/draft-row-status.ts.
-
-                       The word "Unsaved" stays, because the Photo cell's
-                       placeholder uses the same word for the same row and the
-                       two must read as one fact, not two problems. -->
+                  <!-- Unsaved chip and what is still needed, in the first visible column. -->
                   @if (firstColumn && inv.isDraftCoin(coin.id)) {
                     <span class="badge badge--draft" [title]="draftStatus(coin).summary">Unsaved</span>
                     @if (draftStatus(coin).chip; as draftChip) {
@@ -313,52 +185,20 @@
                   } @else if (column === 'certNumber' && certBadgeLabel(coin)) {
                     <span class="badge badge--cert">{{ certBadgeLabel(coin) }}</span>
                   } @else if (column === 'meltValue') {
-                    <!-- Melt gets its own branch for ONE reason: the tooltip.
-                         The number itself still comes from the shared pure
-                         formatter (that is the third argument); all this branch
-                         adds is a `title` saying why the cell is a dash. Without
-                         it, "no spot prices have ever been fetched" — which one
-                         press of Fetch fixes for the whole grid — looks exactly
-                         like "this coin is base metal", which nothing can fix.
-                         See InventoryService.meltValueHint. -->
+                    <!-- Tooltip explains why melt is blank (e.g. no spot prices fetched). -->
                     <span [title]="inv.meltValueHint(coin)">{{ formatInventoryCell(coin, column, inv.spotPrices()) }}</span>
                   } @else if (column === 'catalogReference') {
-                    <!-- The catalogue reference needs the CATALOGS LOOKUP, for
-                         the same reason melt needs spot prices: the coin
-                         stores a foreign key and the name behind it lives on
-                         the service. The fourth argument is how it gets there,
-                         so the pure formatter stays testable with a plain
-                         object under Node with no jsdom.
-
-                         Do not drop it: without the list the cell falls back to
-                         the bare number ("6819" instead of "Sear 6819"), and
-                         since the search box builds the full string the two
-                         would stop agreeing. -->
+                    <!-- Needs the catalogs lookup to show "Sear 6819" rather than "6819". -->
                     {{ formatInventoryCell(coin, column, undefined, inv.catalogs()) }}
                   } @else {
-                    <!-- The fifth argument is the DENOMINATIONS lookup, needed
-                         for the same reason the fourth one is: the coin stores
-                         `denominationId` and the Label behind it lives on the
-                         service. See coinDenominationDisplay() in
-                         types/inventory-columns.ts. It rides on the catch-all
-                         branch because the denomination cell needs no special
-                         markup, only the argument; every other column ignores
-                         it. -->
+                    <!-- The denominations lookup resolves denominationId to its label. -->
                     {{ formatInventoryCell(coin, column, undefined, undefined, inv.denominations()) }}
                   }
                 </td>
               }
               <td>
                 <div class="row-action-stack">
-                  <!--
-                    The row's photo button is ALWAYS live, never disabled for a
-                    coin with no photos: the gallery it opens is the only place
-                    a photo can be attached to one specific coin, so disabling
-                    it would leave such a coin unable to get its first one. The
-                    label says which of the two jobs the click will do, and the
-                    gallery shows an empty state inviting the upload. See
-                    CoinImagesStore.canOpenImageGallery.
-                  -->
+                  <!-- Never disabled: the gallery is where a coin's first photo is attached. -->
                   <button
                     type="button"
                     class="secondary small-button"
@@ -367,19 +207,12 @@
                   >
                     {{ hasPhoto(coin) ? 'Images' : 'Add images' }}
                   </button>
-                  <!-- There is no "Details" button here any more: the ROW opens
-                       the panel now, by click or by Enter/Space, so a button
-                       doing the same job in the same row was redundant and
-                       cost the actions column its width. The panel's own
-                       Close button is still the way out. -->
                 </div>
               </td>
             </tr>
           }
         } @empty {
-          <!-- The empty row has three cases, not two — see `zeroState` in
-               inventory-table.ts. Do not decide the message here: nothing
-               decided inside a template can be tested (no jsdom). -->
+          <!-- Message chosen by `zeroState` in inventory-table.ts. -->
           <tr class="empty-row">
             <td [attr.colspan]="columns().visibleInventoryColumns().length + 3">
               {{ zeroState().message }}

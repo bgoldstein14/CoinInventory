@@ -1,16 +1,7 @@
-<!--
-  Clicking the dark backdrop closes the gallery; the $event.stopPropagation()
-  on the panel itself stops a click *inside* the gallery from bubbling up and
-  closing it too.
--->
+<!-- Clicking the backdrop closes the gallery; clicks inside the panel are stopped. -->
 <div class="modal-backdrop" (click)="images().closeImageGallery()">
   <div class="modal modal--wide image-gallery-modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <!--
-        Naming the coin in the title matters more than it looks: without it
-        a user cannot tell whose photos these are, and an overlay full of
-        images reads as "all the images". The count says how many.
-      -->
       <h2>Images &mdash; {{ coinLabel() }}</h2>
       <button type="button" class="modal-close" (click)="images().closeImageGallery()" aria-label="Close images">&times;</button>
     </div>
@@ -27,51 +18,22 @@
           </label>
         </div>
 
-        <!--
-          The tiles. `@empty` is Angular's built-in "the list was empty"
-          branch of @for. The overlay is NOT gated on the coin already having
-          photos — it is the only place to attach the first one. See
-          CoinImagesStore.canOpenImageGallery.
-        -->
+        <!-- Photo tiles. The gallery opens even with no photos, since it is where the first one is added. -->
         <div class="image-list">
           @for (imagePath of photos(); track imagePath; let i = $index) {
-            <!--
-              `is-main` highlights the photo the main grid uses as this coin's
-              thumbnail. That is always the FIRST image in the list, because
-              the grid renders imagePaths[0] — see CoinImagesStore.setMainImage
-              for why "main photo" is stored as position rather than a flag.
-            -->
+            <!-- The main photo (the grid thumbnail) is always the first image. -->
             <div class="image-item" [class.image-item--main]="images().isMainImage(imagePath)">
-              <!--
-                Deliberately much larger than the import screens' previews:
-                this is the screen for looking at ONE coin properly rather
-                than scanning a folder. Clicking opens the resizable
-                full-size window.
-              -->
+              <!-- Click to open the full-size viewer. -->
               <img [src]="imagePath" alt="Coin image" class="coin-thumb" (click)="images().openPhotoViewer(i)" />
 
               <div class="image-item__meta">
                 <span class="image-item__label">{{ imagePath.includes('data:') ? 'Attached image' : imagePath }}</span>
-                <!--
-                  Where the ORIGINAL full-size file lives. `imagePath` above is
-                  only the downscaled copy we store in the database; this is the
-                  real photo on disk, clickable when it is still there and shown
-                  greyed out (but still readable) when it is not. Renders nothing
-                  when no path was ever recorded.
-                -->
+                <!-- Path of the original full-size file on disk; renders nothing if none was recorded. -->
                 <app-coin-image-path-link [imageData]="imagePath" [coinId]="coin().id" />
               </div>
 
               <div class="image-item__actions">
-                <!--
-                  The per-photo "main photo" control.
-
-                  It is deliberately a button that DISABLES itself (rather than
-                  disappearing) on the photo that is already the main one: a
-                  control that vanishes tells you nothing, whereas a greyed-out
-                  button reading "Main photo" shows the current state at a
-                  glance and keeps every tile the same height.
-                -->
+                <!-- Disabled rather than hidden on the current main photo, so its state stays visible. -->
                 @if (images().isMainImage(imagePath)) {
                   <button
                     type="button"
@@ -92,16 +54,7 @@
             </div>
           } @empty {
             @if (stillLoading()) {
-              <!--
-                NOT the empty state. The list endpoint does not carry
-                photographs (see server/routes/coins/list-query.ts), so there
-                is a moment between opening the gallery and the fetch landing
-                when there is nothing to draw. Showing the "No photos yet"
-                invitation there would be a lie — this coin HAS photos, we
-                just do not have them in hand — and the user's reasonable
-                response to that lie is to attach a duplicate. `imageCount`
-                comes with the list and is what tells the two apart.
-              -->
+              <!-- Photos exist but have not loaded yet; do not show the empty state. -->
               <div class="image-gallery__empty">
                 <p class="image-gallery__empty-title">Loading photos&hellip;</p>
                 <p class="image-gallery__empty-hint">
@@ -109,14 +62,7 @@
                 </p>
               </div>
             } @else {
-            <!--
-              THE EMPTY STATE. One job: make "add the first photo" the
-              obvious thing to do, so it repeats the header's picker in the
-              middle of the dialog where the eye already is. It reuses the
-              EXISTING picker and the EXISTING drag-and-drop target (the
-              whole `.image-gallery` box listens for `drop`), so there is no
-              third way to attach a photo to maintain.
-            -->
+            <!-- Empty state: repeats the picker; the whole box is also a drop target. -->
             <div class="image-gallery__empty">
               <p class="image-gallery__empty-title">No photos yet for this coin.</p>
               <p class="image-gallery__empty-hint">

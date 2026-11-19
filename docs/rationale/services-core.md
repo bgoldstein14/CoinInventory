@@ -20,14 +20,10 @@ silver from the dime and the quarter outright with no transition at all. So
 transcribed by hand.
 
 Hand transcription of a few hundred decimal numbers is exactly the activity
-that produces one wrong digit nobody notices. Two guards exist because of
-that. The first is the identity `grossWeightGrams × pmPercent / 100 =
-pmWeightGrams`, asserted on every row that carries all three, which turns a
-transposed digit into a red test rather than a melt value that is quietly
-$100 out. The second is `sql-pm-reference-parity.spec.ts`, which exists
-because migration 007 needs the same table in T-SQL and SQL cannot import a
-TypeScript module; the table is therefore written twice, and that spec reads
-both files off disk and compares them.
+that produces one wrong digit nobody notices. The guard is the identity
+`grossWeightGrams × pmPercent / 100 = pmWeightGrams`, asserted on every row
+that carries all three, which turns a transposed digit into a red test rather
+than a melt value that is quietly $100 out.
 
 The governing rule of the whole area — a wrong purity silently produces a
 wrong melt value, a blank field is visible and the user can fix it — is why
@@ -38,20 +34,17 @@ spreadsheet row distinguishes them.
 
 ## Why the metal inference is a separate, coarser module
 
-For a long time `composePmFields` was all-or-nothing: it asked the reference
-table for the complete four-field answer and, the moment no catalogued row
-matched, returned nothing. A coin whose exact weight and purity were unknown
-therefore ended up with no METAL recorded either, even where the metal was
-never in doubt — a US $20 is gold whether or not the table has a row for that
-particular issue.
+The reference table gives a complete answer or none. Without a fallback, a
+coin whose exact weight and purity are unknown would get no metal either, even
+where the metal is never in doubt: a US $20 is gold whether or not the table
+has a row for that issue.
 
-`metal-inference.ts` is the coarse half of that question, split out so it can
-answer on its own. It only ever runs after the table has declined, and all it
-can supply is Metal Content. Its rules are deliberately rules that are true by
+`metal-inference.ts` is that coarse fallback. It runs only after the table has
+declined, and all it can supply is Metal Content. Its rules are deliberately rules that are true by
 definition of the series or the face value, never rules that are usually true,
 which is why it reads the coin type and the denomination but never the
 category, the notes or the grade. A coin filed under a "Gold Coins" category
-is a statement about the owner's filing cabinet, not about the coin.
+is a statement about the collector's filing, not about the coin.
 
 ## Why one adapter sits between the reference data and a coin record
 
@@ -179,44 +172,74 @@ re-typing the same value produces an empty diff and the edit is lost for good.
 from what the screen shows.
 
 The related rule is that a PUT body is built from the dirty-field set and
-never from the full record. A whole-record write blanks columns the user never
-touched, which is a failure this project has already had once.
+never from the full record. `PUT /api/coins/:id` writes every field it is
+given, so a whole-record write blanks or reverts columns the user never
+touched. The same reason makes every editor write carry one field, and makes
+the PM backfill send only the fields that were blank.
 
 ### Why a new coin is a local draft
 
-Clicking "Add coin" used to POST an empty record, and the backend answered
-`400 {"error":"denomination is required"}` — a red error toast before the user
-had typed a character. The fix was not a Save button, because saving
-aggressively is a property worth keeping; it was to delay only the first
-write. A new coin is local until it satisfies the same 2-of-3 rule the
-importer applies, at which point it saves itself and behaves like every other
-coin from then on.
+The backend refuses a coin without a denomination (400). Posting an empty
+record on Add Coin would therefore show an error before the user had typed
+anything. Saving aggressively is worth keeping, so only the first write is
+delayed: a new coin stays local until it satisfies the same 2-of-3 rule the
+importers apply, then saves itself and behaves like every other coin.
 
 Drafts are not persisted anywhere. An empty row is not data, and remembering
-it would mean inventing a second, client-only storage format for coins.
+it would mean a second, client-only storage format for coins.
 
 ### Why photographs are fetched one coin at a time
 
-`GET /api/coins` used to inline every photograph of every coin. Past roughly a
-hundred coins the response could not be built at all: `JSON.stringify` threw
-`RangeError: Invalid string length`, the client saw a 500, and the message on
-screen blamed the database — which had in fact handed over every row. The list
-now returns `imageCount` and no `imagePaths` key, and the photographs come
-back per coin, on demand.
+A list response that inlined every photograph cannot be built past roughly a
+hundred coins (`JSON.stringify` throws `RangeError: Invalid string length`;
+see [server.md](server.md)). So the list carries `imageCount` and no
+`imagePaths`, and photographs come per coin, on demand.
 
-That makes `imagePaths` a three-state field — loaded, loaded-and-empty, and
-not-loaded — and the distinction is load-bearing rather than pedantic.
-`PUT /api/coins/:id` replaces a coin's whole image set, and several UI actions
-build that array out of whatever is in memory. Treating "not loaded" as "no
-photographs" deletes pictures. That is why the hydrator rejects on failure
-instead of resolving with an empty array, and why `coin-photos.ts` exists at
-all: nine call sites asking the same question needed one answer.
+That makes `imagePaths` a three-state field (loaded, loaded and empty, not
+loaded), and the distinction matters: `PUT /api/coins/:id` replaces a coin's
+whole image set, and several UI actions build that array from whatever is in
+memory. Treating "not loaded" as "no photographs" deletes pictures. That is
+why the hydrator rejects on failure instead of resolving with an empty array,
+and why `coin-photos.ts` gives the many call sites one answer.
 
-The same episode is why the app now distinguishes a connection failure from a
-delivery failure. One bare error string had to mean both "what went wrong" and
-"is my collection all right", and it got the second one wrong. The server
-classifies its own failures into stages and the client words the banner from
-that.
+### Why failures are classified by stage
+
+The database can hand over every row and the server still fail to send the
+response. One error string cannot say both "what went wrong" and "is my
+collection all right", so the server labels each failure `connection`,
+`database` or `delivery`, and the client words the banner from that. Only a
+delivery failure says the data is safe.
+
+### Why debounced edits are not used for bulk jobs
+
+`updateCoin()` debounces per coin, so a loop over many coins fires every PUT at
+once when the timers expire. Bulk jobs (the PM backfill, the unlinked-coins
+fix) use `updateCoinNow()` and await each write in turn, and can report which
+coins failed.
+
+## Why importers resolve through a cached index
+
+Resolving a denomination folds its spelling through the alias table and
+searches every issuer. A 2,000-row sheet re-planned on every mapping change
+would do that millions of times, so importers build an index once per lookup
+array (`denomination-index.ts`) and reuse it while the array is the same
+instance. The index rebuilds issuers from `Denominations.Country` and must
+never map a historical issuer onto the modern country containing it.
+
+## Why the HTTP layer retries only some writes
+
+Writes are retried twice with backoff only for failures that are transient by
+nature (status 0, 408, 429, 5xx). A 4xx is a refusal that will repeat. Backup
+and restore calls are never retried: a retried restore would replace the
+collection twice, and a swallowed failure could leave the user believing a
+backup exists.
+
+## Why preferences live in IndexedDB under separate keys
+
+localStorage has a small size limit. Filter state and the online-lookup
+consent are stored under their own keys rather than inside `AppSettings`, so a
+failed read of the shared settings object cannot leave the grid filtered or
+quietly turn the outbound lookup back on.
 
 ## Why the statistics module is hand-rolled SVG
 

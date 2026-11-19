@@ -13,145 +13,53 @@ import { parseFilename } from './image-matching/filename-parser';
 import { matchOneImage } from './image-matching/match-decider';
 import { inferFromSiblings } from './image-matching/sibling-inference';
 
- /*
- * ImageMatchingService
- *
- * Job: given a list of image FILENAMES and the coin inventory, decide which
- * image belongs to which coin -- but only claim a match when we are very
- * nearly certain. Anything less goes to the user with a ranked shortlist.
- *
- * The guiding rule:
- *   "Silently filing an image under the wrong coin is much worse than asking."
- *
- * So the matcher is deliberately pessimistic. It would rather send 20 images
- * to a one-click review queue than mis-attach one.
- *
- * ---- HOW IT WORKS (three stages) ----
- * 1. PARSE   -- turn "1881-S Morgan Dollar obverse.jpg" into typed attributes:
- *               { year: 1881, mintMark: 's', denomination: 'dollar',
- *                 coinTypeTokens: ['morgan'] }
- *               Parsing works on DISCRETE TOKENS with exact word matching.
- *               It never regex-searches a joined string, because that is how
- *               the old version matched the "25" inside "1925" as a quarter.
- *
- * 2. SCORE   -- compare the filename's attributes to each coin's attributes,
- *               one attribute at a time, and produce a normalized 0..1 score.
- *               An attribute only participates if BOTH sides have a value.
- *               A missing value is never treated as agreement.
- *
- * 3. DECIDE  -- auto-assign only when all three safety gates pass:
- *               (a) high score, (b) at least two independent strong
- *               attributes agree, (c) the runner-up is clearly behind.
- *
- * ---- WHERE THE CODE LIVES ----
- * This class is now a thin front door. The actual work lives in small,
- * single-purpose modules under `./image-matching/`, each with its own header
- * comment explaining what it owns:
- *
- *   matching-thresholds.ts -- every tuning number and why it has that value.
- *   reference-tables.ts    -- the coin dictionaries: denominations, mints,
- *                             stop words, camera prefixes, grading services.
- *   filename-vocabulary.ts -- the NOISE dictionaries: side words, photo
- *                             qualifiers, grade words, non-coin words.
- *   text-tokens.ts         -- shared token plumbing (tokenize, sequence
- *                             search, small string helpers).
- *   coin-signature.ts      -- stage 1 for coin RECORDS, plus the `Signature`
- *                             shape both sides are reduced to.
- *   filename-parser.ts     -- stage 1 for FILENAMES (the paranoid half); it
- *                             orchestrates the six readers below.
- *   year-mint-parser.ts    -- "1875-CC", "1875CC", "1906-S" (and refusing
- *                             "1873 - CLOSED").
- *   denomination-units.ts  -- "$20", "50<cent>", "20-cent": numbers that
- *                             carry a UNIT. Read the header; it explains the
- *                             single most important parsing rule here.
- *   grade-parser.ts        -- "Choice VF", "PF64Cameo", "XF-AU", "VF+".
- *   photo-markers.ts       -- "- Obverse 2", "- Photo", "- Small".
- *   catalog-refs.ts        -- ancients: "Sear 6819", "RIC 34", "67-68 CE".
- *   non-coin-detector.ts   -- "Gold Coins", "Stamp", "Type Set", "Coin_026".
- *   proof-strike.ts        -- proof vs business strike vs specimen. READ ITS
- *                             HEADER: "PROOFLIKE" is a BUSINESS strike, and
- *                             getting that backwards breaks every PL Morgan.
- *   match-vetoes.ts        -- the three HARD VETOES (year conflict,
- *                             denomination conflict, proof vs business). One
- *                             source of truth, consulted by the scorer, the
- *                             decider and the near-match test alike.
- *   match-scorer.ts        -- stage 2, the 0..1 score for one pair.
- *   match-decider.ts       -- stage 3, the three safety gates (plus the
- *                             non-coin veto and the hard vetoes, which run
- *                             before them).
- *   grade-tolerance.ts     -- "are these two grades the same grade?", once,
- *                             for everyone. PR = PF, EF = XF, CAM = CAMEO.
- *                             Used by the scorer AND the near-match test;
- *                             it is a separate file precisely so there can
- *                             never be two answers.
- *   near-match.ts          -- stage 4, the three review tiers.
- *   sibling-inference.ts   -- stage 5, the only stage that looks at more
- *                             than one image: placing a photo that another
- *                             shot of the same coin has already identified.
- *
- * They export plain functions rather than classes, so this service stays
- * stateless and can still be built with a bare `new ImageMatchingService()`
- * (which is exactly what the spec file does).
+ /**
+  * Matches image filenames to coins in the inventory. Auto-assigns only when
+  * nearly certain; anything less goes to review with a ranked shortlist.
+  *
+  * Stages (implemented as plain functions under ./image-matching/):
+  * 1. Parse   filenames into typed attributes using exact token matching
+  *            (filename-parser.ts; coin records via coin-signature.ts).
+  *            "1881-S Morgan Dollar obverse.jpg" ->
+  *            { year: 1881, mintMark: 's', denomination: 'dollar', coinTypeTokens: ['morgan'] }
+  * 2. Score   each filename/coin pair 0..1; an attribute counts only when both
+  *            sides have a value (match-scorer.ts).
+  * 3. Decide  auto-assign only if the score is high, two independent strong
+  *            attributes agree, and the runner-up is clearly behind; hard vetoes
+  *            run first (match-decider.ts, match-vetoes.ts).
+  * 4. Review tiers for near matches (near-match.ts).
+  * 5. Sibling inference: attach other shots of an already-matched coin
+  *    (sibling-inference.ts).
+  * Tuning numbers live in matching-thresholds.ts.
   */
 
 @Injectable({ providedIn: 'root' })
 export class ImageMatchingService {
-  /* ---- PUBLIC API ---- */
-
   /**
-   * Match a batch of image filenames against the inventory.
+   * Matches a batch of image filenames against the inventory; one result per
+   * input path, in order.
    *
-   * Returns one result per input path, in the same order. The result type
-   * extends the older `ImageMatchCandidate`, so any caller that only reads
-   * `imagePath` / `matchedRecordId` / `confidence` / `reason` still works.
-   *
-   * @param denominationLabels an id -> Label SNAPSHOT of the denominations
-   *   lookup, taken once by the caller. A linked coin is then identified by
-   *   the denomination its `DenominationId` names rather than by whatever
-   *   text the source happened to write (design §6).
-   *
-   *   OPTIONAL, AND OMITTING IT IS NOT A DEGRADED MODE -- it is the matcher
-   *   exactly as it behaved before `DenominationId` existed, which is also
-   *   what an unlinked collection and a lookup that failed to load produce.
-   *   The matcher deliberately does NOT read the lookup itself: see the
-   *   "THE MATCHER DOES NOT PERFORM THE LOOKUP" note in coin-signature.ts
-   *   for the chunk-boundary bug that would otherwise be possible.
+   * @param denominationLabels optional id -> label snapshot of the denominations
+   *   lookup, so linked coins are identified by their `DenominationId`. Without it
+   *   coins are matched on their denomination text. The caller takes the snapshot
+   *   once (see coin-signature.ts).
    */
   matchImages(
     imagePaths: string[],
     inventory: CoinRecord[],
     denominationLabels?: DenominationLabels | null
   ): ImageMatchResult[] {
-    // Defect #8: parse every coin ONCE, not once per image. With 2,000 coins
-    // and 500 images the old code did a million redundant parses.
+    // Parse every coin once, not once per image.
     const coinSignatures = buildCoinSignatures(inventory, denominationLabels);
 
     const decided = imagePaths.map(path => matchOneImage(path, coinSignatures));
 
-    /* STAGE 5, AND THE ONLY STAGE THAT SEES MORE THAN ONE IMAGE.
-     *
-     * Everything above decides each photograph entirely on its own, which is
-     * what makes the three safety gates easy to reason about. But a coin is
-     * usually photographed two or three times, and once one of those shots
-     * is matched the related files — obverse, reverse, slab — should attach
-     * with it. A second shot that merely omits the grade, or a shot of the
-     * slab LABEL (which may never identify a coin by itself), is otherwise
-     * left stranded by a per-image decision however obvious it is to a
-     * human. This pass places those, and only those.
-     *
-     * It runs LAST and over the finished results, so it can only turn a row
-     * that was left alone into a row that is attached. It cannot loosen a
-     * gate, because it never runs one. Read sibling-inference.ts for what a
-     * "sibling" is (shared identifying text, never a shared folder) and for
-     * the seven conditions a placement has to clear -- including his proof
-     * exclusion, which is the one that will surprise you. */
+    // Stage 5 runs last over the finished results and only attaches rows that
+    // were left unmatched, so it never loosens a gate. See sibling-inference.ts.
     return inferFromSiblings(decided, coinSignatures);
   }
 
-  /**
-   * Parse a single filename into typed attributes.
-   * Exposed so the UI (and tests) can show exactly what we understood.
-   */
+  /** Parses one filename into typed attributes (exposed for the UI and tests). */
   parseFilename(imagePath: string): ParsedImageAttributes {
     return parseFilename(imagePath);
   }

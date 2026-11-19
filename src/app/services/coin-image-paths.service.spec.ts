@@ -1,13 +1,6 @@
 /**
- * Tests for CoinImagePathsService — the lazy, cached, batched loader behind the
- * "open the original photo" links.
- *
- * The three rules being protected here are all about not being wasteful or
- * alarming:
- *   - ONE existence request per coin, not one per photo;
- *   - re-selecting a coin issues nothing at all;
- *   - a backend that cannot be reached leaves existence UNKNOWN, so the UI
- *     never tells the user his photos are gone when it simply could not ask.
+ * Tests for CoinImagePathsService: one existence request per coin, no requests
+ * when re-selecting a coin, and an unreachable backend leaves existence unknown.
  */
 import '@angular/compiler';
 import { Injector, runInInjectionContext } from '@angular/core';
@@ -32,10 +25,7 @@ function threeImages(): CoinImageRecord[] {
   ];
 }
 
-/**
- * Builds the service with stubbed HTTP. `images` is what GET returns and
- * `exists` is what POST returns; either may be an error observable.
- */
+/** Stubbed HTTP: `images` is the GET result, `exists` the POST result; either may error. */
 function createService(options: {
   images?: unknown;
   exists?: unknown;
@@ -48,7 +38,6 @@ function createService(options: {
   const api = {
     getCoinImages,
     checkImagesExist,
-    // The real implementation; the URL shape is asserted elsewhere.
     imageFileUrl: (path: string) => `http://localhost:3000/api/images/file?path=${encodeURIComponent(path)}`
   } as unknown as ApiService;
 
@@ -70,8 +59,7 @@ const settle = () => new Promise<void>(resolve => setTimeout(resolve, 0));
 
 describe('CoinImagePathsService', () => {
   beforeEach(() => {
-    // The registry is a module-level singleton shared by the whole app, so it
-    // has to be emptied between tests or one test's paths leak into the next.
+    // Module-level singleton: clear it between tests.
     imageSourcePaths.clear();
   });
 
@@ -82,14 +70,13 @@ describe('CoinImagePathsService', () => {
     await settle();
 
     expect(getCoinImages).toHaveBeenCalledTimes(1);
-    // THE POINT OF THE TEST: three photos, one POST — not three.
+    // Three photos, one POST.
     expect(checkImagesExist).toHaveBeenCalledTimes(1);
     expect(checkImagesExist).toHaveBeenCalledWith([OBVERSE, REVERSE, LABEL]);
   });
 
   it('de-duplicates paths within the one request', async () => {
-    // The same file can legitimately be the source of two image rows; there is
-    // no reason to make the server hit the disk for it twice.
+    // The same file can be the source of two image rows; check it once.
     const duplicated: CoinImageRecord[] = [
       { imageId: 1, imageData: 'data:a', sourcePath: OBVERSE, sortOrder: 0 },
       { imageId: 2, imageData: 'data:b', sourcePath: OBVERSE, sortOrder: 1 }
@@ -107,20 +94,18 @@ describe('CoinImagePathsService', () => {
 
     service.ensureLoaded('coin-1');
     await settle();
-    // The user clicks away to another coin and back again, several times.
     service.ensureLoaded('coin-1');
     service.ensureLoaded('coin-1');
     await settle();
 
     expect(getCoinImages).toHaveBeenCalledTimes(1);
     expect(checkImagesExist).toHaveBeenCalledTimes(1);
-    // And the cached answers are still correct.
     expect(service.existenceOf(OBVERSE)).toBe('present');
     expect(service.existenceOf(LABEL)).toBe('missing');
   });
 
   it('does not fire twice when two components ask at the same moment', async () => {
-    // The detail panel and the gallery can both mount in the same tick.
+    // The detail panel and gallery can both mount in the same tick.
     const { service, getCoinImages } = createService();
 
     service.ensureLoaded('coin-1');
@@ -154,7 +139,6 @@ describe('CoinImagePathsService', () => {
     expect(view.existence).toBe('missing');
     expect(view.isLink).toBe(false);
     expect(view.fileUrl).toBe(null);
-    // The path stays visible: the user wants it as a record of where it was.
     expect(view.displayPath).toBe(LABEL);
   });
 
@@ -166,14 +150,11 @@ describe('CoinImagePathsService', () => {
     service.ensureLoaded('coin-1');
     await settle();
 
-    // THE POINT OF THE TEST: not 'missing'. We could not ask, so we say
-    // nothing — showing every photo as gone whenever the server blinks would
-    // be alarming and wrong.
+    // Unknown, not 'missing': the server could not be asked.
     expect(service.existenceOf(OBVERSE)).toBe('unknown');
     expect(service.existenceOf(LABEL)).toBe('unknown');
 
-    // The path itself was still learned from the GET, so it is shown — just as
-    // plain text with no link.
+    // The path was still learned from the GET, so it shows as plain text.
     const view = service.viewFor('data:image/jpeg;base64,AAA');
     expect(view.hasPath).toBe(true);
     expect(view.existence).toBe('unknown');
@@ -191,8 +172,7 @@ describe('CoinImagePathsService', () => {
 
     expect(service.viewFor('data:image/jpeg;base64,AAA').hasPath).toBe(false);
 
-    // The coin is NOT left marked as loaded, so a later attempt — once the
-    // server is back — actually tries again rather than caching the failure.
+    // The failure is not cached; a later attempt retries.
     service.ensureLoaded('coin-1');
     await settle();
     expect(getCoinImages).toHaveBeenCalledTimes(2);
@@ -207,7 +187,6 @@ describe('CoinImagePathsService', () => {
     service.ensureLoaded('coin-1');
     await settle();
 
-    // Nothing to ask about — a request with an empty array would be pure waste.
     expect(checkImagesExist).not.toHaveBeenCalled();
     expect(service.viewFor('data:a').hasPath).toBe(false);
   });

@@ -1,15 +1,5 @@
  /*
- * stats-format.spec.ts
- *
- * These tests exist to protect ONE rule, the rule the whole statistics view is
- * built on and the same rule `formatMeltValue` already enforces in the grid:
- *
- *     A FIGURE WE DO NOT KNOW RENDERS AS "—", NEVER AS "$0.00".
- *
- * A statistics panel is exactly where that rule is easiest to break, because
- * every number on it is a SUM and a sum of nothing is very naturally written
- * as zero. "Total melt value: $0.00" across a collection of gold coins whose
- * weights were never typed in is a lie the user has no way of spotting.
+  * The rule under test: an unknown figure renders as "—", never as "$0.00".
   */
 
 import { describe, expect, it } from 'vitest';
@@ -28,14 +18,8 @@ import {
 
 describe('groupThousands', () => {
    /*
-   * THESE TESTS EXIST BECAUSE A MUTATION RUN FOUND NOTHING.
-   *
-   * Swapping the implementation for the naive single-regex version
-   *     text.replace(/(\d)(?=(\d{3})+(\.|$))/g, '$1,')
-   * produced ZERO failing tests — not because the two agree (they do not),
-   * but because no caller in the module formats to four decimal places, so
-   * the one case they disagree on was unreachable. The helper is exported
-   * purely so the rule can be asserted on its own terms.
+    * groupThousands must group only the integer part; the naive regex
+    * `/(\d)(?=(\d{3})+(\.|$))/g` would also group decimals.
     */
 
   it('groups the integer part', () => {
@@ -44,8 +28,7 @@ describe('groupThousands', () => {
   });
 
   it('NEVER groups the fractional part, however many digits it has', () => {
-    // The naive regex renders this "0.9,674", because "674" is a perfectly
-    // good group of three at the end of the string.
+    // The naive regex would render "0.9,674".
     expect(groupThousands('0.9674')).toBe('0.9674');
     expect(groupThousands('1.123456789')).toBe('1.123456789');
     expect(groupThousands('12345.678901')).toBe('12,345.678901');
@@ -72,13 +55,12 @@ describe('formatStatMoney', () => {
     expect(formatStatMoney(999.99)).toBe('$999.99');
   });
 
-  // THE RULE. null means "we cannot say", not "nothing".
+  // null means "unknown", not "nothing".
   it('renders an unknown figure as an em-dash, never as $0.00', () => {
     expect(formatStatMoney(null)).toBe('—');
   });
 
-  // A real, measured zero is a different thing from an absent one and must
-  // still print as money, otherwise a genuinely free coin disappears.
+  // A real zero still prints as money.
   it('renders a real zero as $0.00', () => {
     expect(formatStatMoney(0)).toBe('$0.00');
   });
@@ -125,8 +107,7 @@ describe('formatGrams / formatTroyOunces', () => {
   });
 
   it('converts to troy ounces using the same constant the melt maths uses', () => {
-    // 30.09 g of pure gold is the 0.9675 ozt AGW the trade quotes for a
-    // $20 Saint-Gaudens. See the header of services/pm-reference.ts.
+    // 30.09 g of pure gold is the 0.9675 ozt AGW quoted for a $20 Saint-Gaudens.
     expect(formatTroyOunces(30.09)).toBe('0.967 ozt');
   });
 
@@ -144,8 +125,7 @@ describe('formatCount', () => {
 });
 
 describe('formatAxisTick', () => {
-  // Rule from the dataviz guidance: full under 10,000, compact above, one
-  // style per axis. The axis is the only place the un-labelled bars get read.
+  // Full under 10,000, compact above.
   it('prints values under ten thousand in full', () => {
     expect(formatAxisTick(0)).toBe('0');
     expect(formatAxisTick(1000)).toBe('1,000');
@@ -165,10 +145,8 @@ describe('formatAxisTick', () => {
 });
 
 describe('formatChartMonth / formatChartDay', () => {
-  // The series timestamps are UTC midnight (spend-over-time.ts builds them
-  // with Date.UTC). Reading them back with LOCAL getters would show the
-  // previous day for every collector west of Greenwich — an off-by-one on
-  // every point of the chart, invisible unless you happen to live there.
+  // Series timestamps are UTC midnight; local getters would show the previous
+  // day west of Greenwich.
   const march15 = Date.UTC(2024, 2, 15);
 
   it('names the month and year in UTC', () => {
@@ -190,8 +168,7 @@ describe('formatChartMonth / formatChartDay', () => {
 });
 
 describe('coverageNote', () => {
-  // This is the sentence that replaces a silent zero. The brief for the whole
-  // view: say "not known for 31 coins" rather than averaging them in as zero.
+  // Complete data: no note at all.
   it('says nothing at all when every coin is accounted for', () => {
     expect(coverageNote(125, 125)).toBeNull();
   });

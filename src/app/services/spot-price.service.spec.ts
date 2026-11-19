@@ -3,13 +3,6 @@ import { SpotPriceService } from './spot-price.service';
 import { of, throwError } from 'rxjs';
 import { createTestSpotPriceService } from '../testing/test-helpers';
 
-/**
- * Tests for SpotPriceService.
- *
- * SpotPriceService uses inject() for ApiService, LoggingService, and
- * NotificationService. The createTestSpotPriceService() helper creates the
- * service inside a proper injection context with mock dependencies.
- */
 describe('SpotPriceService', () => {
   let service: SpotPriceService;
   let mockApiService: any;
@@ -17,7 +10,6 @@ describe('SpotPriceService', () => {
   let mockNotificationService: any;
 
   beforeEach(() => {
-    // Create mock dependencies for SpotPriceService
     mockApiService = {
       fetchSpotPrices: vi.fn(),
     };
@@ -33,7 +25,6 @@ describe('SpotPriceService', () => {
       showError: vi.fn(),
     };
 
-    // Create SpotPriceService inside injection context with mocks
     const result = createTestSpotPriceService({
       mockApiService,
       mockLogger: mockLoggingService,
@@ -43,7 +34,6 @@ describe('SpotPriceService', () => {
   });
 
   it('should parse backend spot price response', async () => {
-    // SpotPriceService now calls backend API via ApiService instead of direct fetch
     const mockResponse = {
       prices: {
         gold: 2650.30,
@@ -69,7 +59,6 @@ describe('SpotPriceService', () => {
   });
 
   it('should return error on API failure', async () => {
-    // Mock API throwing an error
     mockApiService.fetchSpotPrices.mockReturnValue(
       throwError(() => new Error('Network error'))
     );
@@ -83,7 +72,6 @@ describe('SpotPriceService', () => {
   });
 
   it('should handle backend error response', async () => {
-    // Mock backend returning an error state
     const mockErrorResponse = {
       prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
       source: '',

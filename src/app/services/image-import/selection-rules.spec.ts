@@ -31,8 +31,7 @@ function row(fileName: string, coinId: string | null = 'coin-1'): BatchImageRow 
         certNumbers: [], certCompanies: [], tokens: [], isEmpty: true
       },
       runnerUpGap: 0,
-      // Tier 1 when the matcher placed it, tier 3 when it did not. These rules
-      // only care that a row has (or lacks) a coin, but the field is required.
+      // Required field; these rules only care whether a coin is assigned.
       tier: coinId ? 'matched' : 'not-imported',
       nearMatch: null,
       skipReason: coinId ? null : 'test'
@@ -47,7 +46,7 @@ function row(fileName: string, coinId: string | null = 'coin-1'): BatchImageRow 
   };
 }
 
-/** A realistic 8-shot coin, exactly the shape the share produces. */
+/** A realistic 8-shot coin. */
 function eightShotCoin(): BatchImageRow[] {
   return [
     row('1880-S $1 - MS64 - Obverse - Photo.jpg'),

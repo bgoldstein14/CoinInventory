@@ -1,27 +1,8 @@
 /*
- * catalog-column.spec.ts — the Catalogue Ref. column in the inventory grid.
- * WHY THIS IS A SEPARATE FILE FROM inventory-columns.spec.ts
- *   inventory-columns.ts is shared ground: several pieces of work are adding
- *   columns to it at the same time. Keeping this column's tests in their own
- *   file means two changes to the same array do not become one merge conflict
- *   in one spec, and the invariants below are re-checked from a second place
- *   rather than edited in place.
- *
- * WHAT IS AT RISK
- *   - THE ORDERING INVARIANTS. inventory-columns.ts's header states two that
- *     must never break: Year is immediately followed by Mint Mark, and Cert
- *     sits immediately before Grade. Inserting a column is the one operation
- *     that can break them, so the insertion is tested against them here as
- *     well as in the original spec.
- *
- *   - THE COLUMN BEING ON BY DEFAULT. Most collectors of modern coins will
- *     never record a catalogue reference, and this grid is already dense
- *     enough that an always-empty column pushes the money columns off the
- *     right-hand edge. It must start switched OFF.
- *
- *   - THE CELL RENDERING "undefined" OR LOSING THE NUMBER. The lookup list is
- *     an optional argument, exactly like spot prices, so a caller that does
- *     not have it must still render something true.
+ * Tests for the Catalogue Ref. column in the inventory grid: it keeps the
+ * column-order invariants (Mint Mark right after Year, Cert right before
+ * Grade), is hidden by default, and renders correctly with or without the
+ * optional catalogue lookup list.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -61,8 +42,7 @@ describe('the Catalogue Ref. column', () => {
   });
 
   it('is OFF by default', () => {
-    // A column almost every user of modern coins would leave empty. The
-    // column picker is one tick away for the people who want it.
+    // Usually empty for modern coins; users can enable it in the column picker.
     expect(defaultVisibleColumns).not.toContain('catalogReference');
   });
 
@@ -77,10 +57,7 @@ describe('the Catalogue Ref. column', () => {
   });
 
   it('sits next to Variety, which is where these references are today', () => {
-    // Not decoration. coin-signature.ts documents a live record whose
-    // `variety` reads "Sear 6819" -- the user had nowhere else to put it. The
-    // two columns side by side are what make it obvious that the reference
-    // can be moved out of the free-text field and into its own.
+    // References are often typed into Variety (e.g. "Sear 6819"), so keep them adjacent.
     const variety = inventoryColumnOrder.indexOf('variety');
     const reference = inventoryColumnOrder.indexOf('catalogReference');
     expect(Math.abs(reference - variety)).toBe(1);
@@ -88,54 +65,41 @@ describe('the Catalogue Ref. column', () => {
 });
 
 describe('formatInventoryCell — catalogReference column', () => {
-  it('shows the catalogue and the number as one reference', () => {
-    const coin = makeCoin({ catalogId: 1, catalogNumber: '6819' });
-    expect(formatInventoryCell(coin, 'catalogReference', undefined, CATALOGS)).toBe('Sear 6819');
+  const ric = { catalogId: 2, catalogNumber: '123' };
+  const sear = { catalogId: 1, catalogNumber: '6819' };
+  const LIST: CatalogOption[] = [...CATALOGS, { catalogId: 2, name: 'RIC', sortOrder: 2, isActive: true }];
+
+  it('shows the main (Sear) reference and how many others there are', () => {
+    const coin = makeCoin({ catalogRefs: [ric, sear] });
+    expect(formatInventoryCell(coin, 'catalogReference', undefined, LIST)).toBe('Sear 6819 (+1)');
+  });
+
+  it('shows a single reference on its own', () => {
+    const coin = makeCoin({ catalogRefs: [sear] });
+    expect(formatInventoryCell(coin, 'catalogReference', undefined, LIST)).toBe('Sear 6819');
   });
 
   it('shows the ordinary dash when the coin has no reference', () => {
-    // Every coin that existed before migration 012, which is all of them.
-    expect(formatInventoryCell(makeCoin(), 'catalogReference', undefined, CATALOGS)).toBe('—');
+    expect(formatInventoryCell(makeCoin(), 'catalogReference', undefined, LIST)).toBe('—');
+    expect(formatInventoryCell(makeCoin({ catalogRefs: [] }), 'catalogReference', undefined, LIST)).toBe('—');
   });
 
   it('shows the number alone when no catalogue list was passed in', () => {
-    // The list is an optional argument, like spotPrices, so that this stays
-    // one pure function testable with a plain object. A caller without the
-    // list (the report renderer, today) still prints the number the user
-    // typed rather than an em-dash that hides it.
-    const coin = makeCoin({ catalogId: 1, catalogNumber: '6819' });
+    const coin = makeCoin({ catalogRefs: [sear] });
     expect(formatInventoryCell(coin, 'catalogReference')).toBe('6819');
   });
 
-  it('shows the number alone when the catalogue is no longer in the list', () => {
-    const coin = makeCoin({ catalogId: 404, catalogNumber: '6819' });
-    expect(formatInventoryCell(coin, 'catalogReference', undefined, CATALOGS)).toBe('6819');
-  });
-
-  it('shows the catalogue alone when no number has been recorded', () => {
-    const coin = makeCoin({ catalogId: 3, catalogNumber: '' });
-    expect(formatInventoryCell(coin, 'catalogReference', undefined, CATALOGS)).toBe('Hendin');
-  });
-
-  it('never renders the word undefined', () => {
-    // The two half-populated states are the ones that produce
-    // "undefined 6819" / "Sear undefined" if anything concatenates by hand.
-    for (const coin of [
-      makeCoin({ catalogNumber: '6819' }),
-      makeCoin({ catalogId: 1 })
-    ]) {
-      expect(formatInventoryCell(coin, 'catalogReference', undefined, CATALOGS))
-        .not.toMatch(/undefined/);
-    }
+  it('still names a removed (inactive) catalogue', () => {
+    const removed: CatalogOption[] = [{ catalogId: 1, name: 'Sear', sortOrder: 1, isActive: false }];
+    const coin = makeCoin({ catalogRefs: [sear] });
+    expect(formatInventoryCell(coin, 'catalogReference', undefined, removed)).toBe('Sear 6819');
   });
 
   it('leaves every other column untouched when a catalogue list is supplied', () => {
-    // The new fourth parameter must be inert everywhere else, exactly as the
-    // spotPrices parameter is.
-    const coin = makeCoin({ coinType: 'Shekel', grade: 'VF', catalogId: 1, catalogNumber: '1A' });
+    const coin = makeCoin({ coinType: 'Shekel', grade: 'VF', catalogRefs: [sear] });
     for (const column of inventoryColumnOrder) {
       if (column === 'catalogReference') continue;
-      expect(formatInventoryCell(coin, column, undefined, CATALOGS))
+      expect(formatInventoryCell(coin, column, undefined, LIST))
         .toBe(formatInventoryCell(coin, column));
     }
   });

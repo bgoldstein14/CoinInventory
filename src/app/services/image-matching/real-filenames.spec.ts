@@ -1,18 +1,8 @@
- /*
- * real-filenames.spec.ts
- *
- * WHAT THIS FILE PROVES
- *   That the matcher works against THIS COLLECTION, not against invented
- *   names. Every filename below is VERBATIM from a survey of the user's image
- *   share (\\NAS\Coin Pictures, 2,140 files). Nothing here is made
- *   up, and nothing here should be "tidied" -- the odd spacing, the missing
- *   space in "PF62CAM- Obverse", the mixed-case ".JPG" and the lone "1875CC"
- *   with no separator are all real, and each one broke something.
- *
- *   image-matching.service.spec.ts covers the ALGORITHM (the safety gates,
- *   the ambiguity rules, the defect regressions). This file covers REALITY.
- *   If the collection's naming habits change, this is the file to extend.
-  */
+/*
+ * Matcher tests against real filenames from the user's image share (unless
+ * marked CONSTRUCTED). Odd spacing and casing ("PF62CAM- Obverse", ".JPG",
+ * "1875CC") are real and intentional; keep them as-is.
+ */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -32,12 +22,9 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   };
 }
 
- /*
- * TABLE 1 -- SINGLE COINS: every attribute, from the real filename
- *
- * Columns are exactly what the import UI reads back to the user. `undefined`
- * means "this case does not pin that field down"; null means "we assert the
- * matcher found nothing", which for several of these is the whole point.
+/*
+ * Table 1: single coins. `undefined` = not asserted; null = asserted to be
+ * absent.
  */
 interface ParseCase {
   file: string;
@@ -200,16 +187,10 @@ describe('real filenames - single coins parse to the right attributes', () => {
   }
 });
 
- /*
- * TABLE 2 -- NOT A SINGLE COIN: must score 'none'
- *
- * The inventory below is stocked ON PURPOSE with the coins each of these
- * filenames would otherwise be attracted to -- a Three Cent piece for the
- * stamp and the fractional paper, gold for "Gold Coins", a Canadian cent for
- * "Canadian Cents", a Half Dime for "Half Dimes and Cap and Rays". Without
- * the non-coin veto several of these score well into 'review' territory, and
- * the two "3 cent" traps score against a real coin. The test is only
- * meaningful because the bait is present.
+/*
+ * Table 2: not a single coin, must score 'none'. The inventory is baited
+ * with the coins each filename would otherwise match (a Three Cent piece for
+ * the stamp, gold for "Gold Coins", ...), so the non-coin veto is what stops them.
  */
 const BAITED_INVENTORY: CoinRecord[] = [
   coin({ id: '3cs-1851', denomination: 'Three Cent', coinType: 'Silver Trime', year: '1851' }),
@@ -251,8 +232,6 @@ describe('real filenames - group shots, non-coins and camera names score none', 
       expect(result.status, 'status').toBe('none');
       expect(result.matchedRecordId, 'matchedRecordId').toBeNull();
       expect(result.confidence, 'confidence').toBe(0);
-      // Nothing to confirm either: offering candidates would invite the user
-      // to attach a stamp photo to a coin with one click.
       expect(result.candidates, 'candidates').toEqual([]);
       expect(result.parsed.isNonCoin, 'isNonCoin').toBe(true);
       expect(result.parsed.nonCoinReason, 'nonCoinReason').toBeTruthy();
@@ -260,10 +239,8 @@ describe('real filenames - group shots, non-coins and camera names score none', 
   }
 
   it('proves the "3 cent" bait would otherwise be attractive', () => {
-    // Same three-cent record, but a genuine hyphenated three-cent FILENAME.
-    // This is the control: the parser really does read "3-cent" as a coin, so
-    // the stamp and the paper above are being stopped by the veto and not by
-    // some accident of tokenizing.
+    // Control: "3-cent" does parse as a coin, so the veto is what stops the
+    // stamp and paper above.
     const parsed = service().parseFilename('1851 3-cent - VF - Obverse.jpg');
 
     expect(parsed.denomination).toBe('three cent');
@@ -271,13 +248,9 @@ describe('real filenames - group shots, non-coins and camera names score none', 
   });
 });
 
- /*
- * TABLE 3 -- ANCIENTS GO TO REVIEW, NEVER TO AUTO
- *
- * An ancient's only comparable attribute is its coin-type text (which now
- * includes the folded catalogue reference). One attribute can never clear the
- * two-strong-attributes gate, and coin-type-only coverage caps the score below
- * the 0.85 bar. So a perfect textual match still asks the user.
+/*
+ * Table 3: ancients only have coin-type text (including the catalogue
+ * reference), so they cap below 0.85 and always go to review.
  */
 describe('real filenames - ancients match on catalogue text but never auto-assign', () => {
   const ancients: CoinRecord[] = [
@@ -319,12 +292,7 @@ describe('real filenames - ancients match on catalogue text but never auto-assig
   });
 });
 
- /*
- * TABLE 4 -- THE BARE-DIGIT RULE, RESTATED AGAINST REAL NAMES
- *
- * The rule the rewrite must not lose: a number with a UNIT attached is strong
- * evidence; the SAME number with nothing attached says nothing at all.
- */
+// Table 4: a number with a unit attached is a denomination; a bare number is not.
 describe('real filenames - unit-bound digits count, bare digits do not', () => {
   it('reads a number that carries a unit', () => {
     const s = service();
@@ -344,11 +312,8 @@ describe('real filenames - unit-bound digits count, bare digits do not', () => {
     // A price, not a Gold Eagle. A take number, not a Twenty Cent piece.
     expect(s.parseFilename('1925-S Peace Dollar $25.00.jpg').denomination).toBe('dollar');
     expect(s.parseFilename('1875CC - VF30 - 2 - Obverse.jpg').denomination).toBeNull();
-    // A standalone "- 20 -" segment is a take number. It is NOT a Twenty Cent
-    // piece, and it is not a Double Eagle either: with no unit attached it
-    // contributes nothing, so this name yields no denomination at all.
+    // A standalone "- 20 -" segment is a take number.
     expect(s.parseFilename('1881-S Morgan - 20 - Obverse.jpg').denomination).toBeNull();
-    // Add the unit back and the very same digits become evidence again.
     expect(s.parseFilename('1881-S Morgan Dollar - 20 - Obverse.jpg').denomination).toBe('dollar');
     // Digits inside a cert number stay inside it.
     expect(s.parseFilename('1881 Morgan Dollar NGC 2599001.jpg').denomination).toBe('dollar');
@@ -363,13 +328,7 @@ describe('real filenames - unit-bound digits count, bare digits do not', () => {
   });
 });
 
- /*
- * TABLE 5 -- CERT COMPANY + GRADE TOGETHER
- *
- * Individually weak, jointly strong. These tests pin down that asymmetry,
- * because it is easy to "fix" a missed match by promoting the grade and
- * thereby let every XF coin match every other XF coin.
- */
+// Table 5: cert company and grade are weak alone, strong together.
 describe('real filenames - cert company and grade corroborate only together', () => {
   it('uses a matching company AND grade as corroboration', () => {
     const inventory = [
@@ -395,8 +354,7 @@ describe('real filenames - cert company and grade corroborate only together', ()
   });
 
   it('will not let a shared grade alone clear the two-attribute gate', () => {
-    // Nothing agrees except the grade. One attribute is never enough, and a
-    // grade does not even count as one.
+    // Only the grade agrees, and a grade alone is not a strong attribute.
     const inventory = [coin({ id: 'other', denomination: 'Dime', coinType: 'Mercury', year: '1945', grade: 'XF' })];
 
     const [result] = service().matchImages(['1873 3CN - XF - Obverse.jpg'], inventory);
@@ -416,9 +374,7 @@ describe('real filenames - cert company and grade corroborate only together', ()
   });
 });
 
-/* =========================================================================
- * TABLE 6 -- PHOTO MARKERS NEVER AFFECT THE SCORE
- * ======================================================================= */
+// Table 6: photo markers (side, take, variant) never affect the score.
 describe('real filenames - side and take are reported, not scored', () => {
   const inventory = [
     coin({ id: 'cad-50c', denomination: '50 Cents', coinType: 'Canadian', year: '1913' })
@@ -459,9 +415,7 @@ describe('real filenames - side and take are reported, not scored', () => {
   });
 });
 
-/* =========================================================================
- * TABLE 7 -- MINT MARKS GLUED TO THE YEAR (and what is NOT a mint mark)
- * ======================================================================= */
+// Table 7: mint marks glued to the year, and words that are not mint marks.
 describe('real filenames - mint marks attached to the year', () => {
   it('reads every separator style this collection uses', () => {
     const s = service();
@@ -489,28 +443,12 @@ describe('real filenames - mint marks attached to the year', () => {
   });
 });
 
-/* =========================================================================
- * TABLE 8 -- HELD OUT OF THE AUTOMATED IMPORT ENTIRELY
- * =======================================================================
- * Counterfeits and multi-coin shots. Two groups, one rule: never
- * automatically attach, and never offer as attachable in the automated
- * import. Such a photo can still be chosen by hand later.
- * Every path below is VERBATIM from the share, with its real directory. These
- * 20, plus nine more "Temp/Group PHOTO-..." siblings, are the complete set of
- * 30 that the markers catch across all 1,715 displayable files.
- *
- * WHY THIS IS A SEPARATE TABLE FROM `NOT_ONE_COIN` ABOVE, AND NOT PART OF IT
- * The two tables assert DIFFERENT things. A NOT_ONE_COIN row is `isNonCoin`
- * and still carries tier 3's "Attach anyway..." link. These rows do not --
- * "nor offer as attachable" rules the link out -- so they need their own
- * assertions, and keeping the two apart is what stops someone merging the two
- * verdicts back together by accident.
- *
- * They are also deliberately NOT added to real-filenames.fixture.ts. That
- * fixture feeds the printed census in import-tiers.spec.ts, whose synthetic
- * inventory is derived from the very filenames it measures; feeding it 30
- * files that are excluded by name would move a published table without
- * telling anyone anything new about the tiers.
+/*
+ * Table 8: counterfeits (matched, but only to counterfeit records) and
+ * multi-coin shots (held out of the automated import; no candidates and no
+ * "Attach anyway" link, unlike NOT_ONE_COIN rows). Real paths with their
+ * directories. Not added to real-filenames.fixture.ts, which feeds the tier
+ * census in import-tiers.spec.ts.
  */
 interface ExclusionCase {
   file: string;
@@ -519,21 +457,20 @@ interface ExclusionCase {
   kind: 'counterfeit' | 'multi-coin';
 }
 
-const EXCLUDED_FROM_AUTO_IMPORT: ExclusionCase[] = [
-  /* COUNTERFEITS -- all eight on the share. Note how complete the descriptors
-   * are: year, denomination, and in four cases a grade. That completeness is
-   * exactly why they are dangerous -- the inventory holds five genuine 1861
-   * 3CS records. */
-  { file: 'Business Strikes/FAKE - 1860 3CS - VF - Obverse.jpg', marker: 'fake', kind: 'counterfeit' },
-  { file: 'Business Strikes/FAKE - 1860 3CS - VF - Reverse.jpg', marker: 'fake', kind: 'counterfeit' },
-  { file: 'Business Strikes/Archive/1861 3CS - Obverse - FAKE.jpg', marker: 'fake', kind: 'counterfeit' },
-  { file: 'Business Strikes/Archive/1861 3CS - Reverse - FAKE.jpg', marker: 'fake', kind: 'counterfeit' },
-  { file: 'Business Strikes/1860 Counterfeit 3CS - Obverse.jpg', marker: 'counterfeit', kind: 'counterfeit' },
-  { file: 'Business Strikes/1860 Counterfeit 3CS - Reverse.jpg', marker: 'counterfeit', kind: 'counterfeit' },
-  { file: 'Business Strikes/1861 Counterfeit 3CS - Obverse.jpg', marker: 'counterfeit', kind: 'counterfeit' },
-  { file: 'Business Strikes/1861 Counterfeit 3CS - Reverse.jpg', marker: 'counterfeit', kind: 'counterfeit' },
+// Counterfeits: matched normally; the authenticity veto keeps them off genuine records.
+const COUNTERFEIT_FILES = [
+  'Business Strikes/FAKE - 1860 3CS - VF - Obverse.jpg',
+  'Business Strikes/FAKE - 1860 3CS - VF - Reverse.jpg',
+  'Business Strikes/Archive/1861 3CS - Obverse - FAKE.jpg',
+  'Business Strikes/Archive/1861 3CS - Reverse - FAKE.jpg',
+  'Business Strikes/1860 Counterfeit 3CS - Obverse.jpg',
+  'Business Strikes/1860 Counterfeit 3CS - Reverse.jpg',
+  'Business Strikes/1861 Counterfeit 3CS - Obverse.jpg',
+  'Business Strikes/1861 Counterfeit 3CS - Reverse.jpg'
+];
 
-  // MULTI-COIN SHOTS -- "collage", all seven on the share.
+const EXCLUDED_FROM_AUTO_IMPORT: ExclusionCase[] = [
+  // "collage"
   { file: '20¢/Archive/20¢ Collage.jpg', marker: 'collage', kind: 'multi-coin' },
   { file: '20¢/Archive/20¢ Collage - Small.jpg', marker: 'collage', kind: 'multi-coin' },
   { file: 'Business Strikes/Gold/$3 Collage.jpg', marker: 'collage', kind: 'multi-coin' },
@@ -542,57 +479,84 @@ const EXCLUDED_FROM_AUTO_IMPORT: ExclusionCase[] = [
   { file: 'Business Strikes/3CN/Archive/1875 3CN - Collage - Small.jpg', marker: 'collage', kind: 'multi-coin' },
   { file: 'Business Strikes/3CN/Archive/1875 3CN - Collage - BIG 3 - Small.jpg', marker: 'collage', kind: 'multi-coin' },
 
-  /* "hoard" -- and specifically "mini-hoard", which is why the marker has to
-   * be `\b`-anchored rather than anchored to whitespace. */
+  // "hoard": "mini-hoard" needs a \b-anchored marker, not whitespace.
   { file: 'Business Strikes/3CN/Archive/1875 and 1876 3CN mini-hoard - Obverse.jpg', marker: 'hoard', kind: 'multi-coin' },
   { file: 'Business Strikes/3CN/Archive/1875 and 1876 3CN mini-hoard - Reverse.jpg', marker: 'hoard', kind: 'multi-coin' },
 
-  /* "montage". These two are also the reason "set" does not need to be a
-   * marker: both carry "Montage" and are caught by it, so adding "set" would
-   * buy nothing here and would cost every photograph of a genuine Proof Set
-   * record. */
+  // "montage" (so "set" need not be a marker; see Table 9).
   { file: 'Proofs/1870 Proof Set/Archive/1870 Proof Set Montage - Large.jpg', marker: 'montage', kind: 'multi-coin' },
   { file: 'Proofs/1870 Proof Set/Archive/1870 Proof Set Montage - Small.jpg', marker: 'montage', kind: 'multi-coin' },
 
-  /* "group". All 11 hits on the share are "Temp/Group PHOTO-..." phone dumps,
-   * and every one was opened and checked: they really are several coins in
-   * one frame. Two are listed; the other nine differ only in the timestamp. */
+  // "group": phone dumps showing several coins per frame.
   { file: 'Temp/Group PHOTO-2023-06-02-13-15-48.jpg', marker: 'group', kind: 'multi-coin' },
   { file: 'Temp/Group PHOTO-2023-06-23-07-48-23.jpg', marker: 'group', kind: 'multi-coin' }
 ];
 
-describe('real filenames - counterfeits and group shots are out of the automated run', () => {
+describe('real filenames - counterfeits are matched, but only to counterfeit records', () => {
+  for (const file of COUNTERFEIT_FILES) {
+    it(`reads "${file}" as a counterfeit and does not exclude it`, () => {
+      const [result] = service().matchImages([file], BAITED_INVENTORY);
+      expect(result.parsed.counterfeit, 'counterfeit').toBe(true);
+      expect(result.parsed.excludedFromAutoImport, 'excludedFromAutoImport').toBe(false);
+    });
+  }
+
+  const genuine = coin({
+    id: '3cs-1860', denomination: 'Three Cent', coinType: 'Silver Trime',
+    year: '1860', grade: 'VF'
+  });
+  const fake = coin({
+    id: '3cs-1860-fake', denomination: 'Three Cent', coinType: 'Silver Trime',
+    year: '1860', grade: 'VF', variety: 'FAKE'
+  });
+
+  it('offers a fake photo the fake record and never the genuine one', () => {
+    const [result] = service().matchImages(['FAKE - 1860 3CS - VF - Obverse.jpg'], [genuine, fake]);
+    const offered = [
+      result.matchedRecordId,
+      ...result.candidates.map(c => c.coinId),
+      ...(result.nearMatch?.candidates ?? []).map(c => c.coinId)
+    ].filter(Boolean);
+    expect(offered).toContain('3cs-1860-fake');
+    expect(offered).not.toContain('3cs-1860');
+  });
+
+  it('offers a genuine photo the genuine record and never the fake one', () => {
+    const [result] = service().matchImages(['1860 3CS - VF - Obverse.jpg'], [genuine, fake]);
+    const offered = [
+      result.matchedRecordId,
+      ...result.candidates.map(c => c.coinId),
+      ...(result.nearMatch?.candidates ?? []).map(c => c.coinId)
+    ].filter(Boolean);
+    expect(offered).toContain('3cs-1860');
+    expect(offered).not.toContain('3cs-1860-fake');
+  });
+});
+
+describe('real filenames - group shots are out of the automated run', () => {
   for (const { file, marker, kind } of EXCLUDED_FROM_AUTO_IMPORT) {
     it(`holds back "${file}" as a ${kind}, on the word "${marker}"`, () => {
       const [result] = service().matchImages([file], BAITED_INVENTORY);
 
       expect(result.parsed.excludedFromAutoImport, 'excludedFromAutoImport').toBe(true);
-      // The reason quotes the marker back, so the read-only list can say
-      // WHICH word made the decision and not merely that one did.
+      // The reason names the marker word.
       expect(result.parsed.autoImportExclusionReason, 'reason').toContain(`"${marker}"`);
 
-      // Not attached...
       expect(result.status, 'status').toBe('none');
       expect(result.matchedRecordId, 'matchedRecordId').toBeNull();
       expect(result.confidence, 'confidence').toBe(0);
-      /* ...and not OFFERED either, which is the half that is stronger than an
-       * ordinary skip. An empty candidate list is what empties the tier-3
-       * rescue panel; `BatchImportSession.canRescue` hides the link itself. */
+      // Not offered either; `BatchImportSession.canRescue` hides the rescue link.
       expect(result.candidates, 'candidates').toEqual([]);
 
-      /* But still REPORTED, in full, with the reason the UI prints.
-       * "Where did my photo go?" is the question the importer must never
-       * leave a user asking. */
+      // Still listed with its reason.
       expect(result.tier, 'tier').toBe('not-imported');
       expect(result.skipReason, 'skipReason').toBe(result.parsed.autoImportExclusionReason);
     });
   }
 
-  it('proves the counterfeit descriptor would otherwise be attractive', () => {
-    /* The control, in the same spirit as the "3 cent" bait above: a fake's
-     * filename is not junk that the parser would have discarded anyway.
-     * Remove the single word "FAKE" and the otherwise identical name is
-     * offered against a genuine 1860 three-cent record. */
+  it('keeps a fake photo off a genuine record (authenticity veto)', () => {
+    // Control: without "FAKE" the same name is offered, so the veto is what
+    // blocks it.
     const genuine = [coin({
       id: '3cs-1860', denomination: 'Three Cent', coinType: 'Silver Trime',
       year: '1860', grade: 'VF'
@@ -606,10 +570,8 @@ describe('real filenames - counterfeits and group shots are out of the automated
   });
 
   it('does not let a sibling photo drag a counterfeit in behind it', () => {
-    /* Stage 5 (sibling-inference.ts) is the one place a photo can acquire a
-     * coin without passing the three gates, so it needs the rule too. A fake
-     * is a textbook sibling of the genuine article -- same year, same
-     * denomination, same grade -- and that is precisely the pairing here. */
+    // Sibling inference bypasses the gates; the fake shares all identifying
+    // text with the genuine photo.
     const genuine = [coin({
       id: '3cs-1860', denomination: 'Three Cent', coinType: 'Silver Trime',
       year: '1860', grade: 'VF'
@@ -624,14 +586,9 @@ describe('real filenames - counterfeits and group shots are out of the automated
   });
 });
 
-/* =========================================================================
- * TABLE 9 -- WORDS THAT LOOK LIKE MARKERS AND MUST NOT BE
- * =======================================================================
- * The whole risk in TABLE 8 is over-reach. Excluding an ordinary photograph
- * of a real coin is a silent loss with no way to notice it happened. Each row
- * below is a word that was considered and rejected, with
- * the reason, so that adopting it later means deleting a test and reading
- * why it was there.
+/*
+ * Table 9: words that look like exclusion markers but must not exclude a
+ * photo of a real coin. Each row gives the reason.
  */
 const NOT_EXCLUDED: Array<{ file: string; why: string }> = [
   {
@@ -693,15 +650,8 @@ describe('real filenames - lookalike words do not exclude a photograph', () => {
   }
 });
 
-/* =========================================================================
- * TABLE 10 -- THE FIXTURE GUARD
- * =======================================================================
- * import-tiers.spec.ts measures how the whole corpus divides across the three
- * review tiers, and it reads its filenames from real-filenames.fixture.ts.
- * Two lists of the same data drift apart, so this test keeps them honest: add
- * a case above and forget the fixture, and the measurement would quietly stop
- * covering it. The failure message names the missing file.
- */
+// Table 10: real-filenames.fixture.ts (used by import-tiers.spec.ts) must
+// include every filename asserted in tables 1 and 2.
 describe('real filenames - the shared fixture covers every case asserted here', () => {
   it('lists every single-coin filename used above', () => {
     for (const testCase of SINGLE_COIN_CASES) {

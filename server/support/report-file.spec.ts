@@ -1,20 +1,8 @@
 /**
- * support/report-file.spec.ts — the `.md` file that lands on the Desktop.
- *
- * WHAT IS BEING PINNED DOWN HERE
- *  - Where the file goes. "The Desktop" is not a fixed path on a modern
- *    Windows install: OneDrive Known Folder Move relocates it, and getting
- *    this wrong means telling the user to drag in a file that is not there.
- *  - That it is a PLAIN FILE and not an archive. This module used to build a
- *    zip. The owner's instruction was that the app must not zip anything —
- *    zipping text gains nothing and zipping a JPG hides it, because GitHub
- *    renders a dragged-in image inline and cannot see inside an archive.
- *  - That the text is redacted ON THE WAY TO DISK, not merely by whoever
- *    built it. This endpoint takes markdown from the renderer, so the pass
- *    here is the one that cannot be routed around.
- *  - That the path put in the PUBLIC issue body is redacted, while the path
- *    shown locally and logged is not. Those are two different audiences and
- *    getting them the same way round is the whole point.
+ * The `.md` report file on the Desktop: where it goes (OneDrive may relocate
+ * the Desktop), that it is a plain file rather than an archive, that text is
+ * redacted on the way to disk, and that the path in the public issue body is
+ * redacted while the locally shown and logged path is not.
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -47,13 +35,7 @@ describe('resolveDesktopDirectory', () => {
       .toBe('C:\\Users\\dev\\Desktop');
   });
 
-  /**
-   * OneDrive Known Folder Move. On a machine where it is on, the real
-   * Desktop is C:\Users\dev\OneDrive\Desktop and the profile one either does
-   * not exist or is a stub. Telling a user to look on their Desktop for a
-   * file that is in the other Desktop is the kind of failure that ends a
-   * support conversation before it starts.
-   */
+  /** With OneDrive Known Folder Move the real Desktop is under OneDrive. */
   it('falls back to the OneDrive Desktop when the profile one is absent', () => {
     const exists = (p: string) => p === 'C:\\Users\\dev\\OneDrive\\Desktop';
     expect(
@@ -76,21 +58,14 @@ describe('reportFileName', () => {
     expect(name).toBe('coin-inventory-problem-report-2026-11-08-180405.md');
   });
 
-  /**
-   * NOT .zip. The owner's instruction, and the reason the archive writer was
-   * deleted: a zip hides what it holds, and a report is text.
-   */
+  /** Plain text, not a zip: GitHub shows dragged-in files directly. */
   it('is a plain markdown file, not an archive', () => {
     const name = reportFileName(new Date('2026-11-08T18:04:05.000Z'));
     expect(name.endsWith('.md')).toBe(true);
     expect(name).not.toMatch(/\.zip$/);
   });
 
-  /**
-   * Two reports a few seconds apart is a completely ordinary thing to do —
-   * a question comes back, the user reports again. A minute-resolution
-   * name would make the second file silently overwrite the first.
-   */
+  /** A minute-resolution name would let a quick second report overwrite the first. */
   it('two reports seconds apart do not collide', () => {
     const a = reportFileName(new Date('2026-11-08T18:04:00.000Z'));
     const b = reportFileName(new Date('2026-11-08T18:04:01.000Z'));
@@ -106,12 +81,7 @@ describe('prepareReportFile', () => {
     expect(text).toContain('it broke');
   });
 
-  /**
-   * THE HOLE THIS CLOSES: this module is handed markdown by the renderer. The
-   * builder redacts what IT produces, but nothing guarantees the text that
-   * arrives here came from the builder. One pass at the point the file is
-   * created means no unredacted artefact can exist on disk.
-   */
+  /** The text comes from the renderer, so it is redacted here whatever built it. */
   it('redacts the text on the way to disk, whatever built it', () => {
     const { text } = prepareReportFile(
       'I was looking at C:\\Users\\devuser\\Pictures when it crashed',
@@ -153,30 +123,12 @@ describe('prepareReportFile', () => {
 
 // The path that goes into a public issue
 
-/**
- * The plan says the report file's full path goes in the ISSUE BODY, so the
- * user can see where it is while they are on the page that needs it. The
- * issue body is public, and a raw path carries the user name — the one thing
- * every other line of this feature removes. So the body gets the redacted
- * form, which still tells the user everything they need: they know who they
- * are, and the file name is the part they have to recognise.
- */
 // The pair: the report and the optional log, redacted together
 
 /**
- * THE SHARED REDACTOR IS A CORRECTNESS REQUIREMENT, NOT AN OPTIMISATION.
- *
- * `createRedactor` allocates placeholders in first-seen order against its own
- * table. Redact the report and the log separately and the same folder can be
- * `<USER2>` in one file and `<USER3>` in the other — at which point the pair
- * is worse than either file alone, because a reader comparing them concludes
- * two different accounts were involved and goes looking for a second person
- * who does not exist.
- *
- * The identity's own `devuser` cannot show this: it is reserved up front and
- * always gets `<USER>` whichever redactor runs. The test therefore uses two
- * STRANGERS, mentioned in opposite orders in the two files, which is exactly
- * the case independent passes would number differently.
+ * The report and log share one redactor so placeholders agree. The user's
+ * own name is always <USER>, so the test uses two other accounts mentioned
+ * in opposite orders, which independent redactors would number differently.
  */
 describe('prepareSupportFiles', () => {
   const REPORT = 'report: C:\\Users\\alice\\Pictures then C:\\Users\\bob\\Pictures';
@@ -205,7 +157,7 @@ describe('prepareSupportFiles', () => {
     expect(logText).toContain('<USER2>');
   });
 
-  /** One submission, one receipt. It covers both files or it is not a receipt. */
+  /** One receipt covering both files. */
   it('returns one receipt counting both files', () => {
     const pair = prepareSupportFiles(REPORT, LOG, IDENTITY);
     const reportOnly = prepareSupportFiles(REPORT, null, IDENTITY);
@@ -217,7 +169,7 @@ describe('prepareSupportFiles', () => {
     expect(JSON.stringify(pair.receipt)).not.toContain('alice');
   });
 
-  /** No log asked for means no log text — not an empty string to write. */
+  /** No log requested means null, not an empty string. */
   it('returns null for the log when none was requested', () => {
     const { logText, reportText } = prepareSupportFiles(REPORT, null, IDENTITY);
 
@@ -225,7 +177,7 @@ describe('prepareSupportFiles', () => {
     expect(reportText).toContain('<USER2>');
   });
 
-  /** The single-file wrapper the write endpoint used before still agrees. */
+  /** The single-file wrapper agrees with the pair form. */
   it('matches prepareReportFile for the report alone', () => {
     expect(prepareSupportFiles(REPORT, null, IDENTITY).reportText)
       .toBe(prepareReportFile(REPORT, IDENTITY).text);
@@ -276,7 +228,7 @@ describe('writeReportToDesktop', () => {
     expect(result.bytes).toBeGreaterThan(0);
   });
 
-  /** Readable in Notepad, with no extraction step. That is the whole change. */
+  /** Readable in Notepad, with no extraction step. */
   it('writes the text as plain readable UTF-8, not an archive', () => {
     const result = writeReportToDesktop(dir, '## Problem report\n\nit broke\n', new Date());
 
@@ -290,12 +242,7 @@ describe('writeReportToDesktop', () => {
     expect(fs.existsSync(result.path)).toBe(true);
   });
 
-  /**
-   * The log file goes out through the same writer under a name the caller
-   * chose. The caller names it because both files of one submission must
-   * share a timestamp, and deciding the name in the writer would mean two
-   * `new Date()` calls and a pair that occasionally disagrees by a second.
-   */
+  /** The log goes through the same writer under the caller's name (shared timestamp). */
   it('writes a second file beside the report, under the name it was given', () => {
     const report = writeReportToDesktop(dir, '## report\n', new Date('2026-11-13T18:04:05Z'));
     const log = writeSupportFile(dir, 'coin-inventory-log-2026-11-13-180405.txt', 'a log line\n');

@@ -71,15 +71,8 @@
   color: #8a7a63;
 }
 
-// Fixed-width tiles in a wrapping grid: the number of photos per coin varies
-// from 1 to 10, and auto-fill keeps the rows tidy at every count.
-//
-// 128px, and `object-fit: contain` rather than `cover`, for the same reason
-// as the near-match row: `cover` fills a square by CROPPING, and coins are
-// round and photographed centred, so it shaves the rim off every one of them.
-// The tiles exist to let the user confirm a photo belongs to a coin, which
-// needs the date, mint mark and edge visible. The size costs no extra
-// fetching -- the <img> already points at the full original file.
+// Fixed-width tiles in a wrapping grid. `contain`, not `cover`, so coin rims
+// are not cropped.
 .coin-group-thumbs {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));

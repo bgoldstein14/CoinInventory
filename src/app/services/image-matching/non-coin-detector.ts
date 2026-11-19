@@ -1,42 +1,15 @@
  /*
- * non-coin-detector.ts
+ * Detects images that are not a photograph of one identifiable coin:
  *
- * WHAT THIS FILE OWNS
- *   Deciding that an image is NOT a photograph of one identifiable coin, so
- *   the matcher must not auto-assign it to anything. Public entry point is
- *   `detectNonCoin`.
+ *     group shots    "Gold Coins.JPG", "Ancient Judaica - 8 coins - Obverse.jpg"
+ *     non-coin items "Stamp - 11 - 3 cent.jpg", "3-cent paper - Large.jpg"
+ *     containers     "Sovereign Proof Boxes.jpg"
+ *     camera names   "Coin_026.JPG", "IM000025.JPG"
  *
- * WHY IT IS ITS OWN FILE
- *   Roughly one image in ten on the share is not a single coin. Four different
- *   kinds, all from the real collection:
- *
- *     GROUP SHOTS    "Gold Coins.JPG", "20th Century Type Set.JPG",
- *                    "Ancient Judaica - 8 coins - Obverse.jpg",
- *                    "Canadian Cents - Part 1.jpg",
- *                    "Half Dimes and Cap and Rays.jpg"
- *     NON-COIN ITEMS "Stamp - 11 - 3 cent.jpg", "CSA Bond Coupon.jpg",
- *                    "3-cent paper - Large.jpg",
- *                    "3-cent Fractional - FR1227.jpg"
- *     CONTAINERS     "Sovereign Proof Boxes.jpg"
- *     CAMERA NAMES   "Coin_026.JPG", "IM000025.JPG"
- *
- *   Two of those are outright traps, and they are the reason this check is a
- *   hard veto rather than a score penalty:
- *
- *       "Stamp - 11 - 3 cent.jpg"        contains a valid "3 cent"
- *       "3-cent paper - Large.jpg"       contains a valid "3-cent"
- *
- *   Both would otherwise score respectably against a genuine Three Cent coin.
- *   A stamp filed under a coin is exactly the silent mis-attachment the whole
- *   matcher is built to avoid, so a positive verdict here overrides every
- *   score: match-decider.ts returns 'none' immediately and offers no
- *   candidates at all.
- *
- *   WHY IT WORKS ON THE RAW FILENAME
- *   Plurals are the single strongest group-shot signal ("Coins", "Cents",
- *   "Dimes"), but `text-tokens.singularize` has already destroyed them by the
- *   time tokens exist -- "coins" arrives as "coin", which is a perfectly
- *   normal word for a single-coin photo. So this module reads the raw name.
+ * A positive verdict is a hard veto (match-decider.ts returns 'none'), since
+ * items like "Stamp - 11 - 3 cent" carry a valid-looking denomination and
+ * would otherwise score well. Works on the raw filename because plurals, the
+ * strongest group-shot signal, are lost once tokens are singularized.
   */
 
 import {
@@ -59,28 +32,18 @@ export interface NonCoinVerdict {
 const IS_A_COIN: NonCoinVerdict = { isNonCoin: false, reason: null };
 
 /**
- * Camera and scanner default names: a device prefix followed by nothing but a
- * sequence number. "Coin_026", "IM000025", "IMG_0042", "DSC00031".
- *
- * These are already very likely to parse to nothing at all, but naming them
- * explicitly lets the UI say WHY the file was skipped instead of shrugging.
+ * Camera and scanner default names ("Coin_026", "IMG_0042", "DSC00031").
+ * Detected explicitly so the UI can say why the file was skipped.
  */
 const CAMERA_DEFAULT_NAME =
   /^(coin|coins|img|im|ims|dsc|dscn|dscf|pict|pic|photo|image|scan|mvimg|pxl|p|gopr|pano)[\s_-]*\d{1,8}$/i;
 
-/**
- * "8 coins", "3 Coins", "12 coin" -- an explicit count in front of the word.
- * Written separately from the plural list because "1 coin" is fine and this
- * needs to catch "8 coin" too (post-singularization spellings vary by hand).
- */
+/** An explicit count of coins: "8 coins", "12 coin". */
 const COUNTED_COINS = /\b\d{1,3}\s*coins?\b/i;
 
 /**
  * Decide whether a filename describes something other than one single coin.
- *
- * Checks run cheapest-and-most-certain first. The first hit wins; there is no
- * scoring or weighing here, because every one of these signals is on its own
- * sufficient reason to stop and ask the user.
+ * The first matching check wins.
  *
  * @param rawText Extension-stripped filename, original case and punctuation.
  */
@@ -104,8 +67,7 @@ export function detectNonCoin(rawText: string): NonCoinVerdict {
     };
   }
 
-  // 3. Items that are not coins. Highest-stakes check: a stamp or a piece of
-  //    fractional currency can carry a perfectly valid-looking denomination.
+  // 3. Items that are not coins (stamps, fractional currency).
   const item = firstWordIn(text, NON_COIN_ITEM_WORDS);
   if (item) {
     return {
@@ -123,8 +85,7 @@ export function detectNonCoin(rawText: string): NonCoinVerdict {
     };
   }
 
-  // 5. A PLURAL denomination: "Gold Coins", "Canadian Cents", "Half Dimes".
-  //    This is the check that needs the raw filename -- see the header.
+  // 5. A plural denomination: "Gold Coins", "Canadian Cents", "Half Dimes".
   const plural = firstWordIn(text, PLURAL_DENOMINATION_WORDS);
   if (plural) {
     return {
@@ -137,38 +98,16 @@ export function detectNonCoin(rawText: string): NonCoinVerdict {
 }
 
  /*
- * EXCLUSION FROM THE AUTOMATED IMPORT
+ * Exclusion from the automated import (multi-coin shots).
  *
- * A SECOND, STRONGER VERDICT -- AND WHY IT IS NOT JUST `isNonCoin`.
- *
- * Two groups of photographs on the share get the same treatment:
- * COUNTERFEITS (8 files) and MULTI-COIN SHOTS (22 files) are never attached
- * automatically AND never offered as attachable in the automated import.
- *
- * `isNonCoin` already means "never auto-assign this". What it does NOT mean
- * is "never OFFER this": a tier-3 row still carries the opt-in "Attach
- * anyway..." link, and that link IS the offer these rows must not get. So
- * this verdict is reported separately, and the decision layer suppresses the
- * rescue affordance for it. That difference is the whole reason this is not
- * simply four more entries in GROUP_SHOT_WORDS.
- *
- * *** WHAT THIS VERDICT IS NOT ***
- * It is advice to the AUTOMATED MATCHER and nothing else. No picture file may
- * ever be off limits from being attached to a coin by hand, however
- * irrelevant its descriptor -- it may be an article about the coin rather
- * than a photograph of it. So an excluded file is still read, still listed,
- * still has its parse shown, and is still freely attachable from the per-coin
- * image gallery, which never consults this module. The row stays VISIBLE in
- * the "Not imported" table with a plain reason, because "where did my photo
- * go?" is the one question the importer must never leave a user asking.
- *
- * The governing principle, which is where both halves come from: an image can
- * always be forced onto a coin manually, but the automated process should be
- * very discriminatory.
+ * Stronger than `isNonCoin`: the photo is neither auto-attached nor offered
+ * via tier 3's "Attach anyway..." link. It only affects the automated
+ * matcher; the file stays listed in "Not imported" with a reason and can
+ * still be attached by hand from the coin's image gallery.
   */
 
 /** Which kind of thing the exclusion marker said this photograph was. */
-export type AutoImportExclusionKind = 'counterfeit' | 'multi-coin';
+export type AutoImportExclusionKind = 'multi-coin';
 
 /** Whether (and why) a photograph is held back from the automated importer. */
 export interface AutoImportExclusion {
@@ -188,43 +127,17 @@ const NOT_EXCLUDED: AutoImportExclusion = { excluded: false, kind: null, reason:
 
 /**
  * Decide whether a photograph is held back from the automated import run.
+ * Markers match as whole words, case-insensitively.
  *
- * Markers are matched as WHOLE TOKENS, case-insensitively, with the same
- * `\b`-anchored convention the cert-company and side-word matching already
- * use -- so "fake" can never fire inside a longer word.
- *
- * @param rawText Extension-stripped FILENAME -- the basename only, never the
- *                path. A marker in a FOLDER name says nothing about the file:
- *                "Proofs/1870 Proof Set/Archive/IM000037.JPG" is one photo
- *                filed under a set, not a photograph OF the set. `parseFilename`
- *                takes the basename before calling here, which is what makes
- *                that true, and there is a test pinning it.
+ * @param rawText Extension-stripped basename only; a marker in a folder name
+ *                ("Proofs/1870 Proof Set/...") says nothing about the file.
  */
 export function detectAutoImportExclusion(rawText: string): AutoImportExclusion {
   const text = String(rawText ?? '').trim();
   if (!text) return NOT_EXCLUDED;
 
-  /* COUNTERFEITS. Checked first because they are the dangerous half: a fake
-   * carries a complete and perfectly valid descriptor ("FAKE - 1860 3CS - VF
-   * - Obverse") and would otherwise score exactly as well against a genuine
-   * 1860 three-cent silver as a photograph of one. The inventory holds five
-   * real 1861 3CS records, which is precisely where that collision lands. */
-  const fake = firstWordIn(text, COUNTERFEIT_MARKER_WORDS);
-  if (fake) {
-    return {
-      excluded: true,
-      kind: 'counterfeit',
-      reason:
-        `The filename says "${fake}", so this is a photograph of a counterfeit. ` +
-        'Counterfeits are left out of the automated import entirely ' +
-        '("Ignore the Fake coins"). You can still attach it to any coin by hand ' +
-        "from that coin's image gallery."
-    };
-  }
-
-  /* MULTI-COIN SHOTS. Several coins in one frame, so there is no single coin
-   * for the matcher to be right about: it could only ever pick one of them and
-   * call that the answer. */
+  // Counterfeits are not excluded; they are matched normally and kept apart
+  // from genuine coins by the authenticity veto (see detectCounterfeit).
   const many = firstWordIn(text, MULTI_COIN_MARKER_WORDS);
   if (many) {
     return {
@@ -243,12 +156,18 @@ export function detectAutoImportExclusion(rawText: string): AutoImportExclusion 
 
 
 /**
- * First word from `words` that appears in `text` as a whole word.
- *
- * Whole-word matching is essential rather than convenient: substring matching
- * would find "set" inside "Type Setting", "part" inside "Sparta", and "note"
- * inside "Notes" -- the sort of over-eager matching that produced the bugs
- * this whole directory was written to fix.
+ * Does this text say the coin is a counterfeit ("fake", "counterfeit",
+ * "replica")? Used on both the filename and the coin record so they agree;
+ * feeds the authenticity veto in match-vetoes.ts.
+ */
+export function detectCounterfeit(rawText: string): boolean {
+  const text = String(rawText ?? '').trim();
+  return !!text && firstWordIn(text, COUNTERFEIT_MARKER_WORDS) !== null;
+}
+
+/**
+ * First word from `words` that appears in `text` as a whole word (so "part"
+ * does not match inside "Sparta").
  */
 function firstWordIn(text: string, words: readonly string[]): string | null {
   for (const word of words) {

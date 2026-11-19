@@ -1,23 +1,10 @@
 /**
- * routes/data/spot-prices.ts — precious-metal spot prices.
+ * Precious-metal spot prices. Mounted at /api:
  *
- * Two different things share this prefix, which is worth being clear about:
- *
- *   GET  /spot-prices/latest  reads the most recent row we SAVED in SQL Server
- *   GET  /spot-prices/fetch   calls out to COMEX/NYMEX futures for LIVE
- *                             prices — it touches no database at all
- *   POST /spot-prices         saves a set of prices as a new history row
- *
- * Mounted (via routes/data/index.ts) at /api, so those become
- * /api/spot-prices/latest and so on.
- *
- * The /fetch handler is the only outbound HTTP call in the whole backend; the
- * call itself lives in ./spot-price-source. It deliberately answers 200 with
- * zeroed prices and an `error` field when the upstream call fails, rather than
- * erroring the request — the frontend treats missing spot prices as "unknown",
- * and a dead third-party API should not make the app look broken.
- *
- * Database calls go through `withDb()`; parameter types come from DB_BINDINGS.
+ *   GET  /spot-prices/latest  the most recently saved row
+ *   GET  /spot-prices/fetch   live COMEX/NYMEX futures prices (no database;
+ *                             the outbound call is in ./spot-price-source)
+ *   POST /spot-prices         save a set of prices as a new history row
  */
 
 import { Router, Request, Response } from 'express';
@@ -61,17 +48,10 @@ router.get('/spot-prices/latest', async (_req: Request, res: Response) => {
 });
 
 /**
- * Fetches live prices from COMEX/NYMEX futures. Touches no database.
- *
- * The actual outbound call lives in ./spot-price-source so this route stays
- * about HTTP shape, and so the upstream can be swapped without touching
- * routing code.
- *
- * Answers 200 on failure, with zeroed prices and an `error` field: the
- * frontend treats missing prices as "unknown", and a dead third-party API
- * should not make the app look broken. It also reports *which* metals
- * failed, so a zero is never silently presented as a real price — that is
- * how a dead upstream goes unnoticed for months.
+ * Fetches live prices from COMEX/NYMEX futures. On failure it still answers
+ * 200, with zeroed prices and an `error` field (the frontend treats missing
+ * prices as unknown), and lists which metals failed so a zero is never
+ * presented as a real price.
  */
 router.get('/spot-prices/fetch', async (_req: Request, res: Response) => {
   try {
@@ -81,15 +61,13 @@ router.get('/spot-prices/fetch', async (_req: Request, res: Response) => {
       prices,
       source,
       timestamp: new Date().toISOString(),
-      // Only present when something went wrong, so existing callers that just
-      // check for `error` keep working unchanged.
+      // Only present on failure, so callers checking `error` are unaffected.
       ...(failed.length
         ? { error: `No price available for: ${failed.join(', ')}`, failed }
         : {}),
     });
   } catch (err) {
-    // fetchSpotPrices() is written not to throw, so reaching here means
-    // something unexpected broke. Keep the same graceful-degradation shape.
+    // fetchSpotPrices() shouldn't throw; keep the same degraded shape.
     logError('Spot price fetch failed unexpectedly', err);
     res.json({
       prices: { gold: 0, silver: 0, platinum: 0, copper: 0 },
@@ -101,25 +79,13 @@ router.get('/spot-prices/fetch', async (_req: Request, res: Response) => {
 });
 
 /**
- * Is every metal in this set zero (or missing)?
- *
- * A PRECIOUS METAL NEVER TRADES AT ZERO, so a zero is not a cheap price — it
- * is the absence of a price, and storing it is storing nothing while looking
- * like something. That matters more here than anywhere else in the app:
- * `GET /spot-prices/latest` reads the most recent row back, and the client
- * applies it at start-up. One all-zero row therefore poisons every melt value
- * on every subsequent launch until another save displaces it.
- *
- * Deliberately ALL and not ANY. Partial data is legitimate and common: the
- * four metals are fetched as independent symbols, so silver can succeed while
- * platinum fails, and a user may only care about gold. One real price among
- * three zeros is a good row — the zeros just mean "no price for that metal",
- * which is exactly how computeMeltValue reads them on the client.
+ * Is every metal zero or missing? A precious metal never trades at zero, so an
+ * all-zero row is no data, and since the client applies the latest row at
+ * start-up it would break melt values until replaced. All, not any: partial
+ * sets are normal (metals are fetched independently).
  */
 function isAllZero(prices: { gold?: unknown; silver?: unknown; platinum?: unknown; copper?: unknown }): boolean {
-  // Non-numeric and missing values count as zero: they are no more a price
-  // than 0 is, and Number(undefined) is NaN rather than 0, so this has to be
-  // explicit rather than relying on arithmetic.
+  // Missing or non-numeric counts as zero (Number(undefined) is NaN, so be explicit).
   const asNumber = (value: unknown): number => {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -135,11 +101,8 @@ router.post('/spot-prices', async (req: Request, res: Response) => {
   try {
     const { gold, silver, platinum, copper, source } = req.body ?? {};
 
-    // Refuse an all-zero set outright. The Angular client already guards
-    // against this, but a client-side guard is advice, not a rule: anything
-    // else that can reach this port (a retry, a script, a stale build) could
-    // otherwise write a row that silently breaks melt values for good. The
-    // invariant belongs at the boundary that does the writing.
+    // Refuse all-zero sets here too; the client's guard can't cover every
+    // caller (retries, scripts, stale builds).
     if (isAllZero({ gold, silver, platinum, copper })) {
       logWarn('POST /api/spot-prices — refused an all-zero price set (a metal never trades at zero, so this is missing data, not a price)');
       res.status(400).json({
@@ -163,10 +126,7 @@ router.post('/spot-prices', async (req: Request, res: Response) => {
           RETURNING SpotPriceId, FetchedAt
         `);
 
-      // The OUTPUT clause should always give exactly one row, but a trigger or
-      // a driver quirk can swallow it, and reading [0]['SpotPriceId'] off an
-      // empty recordset throws "Cannot read properties of undefined". Return
-      // null and handle it below.
+      // RETURNING should give one row; return null rather than throw if it doesn't.
       return result.recordset[0] ?? null;
     });
 

@@ -1,10 +1,7 @@
 /*
- * routes/lookups/wikidata-denominations.spec.ts
- *
- * The query text and the parsing, with no network. These are the two halves
- * of the lookup that can be wrong QUIETLY: a query that silently matches
- * nothing and a parser that silently drops everything look identical from
- * the outside to a lookup that correctly found nothing.
+ * The Wikidata query text and response parsing, without a network. A query
+ * matching nothing or a parser dropping everything would look like a lookup
+ * that found nothing.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -33,8 +30,7 @@ function resultsFor(labels: string[]): unknown {
 
 describe('sparqlLiteral', () => {
   it('escapes the backslash before the quote', () => {
-    // The other order turns one backslash into an escaped quote and the
-    // query stops parsing where the author did not intend.
+    // Backslash first, or the escaping breaks.
     expect(sparqlLiteral('a\\b')).toBe('a\\\\b');
     expect(sparqlLiteral('He said "no"')).toBe('He said \\"no\\"');
     expect(sparqlLiteral('back\\"slash')).toBe('back\\\\\\"slash');
@@ -48,17 +44,14 @@ describe('buildDenominationQuery', () => {
   });
 
   it('cannot be broken out of by a name with a quote in it', () => {
-    // Not a security boundary -- the endpoint is read-only and public --
-    // but an unescaped quote makes the query fail to parse, which would
-    // reach the user as "the lookup is broken" for a legal issuer name.
+    // Not a security boundary (read-only public endpoint), but an unescaped
+    // quote would break the query for a legal name.
     const query = buildDenominationQuery('Côte d"Ivoire');
     expect(query).toContain('mwapi:search "Côte d\\"Ivoire"');
   });
 
   it('asks the endpoint to resolve the name instead of scanning every label', () => {
-    // THE REASON THIS SHAPE EXISTS. Matching the typed name against every
-    // rdfs:label in Wikidata timed the endpoint out (HTTP 504 after 65s)
-    // on 'Burma'. EntitySearch is the documented cheap route.
+    // A full label scan timed out (504 after 65 s); EntitySearch is the cheap route.
     const query = buildDenominationQuery('Burma');
     expect(query).toContain('SERVICE wikibase:mwapi');
     expect(query).toContain('bd:serviceParam wikibase:api "EntitySearch"');
@@ -66,7 +59,7 @@ describe('buildDenominationQuery', () => {
   });
 
   it('names the two classes explicitly rather than walking the subclass tree', () => {
-    // The other half of the timeout. wdt:P31/wdt:P279* is unbounded.
+    // A transitive subclass walk is unbounded too.
     const query = buildDenominationQuery('Burma');
     expect(query).toContain('VALUES ?class { wd:Q41207 wd:Q8142 }');
     expect(query).not.toContain('wdt:P279*');
@@ -89,9 +82,7 @@ describe('buildDenominationQueryUrl', () => {
 
 describe('the user agent', () => {
   it('identifies the application and says nothing about who is running it', () => {
-    // Wikimedia asks automated clients to identify themselves. It does not
-    // ask whose coin collection this is, and the app must not volunteer a
-    // user name, a machine name or an install path.
+    // Identifies the app only; no user, machine or path.
     expect(LOOKUP_USER_AGENT).toContain('CoinInventory');
     expect(LOOKUP_USER_AGENT).not.toMatch(/@/);
     expect(LOOKUP_USER_AGENT.toLowerCase()).not.toContain('user');
@@ -105,9 +96,7 @@ describe('parseDenominationResults', () => {
   });
 
   it('returns nothing rather than throwing for any shape at all', () => {
-    // The input is a third party's JSON over a network. Every one of these
-    // must land on the same path as "found nothing", because an exception
-    // here would become an error dialog for the commonest outcome.
+    // Any unexpected shape must mean "found nothing", never an exception.
     for (const payload of [null, undefined, 42, 'text', {}, { results: {} }, { results: { bindings: 'no' } }, []]) {
       expect(parseDenominationResults(payload), JSON.stringify(payload) ?? 'undefined').toEqual([]);
     }
@@ -121,9 +110,7 @@ describe('parseDenominationResults', () => {
 
 describe('normaliseProposals', () => {
   it('drops the bare item id an unlabelled entity comes back as', () => {
-    // SERVICE wikibase:label falls back to the Q-number when there is no
-    // English label, so 'Q4087051' arrives looking like a denomination.
-    // It was in the real answer for 'Burma'.
+    // Unlabelled items come back as their Q-number.
     expect(normaliseProposals(['Q4087051', 'kyat'])).toEqual(['kyat']);
   });
 
@@ -132,10 +119,7 @@ describe('normaliseProposals', () => {
   });
 
   it('folds two spellings of one coin into one proposal', () => {
-    // Offering both invites the user to accept both, and two rows with the
-    // same label under one issuer make every coin carrying that text
-    // resolve as AMBIGUOUS -- which resolves to NULL. The duplicate would
-    // not add a denomination, it would take one away.
+    // Case variants are one proposal; duplicates under one issuer make resolution ambiguous.
     expect(normaliseProposals(['Kyat', 'kyat', 'KYAT'])).toEqual(['Kyat']);
   });
 

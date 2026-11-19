@@ -1,8 +1,5 @@
-/*
- * The import filter's definition of "sold", tested on the two cases that
- * pass review and fail on a real sheet: a sold price of ZERO, and a sold
- * field holding nothing but SPACES.
- */
+// The import filter's definition of "sold": a sold price of 0 counts as sold,
+// and a whitespace-only sold field does not.
 import { describe, expect, it } from 'vitest';
 import { SOLD_RULE_SENTENCE, isSoldRecord } from './import-sold';
 
@@ -25,12 +22,8 @@ describe('isSoldRecord', () => {
     expect(isSoldRecord({ soldTo: 'Tollgate Rarities' })).toBe(true);
   });
 
-  /* ---- THE ZERO CASE ---- */
-
   it('COUNTS A SOLD PRICE OF 0 AS SOLD', () => {
-    // A coin given away, written off, or traded at no cash value. `if
-    // (soldPrice)` reads this as never sold, hands the row back in an
-    // import the user asked to be free of sold coins, and nothing says so.
+    // Coins given away or written off at no cash value.
     expect(isSoldRecord({ soldPrice: 0 })).toBe(true);
   });
 
@@ -39,16 +32,11 @@ describe('isSoldRecord', () => {
   });
 
   it('does not count a price that is not a number', () => {
-    // An unparseable cell is not a price. NaN is the only "number" that is
-    // not present.
+    // An unparseable cell is not a price.
     expect(isSoldRecord({ soldPrice: Number.NaN })).toBe(false);
   });
 
-  /* ---- THE WHITESPACE CASE ---- */
-
   it('DOES NOT COUNT A WHITESPACE-ONLY BUYER AS SOLD', () => {
-    // One stray space bar in a spreadsheet cell would otherwise mark the
-    // coin sold and hide it from the default import.
     expect(isSoldRecord({ soldTo: '   ' })).toBe(false);
   });
 

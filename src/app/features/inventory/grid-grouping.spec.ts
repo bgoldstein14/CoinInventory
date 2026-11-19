@@ -1,10 +1,4 @@
-/*
- * The rules for folding the main grid into groups.
- *
- * Everything under test here is pure, which is the point: the suite runs
- * under Node with no jsdom, so a grouping rule decided inside a template
- * could not be tested at all.
- */
+// Rules for folding the main grid into groups.
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
 import { inventoryColumnOrder } from '../../types/inventory-columns';
@@ -68,8 +62,7 @@ describe('which columns may be grouped by', () => {
   });
 
   it('refuses a column that no longer exists at all', () => {
-    // `Source` was dropped from the grid; a saved grouping naming it must
-    // not get through this gate.
+    // `source` is no longer a grid column.
     expect(isGroupableColumn('source')).toBe(false);
     expect(isGroupableColumn('')).toBe(false);
     expect(isGroupableColumn(null)).toBe(false);
@@ -77,8 +70,6 @@ describe('which columns may be grouped by', () => {
   });
 
   it('has a declared kind for every column in the grid', () => {
-    // The Record is exhaustive at compile time; this is the runtime half,
-    // so the next money column cannot slip into the menu by accident.
     for (const column of inventoryColumnOrder) {
       expect(GROUPING_COLUMN_KINDS[column]).toBeDefined();
     }
@@ -155,8 +146,7 @@ describe('bucketing rows', () => {
   });
 
   it('keeps the rows inside a group in the order the sort put them', () => {
-    // buildCoinGroups partitions; it never re-sorts. The grid is already
-    // sorted by Year when it gets here, and every group stays that way.
+    // Input is already sorted by Year; grouping must not re-sort.
     const byYear = [
       coin({ id: 'old', country: 'Mexico', year: '1878' }),
       coin({ id: 'mid', country: 'France', year: '1900' }),
@@ -167,8 +157,6 @@ describe('bucketing rows', () => {
   });
 
   it('turns the group order round only when the sort column IS the grouping column', () => {
-    // Sorting by Year while grouped by Country sorts the rows inside each
-    // country; it must not reverse the country list as a side effect.
     const groups = buildCoinGroups(coins, 'country', {
       sort: { column: 'year', direction: 'desc' }
     });
@@ -177,8 +165,7 @@ describe('bucketing rows', () => {
 
   it('groups by the FORMATTED cell, so the heading says what the column says', () => {
     const status = coin({ collectionStatus: undefined });
-    // A coin with no stored status is Owned, and the heading must say so
-    // rather than inventing an empty bucket the grid does not show.
+    // No stored status displays as Owned.
     expect(groupKeyFor(status, 'collectionStatus')).toBe('Owned');
     expect(buildCoinGroups([status], 'collectionStatus')[0].isEmptyBucket).toBe(false);
   });
@@ -207,9 +194,6 @@ describe('what a collapsed heading has to say for itself', () => {
   });
 
   it('never sums a want list into the money', () => {
-    // The whole reason the total goes through sumCurrentValue: a wanted
-    // coin is one the owner is dreaming about, and adding it to a heading
-    // reports a collection bigger than the one in the safe.
     const groups = buildCoinGroups([
       coin({ country: 'Mexico', currentValue: 100, collectionStatus: 'owned' }),
       coin({ country: 'Mexico', currentValue: 900, collectionStatus: 'wanted' })
@@ -229,9 +213,6 @@ describe('which groups are open', () => {
   });
 
   it('shuts a group nobody has ever seen — which a set of folded headings cannot', () => {
-    // Collapse all with a search running, clear the search, and the groups
-    // that were off screen must still be shut. This is the whole reason the
-    // state is a default plus exceptions.
     const state = collapseAllGroups();
     expect(isGroupExpanded(state, 'A country imported five minutes from now')).toBe(false);
   });
@@ -326,9 +307,7 @@ describe('remembering the grouping, and surviving what was remembered', () => {
       column: 'country',
       collapsedByDefault: true,
       exceptions: ['Mexico'],
-      // The user's dragged group order travels in the same blob — one key
-      // for all three, see StoredGroupingState. Empty here because nothing
-      // has been dragged; group-order.spec.ts owns what goes in it.
+      // Dragged group orders; covered in group-order.spec.ts.
       orders: {}
     });
 
@@ -339,9 +318,6 @@ describe('remembering the grouping, and surviving what was remembered', () => {
   });
 
   it('degrades a grouping by a DELETED column to the flat grid', () => {
-    // `Source` was removed from the grid. A saved grouping naming it must
-    // not throw and must not leave the user looking at something he cannot
-    // explain — it simply is not a grouping any more.
     const restored = restoreGrouping({ column: 'source', collapsedByDefault: true, exceptions: [] });
     expect(restored.column).toBeNull();
   });
@@ -375,5 +351,17 @@ describe('remembering the grouping, and surviving what was remembered', () => {
   it('remembers an expanded-by-default state as well as a collapsed one', () => {
     const stored = serializeGrouping('country', expandAllGroups());
     expect(restoreGrouping(stored).expansion.collapsedByDefault).toBe(false);
+  });
+});
+
+describe('grouping by catalogue reference', () => {
+  it('groups under the main reference, without the (+N) count', () => {
+    const catalogs = [
+      { catalogId: 1, name: 'Sear', sortOrder: 1, isActive: true },
+      { catalogId: 2, name: 'RIC', sortOrder: 2, isActive: true }
+    ];
+    const coin = { id: 'g', catalogRefs: [{ catalogId: 2, catalogNumber: '123' }, { catalogId: 1, catalogNumber: '6819' }] } as unknown as CoinRecord;
+    expect(groupKeyFor(coin, 'catalogReference', { catalogs })).toBe('Sear 6819');
+    expect(groupKeyFor({ id: 'h' } as unknown as CoinRecord, 'catalogReference', { catalogs })).toBeNull();
   });
 });

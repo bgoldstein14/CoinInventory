@@ -9,8 +9,7 @@ import {
 /** Minimal File stand-in: the filter only ever looks at `name`. */
 function file(name: string, size = 1024): File {
   return new File(['x'], name, { type: 'application/octet-stream' });
-  // NOTE: `size` is intentionally unused - the filter must NOT read the file,
-  // which is the whole point of doing this step before anything expensive.
+  // `size` is unused: the filter must not read the file.
 }
 
 describe('image-file-filter', () => {
@@ -89,8 +88,7 @@ describe('image-file-filter', () => {
   });
 
   it('does not trust a misleading MIME type over the extension', () => {
-    // Windows commonly reports image/x-adobe-dng for RAW. The old
-    // file.type.startsWith('image/') test let these straight through.
+    // Windows commonly reports image/x-adobe-dng for RAW.
     const raw = new File(['x'], 'sneaky.dng', { type: 'image/x-adobe-dng' });
     // ...and sometimes reports nothing at all for a perfectly good .webp.
     const webp = new File(['x'], 'fine.webp', { type: '' });

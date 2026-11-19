@@ -1,9 +1,4 @@
-<!--
-  One coin's proposed photos.
-
-  The header is always rendered; the thumbnail grid only when `expanded()` is
-  true, because each <img> pulls a multi-megabyte JPEG off the share.
--->
+<!-- One coin's proposed photos. Thumbnails render only when expanded. -->
 <div class="coin-group" [class.coin-group--empty]="group().selectedCount === 0">
 
   <!-- Header: coin, counts, expand toggle. -->
@@ -20,9 +15,7 @@
     </span>
   </button>
 
-  <!-- Bulk tick-box controls for THIS coin. Shown whether or not the group is
-       expanded: the whole point is that the user can thin out a 10-photo coin
-       without ever opening it. -->
+  <!-- Bulk controls for this coin, available without expanding. -->
   <div class="coin-group-bulk">
     <button type="button" class="secondary small-button" (click)="bulkAction.emit('keep-obverse-reverse')">
       Keep only Obverse + Reverse
@@ -40,12 +33,7 @@
     <button type="button" class="secondary small-button" (click)="bulkAction.emit('select-all')">All</button>
     <button type="button" class="secondary small-button" (click)="bulkAction.emit('deselect-all')">None</button>
 
-    <!-- SKIP, as opposed to "None".
-         Unticking leaves the coin in this list with 0 of 8 selected, which is
-         right when you are still choosing. Skip says "I am done with this
-         coin, take it off my screen" and drops the whole group out of the
-         list. Skip belongs wherever there is an apparent match — tier 1 here
-         and the near-match tier. Tier 3 deliberately has neither. -->
+    <!-- Skip removes the coin from the list; "None" only unticks its photos. -->
     <button type="button" class="secondary small-button" (click)="skipped.emit(group().coinId)">
       Skip this coin
     </button>
@@ -66,7 +54,6 @@
                 [attr.aria-label]="'Include ' + row.fileName"
               />
               @if (thumbnailFor(row)) {
-                <!-- loading="lazy" so a long list only decodes what is visible. -->
                 <img [src]="thumbnailFor(row)" alt="" class="photo-tile-img" loading="lazy" />
               } @else {
                 <span class="photo-tile-img photo-tile-img--placeholder">No preview</span>

@@ -1,42 +1,13 @@
 /*
  * report-html.ts — a ReportDocument as one self-contained printable page.
- *
- * WHY A STRING, AND NOT AN ANGULAR TEMPLATE
- *
- * 1. IT IS TESTABLE. The frontend suite runs under Node with NO jsdom, so an
- *    Angular template's output cannot be inspected at all. A pure
- *    `ReportDocument -> string` function can be, and the things worth
- *    checking — that a coin's text is escaped, that the pagination rules are
- *    present, that the "NOT included in this total" caveat reaches the page —
- *    are all assertable without a browser.
- *
- * 2. IT IS ISOLATED. The page is written into a brand-new window that has
- *    none of this app's stylesheets. Everything it needs is inline, so what
- *    prints cannot be changed by an unrelated edit to styles.scss, and the
- *    report cannot inherit the dark-on-cream palette that is right on screen
- *    and wasteful on paper.
- *
- * 3. IT SURVIVES THE SHELL. The app is packaged into a webview; a separate
- *    print window goes through the same Chromium print path either way, and
- *    a self-contained document renders identically in both.
- *
- * ESCAPING IS NOT OPTIONAL HERE. Every cell on this page came out of a
- * database filled by CSV import, `.xlsx` import, Quicken QIF import and a
- * free-text editor. A coin type of `<img onerror=...>` is not a likely attack
- * in a single-user local app, but it IS a likely accident — an apostrophe or
- * an ampersand in a variety name is enough to mangle or truncate the
- * document. Every piece of record data below goes through escapeHtml().
+ * A plain string (not an Angular template) so it is testable without a DOM
+ * and carries its own inline styles. All record data goes through
+ * escapeHtml(), since imported text can contain <, & or quotes.
  */
 
 import { ReportDocument } from './report-types';
 
-/**
- * HTML-escape a string.
- *
- * The ampersand is replaced FIRST and that order is load-bearing: doing `<`
- * first would turn `<` into `&lt;` and then the ampersand pass would turn
- * that into `&amp;lt;`, printing the literal text "&lt;" on the page.
- */
+/** HTML-escape a string. `&` must be replaced first to avoid double-escaping. */
 export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -47,23 +18,8 @@ export function escapeHtml(value: string): string {
 }
 
 /**
- * The print stylesheet. The three rules that do the actual work:
- *
- * `thead { display: table-header-group }` repeats the column headings at the
- *   top of every printed page. Without it a forty-page schedule has headings
- *   on page one and anonymous columns of numbers on pages two to forty.
- *
- * `tr { break-inside: avoid }` stops a coin being split across a page break,
- *   which with photographs in the row is the difference between a readable
- *   document and one where half the pictures are sliced in two.
- *
- * `@page { margin }` gives the printer something to hold. Browsers default to
- *   a margin that varies by platform, and a table set to 100% width will
- *   happily run into the unprintable edge.
- *
- * Everything else is making it look like a document rather than a web page:
- * a serif face, black on white (a cream background would be printed, wasting
- * ink on every page), and hairline rules instead of the app's chrome.
+ * The print stylesheet: headings repeat on every page, rows never split
+ * across a page break, and a fixed @page margin keeps the table printable.
  */
 const PRINT_STYLES = `
   @page { size: letter; margin: 0.6in 0.5in; }
@@ -153,13 +109,10 @@ function renderHead(doc: ReportDocument): string {
 
 function renderTable(doc: ReportDocument): string {
   if (doc.rows.length === 0) {
-    // Not an empty table with a header row: an empty table looks like a
-    // rendering failure, whereas a sentence is an answer.
     return '<p class="empty">No coins to report. Nothing matched the current filters.</p>';
   }
 
   // The photo column only exists when there is at least one photograph.
-  // An always-present column of blanks wastes an inch of every page.
   const photoHeader = doc.hasImages ? '<th>Photographs</th>' : '';
 
   const headCells = doc.columns
@@ -174,8 +127,7 @@ function renderTable(doc: ReportDocument): string {
       })
       .join('');
 
-    // `data:` URLs only -- thumbnails this app produced itself, so the
-    // value is never user-typed text.
+    // App-generated `data:` URLs, never user-typed text.
     const photos = doc.hasImages
       ? `<td class="photos">${row.images.map(image => `<img src="${escapeHtml(image)}" alt="">`).join('')}</td>`
       : '';
@@ -222,11 +174,8 @@ function renderNotes(doc: ReportDocument): string {
 }
 
 /**
- * The whole page, ready to be written into a print window.
- *
- * `<!DOCTYPE html>` matters: without it the window renders in quirks mode,
- * where `border-collapse` and the `@page` rules behave differently, so the
- * printed output would not match what was designed.
+ * The whole page, ready to be written into a print window. The doctype keeps
+ * the window out of quirks mode, where table and @page rules behave differently.
  */
 export function renderReportHtml(doc: ReportDocument): string {
   return `<!DOCTYPE html>

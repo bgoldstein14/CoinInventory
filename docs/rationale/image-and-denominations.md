@@ -2,15 +2,11 @@
 
 This file holds the longer explanations behind three subsystems:
 `src/app/services/image-matching/`, `src/app/services/image-import/` and
-`src/app/services/denominations/`. It is background reading, not
-documentation of the current API — the rules that constrain an edit still live
-beside the code they constrain, and the code is the authority wherever the two
+`src/app/services/denominations/`. The mechanics (pipeline, weights, gates,
+tiers, photo sets) are described in
+[how-it-works.md](../how-it-works.md#image-matching-engine); this file says
+why they are shaped that way. The code is the authority wherever the two
 appear to differ.
-
-It exists because the same arguments were previously written out in full in
-three or four files each. Everything below is the version you would want if
-you were new to the codebase and wondered *why on earth* some of these rules
-are shaped the way they are.
 
 ---
 
@@ -39,7 +35,7 @@ you know the reasoning:
 - a second shot of a proof coin whose filename omits "PF" is refused against
   its own record (see "Silence is a statement" below).
 
-Both were weighed and accepted.
+Both are accepted costs; the photo stays listed and can be attached by hand.
 
 ## Numismatics the code depends on
 
@@ -59,7 +55,11 @@ a date cannot separate them:
 
 A denomination FIELD records the face value; a PHOTOGRAPH shows the coin.
 They are not the same fact, which is why `reference-tables.ts` has generic
-keys standing over specific ones rather than one key per face value.
+keys standing over specific ones rather than one key per face value, and why
+a filename's generic denomination never auto-attaches when two or more of its
+specific forms survive the vetoes. The seed stores half dimes and nickels both
+as `5¢` and large and small cents both as `1¢`, so on real records only the
+three-cent case of that rule can occur.
 
 **The Eagle is two unrelated coin families fifty years apart.** The classic
 gold Eagle ($10), Double Eagle ($20), Half Eagle ($5) and Quarter Eagle
@@ -70,7 +70,8 @@ bullion series begins in 1986 in four sizes (1/10 oz $5, 1/4 oz $10,
 
 That 52-year gap is the only reason reading a year is safe for the Eagle when
 it would be reckless for every pair in the table above. Do not generalise the
-technique.
+technique. A modern 1/4 oz Gold Eagle is $10 and shares the `eagle` key with
+the classic coin; the year veto keeps it off classic Eagle records.
 
 **Silver Eagle is a dollar.** The American Silver Eagle (1986–) is one ounce
 of silver and worth far more than a dollar in metal, but its FACE VALUE — the
@@ -135,26 +136,39 @@ Things worth knowing before editing a parser:
   ordinary English word, and "lot 10 price 5.00" would yield the reference
   "price5".
 
-## Silence is a statement — but only about the strike
+## Silence is a statement — but only about strike and authenticity
 
 The general rule across the matcher is "absence is not agreement", applied in
 both directions: an attribute only one side states is left out of the score
-entirely, and it can never cause a veto. A second shot that omits the grade,
-the service or the variety is ordinary and expected.
+entirely, and it can never cause a veto. A second shot that omits the year,
+the grade, the service or the coin type ("1884 3CN - Obverse 2.jpg") is
+ordinary and expected.
 
-The STRIKE is the single carve-out. The proof designation is always written
-into both the image file name and the inventory description, so a filename
-that says nothing about the strike is not a filename that forgot — it is a
-filename about a coin with nothing to say. `detectStrike` therefore resolves
-silence to `business` before either signature is built, and a quiet filename
-then contradicts a proof record exactly as "MS65" would. The same argument
-applies to SP/Specimen.
+There are two carve-outs.
 
-This rests on a fact about the DATA, not on logic: one person writes all of
-these names and all of these records, and writes the designation every time
-it is true. It does NOT transfer to the year, the denomination or the coin
-type, where real filenames leave the attribute out all the time. Do not
+- **Strike.** The proof designation is always written into both the filename
+  and the inventory description, so a filename that says nothing about the
+  strike is about a coin with nothing to say. `detectStrike` resolves silence
+  to `business` before either signature is built, and a quiet filename then
+  contradicts a proof record exactly as "MS65" would. The same applies to
+  SP/Specimen. Absence (no descriptive text or grade at all) stays `unknown`
+  and never conflicts; the year and denomination fields are not descriptive text.
+- **Authenticity.** "fake", "counterfeit" or "replica" is likewise always
+  written when it applies, so silence means genuine on both sides. Counterfeit
+  coins are therefore matched like any other coin, and the authenticity veto
+  keeps a fake photo off a genuine record and a genuine photo off a fake one.
+
+Both rest on a fact about the DATA, not on logic: one person writes all of
+these names and records, and writes the designation every time it is true. It
+does NOT transfer to the year, the denomination or the coin type. Do not
 extend the carve-out without separate evidence about how the files are named.
+
+If a correct match is ever vetoed as proof against business, or as fake
+against genuine, look at the record's fields first. On the record side the
+word is read from coin type, variety, denomination, category, set, grade and
+the Quicken security name (where "FAKE" often survives only), but not from
+`notes`, because a genuine coin's memo can mention a fake ("exchange for a 3CS
+FAKE").
 
 ## Why the strike is its own field and not just the grade
 
@@ -180,6 +194,21 @@ which part is a judgement. The base letters are a fact — a grading service
 never prints a proof on an MS label. The number is a judgement, and real
 filenames and real records disagree about it constantly ("XF" against "XF45")
 because one was typed from memory and the other copied off a slab.
+
+## Why the score is damped and the weights are uneven
+
+An attribute only one side states is left out of the score, so a sparse
+record could otherwise reach a perfect score on one agreeing field. The
+damping factor (0.70 + 0.30 × the share of total weight that was comparable)
+keeps a thin comparison from looking like a thick one, and the
+two-strong-attributes gate stops a single clean attribute from deciding.
+
+Mint mark carries little weight (0.09) so that two coins differing only by
+mint mark score about 0.10 apart, inside the 0.15 margin, and both go to review
+instead of one being chosen silently. Without a year the score cannot reach the
+0.85 bar, which is intended: denomination and design alone cannot tell a 1904
+Double Eagle from a 1907 one. Ancients, identified only by a catalogue
+reference folded into the coin type, top out near 0.76 and always go to review.
 
 ## The margin gate and disqualified coins
 
@@ -215,114 +244,148 @@ and the bar refuses only because the filename states no grade.
 
 Lowering the bar would move those 17 into tier 2, where each costs a
 question, and would drag the 2 genuinely wrong ones along dressed as
-plausible suggestions. So the bar stayed exactly where it was and tier 3
-gained an opt-in "Attach anyway" panel instead: nothing expands, nothing is
-asked, and a row nobody touches contributes nothing to the attach run.
+plausible suggestions. So the bar stays where it is and tier 3 has an opt-in
+"Attach anyway" panel instead: nothing expands, nothing is asked, and a row
+nobody touches contributes nothing to the attach run. A rescue keeps the row's
+tier so it holds its place in the read-only list, and the rule that tiers
+never change what is auto-attached stays true.
 
-## How the import came to look frozen
+The tiers exist because the share holds about 2,140 files: anything that needs
+a decision per file is unusable, so the review is split by what question can
+be asked rather than by matcher confidence.
 
-The batch import had a progress bar and still read as a hung screen, for two
-independent reasons that both had to be fixed:
+## Sibling inference and photo sets: containment versus equality
 
-1. **The indicator did not cover the slow parts.** Picking a folder ran the
-   extension filter over ~2,140 File handles with nothing on screen; the
-   attach run reported nothing until the first file had been read, decoded and
-   downscaled (seconds, for a 46 MB JPEG over SMB); and the longest wait of
-   all — Angular building the review screen out of 2,140 finished rows —
-   happened after the indicator had already come down.
-2. **Setting a signal does not draw anything.** JavaScript is single
-   threaded, so a write to `progress` only becomes pixels when the current
-   task ends. Setting the matching progress and then running the first
-   200-filename chunk in the same task (~1.1 s against a 2,000-coin
-   inventory) means the bar's first appearance is already a second late.
+A coin is photographed several times, and the later shots often say less
+("1884 3CN - Obverse 2.jpg" next to "1884 3CN - NGC MS64 - Obverse.jpg").
+Both features decide "same coin" from identifying text (filename tokens minus
+side, variant and shot number), never from the folder, because a folder such as
+"Early Proofs" holds many unrelated coins. Small numbers come from the parsed
+take, not from any trailing digit, because "1904 $20" ends in a face value.
 
-Hence the three-beat pattern throughout `batch-import-session.ts` and
-`attach-runner.ts`: set the stage, `await yieldToBrowser()`, then do the slow
-thing. The middle line is easy to delete and fatal to delete.
+They use different tests on purpose:
 
-There was a third, worse symptom: because `busy()` is derived from
-`progress`, the window with no indicator was also a window with the Save
-button still live — and an impatient second click ran the entire import
-again and wrote every photo twice. That is why `progress` is now set
-synchronously, on the click's own tick, before any `await`.
+- **Sibling inference uses containment**: every token of the quieter name must
+  appear in the louder one. It is guarded by its own gates (one coin only, year
+  and type agree, no veto, no equally good rival), and only a row matched on
+  its own may vouch, so inference never chains from an inferred row.
+- **Photo sets use equality.** One answer is applied to every member of a set,
+  so a quiet name must not absorb every file that happens to contain its words.
+  Names with a single identifying word are too weak to group, and photos
+  excluded from the automated import are never grouped. Set actions are built
+  from single-row decisions so every per-row guard still applies.
 
-The Save button carries its own label for a related reason: the bar is at the
-top of a dialog whose review list runs to hundreds of rows, and by the time
-you have scrolled to Save the bar is several screens away. An indicator that
-cannot be seen from where the user is standing is not an indicator.
+A slab-label shot never attaches on its own: its text often names the coin
+perfectly while showing nothing of it. It rides along with a coin photo of the
+same set.
 
-## Why the import knows where a file came from
+## Two kinds of "not a coin"
 
-A browser never tells JavaScript where a file really lives on disk; that is a
-deliberate platform rule. A directory picker supplies only
-`File.webkitRelativePath`, the path relative to the folder that was picked.
-The absolute prefix therefore comes from exactly one place: the base-folder
-box the user fills in.
+`isNonCoin` (group shots, stamps, fractional currency, camera default names)
+is a veto because these names often contain a valid-looking denomination
+("Stamp - 11 - 3 cent.jpg"). Such a row still gets "Attach anyway", because
+the word that tripped it may be wrong for that file ("set" photos of real
+proof sets). `excludedFromAutoImport` (collage, montage, hoard, group) is
+stronger: a picture of many coins has no single right answer, so it gets no
+rescue link at all. Both affect only the automated import; the gallery never
+consults them, so any file can still be attached by hand.
 
-That box must never be seeded with a hardcoded path, and — after a real
-incident — must not be seeded with the app's own install directory either. A
-wrong base folder does not fail loudly; it stamps every imported row with a
-location that resolves to nothing, and you find out ~1,700 rows later when
-every photo reports "file is missing". The app's own folder is a
-*plausible-looking* path that is **never** the right answer, which is worse
-than a blank box because nothing prompts anyone to look at it. It does not
-improve when packaged, where it becomes `C:\Program Files\...`.
+## Why the import yields and sets progress synchronously
 
-It also caused a second-order bug worth remembering: when an empty saved
-value read as "nothing saved" and fell through to the app folder, CLEARING
-THE BOX — the exact thing a user does on discovering the path is wrong —
-brought the wrong path straight back on the next open.
+JavaScript is single threaded: a write to `progress` becomes pixels only when
+the current task ends. The slow steps (filtering ~2,140 File handles, the first
+200-filename chunk at ~1.1 s against 2,000 coins, Angular building the review
+rows, reading the first 46 MB JPEG) would otherwise run with nothing on screen.
+Hence the pattern in `batch-import-session.ts` and `attach-runner.ts`: set the
+stage, `await yieldToBrowser()`, then do the slow thing. The middle line is
+easy to delete and fatal to delete. Do not clear `progress` in the same task
+that hands the rows to Angular, or the indicator disappears just before the
+longest render.
 
-Three defences now stand behind the box: a live preview of the finished path
-built from the first selected file, a pre-flight existence check against the
-disk (`base-folder-check.ts`) that refuses an import where every sampled path
-is unreadable, and an empty default that demands attention.
+`busy()` is derived from `progress`, so `progress` is set synchronously on the
+click's own tick, before any `await`. Otherwise a second click in the gap runs
+the whole import again and writes every photo twice.
+
+The Save button carries its own count because the bar is at the top of a
+dialog whose review list runs to hundreds of rows; from Save it is out of view.
+
+## Why the base folder has no default
+
+A browser never tells JavaScript where a file lives; a directory picker gives
+only `webkitRelativePath`. The absolute prefix comes from exactly one place:
+the base-folder box.
+
+That box starts empty when nothing is saved. A wrong base folder does not fail
+loudly; it stamps every imported row with a path that resolves to nothing,
+discovered later when every photo reports missing. The app's own install
+folder looks plausible and is never the right answer, which is worse than a
+blank box because nothing prompts anyone to look at it. A fallback also means a
+cleared box refills itself on the next open, undoing the user's correction.
+
+Three defences stand behind the box: a live preview of the finished path, a
+pre-flight existence check that refuses the import when every sampled path is
+unreadable, and the empty default. The check blocks only a total failure,
+because a wrong root makes every path fail while a partial failure is about
+individual files; and if the check itself cannot run, the import proceeds.
 
 ## Re-importing a folder
 
-An append-only, blind attach takes the coin's existing photos, puts the new
-ones on the end, and has no way to notice that 290 of the 300 "new" ones are
-files it stored last time. Re-importing a folder then re-read, re-decoded and
-re-saved everything in it and gave each coin its photos twice.
+A blind append cannot notice that most of the "new" files are ones it stored
+last time, so it would re-read, re-decode and re-save them and give each coin
+its photos twice. Two independent things prevent that:
 
-Two separate things fix it, and they are independent:
-
-- **A choice**, because the program cannot guess the intent. `leave` (the
+- **A choice**, because the program cannot guess the intent: Leave (the
   default, and the only answer that can neither delete nor duplicate),
-  `replace` or `add`.
-- **A skip**, because even under `add` a file already on the coin must not be
-  attached twice. The comparison is on the ORIGINAL file's absolute path —
-  filename is hopeless ("Obverse.jpg" is in every subfolder) and comparing
-  image bytes would mean reading the file to decide whether to read it.
+  Replace, or Keep both. It is a mode rather than unticking rows, because
+  unticking would lose the user's own selections, Replace cannot be expressed
+  as a selection, and the counts in the question must not change when an answer
+  is picked.
+- **A skip**, because even under Keep both a file already on the coin must not
+  be attached twice. The comparison is on the original file's absolute path:
+  filenames repeat in every subfolder, and comparing bytes would mean reading a
+  file to decide whether to read it.
 
-Both are evaluated BEFORE a byte is read, which is the point: the cost being
-removed is the read, JPEG decode and canvas downscale of a file that can be
-46 MB, over SMB, for a photo already held.
+Both are decided before a byte is read. The existing paths cannot be derived in
+the browser, so they are fetched in batches from
+`POST /api/coins/image-source-paths`.
 
-The existing source paths are not derivable in the browser —
-`CoinRecord.imagePaths` holds only the downscaled `data:` URLs — so they are
-fetched in one batched request from `POST /api/coins/image-source-paths`.
+The failure directions differ on purpose. Fetching existing source paths
+fails open: at worst a duplicate photo appears, which is visible and undoable.
+Loading a coin's existing photos for Keep both fails closed: a guess there is
+a PUT that deletes photos.
+
+## Why the attach run is sequential
+
+Decoding an 8000×6000 photo onto a canvas needs about 190 MB of RGBA; several
+at once risks running out of memory, and reading from a network share is the
+bottleneck anyway. One file at a time also gives an honest progress bar.
 
 ## Why photos are downscaled
 
-The share holds 4.2 GB of JPEGs (~2.5 MB average, largest 46 MB). Images are
-stored in SQL Server as base64 TEXT, and base64 inflates bytes by 4/3, so
-attaching them untouched would mean about 5.6 GB of text in the database for
-pictures displayed in a gallery a few hundred pixels wide. Capping the long
-edge at 1600 px and re-encoding at JPEG quality 0.85 lands around 250 KB per
-photo, so roughly 0.5 GB for ~1,700 photos — an order of magnitude smaller,
-at a resolution that still looks sharp full-screen on a 1080p monitor.
+The share holds 4.2 GB of JPEGs (~2.5 MB average, largest 46 MB). Photos are
+stored in the database as base64 text, which inflates bytes by 4/3, so
+attaching them untouched would mean about 5.6 GB of text for pictures shown a
+few hundred pixels wide. Capping the long edge at 1600 px at JPEG quality 0.85
+gives about 250 KB per photo, roughly 0.5 GB for the library, and still looks
+sharp full-screen on a 1080p monitor. Below quality 0.75, JPEG blocking shows
+in a coin's flat fields, which is where a collector looks.
+
+The size budget can only make photos smaller (its first rung is the default
+encoding). Its cap is 10 MB because very large base64 strings in JSON hit V8's
+string-length limit.
 
 ## Denominations: why a coin carries two fields
 
-Since migration 011 a coin carries both, and they are allowed to disagree:
+A coin carries both, and they are allowed to disagree:
 
 - `Coins.DenominationId` — the canonical link. NULL is ordinary, not an error.
-- `Coins.Denomination` — what the SOURCE said. Never rewritten by anything.
+- `Coins.Denomination` — what the SOURCE said. Never rewritten by anything
+  except the user picking a label.
 
 They diverge in two intended, visible situations: an import whose text
-resolved to nothing, and a denomination the user deleted (§4.4 nulls the id
-and leaves the text alone).
+resolved to nothing, and a denomination the user deleted (which nulls the id
+and leaves the text alone). If only the id were kept, the original text would
+be lost at import and a better resolver could never recover it.
 
 Both are kept because each answers a question the other cannot. The id says
 which coin this is; the text is the only surviving record of what the file or
@@ -353,10 +416,9 @@ matches nothing the search widens to every issuer.
 
 ## Denominations: the cleanup screen
 
-Migration 014's unresolved report is SQL output, and a packaged user will
-never see it. Without an in-app equivalent they simply have coins reading
+Without an in-app list of unresolved coins, a user simply has coins reading
 `Other (8 Reales)` with no explanation, no list of which ones and no route to
-fixing them.
+fixing them. The Unlinked Coins pane and the shell's banner are that route.
 
 The screen groups coins by the QUESTION they ask rather than listing them,
 because four separate edits for one decision is what makes people abandon a
@@ -389,13 +451,22 @@ to make one of them, read the comment beside the code first.
   records that genuinely are sets, and the files that need catching carry
   "Montage" or are already flagged by the group-shot words.
 - **Do not read `coin.imagePaths` to find out what a coin already has.**
-  `GET /api/coins` no longer inlines photographs, so the array is absent on a
+  `GET /api/coins` does not include photographs, so the array is absent on a
   freshly loaded coin — and because `add` mode PUTs the complete array, a
   `?? []` fallback does not mean "appended to the wrong place", it means
   DELETED.
-- **Do not push the counterfeit filter below `buildCoinSignatures`.** It must
-  stay invisible to the automated matcher and entirely ordinary everywhere
-  else; the manual search is the escape hatch the whole rule depends on.
+- **Do not filter counterfeit records out of matching.** They are matched like
+  any coin and kept apart from genuine ones by the authenticity veto. The
+  manual coin search (`searchCoins`, behind `CoinLookup`) reads the unfiltered
+  inventory so every coin stays attachable by hand.
+- **Do not let the tier stage change a decision.** `near-match.ts` reads
+  `status` and never writes it or `matchedRecordId`; the tiers make asking
+  cheaper, not the matcher braver. Keep scoring (`match-scorer.ts`) and gates
+  (`match-decider.ts`) in separate files so a scoring change cannot quietly
+  weaken a gate.
+- **Do not let folder names reach the parser.** `baseName()` keeps only the
+  last path component, or a folder called "Early Proofs" would make its
+  contents read as proofs.
 - **Do not let the matcher perform the denominations lookup itself.** It is
   handed a snapshot taken once, because `buildRows` matches in chunks of 200
   and a response landing between two chunks would match one folder under two

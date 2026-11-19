@@ -1,20 +1,10 @@
 /*
- * image-thumbnail.ts — shrink a stored photograph down to printing size.
+ * image-thumbnail.ts — shrink a stored photograph (about 1600px) to printing
+ * size. At about one inch on the page, 480px is still around 430 dpi, and the
+ * smaller files keep a large report from stalling the browser.
  *
- * WHY SHRINK AT ALL, WHEN imagePaths IS ALREADY "DOWNSCALED"? Those copies
- * were downscaled once for a full-screen viewer — roughly 1600px, about
- * 250 KB of base64 each — which is the right size for filling a monitor and
- * wildly the wrong size for a picture printed at about one inch. A tenth of
- * the bytes is the difference between a report that prints and a browser
- * that stops responding; see the arithmetic in report-images.ts. Nothing
- * visible is lost: at 1.05in on the page, 480px is roughly 430 dpi, past
- * what any home printer resolves.
- *
- * WHY THE SIZE MATHS IS A SEPARATE, EXPORTED FUNCTION. Everything below
- * `thumbnailSize` needs an `Image`, a `<canvas>` and `toDataURL`, none of
- * which exist in Node, where this project's tests run. So the canvas work is
- * kept to the smallest possible block and the decision it depends on — how
- * big, and the three ways that goes wrong — is a pure function with a spec.
+ * The size calculation is a separate pure function so it can be tested
+ * without a canvas.
  */
 
 import { THUMBNAIL_MAX_EDGE_PX } from './report-images';
@@ -26,19 +16,8 @@ export interface ThumbnailSize {
 
 /**
  * Fit an image inside a square of `maxEdge`, preserving its aspect ratio.
- *
- * Three guards, each for a real failure:
- *
- *   NEVER ENLARGE. A 200px photograph scaled up to 480 is a bigger file and
- *   no more detail. `Math.min(1, ...)` keeps the scale at or below 1.
- *
- *   NEVER ROUND TO ZERO. `canvas.width = 0` throws, and a freak aspect ratio
- *   (a 2000x1 strip from a corrupt record) would otherwise produce exactly
- *   that. One unreadable image must not take the report down.
- *
- *   NO DIMENSIONS AT ALL. A decode failure reports 0x0. Falling back to a
- *   square at the cap means the draw either works or fails on its own terms,
- *   rather than dividing by zero here.
+ * Never enlarges, never rounds a side to zero (canvas.width = 0 throws), and
+ * falls back to a square at the cap when the image reports no dimensions.
  */
 export function thumbnailSize(
   naturalWidth: number,
@@ -57,23 +36,12 @@ export function thumbnailSize(
   };
 }
 
-/**
- * JPEG quality for the embedded thumbnail.
- *
- * 0.72 rather than the browser default of 0.92. At the printed size the
- * difference is invisible and it is worth roughly half the bytes; JPEG rather
- * than PNG because these are photographs, where PNG would be several times
- * larger for no gain.
- */
+/** JPEG quality for the thumbnail: invisible at print size, about half the bytes of 0.92. */
 const THUMBNAIL_JPEG_QUALITY = 0.72;
 
 /**
- * Re-encode one stored `data:` URL as a small JPEG `data:` URL.
- *
- * Rejects rather than returning the original on failure. The caller
- * (collectReportImages) counts a rejection and names it on the document;
- * silently substituting the 250 KB original would defeat the point of this
- * module, invisibly, a few hundred times over.
+ * Re-encode one stored `data:` URL as a small JPEG `data:` URL. Rejects on
+ * failure rather than returning the full-size original; the caller counts it.
  */
 export function toReportThumbnail(dataUrl: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -101,9 +69,7 @@ export function toReportThumbnail(dataUrl: string): Promise<string> {
 
     image.onerror = () => reject(new Error('image failed to decode'));
 
-    // These are `data:` URLs the app stored itself, so there is no network
-    // fetch and no cross-origin taint — `toDataURL` on the canvas would throw
-    // a SecurityError if there were.
+    // Locally stored data: URLs, so the canvas is never cross-origin tainted.
     image.src = dataUrl;
   });
 }

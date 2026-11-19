@@ -1,26 +1,15 @@
 /**
- * routes/data/spot-price-source.ts — the one outbound HTTP call in this backend.
- *
- * Fetches live precious-metal prices from COMEX/NYMEX front-month futures.
- *
- * A DEAD UPSTREAM IS SILENT HERE. The route answers 200 with zeroed prices
- * on failure, so a provider that stops responding shows no error at all --
- * the prices simply stay at $0 forever. That is why the result reports WHICH
- * metals failed rather than only handing back zeros.
- *
- * WHY YAHOO FINANCE
- * These four symbols are the actual COMEX/NYMEX contracts, which is precisely
- * what "COMEX prices" means, and the endpoint needs no API key or signup:
+ * Fetches live precious-metal prices from COMEX/NYMEX front-month futures via
+ * Yahoo Finance (no API key needed):
  *
  *   GC=F  Gold      (COMEX)
  *   SI=F  Silver    (COMEX)
  *   PL=F  Platinum  (NYMEX)
  *   HG=F  Copper    (COMEX)
  *
- * It is an undocumented endpoint, so treat it as best-effort: every symbol is
- * fetched independently and a failure on one does not lose the others. The
- * base URL can be overridden with the SPOT_PRICE_BASE_URL environment
- * variable if it ever needs swapping without a code change.
+ * The endpoint is undocumented, so it's best-effort: each symbol is fetched
+ * independently, failures are reported per metal (a dead upstream otherwise
+ * just shows $0), and SPOT_PRICE_BASE_URL can override the base URL.
  */
 
 import { logInfo, logWarn } from '../../logger';
@@ -36,22 +25,14 @@ export interface SpotPriceSet {
 export interface SpotPriceFetchResult {
   prices: SpotPriceSet;
   source: string;
-  /** Metals we could not retrieve, so the caller can say so honestly. */
+  /** Metals that couldn't be retrieved. */
   failed: string[];
 }
 
 /**
- * Troy ounces in one pound (avoirdupois).
- *
- * 1 lb = 453.59237 g and 1 troy oz = 31.1034768 g, so 1 lb = 14.5833... troy oz.
- *
- * This matters because COMEX quotes copper (HG) in dollars per POUND, while
- * gold, silver and platinum are quoted per TROY OUNCE. The melt-value
- * calculation in the frontend (`inventory-metrics.ts`) divides a coin's gram
- * weight by 31.1035 and multiplies by the spot price, i.e. it assumes every
- * price is per troy ounce. Storing copper per pound would therefore overstate
- * copper melt values by a factor of ~14.6, so we convert here -- at the single
- * point where the unit is known -- rather than leaving it to callers.
+ * Troy ounces per avoirdupois pound (453.59237 g / 31.1034768 g). COMEX quotes
+ * copper per pound and the others per troy ounce; the frontend's melt value
+ * assumes troy ounces, so copper is converted here.
  */
 const TROY_OUNCES_PER_POUND = 453.59237 / 31.1034768;
 
@@ -72,23 +53,18 @@ const METALS: MetalSpec[] = [
   { key: 'gold', symbol: 'GC=F', toPerTroyOunce: 1 },
   { key: 'silver', symbol: 'SI=F', toPerTroyOunce: 1 },
   { key: 'platinum', symbol: 'PL=F', toPerTroyOunce: 1 },
-  // Quoted per pound -- see TROY_OUNCES_PER_POUND above.
+  // Quoted per pound.
   { key: 'copper', symbol: 'HG=F', toPerTroyOunce: 1 / TROY_OUNCES_PER_POUND },
 ];
 
-/**
- * Minimal shape of the bit of Yahoo's response we actually read. Declared
- * loosely on purpose: this is a third-party payload we do not control, so we
- * validate the one number we need rather than trusting a full schema.
- */
+/** The part of Yahoo's response we read. Loose on purpose: only the one number is validated. */
 interface YahooChartResponse {
   chart?: {
     result?: Array<{ meta?: { regularMarketPrice?: unknown } }>;
   };
 }
 
-/** Fetches one symbol. Returns null rather than throwing, so one dead symbol
- *  cannot take the others down with it. */
+/** Fetches one symbol; returns null rather than throwing so one failure doesn't affect the others. */
 async function fetchOne(spec: MetalSpec): Promise<number | null> {
   const url = `${BASE_URL}/${encodeURIComponent(spec.symbol)}?interval=1d&range=1d`;
 
@@ -107,9 +83,7 @@ async function fetchOne(spec: MetalSpec): Promise<number | null> {
     const body = (await response.json()) as YahooChartResponse;
     const raw = body.chart?.result?.[0]?.meta?.regularMarketPrice;
 
-    // A missing or nonsensical price is treated as a failure, not as zero --
-    // zero would silently make every melt value come out at $0, which is the
-    // exact failure mode that hid the dead metals.live API for so long.
+    // Missing or non-positive is a failure, not zero (zero would give $0 melt values).
     if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) {
       logWarn(`Spot price fetch for ${spec.key} (${spec.symbol}) returned no usable price`);
       return null;
@@ -124,11 +98,8 @@ async function fetchOne(spec: MetalSpec): Promise<number | null> {
 }
 
 /**
- * Fetches all four metals concurrently, in dollars per troy ounce.
- *
- * Never throws. Metals that could not be retrieved stay at 0 and are listed in
- * `failed`, so the caller can tell the user which ones are missing instead of
- * presenting a zero as though it were a real price.
+ * Fetches all four metals concurrently, in dollars per troy ounce. Never
+ * throws; failed metals stay 0 and are listed in `failed`.
  */
 export async function fetchSpotPrices(): Promise<SpotPriceFetchResult> {
   logInfo('Fetching spot prices from COMEX/NYMEX futures...');
@@ -144,8 +115,7 @@ export async function fetchSpotPrices(): Promise<SpotPriceFetchResult> {
     if (value === null) {
       failed.push(spec.key);
     } else {
-      // Round to sensible precision: copper works out to well under a dollar
-      // per troy ounce, so it needs more decimal places than gold.
+      // Copper is well under $1 per troy ounce, so it gets more decimals.
       prices[spec.key] = spec.key === 'copper'
         ? Math.round(value * 10_000) / 10_000
         : Math.round(value * 100) / 100;

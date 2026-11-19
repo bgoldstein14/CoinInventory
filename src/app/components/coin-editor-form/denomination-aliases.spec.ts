@@ -1,17 +1,6 @@
 /**
- * Tests for the denomination alias layer.
- *
- * WHY THESE TESTS AND NOT TEMPLATE TESTS
- * The symptom is a rendering outcome — "the Denomination dropdown sits on
- * Other instead of the coin's real denomination" — and this project's suite
- * runs under plain Node with no jsdom, so no template can be rendered here.
- * What CAN be tested is the decision behind it: which lookup label, if any, a
- * stored denomination string corresponds to. That decision is the whole of
- * this bug, and it lives in `denomination-aliases.ts`.
- *
- * The last block composes `resolveDenominationLabel` with `CustomOptionMode`
- * exactly the way `coin-editor-form.ts` does, which is as close to an
- * end-to-end test of the reported symptom as this suite can get.
+ * Tests for the denomination alias layer: which lookup label, if any, a stored denomination
+ * string corresponds to. The last block combines it with CustomOptionMode as the editor does.
  */
 import { describe, expect, it } from 'vitest';
 import { CustomOptionMode } from './custom-option-mode';
@@ -19,11 +8,8 @@ import { denominationKey, resolveDenominationLabel } from './denomination-aliase
 import { QIF_ACCOUNTS, inventoryFor } from '../../testing/qif-accounts.fixture';
 
 /**
- * The real active denomination labels, VERBATIM from the seed rows in
- * server/setup-database.sql (the 18 US rows including migration 009's $25 and
- * $50, and the 22 GB rows). Not a trimmed-down sample: the collisions this
- * file has to avoid — '$1' against '$10', '5¢' against '25¢', '3CS' against
- * '3CN' — only exist when the whole list is present.
+ * The real active labels from setup-database.sql (US and GB). The full list is needed so
+ * near-collisions like '$1'/'$10' and '3CS'/'3CN' are exercised.
  */
 const US_LABELS = [
   '½¢', '1¢', '2¢', '3CS', '3CN', '5¢', '10¢', '20¢', '25¢', '50¢',
@@ -38,8 +24,7 @@ const LABELS = [...US_LABELS, ...GB_LABELS];
 
 describe('denominationKey', () => {
   it('folds the symbols the lookup labels are written with', () => {
-    // The same three substitutions migration 007 makes, for the same reason:
-    // the column and the lookup disagree about symbols, not about coins.
+    // Same symbol folding as migration 007.
     expect(denominationKey('50¢')).toBe('50c');
     expect(denominationKey('½¢')).toBe('halfc');
     expect(denominationKey('£5')).toBe('gbp5');
@@ -51,8 +36,7 @@ describe('denominationKey', () => {
   });
 
   it('gives two different coins two different keys', () => {
-    // The 1865-1873 overlap is the reason the importer flags a bare "3¢" at
-    // all. Folding 3CS and 3CN together here would undo that work silently.
+    // 3CS and 3CN are different coins and must stay distinct.
     expect(denominationKey('3CS')).not.toBe(denominationKey('3CN'));
   });
 });
@@ -64,9 +48,7 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('matches a label that differs only in case — THE REPORTED BUG', () => {
-    // `Denominations.Label` is '3CS'. Anything that typed it as '3cs' — a CSV
-    // column, a hand-typed row, denomination-sort.ts's own vocabulary — missed
-    // the exact-match test and opened the custom box.
+    // Case differences ('3cs') must still match.
     expect(resolveDenominationLabel('3cs', LABELS)).toBe('3CS');
     expect(resolveDenominationLabel('3Cn', LABELS)).toBe('3CN');
   });
@@ -75,7 +57,7 @@ describe('resolveDenominationLabel', () => {
     expect(resolveDenominationLabel('Three Cent Silver', LABELS)).toBe('3CS');
     expect(resolveDenominationLabel('Trime', LABELS)).toBe('3CS');
     expect(resolveDenominationLabel('Three Cent Nickel', LABELS)).toBe('3CN');
-    // The ones docs/csv-import-guide.md tells people to type.
+    // Spellings suggested by docs/csv-import-guide.md.
     expect(resolveDenominationLabel('Dollar', LABELS)).toBe('$1');
     expect(resolveDenominationLabel('Quarter', LABELS)).toBe('25¢');
     expect(resolveDenominationLabel('Half Dollar', LABELS)).toBe('50¢');
@@ -86,7 +68,7 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('reads "<n> cents" and "<n> dollars" as face values', () => {
-    // coin-signature.ts names "50 Cents" as a real value of this column.
+    // Face values written as words.
     expect(resolveDenominationLabel('50 Cents', LABELS)).toBe('50¢');
     expect(resolveDenominationLabel('20 cent', LABELS)).toBe('20¢');
     expect(resolveDenominationLabel('20 Dollars', LABELS)).toBe('$20');
@@ -94,9 +76,7 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('matches the GB shilling notations the QIF importer actually writes', () => {
-    // quicken-import.service.ts writes '5s' for a crown and '1s' for a
-    // shilling; the lookup spells them '5/- (Crown)' and '1/-'. Every British
-    // crown in the collection imported straight into the custom box.
+    // Forms written by the QIF importer.
     expect(resolveDenominationLabel('5s', LABELS)).toBe('5/- (Crown)');
     expect(resolveDenominationLabel('1s', LABELS)).toBe('1/-');
     expect(resolveDenominationLabel('Crown', LABELS)).toBe('5/- (Crown)');
@@ -106,8 +86,7 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('answers null for a value that really is custom', () => {
-    // These have no row in the lookup under any spelling, so the custom text
-    // box opening for them is CORRECT and must keep happening.
+    // No lookup row under any spelling, so these stay custom.
     expect(resolveDenominationLabel('8 Reales', LABELS)).toBeNull();
     expect(resolveDenominationLabel('100 Soles', LABELS)).toBeNull();
     expect(resolveDenominationLabel('20 Francs', LABELS)).toBeNull();
@@ -115,18 +94,8 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('refuses the readings the rest of the app refuses', () => {
-    // Deliberate non-aliases, each one copied from an existing decision:
-    //   'Penny'        migration 007 — US cent to an American, GB penny to
-    //                  everyone else, and the alloys part company in 1943.
-    //   'Eagle'        migration 007 — Gold, Silver and the classic $10 Eagle
-    //                  are three coins in three metals.
-    //   'Trade Dollar' custom-option-mode.ts uses it as its worked example of
-    //                  a legitimate custom denomination. It is a distinct coin
-    //                  (420 grains, struck for the Orient), not a synonym for
-    //                  the $1 the lookup offers.
-    //   '3 cent'       the 1851-1889 three-cent span covers two different
-    //                  coins; choosing one here is the guess the importer goes
-    //                  out of its way to flag.
+    // Deliberately not aliases: 'Penny' and 'Eagle' are ambiguous, 'Trade Dollar' is a distinct
+    // coin, and '3 cent' could be silver or nickel.
     expect(resolveDenominationLabel('Penny', LABELS)).toBeNull();
     expect(resolveDenominationLabel('Eagle', LABELS)).toBeNull();
     expect(resolveDenominationLabel('Trade Dollar', LABELS)).toBeNull();
@@ -141,17 +110,14 @@ describe('resolveDenominationLabel', () => {
   });
 
   it('never invents a label the lookup does not offer', () => {
-    // The alias table is only ever a way of FINDING a row that is already
-    // there. On a database whose Denominations table has been edited down —
-    // the Settings dialog can deactivate rows — an alias with no surviving row
-    // must answer null, not a label that would render as a missing <option>.
+    // An alias with no active row answers null rather than a label with no <option>.
     expect(resolveDenominationLabel('Half Dollar', ['$1', '$20'])).toBeNull();
     expect(resolveDenominationLabel('Three Cent Silver', [])).toBeNull();
   });
 });
 
 describe('the editor decision this fixes', () => {
-  /** The exact composition coin-editor-form.ts performs on every coin load. */
+  /** The same composition coin-editor-form.ts performs on coin load. */
   function opensTheCustomBox(storedDenomination: string): boolean {
     const mode = new CustomOptionMode();
     const forSelect = resolveDenominationLabel(storedDenomination, LABELS) ?? storedDenomination;
@@ -160,8 +126,7 @@ describe('the editor decision this fixes', () => {
   }
 
   it('leaves the dropdown on the coin, not on Other, for the reported coins', () => {
-    // The owner's report: "I brought up the 1866 3CS NGC PF65 CAC... it shows
-    // Other. I brought up another 3CS, same thing."
+    // A 3CS coin must not open as "Other".
     expect(opensTheCustomBox('Three Cent Silver')).toBe(false);
     expect(opensTheCustomBox('3cs')).toBe(false);
     expect(opensTheCustomBox('Trime')).toBe(false);
@@ -176,13 +141,8 @@ describe('the editor decision this fixes', () => {
 
 describe('the real collection', () => {
   /**
-   * REALITY, not a fixture. Every coin the owner's seven QIF accounts have
-   * ever held, parsed by the importer that will parse them again, measured
-   * against the labels the database is seeded with.
-   *
-   * Only the genuinely foreign face values — "8 Reales", "100 Soles" — should
-   * open the custom box. '5s' must not: the lookup has that coin, spelled
-   * '5/- (Crown)'.
+   * Real QIF data: every denomination parsed from the sample accounts, checked against the
+   * seeded labels. Only genuinely foreign face values should be custom.
    */
   const coins = QIF_ACCOUNTS.flatMap(account => inventoryFor(account));
 
@@ -196,8 +156,7 @@ describe('the real collection', () => {
       )
     ].sort();
 
-    // Exactly the foreign face values, and nothing else. '5s' must not be
-    // here: it is a British crown and the lookup has one.
+    // Only foreign face values; '5s' is a British crown and must resolve.
     expect(unresolved).toEqual(['100 Soles', '8 Reales']);
   });
 
@@ -212,15 +171,7 @@ describe('the real collection', () => {
   });
 });
 
- /*
- * "Nickel" and "Half Dime" must NOT fold onto 5¢
- *
- * A Half Dime (1794-1873, silver) and a Nickel (1866-) are different coins
- * that merely share a face value, and each is seeded as its own United States
- * denomination. Three labels folding to one key makes every five-cent coin
- * AMBIGUOUS, and an ambiguous resolution is no link at all — the seed
- * generator refuses such a file outright.
-  */
+/* "Nickel" and "Half Dime" are distinct seeded coins and must not fold onto 5¢. */
 describe('the five-cent rows are distinct, not aliases of one another', () => {
   const FIVE_CENT_LABELS = ['5¢', 'Half Dime', 'Nickel'];
 
@@ -236,7 +187,7 @@ describe('the five-cent rows are distinct, not aliases of one another', () => {
   });
 
   it('still folds "Five Cents" onto the generic row', () => {
-    // A spelling of 5¢, not a distinct coin — so this alias stays.
+    // A plain spelling of 5¢, so this alias stays.
     expect(resolveDenominationLabel('Five Cents', FIVE_CENT_LABELS)).toBe('5¢');
   });
 });

@@ -1,59 +1,25 @@
  /*
- * reference-tables.ts -- the matcher's coin DICTIONARIES.
- *
- * Pure lookup data, no algorithms: the denomination table (which words mean
- * which face value), the US mint marks, and the token filters (stop words,
- * camera prefixes, grading services, the grade shorthand pattern).
- *
- * This is knowledge about COINS, not about matching, and it is the part of
- * the matcher that grows. Teaching the matcher a new word should be a
- * one-file, zero-logic edit here.
- *
- * ORDER MATTERS in DENOMINATION_RULES -- see the comment block above it.
+ * The matcher's coin dictionaries: denomination table and equivalences, US
+ * mint marks, and token filters (stop words, camera prefixes, grading
+ * services, grade shorthand). Pure data; new vocabulary belongs here.
   */
 
 import { PHOTO_NOISE_WORDS } from './filename-vocabulary';
 
  /*
- * DENOMINATION TABLE
+ * Denomination table, ordered most specific first: the first rule whose
+ * pattern appears as a run of consecutive tokens wins.
  *
- * Ordered MOST SPECIFIC FIRST. The first rule whose pattern appears as a run
- * of consecutive tokens wins.
+ *  1. Patterns are whole tokens, never substrings ("center" is not "cent",
+ *     cert number "2599001" is not a quarter).
+ *  2. No bare-digit patterns: ['20','dollar'] and ['3cn'] are fine, ['20'] is
+ *     not. Sign/hyphen forms ("$20", "20-cent") are read in denomination-units.ts.
  *
- * Two hard rules, both of which exist to prevent real defects:
+ * Eagles are five denominations: Silver Eagle ($1), Quarter ($2.50), Half
+ * ($5), Eagle ($10), Double ($20). The bare word "Eagle" parses to the vague
+ * 'gold eagle' and is resolved by `resolveEagleSeries`.
  *
- *  1. Patterns are arrays of WHOLE TOKENS, never substrings. This is why the
- *     cert number "2599001" is not read as a quarter ("25") and why the word
- *     "center" is not read as a cent.
- *
- *  2. No pattern is a BARE DIGIT. "25", "10" and "5" alone mean nothing in a
- *     filename -- they could be a price, a lot number, or part of a date.
- *     The rule is NOT "digits are forbidden", it is "digits with NO UNIT
- *     ATTACHED are forbidden": ['20','dollar'], ['50c'] and ['3cn'] are fine,
- *     ['20'], ['50'] and ['3'] would be bugs. The sign-and-hyphen forms that
- *     tokenizing destroys ("$20", "50<cent sign>", "20-cent") are read one
- *     layer earlier, in denomination-units.ts.
- *
- * EAGLES ARE FIVE DIFFERENT DENOMINATIONS, not one: Silver Eagle ($1), Double
- * Eagle ($20), Half Eagle ($5), Quarter Eagle ($2.50) and the plain Eagle
- * ($10). The more specific ones are listed first so they win.
- *
- * The bare word "Eagle" is ambiguous between the classic $10 gold piece
- * (1795-1933) and the modern bullion series (1986-), so it parses to the
- * deliberately vague key 'gold eagle' and is resolved by year in
- * `resolveEagleSeries` further down this file. A STATED face value ("$10",
- * "Ten Dollar") is never ambiguous and is never re-resolved.
- *
- * MOST ALIASES ARE NOT ROWS IN A TABLE. Where two spellings mean one face
- * value, both patterns are given THE SAME KEY here -- "Double Eagle"/"$20",
- * "Half Eagle"/"$5", "Quarter Eagle"/"$2.50", "Half Dime"/"1/2 10<cent sign>"
- * -- which is a stronger guarantee than an equivalence row, because `===`
- * already agrees and nothing downstream has to look anything up. The sign
- * forms come from DOLLAR_FACE_VALUES / CENT_FACE_VALUES in
- * denomination-units.ts.
- *
- * Silver Eagle is the one exception: it must keep its own key (it is NOT the
- * $10 gold Eagle), so it is a row in DENOMINATION_EQUIVALENCES.
+ * Aliases mostly share a key ("Double Eagle"/"$20"); see DENOMINATION_EQUIVALENCES.
   */
 export interface DenominationRule {
   /** Canonical key -- two denominations agree only if their keys are equal. */
@@ -65,37 +31,16 @@ export interface DenominationRule {
 }
 
 export const DENOMINATION_RULES: readonly DenominationRule[] = [
-  /* --- eagles in a metal OTHER than gold ---------------------------------
-   * These must precede every gold-eagle rule below, because each of them
-   * contains the token "eagle" and the bare ['eagle'] pattern further down
-   * would otherwise swallow them. A Silver Eagle is ONE DOLLAR; see the long
-   * "SILVER EAGLE IS NOT THE EAGLE" warning further down this file. */
+  /* --- non-gold eagles: must precede every rule containing ['eagle'].
+   * A Silver Eagle is $1. */
   { key: 'silver eagle', label: 'Silver Eagle ($1 bullion)', patterns: [['silver', 'eagle'], ['ase']] },
   { key: 'platinum eagle', label: 'Platinum Eagle (bullion)', patterns: [['platinum', 'eagle']] },
   { key: 'palladium eagle', label: 'Palladium Eagle (bullion)', patterns: [['palladium', 'eagle']] },
 
-  /* --- $25 and $50: the two face values the modern bullion series added ---
-   *
-   * Until 1986 no circulating US coin was ever denominated $25 or $50, which
-   * is why these two rows did not exist before and why the database seed (see
-   * server/setup-database.sql) still has no row for them. The half-ounce
-   * American Gold Eagle is $25 and the one-ounce is $50, so a collection that
-   * contains either needs the matcher to recognise them.
-   *
-   * ORDER: ['twenty','five','dollar'] MUST come before the Half Eagle's
-   * ['five','dollar'], because the tokens of "Twenty Five Dollar" CONTAIN the
-   * run ['five','dollar']. First rule whose pattern appears wins, so if Half
-   * Eagle were tried first a $25 coin would be filed as a $5 one. This is the
-   * same most-specific-first discipline the Three Cent Nickel block relies on.
-   *
-   * NO BARE-DIGIT PATTERN HERE EITHER. ['25','dollar'] and ['50','dollar']
-   * need the word "dollar" next to the number, exactly like the ['20','dollar']
-   * above them. The "$25" / "$50" sign forms are read one layer earlier by
-   * denomination-units.ts, which is also where the rule that keeps "$50" the
-   * DENOMINATION apart from "$50.00" the PRICE lives: an amount is a face
-   * value only if it is spelled exactly as one of the amounts a US coin is
-   * actually worth, and only if the filename has not already named a
-   * different one in words. */
+  /* --- $25 and $50: modern bullion face values (1986-) ---
+   * ['twenty','five','dollar'] must precede the Half Eagle's ['five','dollar'],
+   * which it contains. The "$25" / "$50" sign forms are read by
+   * denomination-units.ts. */
   {
     key: 'twenty five dollar',
     label: 'Twenty-Five Dollar ($25)',
@@ -107,50 +52,24 @@ export const DENOMINATION_RULES: readonly DenominationRule[] = [
     patterns: [['fifty', 'dollar'], ['50', 'dollar']]
   },
 
-  // --- classic US gold: the NAMED multiples of the Eagle ---
-  // Each of these names its own size, so none of them is ambiguous between
-  // the two series the way the bare word "Eagle" is.
+  // --- classic US gold: named multiples of the Eagle (unambiguous) ---
   { key: 'double eagle', label: 'Double Eagle ($20)', patterns: [['double', 'eagle'], ['twenty', 'dollar'], ['20', 'dollar']] },
   { key: 'half eagle', label: 'Half Eagle ($5)', patterns: [['half', 'eagle'], ['five', 'dollar'], ['5', 'dollar']] },
   { key: 'quarter eagle', label: 'Quarter Eagle ($2.50)', patterns: [['quarter', 'eagle']] },
 
-  /* --- THE WORD "EAGLE": AMBIGUOUS UNTIL A YEAR RESOLVES IT ---------------
-   *
-   * "Eagle" and "Gold Eagle" land on a key that commits to NOTHING: it could
-   * be the classic $10 piece (1795-1933) or any of the four modern bullion
-   * sizes (1986-). `resolveEagleSeries` (below) turns it into a real key as
-   * soon as a year is available. With NO year it stays vague, and the
-   * equivalence table makes it agree with every face value it could be, so
-   * an undated "Eagle" photo vetoes nothing.
-   *
-   * IT MUST SIT BELOW double / half / quarter eagle. ['eagle'] is a run of
-   * one token and appears inside all three of those names. */
+  /* The bare word "Eagle": could be the classic $10 or a modern bullion size.
+   * `resolveEagleSeries` resolves it by year; undated, it vetoes nothing.
+   * Must sit below double / half / quarter eagle, which contain ['eagle']. */
   {
     key: 'gold eagle',
     label: 'Eagle (series undetermined)',
     patterns: [['gold', 'eagle'], ['eagle']]
   },
 
-  /* The $10 FACE VALUE, as opposed to the word. A stated face value is never
-   * ambiguous, so these spellings go straight to the classic key and are
-   * never re-resolved. (A modern 1/4 oz Gold Eagle is also $10 and also lands
-   * here, correctly. The YEAR veto, not this table, is what stops a 1996
-   * quarter-ounce from matching a 1907 Eagle record.) */
-
-  /* --- dollars (specific dollar types before the generic one) -----------
-   *
-   * THREE different one-dollar coins live here. A Trade Dollar normally says
-   * so in the descriptor, and a gold dollar normally carries the word "Gold"
-   * or "G$1", so 'trade dollar', 'gold dollar' and 'silver dollar' are the
-   * SPECIFIC forms and the plain 'dollar' at the bottom of this table is the
-   * GENERIC one. A record or filename that merely says "$1" has not chosen
-   * between them, and DENOMINATION_EQUIVALENCES below says so. The three
-   * specifics genuinely conflict with each other: a gold dollar (1849-1889,
-   * 1.67g of gold) and a Trade Dollar (1873-1885, 27.2g of silver, struck for
-   * the China trade) are not remotely the same coin.
-   *
-   * "G$1" never reaches this table -- the "$" is destroyed by tokenizing, so
-   * it is read from the raw text by denomination-units.ts instead. */
+  /* --- dollars (specific types before the generic one) ---
+   * Trade, gold and silver dollars are distinct coins; a bare "$1" is the
+   * generic 'dollar' at the bottom of the table. "G$1" is read by
+   * denomination-units.ts because tokenizing removes the "$". */
   { key: 'trade dollar', label: 'Trade Dollar', patterns: [['trade', 'dollar']] },
   { key: 'gold dollar', label: 'Gold Dollar (G$1)', patterns: [['gold', 'dollar']] },
   { key: 'silver dollar', label: 'Silver Dollar', patterns: [['silver', 'dollar']] },
@@ -159,41 +78,17 @@ export const DENOMINATION_RULES: readonly DenominationRule[] = [
 
   // --- minor silver / base metal ---
   { key: 'quarter', label: 'Quarter (25c)', patterns: [['quarter', 'dollar'], ['quarter'], ['25c']] },
-  /* HALF DIME -- a SILVER five-cent piece, 1792-1873, and a different coin
-   * from the copper-nickel five-cent "nickel" that replaced it. Both are
-   * five cents, which is why 'five cent' below is generic over the pair.
-   * It is written either "1/2 10<cent sign>" (read by denomination-units.ts)
-   * or "5<cent sign>" (which lands on the generic 'five cent'). */
+  // Half dime: silver five-cent piece (1792-1873), distinct from the nickel.
   { key: 'half dime', label: 'Half Dime', patterns: [['half', 'dime']] },
   { key: 'dime', label: 'Dime (10c)', patterns: [['dime'], ['10c']] },
   { key: 'twenty cent', label: 'Twenty Cent', patterns: [['twenty', 'cent'], ['20c']] },
 
   /*
-   * THREE CENT: real filenames use the collector abbreviations "3CN" and
-   * "3CS" ("1865 3CN - Choice VF - Obverse - Photo.jpg"). Both survive
-   * tokenizing intact -- one token, three characters, so `singularize` leaves
-   * them alone -- so listing them here is all that is needed.
-   *
-   * They are separate KEYS from the generic 'three cent' because the silver
-   * trime and the copper-nickel three-cent piece are DIFFERENT COINS. A
-   * filename often writes only the generic form, so 'three cent' is declared
-   * EQUIVALENT to either specific one in DENOMINATION_EQUIVALENCES below. The
-   * two specific keys never agree with each other.
-   *
-   * THIS BLOCK MUST SIT ABOVE 'nickel'. "Three Cent Nickel" tokenizes to
-   * ['three','cent','nickel']; if the generic ['nickel'] rule were tried
-   * first the record would be filed as a FIVE CENT PIECE and every 3CN photo
-   * would disagree on denomination with its own record. MOST SPECIFIC FIRST
-   * is not a style preference.
-   *
-   * THE DIGIT SPELLINGS. The three is written in digits at least as often as
-   * in words ("1864 3-cent silver - PF64 - Obverse.jpg"), and a filename that
-   * states the metal outright must never be read as though it had not: the
-   * more specific the key, the more conflicts the veto can see. The digit
-   * forms are listed only WITH a metal word -- a bare "3 cent" / "3-cent"
-   * still means the vague 'three cent' and is handled by
-   * denomination-units.ts, which deliberately insists on the hyphen as its
-   * defence against "Stamp - 11 - 3 cent.jpg".
+   * Three cent: "3CN" / "3CS" survive tokenizing as single tokens. 3CS (silver
+   * trime) and 3CN (copper-nickel) are different coins under the generic
+   * 'three cent'. Must sit above 'nickel', or "Three Cent Nickel" would be read
+   * as a five-cent piece. Digit spellings are listed only with a metal word;
+   * a bare "3-cent" is handled by denomination-units.ts.
    */
   {
     key: 'three cent nickel',
@@ -216,179 +111,51 @@ export const DENOMINATION_RULES: readonly DenominationRule[] = [
   },
   { key: 'three cent', label: 'Three Cent', patterns: [['three', 'cent'], ['3c']] },
 
-  /*
-   * FIVE CENTS: a GENERIC face value and a SPECIFIC coin, split apart.
-   *
-   * 'five cent' is the bare face value -- "5c", "5<cent sign>", "Five Cent".
-   * It says the coin is worth five cents and NOTHING ELSE, because the United
-   * States struck two quite different five-cent pieces:
-   *
-   *     HALF DIME   1792-1873   silver, tiny, 1.24g
-   *     NICKEL      1866-       copper-nickel, much larger
-   *
-   * So a record reading "5<cent sign>" -- which is exactly what
-   * server/setup-database.sql seeds -- has not said which coin it is, and
-   * 'five cent' is declared GENERIC over both in DENOMINATION_EQUIVALENCES.
-   *
-   * THIS IS NOT THE TABLE CONTRADICTING ITSELF. FACE VALUE and COIN are two
-   * different facts, and two different coins may share one face value. The
-   * years overlap from 1866 to 1873, so the date cannot separate them either.
-   * The generic must match either; the two specifics must never match each
-   * other.
-   *
-   * 'nickel' (the specific coin) stays LAST of the three-cent family so that
-   * "Three Cent Nickel" can never be read as a five-cent piece.
-   */
+  // Five cents: generic 'five cent' over Half Dime (silver, 1792-1873) and
+  // Nickel (1866-). 'nickel' must come after the three-cent rules.
   { key: 'five cent', label: 'Five Cent (5c)', patterns: [['5c'], ['five', 'cent']] },
   { key: 'nickel', label: 'Nickel (5c)', patterns: [['nickel']] },
 
   { key: 'two cent', label: 'Two Cent', patterns: [['two', 'cent'], ['2c']] },
   { key: 'half cent', label: 'Half Cent', patterns: [['half', 'cent']] },
 
-  /*
-   * ONE CENT: the same generic/specific split once more.
-   *
-   *     LARGE CENT  1793-1857   copper, 28-29mm -- the size of a half dollar
-   *     SMALL CENT  1856-       the Flying Eagle / Indian Head / Lincoln cent
-   *
-   * Both ARE one cent, so a record saying only "1<cent sign>" is compatible
-   * with either, while a stated Large Cent and a stated Small Cent are
-   * different coins and conflict. 'cent' below is the GENERIC key and these
-   * two are its specifics.
-   *
-   * 'small cent' is listed even though the words are rare in a filename,
-   * because without a key for it a Large Cent has nothing to conflict WITH.
-   */
+  // One cent: generic 'cent' over Large Cent (1793-1857) and Small Cent (1856-).
   { key: 'large cent', label: 'Large Cent', patterns: [['large', 'cent']] },
   { key: 'small cent', label: 'Small Cent', patterns: [['small', 'cent']] },
   { key: 'cent', label: 'Cent (1c)', patterns: [['cent'], ['penny'], ['1c'], ['one', 'cent']] },
 
-  // --- generic dollar last so "half dollar" / "trade dollar" win first ---
+  // Generic dollar last so specific dollar types win.
   { key: 'dollar', label: 'Dollar ($1)', patterns: [['dollar'], ['one', 'dollar'], ['1', 'dollar'], ['100c']] }
 ];
 
  /*
- * WHEN TWO DIFFERENT KEYS STILL MEAN ONE COIN
+ * Denomination equivalences: when two different keys can still mean one coin.
  *
- * There are TWO shapes of rule in this table and they are not the same.
+ *  A. Alias: two names for one face value, interchangeable (Silver Eagle == $1).
+ *     Most aliases share a key in DENOMINATION_RULES and need no row here.
  *
- *  A. AN ALIAS. Two names for ONE face value, fully interchangeable in both
- *     directions, with nothing left to disagree about:
- *
- *         Silver Eagle  ==  $1
- *
- *     Most aliases never reach this table at all, because DENOMINATION_RULES
- *     and denomination-units.ts already give both spellings THE SAME KEY.
- *     Only Silver Eagle needs a row, and only because it must keep its own
- *     key.
- *
- *  B. A GENERIC OVER ITS SPECIFICS. One vague key standing over the real
- *     coins it might be. The generic agrees with EVERY specific, and the
- *     specifics NEVER agree with EACH OTHER:
- *
+ *  B. Generic over specifics: the generic agrees with every specific; the
+ *     specifics conflict with each other.
  *         3c  over  3CS / 3CN
  *         1c  over  Large Cent / Small Cent
  *         5c  over  Half Dime / Nickel
  *         $1  over  Gold Dollar / Silver Dollar / Trade Dollar
+ *     Records and filenames often state only the face value, so the generic
+ *     must not veto a specific. The specifics overlap in date, so the year
+ *     can't separate them.
  *
- * An alias has no losers -- nobody conflicts with anybody. A generic group
- * creates conflicts on purpose, between its own specifics.
+ * Silver Eagle is a $1 bullion coin, not the $10 gold Eagle;
+ * `denominationsAgree('silver eagle', 'eagle')` is false.
  *
- * THE TRAP: "SILVER EAGLE" IS ONE DOLLAR, NOT TEN AND NOT TWENTY
+ * Not transitive: Silver Eagle == $1 and $1 ~ Trade Dollar does not make a
+ * Silver Eagle match a Trade Dollar.
  *
- *   EAGLE          the classic US gold ten-dollar piece, 1795-1933.
- *   HALF EAGLE     $5 gold.      DOUBLE EAGLE   $20 gold.
- *   QUARTER EAGLE  $2.50 gold.
- *
- *   SILVER EAGLE   the modern American Silver Eagle bullion coin, 1986-.
- *                  One ounce of silver, worth far more than a dollar in
- *                  metal, but its FACE VALUE -- the only thing a
- *                  denomination field records -- is ONE DOLLAR.
- *
- * So "Silver Eagle" is a dollar coin that happens to have the word "Eagle" in
- * its name. It must NEVER collapse into 'eagle': a Silver Eagle photograph
- * landing on a $10 gold Eagle record would be a four-figure mistake. The two
- * keys stay separate and `denominationsAgree('silver eagle', 'eagle')` is
- * FALSE. There is a test with exactly that name.
- *
- * THE ASYMMETRY, AND WHY THE YEAR CANNOT RESCUE YOU
- *
- * The United States repeatedly struck two or three quite different coins at
- * one face value. The face value is what a denomination field records; the
- * coin is what the photograph shows. They are not the same fact.
- *
- *     ONE CENT    Large Cent  1793-1857  copper, 28-29mm
- *                 Small Cent  1856-      Flying Eagle / Indian / Lincoln
- *
- *     THREE CENT  3CS "trime" 1851-1873  silver
- *                 3CN         1865-1889  copper-nickel
- *
- *     FIVE CENT   Half Dime   1792-1873  silver, tiny
- *                 Nickel      1866-      copper-nickel, much larger
- *
- *     ONE DOLLAR  Gold Dollar   1849-1889  1.67g gold ("G$1")
- *                 Silver Dollar 1794-      Morgan, Peace, Seated...
- *                 Trade Dollar  1873-1885  27.2g, for the China trade
- *
- * A record may say which one it is -- 3CS and 3CN are seeded as separate
- * denominations in server/setup-database.sql -- or may say only the face
- * value, because '1c', '5c' and '$1' are the only rows the seed offers for
- * those three. A FILENAME very often says only the face value too.
- *
- * So for a shape-B entry the equivalence runs GENERIC-TO-SPECIFIC ONLY:
- *
- *     'three cent'  <-> 'three cent silver'        equivalent, no conflict
- *     'three cent'  <-> 'three cent nickel'        equivalent, no conflict
- *     'three cent silver' <-> 'three cent nickel'  A GENUINE CONFLICT
- *
- * Getting it wrong is costly in both directions: collapse all three into one
- * bucket and a silver trime starts matching a nickel three-cent; treat the
- * generic as conflicting with the specific and the denomination veto throws
- * away a CORRECT match.
- *
- * EVERY ONE OF THESE PAIRS OVERLAPS IN TIME -- 3CS and 3CN share 1865-1873,
- * Half Dime and Nickel 1866-1873, Large and Small Cent 1856-1857, the three
- * dollars 1873-1885 -- so "the dates will separate them" is false in exactly
- * the years where a mistake is possible. THE EAGLE IS THE ONE EXCEPTION, and
- * that 52-year gap is what makes `resolveEagleSeries` safe. Do not generalise
- * it to the groups above.
- *
- * A metal or size word in the text ("silver", "nickel", "large") does
- * separate them, and when one is present DENOMINATION_RULES has already
- * produced the SPECIFIC key -- so that disambiguation is a refinement that
- * happens earlier, not a requirement here.
- *
- * NOT TRANSITIVE, DELIBERATELY. 'silver eagle' is an ALIAS of 'dollar' and
- * 'dollar' is GENERIC over 'trade dollar', but a Silver Eagle does NOT match
- * a Trade Dollar: `denominationsAgree` consults each row on its own and never
- * chains them. A 1986 bullion coin and an 1878 China-trade coin are not the
- * same coin, however the arrows line up.
- *
- * THIS IS THE SINGLE SOURCE OF TRUTH. The scorer, the near-match test, the
- * hard veto and the import paths all call `denominationsAgree` rather than
- * `===`. Two tables that could drift would eventually disagree about whether
- * a photo belongs to a coin.
- *
- * ADDING TO THIS TABLE
- *   DO NOT GUESS. A wrong equivalence is worse than a missing one, because it
- *   silently attaches a photo to the wrong coin whereas a missing one merely
- *   sends the pair to review. Add a group only when the generic form
- *   genuinely cannot mean anything except one of the listed specifics.
- *
- *   Pick the SHAPE before you write the row. Ask: "if both sides name a
- *   member of this group, and they name DIFFERENT members, is that a
- *   conflict?" If yes it is a generic group (shape B). If no it is an alias
- *   (shape A) -- and check first whether the two spellings can just be given
- *   the same key in DENOMINATION_RULES instead, which is simpler still.
+ * When adding a row: a wrong equivalence silently attaches photos to the wrong
+ * coin, while a missing one only sends a pair to review. Add a generic group
+ * only when the generic can mean nothing but the listed specifics.
   */
 
-/**
- * SHAPE A -- two names for one face value, fully interchangeable.
- *
- * Every key in `names` agrees with every other key in `names`, in both
- * directions, and none of them conflicts with any of the others. There is no
- * "more specific" member: that is the whole difference from shape B.
- */
+/** Two names for one face value, fully interchangeable. */
 export interface DenominationAlias {
   kind: 'alias';
   /** Interchangeable keys. Order is irrelevant. */
@@ -398,10 +165,8 @@ export interface DenominationAlias {
 }
 
 /**
- * SHAPE B -- one vague key standing over the real coins it might be.
- *
- * `generic` agrees with every entry in `specific`. The entries in `specific`
- * NEVER agree with each other; that disagreement is the point of the group.
+ * One vague key over the coins it might be. `generic` agrees with every
+ * entry in `specific`; the specifics never agree with each other.
  */
 export interface DenominationGeneric {
   kind: 'generic';
@@ -416,16 +181,9 @@ export interface DenominationGeneric {
 /** One row of the single shared equivalence table, of either shape. */
 export type DenominationEquivalence = DenominationAlias | DenominationGeneric;
 
-/**
- * THE ONE TABLE. The veto, the scorer and the near-match test all reach this
- * through `denominationsAgree`; none of them holds a rule of its own.
- */
+/** The shared equivalence table, consulted only through `denominationsAgree`. */
 export const DENOMINATION_EQUIVALENCES: readonly DenominationEquivalence[] = [
-  /* --- A. ALIASES -------------------------------------------------------
-   * Only one row. Every other alias ("Eagle"/"$10", "Double Eagle"/"$20",
-   * "Half Eagle"/"$5", "Quarter Eagle"/"$2.50", "Half Dime"/"1/2 10c") is
-   * already resolved to a single key by the parse tables, which is a stronger
-   * guarantee than a row here could give. ------------------------------- */
+  /* --- A. aliases. Most aliases already share a key in the parse tables. --- */
   {
     kind: 'alias',
     names: ['silver eagle', 'dollar'],
@@ -438,11 +196,7 @@ export const DENOMINATION_EQUIVALENCES: readonly DenominationEquivalence[] = [
       'one, which is the point of giving the Silver Eagle a key at all.'
   },
 
-   /*
-   * B. GENERIC OVER SPECIFICS
-   *
-   * In each row the generic matches anything; the specifics fight.
-    */
+  /* --- B. generic over specifics: the generic matches any; specifics conflict --- */
   {
     kind: 'generic',
     generic: 'three cent',
@@ -477,27 +231,9 @@ export const DENOMINATION_EQUIVALENCES: readonly DenominationEquivalence[] = [
       'Half Dime and a stated Nickel are different coins and conflict.'
   },
   {
-    /* THE UNDATED EAGLE. 'gold eagle' is produced ONLY by the bare word
-     * "Eagle" / "Gold Eagle" with no usable year beside it;
-     * `resolveEagleSeries` replaces it the moment a year is available, so by
-     * the time this row is consulted we genuinely do not know the series.
-     *
-     * The honest specific list is every face value an Eagle can carry:
-     *
-     *     classic Eagle   $10   1795-1933   -> 'eagle'
-     *     modern 1/10 oz  $5    1986-       -> 'half eagle'
-     *     modern 1/4  oz  $10   1986-       -> 'eagle'
-     *     modern 1/2  oz  $25   1986-       -> 'twenty five dollar'
-     *     modern 1    oz  $50   1986-       -> 'fifty dollar'
-     *
-     * $20 (Double Eagle) and $2.50 (Quarter Eagle) are NOT in the list:
-     * neither series ever put those values on a coin called simply "Eagle",
-     * and both have their own unmistakable name.
-     *
-     * GENERIC AND NOT ALIAS, so this key vetoes none of the four while the
-     * four go on conflicting with each other. That is the safe direction to
-     * be wrong in: a too-wide generic costs a human glance, a missing
-     * equivalence costs a correct match. */
+    /* The undated Eagle: 'gold eagle' with no usable year. Specifics are every
+     * face value an Eagle can carry ($10 classic; $5/$10/$25/$50 bullion).
+     * $20 and $2.50 have their own names and are excluded. */
     kind: 'generic',
     generic: 'gold eagle',
     specific: ['eagle', 'half eagle', 'twenty five dollar', 'fifty dollar'],
@@ -525,18 +261,9 @@ export const DENOMINATION_EQUIVALENCES: readonly DenominationEquivalence[] = [
 ];
 
 /**
- * Do these two denomination keys describe the same coin?
- *
- * Use this ANYWHERE two denominations are compared. Plain `===` would reject
- * the alias and generic/specific pairs above and veto correct matches.
- *
- * DELIBERATELY NOT TRANSITIVE. Each row is checked on its own and the rows are
- * never chained, so 'silver eagle' == 'dollar' and 'dollar' ~ 'trade dollar'
- * do NOT combine into 'silver eagle' ~ 'trade dollar'. See the header.
- *
- * A missing value on either side is NOT agreement -- it is no evidence at all,
- * and the "absence is not agreement" rule means the caller must handle that
- * case itself rather than being told the two agree.
+ * Do these two denomination keys describe the same coin? Use this wherever
+ * denominations are compared; `===` would reject the pairs above.
+ * Not transitive: rows are never chained. A missing value is not agreement.
  */
 export function denominationsAgree(
   left: string | null | undefined,
@@ -554,15 +281,9 @@ export function denominationsAgree(
 }
 
 /**
- * True when the two keys agree WITHOUT being identical -- i.e. they agree
- * because of a row in the table above rather than because the two sides wrote
- * the same thing.
- *
- * Used purely to word the explanation honestly ("Three Cent is the general
- * form of Three Cent Silver") rather than claiming an exact match. The
- * sentence is phrased for the common case, shape B; the single alias row
- * (Silver Eagle / $1) also comes through here and reads acceptably in the
- * "$1 is the general form of Silver Eagle" direction.
+ * True when the two keys agree via the equivalence table rather than being
+ * identical. Used to word explanations ("Three Cent is the general form of
+ * Three Cent Silver").
  */
 export function denominationsAgreeLoosely(
   left: string | null | undefined,
@@ -572,30 +293,10 @@ export function denominationsAgreeLoosely(
 }
 
 /**
- * True when `specific` is one of the precise coins that `generic` stands over
- * -- 'three cent silver' under 'three cent', 'half dime' under 'five cent'.
- *
- * WHY THIS IS A QUESTION WORTH ASKING
- *   Two readers look at every filename: the WORD table above, and the
- *   face-value reader in denomination-units.ts. Normally a stated face value
- *   is the better evidence and wins. But a face value can only ever say HOW
- *   MANY CENTS, and for three cents and five cents that is not enough to name
- *   the coin:
- *
- *       1864 3-cent silver - PF64 - Obverse.jpg
- *            ^^^^^^ the reader sees "three cents"
- *                   ^^^^^^ the words say WHICH three-cent coin
- *
- *   Letting the face value win there threw the word "silver" away and
- *   produced the vague 'three cent', which is compatible with a Three Cent
- *   NICKEL record -- so the denomination veto never fired and the owner was
- *   offered his 3CN for a photograph of his 3CS. This predicate is how
- *   filename-parser.ts knows to keep the sharper of the two answers.
- *
- *   It is strictly a sharpening: the two keys already AGREE (that is what
- *   makes one the generic of the other), so no pairing that used to match
- *   stops matching. What changes is that the specific key can now CONFLICT
- *   with the other specific, which is exactly what it is for.
+ * True when `specific` is one of the coins `generic` stands over
+ * ('three cent silver' under 'three cent'). filename-parser.ts uses this to
+ * keep the word table's sharper answer over a face value, e.g.
+ * "1864 3-cent silver" should be 3CS, not the vague 'three cent'.
  */
 export function isSpecificFormOf(
   specific: string | null | undefined,
@@ -608,30 +309,14 @@ export function isSpecificFormOf(
 }
 
  /*
- * THE YEAR AS A TIE-BREAKER: WHICH EAGLE IS THIS?
+ * Which Eagle? Resolved by year:
+ *   Classic gold Eagle    $10, 1795-1933
+ *   American Gold Eagle   bullion, 1986-: 1/10 oz $5, 1/4 oz $10, 1/2 oz $25, 1 oz $50
+ *   1934-1985             no gold Eagle struck
  *
- *   CLASSIC GOLD EAGLE   $10, struck 1795-1933. Real circulating money,
- *                        16.72 g of .900 gold. All US gold coinage for
- *                        circulation ends with the 1933 gold recall.
- *
- *   AMERICAN GOLD EAGLE  bullion, struck 1986-present. Sold by weight, not
- *                        spent. Four sizes, each with a nominal face value:
- *                            1/10 oz -> $5     1/4 oz -> $10
- *                            1/2  oz -> $25    1   oz -> $50
- *
- *   1934 - 1985          NOTHING. Fifty-two years with no gold Eagle.
- *
- * THAT GAP IS WHY THIS IS SAFE AND NOT A GUESS: no year can belong to both
- * series. Contrast every other ambiguous pair in this file -- Half Dime vs
- * Nickel, 3CS vs 3CN, Large vs Small Cent -- where the two coins were struck
- * ALONGSIDE each other and the year is worthless. Do not copy this technique
- * to those.
- *
- * AND WHEN THERE IS NO YEAR WE STOP. An undated "Eagle" keeps the vague
- * 'gold eagle' key, which the equivalence table makes compatible with every
- * face value it could be, so it disqualifies nothing. Refusing to answer is
- * the correct answer; inventing a series would attach a photo of a $2,500
- * bullion coin to a $20,000 classic coin, or the reverse.
+ * The gap is what makes year resolution safe here. Don't apply it to the
+ * other generic groups (Half Dime/Nickel, 3CS/3CN, Large/Small Cent), whose
+ * dates overlap. Without a year the vague key is left unresolved.
   */
 
 /** First year of the American Gold Eagle bullion series. Nothing before it. */
@@ -650,33 +335,15 @@ const MODERN_EAGLE_DEFAULT = { key: 'fifty dollar', label: 'Gold Eagle 1 oz ($50
 const CLASSIC_EAGLE = { key: 'eagle', label: 'Eagle ($10)' };
 
  /*
- * THE OPTIONAL REFINEMENT: A WEIGHT WORD NAMES THE EXACT SIZE
+ * Weight words that name a modern Gold Eagle's size. Consulted only once the
+ * year says "modern". Ordered most specific first ("1 oz" last so it can't
+ * claim "1/10 oz").
  *
- * Only the ONE OUNCE coin is called a "Gold Eagle" unqualified -- the $50
- * default above. The three fractional sizes are normally written with their
- * fraction ("1/4 oz Gold Eagle") or their own face value, and when the
- * fraction IS written it gives the face value exactly. So this is a
- * refinement on top of the year, never a substitute: it is consulted only
- * once the year has already said "modern".
+ * Fractions accept "/", "-", "_" and the single glyph: a filename can't
+ * contain "/", but coin record text can.
  *
- * ORDERED MOST SPECIFIC FIRST, like every other table in this file. "1 oz"
- * must be tried last or it would claim the "1" at the front of "1/10 oz".
- *
- * WHY EACH FRACTION ACCEPTS "/", "-" AND "_", AND ALSO THE SINGLE GLYPH.
- * A FILENAME CANNOT CONTAIN A FORWARD SLASH -- it is the path separator, and
- * `baseName` in text-tokens.ts splits on it, so "2015 1/2 oz Eagle.jpg" would
- * arrive here as "2 oz Eagle.jpg" with the year already lost. Anyone writing
- * a fraction into a file name therefore writes "1-2 oz", "1_2 oz" or the
- * single character. The slash form is still accepted because the other caller
- * is a coin RECORD, whose coinType and variety columns hold ordinary text and
- * keep their slashes.
- *
- * THE FRACTIONAL KEYS ARE THE CLASSIC KEYS, deliberately: 1/10 oz is $5 and
- * maps to 'half eagle', 1/4 oz is $10 and maps to 'eagle'. The face value
- * really is the same, and sharing the key is what lets a modern bullion photo
- * match a record seeded with the existing "$5" or "$10" row. The YEAR VETO in
- * match-vetoes.ts, not this table, is what keeps a 1996 tenth-ounce away from
- * an 1899 Half Eagle record.
+ * Fractional sizes share the classic keys (1/10 oz = $5 'half eagle',
+ * 1/4 oz = $10 'eagle'); the year veto keeps them apart from classic records.
   */
 const GOLD_EAGLE_SIZES: ReadonlyArray<{ pattern: RegExp; key: string; label: string }> = [
   { pattern: /(?:1\s*[/\-_]\s*10|⅒)\s*(?:oz|ounce)/i, key: 'half eagle', label: 'Gold Eagle 1/10 oz ($5)' },
@@ -686,34 +353,18 @@ const GOLD_EAGLE_SIZES: ReadonlyArray<{ pattern: RegExp; key: string; label: str
 ];
 
 /**
- * Turn the vague 'gold eagle' key into a real face value, using the year.
- *
- * THE ONE PLACE this decision is made. Both parsers call it -- the filename
- * parser and the coin-record parser -- so neither side can form its own
- * opinion about which series a coin belongs to.
- *
- * It is a no-op for every key except 'gold eagle'. In particular it never
- * touches 'eagle', 'half eagle', 'double eagle' or 'quarter eagle': those
- * came from a STATED face value or a self-describing name and are not
- * ambiguous, so re-reading them against the year would be meddling.
+ * Turn the vague 'gold eagle' key into a real face value using the year. Used
+ * by both the filename and coin-record parsers. A no-op for every other key.
  *
  * @param denomination what the word/sign tables produced (may be null)
  * @param year         the year the same parser read, or null if it read none
  * @param text         the raw text, searched for a weight word as a refinement
  *
- * The four outcomes:
- *
- *   no year            -> unchanged. WE DO NOT GUESS. The equivalence table
- *                         makes the vague key agree with everything it could
- *                         be, so nothing is vetoed on its account.
- *   year <= 1933       -> the classic $10 Eagle.
- *   year >= 1986       -> the modern bullion coin: the size named by a weight
- *                         word if there is one, otherwise the unqualified
- *                         meaning, which the owner gives as the $50 one-ouncer.
- *   1934 .. 1985       -> unchanged. No gold Eagle exists with such a date, so
- *                         the year is telling us something is wrong (most
- *                         likely it is not really the coin's mint year) and
- *                         the honest answer is still "we do not know".
+ * Outcomes:
+ *   no year       -> unchanged (the vague key vetoes nothing)
+ *   year <= 1933  -> classic $10 Eagle
+ *   year >= 1986  -> modern bullion: the size named by a weight word, else $50 (1 oz)
+ *   1934 .. 1985  -> unchanged (no gold Eagle has such a date)
  */
 export function resolveEagleSeries<T extends { key: string; label: string }>(
   denomination: T | null,
@@ -733,10 +384,6 @@ export function resolveEagleSeries<T extends { key: string; label: string }>(
   // 1934-1985: neither series was struck. Say nothing.
   return denomination;
 }
-
- /*
- * MINT MARKS
-  */
 
 /** Valid US mint mark codes. Anything not in here is not a mint mark. */
 export const MINT_CODES = new Set(['p', 'd', 's', 'w', 'o', 'c', 'cc', 'm']);
@@ -766,24 +413,12 @@ export const MINT_LABELS: Readonly<Record<string, string>> = {
   m: 'M (Manila)'
 };
 
-/**
- * Friendly label for a mint code, for use in the "why" sentences.
- * Unknown codes fall back to shouting the code itself, which is better than
- * printing nothing when a record holds a mint we have not catalogued.
- */
+/** Friendly label for a mint code; unknown codes fall back to the code in upper case. */
 export function mintLabel(code: string): string {
   return MINT_LABELS[code] ?? code.toUpperCase();
 }
 
- /*
- * TOKEN FILTERS
-  */
-
-/**
- * Words that carry no information about WHICH coin this is. They are removed
- * before we compare "coin type" words, so "obverse" and "scan" cannot inflate
- * a similarity score.
- */
+/** Words that say nothing about which coin this is; removed before comparing coin-type words. */
 export const STOP_WORDS = new Set([
   // file / image words
   'jpg', 'jpeg', 'png', 'webp', 'gif', 'tif', 'tiff', 'bmp', 'heic', 'heif',
@@ -799,36 +434,15 @@ export const STOP_WORDS = new Set([
   // filler
   'the', 'and', 'of', 'a', 'an',
 
-  /*
-   * Everything that describes the PHOTOGRAPH or the GRADE rather than the
-   * coin, pulled in from filename-vocabulary.ts: side words ("Obverse",
-   * "Label"), photo qualifiers ("Photo", "Orig", "Sharpened", "Small"),
-   * grade vocabulary ("VF", "Choice", "DCAM") and era markers ("BC", "CE").
-   *
-   * They are folded in HERE rather than filtered separately so that every
-   * consumer of `meaningfulTokens` -- the filename parser AND the coin-record
-   * parser -- drops them automatically and identically. If they survived,
-   * two unrelated coins would look similar merely because both filenames end
-   * in "- Obverse - Photo".
-   *
-   * Safe despite "Large Cent" and "Small Cent" being real denominations:
-   * denomination detection runs on the RAW token list before stop words are
-   * removed, so those rules still fire.
-   */
+  // Photo, side and grade vocabulary, so every caller of `meaningfulTokens`
+  // drops them identically. Denomination detection runs before stop-word
+  // removal, so "Large Cent" / "Small Cent" still work.
   ...PHOTO_NOISE_WORDS
 ]);
 
-/** Camera / phone filename prefixes. A number right after one of these is a
- *  sequence number, NOT a year -- this is what stops "IMG_2024.jpg" from being
- *  read as a 2024 coin.
- *
- *  "im" is here because this collection's older camera produced "IM000025.JPG".
- *
- *  "coin" is deliberately NOT here even though "Coin_026.JPG" exists: "coin"
- *  is an ordinary word that could legitimately precede a year ("Coin 1881
- *  Morgan"), and rejecting that year would cost more than it saves. The
- *  camera-default names are caught instead by non-coin-detector.ts, which
- *  requires the WHOLE filename to be a prefix plus a number. */
+/** Camera / phone filename prefixes. A number right after one is a sequence
+ *  number, not a year ("IMG_2024.jpg" is not a 2024 coin). "coin" is omitted
+ *  because it can legitimately precede a year ("Coin 1881 Morgan"). */
 export const CAMERA_PREFIXES = new Set([
   'img', 'image', 'im', 'dsc', 'dscn', 'dscf', 'dscd', 'pxl', 'p',
   'photo', 'pic', 'pict', 'scan', 'screenshot', 'mvimg', 'vid', 'gopr',
@@ -836,26 +450,17 @@ export const CAMERA_PREFIXES = new Set([
 ]);
 
 /**
- * Third-party grading services. Recognised but not used as coin-type words.
- *
- * On its own a cert company is WEAK evidence -- hundreds of coins in one
- * collection are "PCGS". Paired with a matching grade it becomes strong; see
- * the combination rule in match-scorer.ts.
+ * Third-party grading services. Weak evidence alone (many coins are "PCGS");
+ * strong when paired with a matching grade (see match-scorer.ts).
  */
 export const CERT_COMPANIES = new Set([
   'ngc', 'pcgs', 'anacs', 'icg', 'cac', 'cacg', 'segs', 'nnc'
 ]);
 
 /**
- * Grade shorthand as a WHOLE TOKEN, e.g. ms63, au50, pf70, xf45, vf20,
- * pf65rb, pf64cameo, pr69dcam.
- *
- * Used to keep grade tokens out of the coin-type evidence. The richer grade
- * forms that tokenizing destroys -- "VF+", "XF-AU", "Choice VF" -- are read
- * separately by grade-parser.ts, which works on the raw filename.
- *
- * The designation group is ordered LONGEST FIRST so "cameo" is never matched
- * as "cam" with a stray "eo" left over.
+ * Grade shorthand as a whole token, e.g. ms63, pf65rb, pr69dcam. Keeps grades
+ * out of the coin-type evidence; richer forms ("VF+", "Choice VF") are read
+ * by grade-parser.ts. Designations are ordered longest first ("cameo" before "cam").
  */
 export const GRADE_PATTERN =
   /^(ms|pf|pr|sp|au|xf|ef|vf|vg|ag|fr|po|g|f)-?(\d{1,2})(dcameo|cameo|dcam|ucam|cam|dpl|pl|rd|rb|bn|fb|fs|fh|bl|star)?$/;

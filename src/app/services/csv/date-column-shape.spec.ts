@@ -1,18 +1,7 @@
 /**
- * Tests for value-aware classification of a date-ish column.
- *
- * `header-synonyms.ts` maps a column headed `Date` onto `year`, on the
- * numismatic reading that a coin's "date" is the date it was struck. The
- * heading cannot tell that from a calendar date; the VALUES can, and these
- * tests fix exactly how they are read. See date-column-shape.ts for why.
- *
- * THE ASYMMETRY THAT SHAPES EVERY ASSERTION
- *
- * `coin-year` is a claim; anything else is a shrug. A shrug leaves the
- * dropdown blank and costs the user two seconds. A wrong claim costs the
- * whole import. So every "is this a coin year?" test below is really asking
- * "is there any way this could be a calendar date?", and when the answer is
- * yes the verdict must not be `coin-year`.
+ * Tests for classifying a date-ish column by its values (see date-column-shape.ts).
+ * `coin-year` is a claim and any doubt must avoid it; a blank dropdown costs
+ * the user a click, a wrong mapping corrupts the import.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -27,7 +16,7 @@ import {
   textColumnSamples
 } from './date-column-shape';
 
-/** Shorthand: a plain text cell, the only kind a CSV can produce. */
+/** A plain text cell, the only kind a CSV produces. */
 function text(value: string) {
   return { text: value };
 }
@@ -40,16 +29,14 @@ describe('classifyCellValue — one cell at a time', () => {
   });
 
   it('reads a mint-marked coin date as a coin year', () => {
-    // `1909-S` is how a collector writes the San Francisco cent. It looks
-    // like a hyphenated date and is not one.
+    // `1909-S` is a year with a mint mark, not a hyphenated date.
     expect(classifyCellValue(text('1909-S'))).toBe('coin-year');
     expect(classifyCellValue(text('1883-CC'))).toBe('coin-year');
     expect(classifyCellValue(text('1922 D'))).toBe('coin-year');
   });
 
   it('reads a year RANGE as a coin year', () => {
-    // CoinRecord.year is a string precisely so a type can carry its span.
-    // A rule that called `1916-1945` "not a year" would be wrong.
+    // A type's span is a valid coin year (CoinRecord.year is a string).
     expect(classifyCellValue(text('1916-1945'))).toBe('coin-year');
     expect(classifyCellValue(text('1916–1945'))).toBe('coin-year');
     expect(classifyCellValue(text('1916-45'))).toBe('coin-year');
@@ -81,8 +68,7 @@ describe('classifyCellValue — one cell at a time', () => {
   });
 
   it('reads YYYY-MM-DD as a full date even though it STARTS with four digits', () => {
-    // The trap. Truncating to the first four characters, or testing
-    // /^\d{4}/, turns every ISO purchase date in the file into a coin year.
+    // Must not be read as a year by looking at the first four characters.
     expect(classifyCellValue(text('2024-03-15'))).toBe('full-date');
     expect(classifyCellValue(text('1881-01-01'))).toBe('full-date');
     expect(classifyCellValue(text('2024/03/15'))).toBe('full-date');
@@ -98,19 +84,14 @@ describe('classifyCellValue — one cell at a time', () => {
   });
 
   it('reads a year-and-month pair as a full date rather than a range', () => {
-    // `2024-03` cannot be a span -- it would have to run backwards -- so it
-    // is a calendar value with the day left off.
+    // `2024-03` can't be a span (it runs backwards), so it is a calendar value.
     expect(classifyCellValue(text('2024-03'))).toBe('full-date');
     expect(classifyCellValue(text('1999-01'))).toBe('full-date');
     expect(classifyCellValue(text('3/15'))).toBe('full-date');
   });
 
   it('trusts the spreadsheet when the cell itself is typed as a date', () => {
-    // The free, strongest signal: `read-excel-file` only hands back a `Date`
-    // for a cell carrying a date NUMBER FORMAT, and such a cell is always a
-    // full date. Whatever the text rendering happens to look like, the type
-    // wins -- including for a date that falls on 1 January, whose rendering
-    // is the most year-like a full date can get.
+    // A cell typed as a date is a full date, whatever its text looks like.
     expect(classifyCellValue({ text: '1881-01-01', typedDate: true })).toBe('full-date');
     expect(classifyCellValue({ text: '1881', typedDate: true })).toBe('full-date');
   });
@@ -118,8 +99,7 @@ describe('classifyCellValue — one cell at a time', () => {
   it('refuses to call an unrecognisable cell a year', () => {
     expect(classifyCellValue(text('unknown'))).toBe('other');
     expect(classifyCellValue(text('n/a'))).toBe('other');
-    // A date cell whose number format was lost: the raw serial. We cannot
-    // tell it from a quantity, so we must not call it a year.
+    // A raw serial (number format lost) can't be told from a quantity.
     expect(classifyCellValue(text('45678'))).toBe('other');
     expect(classifyCellValue(text('Morgan Dollar'))).toBe('other');
   });
@@ -148,8 +128,7 @@ describe('classifyColumnValues — the whole column', () => {
   });
 
   it('refuses a column that mixes years and full dates', () => {
-    // Nothing principled to pick here, and picking wrong puts calendar dates
-    // into Year for part of the file. Hand it back to the user.
+    // No principled choice; hand it back to the user.
     expect(classifyColumnValues(['1881', '3/15/2024', '1909'].map(text))).toBe('mixed');
   });
 
@@ -177,11 +156,8 @@ describe('classifyColumnValues — the whole column', () => {
   });
 
   it('lets one typed date cell veto a column that otherwise reads as years', () => {
-    // The typed cell's TEXT is `1883`, which on its own reads as a perfectly
-    // good coin year. Only the type says otherwise, so this assertion goes
-    // red the moment the type stops being consulted -- which is the point of
-    // writing it this way rather than with a date-looking rendering that the
-    // pattern would have caught anyway.
+    // The text `1883` reads as a year; only the type says otherwise, so this
+    // fails if the type stops being consulted.
     expect(classifyColumnValues([
       { text: '1881' },
       { text: '1882' },
@@ -192,9 +168,7 @@ describe('classifyColumnValues — the whole column', () => {
 
 describe('sampleColumnCells — how much of the column is read', () => {
   it('skips leading blanks instead of giving up on the column', () => {
-    // A collector's sheet routinely opens with a spacer row, or a first row
-    // that is a group heading. Sampling "the first few rows" verbatim reads
-    // nothing and classifies the column as unknown.
+    // Leading blank or heading rows must not leave the column unclassified.
     const column = [text(''), text(''), text('1881'), text('1909-S')];
     expect(sampleColumnCells(column).map(cell => cell.text)).toEqual(['1881', '1909-S']);
   });
@@ -205,8 +179,7 @@ describe('sampleColumnCells — how much of the column is read', () => {
   });
 
   it('gives up scanning after a bounded number of rows', () => {
-    // A column that is blank for thousands of rows must not cost a full scan
-    // of a 50,000-row export every time the mapping grid is drawn.
+    // Scanning is bounded, so a mostly blank column doesn't cost a full scan.
     const column = [
       ...Array.from({ length: COLUMN_SCAN_ROWS + 10 }, () => text('')),
       text('1881')
@@ -253,8 +226,7 @@ describe('mergeColumnSamples — one mapping, several worksheets', () => {
 
     expect(merged['Date'].map(cell => cell.text)).toEqual(['1881', '3/15/2024']);
     expect(merged['Cost'].map(cell => cell.text)).toEqual(['1250']);
-    // Pooled, the column is a mix, which is exactly the verdict a user
-    // needs to see rather than whichever tab happened to be read first.
+    // Pooled across tabs, the column is mixed.
     expect(classifyColumnValues(merged['Date'])).toBe('mixed');
   });
 

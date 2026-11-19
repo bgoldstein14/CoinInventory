@@ -1,18 +1,12 @@
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
-      <!-- Named after the menu entry the user pressed, not after the file
-           types this dialog can read: it reads both either way. See `mode`
-           in csv-import-modal.ts. -->
+      <!-- Heading follows the menu entry used (see `mode`). -->
       <h2>{{ heading() }}</h2>
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <!--
-        Guidance shown before a file is chosen. The template download is
-        generated from the same field list the importer uses, so it cannot
-        go stale.
-      -->
+      <!-- Guidance shown before a file is chosen. -->
       @if (!hasFile() && !showSheetPicker()) {
         <div class="csv-help">
           <p>
@@ -57,11 +51,7 @@
 
       @if (!hasFile() && !showSheetPicker()) {
         <label class="file-picker">
-          <!-- `accept` leads with the format the menu entry named. It is a
-               SUGGESTION to the file dialog and nothing more — the other
-               format is still listed, and handleFileSelection() routes on
-               the extension, so a CSV chosen from the Excel door still
-               works. -->
+          <!-- `accept` is only a suggestion; both formats are always read. -->
           <input type="file" [attr.accept]="acceptedExtensions()"
                  (change)="handleFileSelection($event)" [disabled]="parsing()" />
           {{ parsing() ? 'Reading workbook…' : filePickerLabel() }}
@@ -73,8 +63,7 @@
         <p class="csv-file-error" role="alert">{{ fileError() }}</p>
       }
 
-      <!-- STEP 1 - which sheets? Workbooks with more than one worksheet
-           only; a single-sheet workbook skips this entirely. -->
+      <!-- Step 1: choose worksheets (multi-sheet workbooks only). -->
       @if (showSheetPicker()) {
         <div class="sheet-picker">
           <h3>Which worksheets? &mdash; {{ fileName() }}</h3>
@@ -97,8 +86,6 @@
                       {{ sheet.headers.length === 1 ? 'column' : 'columns' }}
                     </span>
                     @if (sheet.recognisedColumns === 0) {
-                      <!-- Listed and tickable, just not ticked. A guess about
-                           what counts as inventory is only a guess. -->
                       <span class="sheet-warn">no coin columns recognised &mdash; tick to include anyway</span>
                     }
                   } @else {
@@ -113,8 +100,6 @@
             <button type="button" class="small-button" (click)="clearSheetSelection()">Clear</button>
           </p>
 
-          <!-- Name what differs rather than saying "columns are inconsistent",
-               which cannot be acted on without going back to Excel. -->
           @if (sheetWarnings().length > 0) {
             <div class="sheet-mismatch" role="status">
               <h4>These sheets do not have the same columns</h4>
@@ -138,9 +123,7 @@
         </div>
       }
 
-      <!-- STEP 2 - map the columns, then preview what will be created.
-           Shared by both formats; this is the whole reason Excel import
-           lives in this component rather than in one of its own. -->
+      <!-- Step 2: map columns and preview (shared by both formats). -->
       @if (hasFile() && !showSheetPicker()) {
         @if (workbookSheets().length > 1) {
           <p class="sheet-summary">
@@ -179,9 +162,7 @@
           </div>
         </div>
 
-        <!-- One preview table per source, so a multi-sheet import shows each
-             sheet under its own heading row rather than pretending they are
-             one grid. -->
+        <!-- One preview table per source sheet. -->
         @for (source of importSources(); track source.sheetName ?? '') {
           @if (source.rows.length > 0) {
             <div class="csv-preview">
@@ -203,19 +184,11 @@
           }
         }
 
-        <!-- What this import will actually do, BEFORE it does it. A coin
-             needs at least two of Year / Coin Type / Denomination to be
-             identifiable, and the backend refuses one with no denomination
-             outright. The count shown here and the count imported come from
-             the same call, so the button cannot over-promise. -->
+        <!-- Import plan; uses the same counts the import will deliver. -->
         <div class="import-plan">
           <h3>What will be imported</h3>
 
-          <!-- UNTICKED BY DEFAULT, exactly as on the Quicken dialog. The
-               option belongs to the IMPORT, not to one file format, so it
-               is offered here for CSV and Excel on the same terms: a coin
-               the owner no longer has is still a coin he had, and leaving
-               those out is the deliberate act. -->
+          <!-- Unticked by default, as on the Quicken dialog. -->
           <label class="csv-sold-toggle">
             <input
               type="checkbox"
@@ -254,24 +227,14 @@
             }
           </p>
 
-          <!-- How many will link to a denomination in the reference list.
-               Plain text, no icon, no colour and no threshold: a coin that
-               links to nothing is a perfectly ordinary import. The number is
-               here because it is the cheapest check on the MAPPING -- a
-               column mapped onto the wrong field shows almost nothing
-               linking, while every row still imports. -->
+          <!-- Denomination link count; informational, and a quick check on the mapping. -->
           @if (plannedImportCount() > 0) {
             <p class="import-plan-summary import-plan-links">
               <strong>{{ plannedLinkedCount() }}</strong> of
               {{ plannedImportCount() }}
               will be linked to a denomination in your reference list.
-              <!-- Deliberately does NOT spell out the "Other (...)" display
-                   form. That string is built in exactly one place
-                   (services/denominations/denomination-display.ts) and
-                   denomination-display.spec.ts greps the whole source tree,
-                   templates included, to keep it that way: a second copy is
-                   a fork, and the same coin ends up reading two ways on two
-                   screens. -->
+              <!-- The "Other (...)" display form is built only in
+                   denomination-display.ts; do not spell it out here. -->
               @if (plannedLinkedCount() < plannedImportCount()) {
                 The rest keep the wording from your file and show it as-is
                 &mdash; nothing is lost, and you can pick a denomination for
@@ -286,8 +249,7 @@
                 <li>
                   <span class="sheet-name">{{ tally.sheetName }}</span>
                   <span>{{ tally.accepted }} in</span>
-                  <!-- Deliberately NOT class="sheet-warn". The skipped count
-                       beside it is a warning; this one is a fact. -->
+                  <!-- Informational, so not styled as sheet-warn. -->
                   @if (tally.accepted > 0) {
                     <span class="sheet-note">{{ tally.linkedDenominations }} linked</span>
                   }
@@ -318,18 +280,13 @@
           }
         </div>
 
-        <!-- Rows that could not be imported, reported again after the fact.
-             The dialog stays open on a partial import so this is actually
-             read, rather than flashing past in a toast. -->
+        <!-- Rows refused by the last import; the dialog stays open so they can be read. -->
         @if (csvExceptions().length > 0) {
           <div class="csv-exceptions">
             <h3>Not imported &mdash; too little detail ({{ csvExceptions().length }})</h3>
             <p class="csv-exceptions-summary">
               Imported {{ importedCount() }}
               {{ importedCount() === 1 ? 'coin' : 'coins' }}.
-              <!-- Say so when the import worked out metal / composition /
-                   purity / weight that the file itself did not carry. Values
-                   that WERE in the file are never replaced. -->
               @if (enrichedCount() > 0) {
                 Metal, composition and weight were filled in automatically on
                 {{ enrichedCount() }} of them from the reference tables;

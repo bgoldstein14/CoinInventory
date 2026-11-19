@@ -1,11 +1,6 @@
 /**
- * Tests for the stored-size budget.
- *
- * There is no <canvas> in this test environment, so the encoder is a fake
- * that returns whatever size the test wants for each rung. That is not a
- * compromise: the thing worth pinning is the DECISION — which rung is tried,
- * when it stops, and what happens when nothing fits — and that decision is
- * pure arithmetic over the results.
+ * Tests for the stored-size budget. The encoder is faked (no <canvas> in
+ * Node); what is tested is which rungs are tried and when it stops.
  */
 import { describe, expect, it } from 'vitest';
 import { ENCODE_LADDER, encodeWithinBudget, type EncodeAttempt } from './encode-budget';
@@ -48,10 +43,7 @@ function shrinking(sizes: number[]) {
 
 describe('the ladder', () => {
   it('starts at exactly what the app has always produced', () => {
-    // *** 1600 px / quality 0.85 MUST BE RUNG 0. *** Every photograph in the
-    // owner's database was imported at those numbers, and the whole claim
-    // that the default budget changes nothing rests on this rung being
-    // tried first and accepted whenever it fits.
+    // The standard import setting must be tried first.
     expect(ENCODE_LADDER[0]).toEqual({ maxEdge: 1600, quality: 0.85 });
   });
 
@@ -88,26 +80,17 @@ describe('encodeWithinBudget', () => {
   });
 
   it('keeps the smallest attempt rather than losing the photograph', async () => {
-    /*
-     * A budget nothing can meet is a settings mistake. Dropping the photo
-     * over it would be far worse than storing one that is over: the photo
-     * may be the only copy the user has, and a silently discarded import is
-     * exactly what the whole feature is written to avoid.
-     */
     const { attempts, encodeAt } = fixedSize(500_000);
 
     const outcome = await encodeWithinBudget(64 * 1024, encodeAt);
 
     expect(attempts).toHaveLength(ENCODE_LADDER.length);
     expect(outcome.result.storedBytes).toBe(500_000);
-    // ...and it SAYS so, so the caller can report it rather than pretend.
+    // ...and reports it.
     expect(outcome.overBudget).toBe(true);
   });
 
   it('stops early for a photo that was already small enough to pass through', async () => {
-    // Capping the long edge again cannot shrink an image that was never
-    // resized; grinding through four more encodes of the same tiny picture
-    // would cost time and change nothing.
     const { attempts, encodeAt } = fixedSize(200_000, false);
 
     await encodeWithinBudget(64 * 1024, encodeAt);

@@ -18,10 +18,7 @@
   h3 { margin: 0 0 8px; font-size: 0.88rem; }
 }
 
-// "Import only coins I still own". Sits under the filter grid rather than
-// inside it: the controls above narrow WHICH coins, this one changes whether
-// the owner's history comes with them, and it is the one with a default
-// worth noticing.
+// "Import only coins I still own", kept separate from the filter grid.
 .qif-sold-toggle {
   display: flex;
   align-items: center;
@@ -111,9 +108,7 @@
   ul { margin: 0; padding-left: 16px; display: grid; gap: 3px; font-size: 0.8rem; color: #6a5030; }
 }
 
-// Exceptions: coins rejected for having fewer than 2 of the 3 main details.
-// Styled as a "needs your attention" panel rather than an error: the file is
-// not broken, these rows just cannot be identified as coins.
+// Exceptions: amber "needs attention", not an error.
 .exception-list {
   margin-top: 14px;
   background: #fdf1ee;
@@ -142,15 +137,8 @@
   code { font-family: inherit; font-weight: 600; color: #5c3a2e; }
 }
 
-/*
- * GUESSED READINGS -- the "Assumptions" panel and its row-level controls.
- *
- * Deliberately wearing the SAME amber warning colours as `.warning-list`
- * above, and deliberately NOT the red of `.exception-list`. The colour is
- * carrying a meaning here: amber says "this is coming in, give it a look",
- * red says "this did not come in". A guessed row is imported by default, so
- * it cannot be allowed to look like a rejection.
- */
+/* Guessed readings: amber like `.warning-list` (coming in, check it), not the
+ * red of `.exception-list` (did not come in). */
 .ambiguity-list {
   margin-top: 12px;
   background: #fff8e8;
@@ -164,16 +152,13 @@
   code { font-family: inherit; font-weight: 600; color: #5c3a2e; }
 }
 
-/* The ⚠ in front of a guessed denomination. Same amber as the panel, so the
- * eye connects the row to the explanation above it without being told. */
 .guess-flag {
   color: #b07a1b;
   margin-right: 4px;
   font-weight: 700;
 }
 
-/* The two-candidate picker that replaces the plain denomination text on a
- * guessed row. Sized to the table, not to a form. */
+/* Picker replacing the denomination text on a guessed row. */
 .guess-select {
   font: inherit;
   font-size: 0.78rem;
@@ -184,18 +169,14 @@
   color: #5c3a2e;
 }
 
-/* A faint amber wash down the whole guessed row, so it is findable by
- * scrolling rather than only by reading the denomination column. */
 .preview-row--guessed > td { background: #fffaf0; }
 
-/* A cancelled row stays visible -- struck through and faded -- because
- * hiding it would make the Undo button unreachable. */
+/* Cancelled rows stay visible so Undo remains reachable. */
 .preview-row--dropped > td {
   text-decoration: line-through;
   opacity: 0.55;
 }
 
-/* ...except the Undo button itself, which has to stay legible and clickable. */
 .preview-row--dropped > td:last-child {
   text-decoration: none;
   opacity: 1;
@@ -225,14 +206,7 @@
   font-size: 0.82rem;
 }
 
-/*
- * The green CAC sticker indicator in the import-preview table.
- *
- * CAC's real-world sticker is green, so the check mark is green too -- it
- * reads at a glance without needing the column header. The `title` attribute
- * on the span (see the template) carries the wording for anyone who hovers,
- * and the column header spells it out for screen readers.
- */
+/* CAC sticker indicator; green like the real sticker. */
 .cac-indicator {
   color: #2e7d32;
   font-weight: 700;

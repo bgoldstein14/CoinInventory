@@ -1,56 +1,20 @@
  /*
- * attach-runner.ts
+ * Stage 2 of the batch import: the only code that reads file bytes or writes
+ * to the inventory. Runs only after the user confirms.
  *
- * STAGE 2 of the batch import: the only place in the whole feature that reads
- * bytes off the share or writes to the inventory. Nothing here runs until the
- * user has pressed the confirm button.
+ * Files are processed one at a time with a yield after each, so the progress
+ * bar repaints. Not parallel: decoding a large JPEG onto a canvas needs its
+ * full uncompressed size in memory (an 8000x6000 photo is ~190 MB RGBA), and
+ * the network share is the bottleneck anyway. Each file has its own try/catch,
+ * so one bad file is recorded and the run continues.
  *
- * BATCHING STRATEGY: ONE FILE AT A TIME, WITH A YIELD AFTER EACH
+ * Writes are grouped per coin: one `attach` call per coin.
  *
- * JavaScript is single-threaded. A long synchronous run means no repaints, no
- * scrolling and no responsive Cancel button - a hung app. So each file is
- * followed by `await yieldToBrowser()`, which hands control back to the event
- * loop long enough for Angular to repaint the progress bar.
- *
- * Why strictly sequential rather than, say, eight in parallel:
- *
- *   - Decoding a 46 MB JPEG onto a canvas needs its full uncompressed size in
- *     memory (a 8000x6000 photo is ~190 MB of RGBA). Eight of those at once is
- *     an out-of-memory crash, not a speed-up.
- *   - The files are on a network share; the transfer, not the CPU, is the
- *     bottleneck, and parallel reads off one SMB mount do not help much.
- *   - Sequential gives an honest, monotonic progress bar.
- *
- * Every file is wrapped in its own try/catch, so a corrupt JPEG is recorded as
- * one failure and the run continues to the end.
- *
- * WRITES ARE GROUPED PER COIN. Inventory saves are debounced per coin, so
- * calling updateCoin eight times for one coin would mean eight rounds of
- * change-tracking for a single save. One call per coin.
- *
- * COINS THAT ALREADY HAVE PHOTOS
- *
- * An unconditionally APPEND-ONLY, blind write -- existing photos, then every
- * ticked file, with no idea which of those files were already stored last
- * time -- means re-picking a folder tries to import every image again even
- * though most of the coins already have them.
- *
- * Two things prevent that, and both are here:
- *
- *   1. A CHOICE, because the program cannot guess the intent. `existingPhotoMode`
- *      is 'leave' (don't touch coins that have photos — the default, and the
- *      only option that can neither delete nor duplicate), 'replace' (their
- *      current photos go first) or 'add' (keep both). See existing-photo-mode.ts
- *      for why the default is what it is.
- *
- *   2. A SKIP, because even under 'add' a file that is already on the coin must
- *      not be attached twice. The comparison is on the ORIGINAL file's absolute
- *      path, supplied by the caller in `existingSourcePaths`; see
- *      already-attached.ts for why path and not filename or bytes.
- *
- * Both are evaluated BEFORE the file is read, which is the point: the cost this
- * removes is the read + JPEG decode + canvas downscale of a file that can be
- * 46 MB, pulled over an SMB share, for a photo we already have.
+ * Coins that already have photos are handled before any file is read:
+ *   - `existingPhotoMode`: 'leave' (default), 'replace' or 'add'
+ *     (see existing-photo-mode.ts).
+ *   - Under 'add', a file whose original path is already recorded on the coin
+ *     is skipped (see already-attached.ts).
   */
 
 import {
@@ -77,8 +41,7 @@ import {
 
 /** Hands control back to the browser so it can paint. */
 export function yieldToBrowser(): Promise<void> {
-  // setTimeout(0) rather than a microtask: a resolved promise would be drained
-  // within the same task and would NOT let a repaint through.
+  // setTimeout, not a microtask: a resolved promise would not allow a repaint.
   return new Promise<void>(resolve => setTimeout(resolve, 0));
 }
 
@@ -96,99 +59,43 @@ export interface AttachOptions {
   /** Current inventory, used to append to a coin's existing imagePaths. */
   inventory: readonly CoinRecord[];
   /**
-   * The base folder the user confirmed on the import screen, used to rebuild
-   * each file's ABSOLUTE path.
-   *
-   * A browser never reveals where a file really lives — it only gives us
-   * `File.webkitRelativePath`, the path relative to the folder that was picked.
-   * The base folder is the missing front half. See source-path.ts for the full
-   * explanation and the joining rules.
-   *
-   * Optional: with no base folder every image is attached with
-   * `sourcePath: null`, which is exactly how the import behaved before this
-   * feature existed.
+   * The base folder the user confirmed, used to rebuild each file's absolute
+   * path from `webkitRelativePath` (see source-path.ts). Without it images are
+   * attached with `sourcePath: null`.
    */
   baseFolder?: string;
 
   /**
-   * What happens to coins that ALREADY have photos.
-   *
-   * Defaults to 'leave' when omitted, and that default is deliberately in the
-   * runner as well as in the UI: a caller that forgets this option must not
-   * fall back to the duplicate-everything behaviour the feature exists to
-   * remove. See existing-photo-mode.ts.
+   * What happens to coins that already have photos. Defaults to 'leave' here
+   * as well as in the UI, so a caller that omits it can't duplicate everything.
    */
   existingPhotoMode?: ExistingPhotoMode;
 
   /**
-   * Which ORIGINAL files are already attached to each coin — the response of
-   * POST /api/coins/image-source-paths, keyed by coin id.
-   *
-   * These paths are not derivable in the browser: `CoinRecord.imagePaths`
-   * holds only the downscaled `data:` URLs (see services/image-source-paths.ts
-   * for why it was not widened), so they have to come from the backend.
-   *
-   * OPTIONAL, AND ABSENCE FAILS OPEN. With nothing here, nothing is recognised
-   * as already attached and every ticked file is imported — exactly the
-   * behaviour this import had before the feature existed. That is the right
-   * way round: attaching a photo twice is visible and undoable, silently
-   * dropping one the user wanted is not.
+   * Original files already attached to each coin, from
+   * POST /api/coins/image-source-paths, keyed by coin id. Fails open: when
+   * absent, nothing is treated as already attached (a duplicate is visible
+   * and undoable; a dropped photo is not).
    */
   existingSourcePaths?: ExistingSourcePaths;
 
   /**
-   * Fetch ONE coin's existing photographs, for the 'add' mode.
-   *
-   * WHY THIS IS NEEDED, AND WHAT HAPPENS WITHOUT IT
-   *
-   * 'add' means "keep both", and it is expressed by SENDING THE WHOLE
-   * ARRAY: the coin's existing photographs followed by the new ones.
-   * `PUT /api/coins/:id` then deletes every CoinImages row and re-inserts
-   * exactly that. So the existing half has to be RIGHT.
-   *
-     * DO NOT read this off `coin.imagePaths`. That worked only while
-     * `GET /api/coins` inlined every photograph; it no longer does, and the
-     * key is ABSENT on a freshly loaded coin (see CoinRecord.imagePaths and
-     * server/routes/coins/list-query.ts). A `?? []` fallback turns "not
-     * loaded" into "none", making "keep both" send only the new photographs
-     * and silently DELETE every photograph already on the coin.
-     *
-     * So: when the array is not in memory and `imageCount` says the coin has
-     * some, this is called. Normally `InventoryService.loadCoinImages`, which
-     * also hydrates the record.
-   *
-   * OPTIONAL, AND ABSENCE FAILS CLOSED. With no loader (and with a loader
-   * that rejects) the coin is SKIPPED and its files are reported as
-   * failures. That is the opposite of how `existingSourcePaths` above
-   * degrades, and deliberately so: that one risks attaching a photo twice,
-   * which is visible and undoable, while this one risks deleting
-   * photographs that exist nowhere else.
+   * Fetch one coin's existing photos for 'add' mode when they aren't in memory
+   * (normally `InventoryService.loadCoinImages`). See `resolveKeptImages`.
+   * Fails closed: with no loader, or a rejection, the coin is skipped and its
+   * files reported as failures, because guessing would delete photos.
    */
   loadExistingImages?: (coinId: string) => Promise<string[]>;
 
   /**
-   * The write. Called once per coin.
+   * The write, called once per coin. Injected so the runner stays pure.
    *
-   * @param coinId     the coin being written
-   * @param imagePaths that coin's COMPLETE new image array, as `data:` URL
-   *                   strings. What is in it depends on `existingPhotoMode`:
-   *                   under 'add' it is the existing photos followed by the
-   *                   new ones, under 'replace' it is the new ones ALONE —
-   *                   which is how the delete happens, because
-   *                   `PUT /api/coins/:id` with an `imagePaths` key drops the
-   *                   coin's CoinImages rows and re-inserts exactly what it is
-   *                   given (see server/routes/coins/writes.ts). It stays
-   *                   plain strings because that array is bound directly to
-   *                   `<img [src]>` all over the app.
-   * @param newImages  just the images added by THIS run, each paired with the
-   *                   absolute path of its original file (or null when there is
-   *                   no base folder to anchor it to). The caller records these
-   *                   so the outgoing request can carry
-   *                   `{ imageData, sourcePath }` — see
-   *                   services/image-source-paths.ts.
-   *
-   * Injected rather than calling InventoryService directly, so the runner stays
-   * a pure function of its inputs and the modal keeps control of the write.
+   * @param imagePaths the coin's complete new image array as data URLs: existing
+   *                   plus new under 'add', new only under 'replace' (the PUT
+   *                   replaces all CoinImages rows, which is how the delete happens).
+   * @param newImages  just this run's images, each with its original's absolute
+   *                   path (or null), so the request can carry
+   *                   `{ imageData, sourcePath }`. See services/image-source-paths.ts.
    */
   attach: (coinId: string, imagePaths: string[], newImages: AttachedImage[]) => void;
   /** Called after every file so the UI can show progress. */
@@ -207,32 +114,18 @@ export async function runAttach(
   rows: readonly BatchImageRow[],
   options: AttachOptions
 ): Promise<BatchImportSummary> {
-   /*
-   * WHAT WILL ACTUALLY BE READ — decided here, before a single byte moves.
-   *
-   * Three filters, in this order, and the order matters because each one is
-   * cheaper than the one after it:
-   *
-   *   1. TICKED. A row is only ever written when it is ticked AND has a coin
-   *      AND was not skipped. (Unchanged; this has always been the rule.)
-   *   2. THE MODE. Under 'leave' — the default — a coin that already has
-   *      photos drops out entirely. No read, no write, nothing.
-   *   3. ALREADY ATTACHED. Of what survives, any file whose original path is
-   *      already recorded against that coin drops out too. This is what turns
-   *      "re-import a folder of 300 where 290 are already there" into ten
-   *      files instead of three hundred.
-   *
-   * `toProcess` is then the honest denominator for the progress bar. Counting
-   * every ticked row instead would crawl to 1/300 with most of them skipped
-   * and then jump to done -- indistinguishable from a hang.
-    */
+  /*
+   * Decide what will be read before any bytes move, cheapest filter first:
+   *   1. Ticked, with a coin, not skipped.
+   *   2. The existing-photo mode ('leave' drops coins that already have photos).
+   *   3. Already attached (original path already recorded on that coin).
+   * `toProcess` is the progress bar's denominator.
+   */
   const mode = options.existingPhotoMode ?? DEFAULT_EXISTING_PHOTO_MODE;
   const selected = rowsWrittenUnderMode(rows, options.inventory, mode);
 
-  /* Under 'replace' the coin's existing images are about to be deleted, so
-   * "already attached" is about to stop being true. Skipping on it would leave
-   * the coin with NO copy of that photo — the one way this feature could
-   * destroy something outright — so the index is deliberately empty there. */
+  /* Under 'replace' existing images are about to be deleted, so the
+   * already-attached index is empty; skipping would leave no copy at all. */
   const attached: AttachedPathIndex =
     mode === 'replace'
       ? new Map()
@@ -256,36 +149,15 @@ export async function runAttach(
   let storedBytes = 0;
   let coinsTouched = 0;
 
-   /*
-   * ANNOUNCE THE RUN BEFORE TOUCHING A SINGLE FILE.
-   *
-   * Reporting progress only AFTER a file has been read leaves the whole of
-   * the first file with:
-   *
-   *   - no progress bar, because `progress` is still null; and
-   *   - no disabled Save button, because `busy()` is derived from `progress`
-   *     -- so a second click starts the entire import again.
-   *
-   * The first file is the worst possible one to be silent through: a full
-   * read + JPEG decode + canvas downscale of something that can be 46 MB,
-   * pulled over an SMB share.
-   *
-   * The yield is not optional garnish. A signal write only becomes pixels
-   * when the current task ends; without it the emit above and the first
-   * `encode()` below run in one unbroken task and the user sees neither.
-    */
+  // Announce the run before reading the first (possibly huge) file, so the
+  // progress bar shows and `busy()` disables Save. The yield lets it paint.
   options.onProgress?.({ ...progress });
   await yieldToBrowser();
 
   for (const [coinId, coinRows] of byCoin) {
     const coin = options.inventory.find(c => c.id === coinId);
     const newPaths: string[] = [];
-    /**
-     * The rows that actually produced an image. Needed because a coin can
-     * still be abandoned AFTER its files have been read (see the `keep ===
-     * null` branch below), and the progress counters then have to be put
-     * back for exactly those rows and no others.
-     */
+    /** Rows that produced an image, so counters can be reverted if the coin is abandoned. */
     const encodedRows: BatchImageRow[] = [];
     /** The new images paired with where their originals live. */
     const newImages: AttachedImage[] = [];
@@ -298,9 +170,7 @@ export async function runAttach(
 
         const encoded = await options.encode(file);
         newPaths.push(encoded.dataUrl);
-        // Rebuild the original's absolute path while we still hold the File
-        // handle: `webkitRelativePath` is only available here, and the
-        // downscaled data URL we store carries no trace of where it came from.
+        // Build the original's absolute path while we still hold the File handle.
         newImages.push({
           imageData: encoded.dataUrl,
           sourcePath: candidateSourcePath(row, options)
@@ -320,24 +190,13 @@ export async function runAttach(
     }
 
     if (newPaths.length > 0) {
-      /* 'replace' is expressed HERE, as an empty "keep" list, and nowhere
-       * else. `PUT /api/coins/:id` with an `imagePaths` key deletes the coin's
-       * CoinImages rows and re-inserts exactly what it is handed (see
-       * server/routes/coins/writes.ts), so leaving the old entries out IS the
-       * delete. There is no separate delete call to get wrong.
-       *
-       * Which also means the 'add' branch has to be exactly right, because
-       * anything missing from `keep` is deleted just as surely. See
-       * resolveKeptImages() for the three ways it can know, and the one case
-       * where it refuses to guess. */
+      /* 'replace' is an empty keep list: the PUT replaces the coin's images, so
+       * leaving the old ones out is the delete. */
       const keep = mode === 'replace' ? [] : await resolveKeptImages(coin, coinId, options);
 
       if (keep === null) {
-        /* We do not know what this coin already has, and appending to an
-         * unknown set means deleting it. SKIP THE COIN — a user who has to
-         * re-run an import has lost a few minutes; a user whose photographs
-         * were deleted has lost them for good. Every file for this coin is
-         * reported so the failure is visible rather than silent. */
+        /* Unknown existing photos: writing would delete them, so skip the coin
+         * and report each file as a failure. */
         for (const row of encodedRows) {
           failures.push({
             fileName: row.fileName,
@@ -351,13 +210,8 @@ export async function runAttach(
         continue;
       }
 
-      /* The Set is here for the within-run case: two picked files that
-       * downscale to byte-identical data URLs. It is NOT what prevents
-       * re-importing a folder from duplicating photos -- a second import
-       * produces freshly encoded strings, so the old entries and the new ones
-       * are different strings for the same photograph and the Set sees
-       * nothing wrong. The source-path skip above is what does that; do not
-       * mistake one for the other. */
+      /* The Set removes byte-identical duplicates within one run only. Re-import
+       * duplicates are prevented by the source-path skip above. */
       const merged = [...new Set([...keep, ...newPaths])];
       options.attach(coinId, merged, newImages);
       coinsTouched += 1;
@@ -370,8 +224,7 @@ export async function runAttach(
 
   return {
     attached: progress.attached,
-    // Everything in the plan that was not written: unticked photos, skipped
-    // files, and rows the user never resolved.
+    // Unticked, skipped, already attached or unresolved rows.
     skipped: rows.length - toProcess.length,
     failures,
     coinsTouched,
@@ -380,39 +233,19 @@ export async function runAttach(
   };
 }
 
- /*
- * "What does this coin already have?" — the append-mode question.
- *
- * THE DATA LOSS THIS PREVENTS
- *
- * 'add' ("keep both") is expressed by PUTting the coin's COMPLETE image
- * array: the existing photographs followed by the new ones. The server
- * deletes every CoinImages row and re-inserts exactly what it is handed. So
- * anything missing from the "keep" half is not merely omitted — it is
- * DELETED.
- *
- * DO NOT write `coin?.imagePaths ?? []` here. That is correct only while
- * `GET /api/coins` inlines every photograph; it no longer does, and the key
- * is absent on a freshly loaded coin. The `?? []` turns "I have not loaded
- * them" into "there are none", and "keep both" then wipes every photograph
- * on every coin it touches.
-  */
-
 /**
- * The photographs to keep, or NULL meaning "refuse to write this coin".
+ * The photos to keep under 'add', or null meaning "don't write this coin".
  *
- * Three ways to know, in increasing cost:
+ * 'add' PUTs the complete array and the server replaces every CoinImages row,
+ * so anything missing from this list is deleted. Never use
+ * `coin?.imagePaths ?? []`: the list endpoint doesn't inline photos, so an
+ * unloaded coin would look empty and lose all its photos.
  *
- *   1. ALREADY IN MEMORY — the coin has been opened, or photos were attached
- *      to it earlier in this very run. This array is also the most current.
- *   2. `imageCount` IS ZERO — the server already said there is nothing here.
- *      An empty keep list is then a FACT, not a guess, and costs no request.
- *   3. FETCH IT — one round trip for one coin, via `loadExistingImages`.
- *
- * And one way not to know: no loader supplied, or the fetch failed. That
- * returns null, and the caller skips the coin entirely. Refusing to write is
- * the only safe answer, because the alternative — assuming empty — is
- * indistinguishable from "delete everything".
+ * In order of cost:
+ *   1. Already in memory (also the most current).
+ *   2. `imageCount` is zero: empty is a fact.
+ *   3. Fetch via `loadExistingImages`.
+ * No loader, or a failed fetch, returns null and the coin is skipped.
  */
 async function resolveKeptImages(
   coin: CoinRecord | undefined,
@@ -423,13 +256,11 @@ async function resolveKeptImages(
   const inMemory = coinImagesInMemory(coin);
   if (inMemory) return inMemory;
 
-  // 2. The server said this coin has no photographs. Nothing to preserve.
-  //    Guarded on `coin` being present: an unknown id means "no information
-  //    about this coin", which is not the same as "it has no photographs".
+  // 2. The server says there are no photos. An unknown coin is not the same
+  //    as "no photos", hence the `coin &&` guard.
   if (coin && coinPhotoCount(coin) === 0) return [];
 
-  // 3. Ask. A rejection is the loader doing its job — see its contract in
-  //    services/coin-photos.ts: it must never turn a failure into `[]`.
+  // 3. Ask. The loader rejects rather than returning `[]` on failure.
   if (!options.loadExistingImages) return null;
   try {
     return await options.loadExistingImages(coinId);
@@ -439,16 +270,9 @@ async function resolveKeptImages(
 }
 
 /**
- * The absolute path this row's file WOULD be recorded at, or null.
- *
- * Used twice and it must give the same answer both times: once up front to
- * decide whether the file is already on the coin, and once after the encode to
- * record where the new image came from. Computing it in two places invites the
- * two from drifting, and a drift would mean a file skipped as a duplicate on
- * one rule and stored under a different path on the other.
- *
- * Null when there is no base folder, which is a legitimate long-standing way
- * to import — it just means nothing can be identified, so nothing is skipped.
+ * The absolute path this row's file would be recorded at, or null without a
+ * base folder. Used both for the already-attached check and for recording the
+ * new image, so the two always agree.
  */
 function candidateSourcePath(row: BatchImageRow, options: AttachOptions): string | null {
   if (!options.baseFolder) return null;

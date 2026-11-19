@@ -1,15 +1,7 @@
 /**
- * Excel import, driven through the real import modal.
- *
- * The `.xlsx` path converts a workbook into the `headers` + `rows` arrays
- * the CSV path already consumes, and stops. Everything below the conversion
- * -- the mapping grid, the 2-of-3 completeness rule, the preview, the
- * exceptions list, the alloy inference -- is shared code, and these tests
- * exercise it through the same modal rather than through a second one that
- * would drift away from it.
- *
- * The fixtures are built by src/app/testing/xlsx-fixture.ts rather than
- * committed as binaries, so the file under test is readable in a diff.
+ * Excel import through the real import modal. Workbooks are converted to the
+ * CSV headers + rows shape, so everything after that is shared code. Fixtures
+ * are built by src/app/testing/xlsx-fixture.ts.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -55,8 +47,6 @@ describe('choosing an .xlsx file', () => {
   });
 
   it('loads a single-sheet workbook straight into the mapping screen', async () => {
-    // One worksheet means there is nothing to choose between, so asking
-    // would be a click for nothing.
     const { modal } = createModal();
     await modal['handleFileSelection'](oneSheet(
       ['Coin Type', 'Denomination', 'Year'],
@@ -99,8 +89,7 @@ describe('choosing an .xlsx file', () => {
   });
 
   it('imports a serial date as a date and a currency cell as a number', async () => {
-    // The two cell shapes that corrupt data silently. Serial 45678 is
-    // 21 January 2025; `$1,250.00` is a format over the value 1250.
+    // Serial 45678 is 21 January 2025; `$1,250.00` is a format over the value 1250.
     const { modal, inv } = createModal();
     await modal['handleFileSelection'](oneSheet(
       ['Coin Type', 'Denomination', 'Purchase Date', 'Purchase Price'],
@@ -136,7 +125,6 @@ describe('choosing an .xlsx file', () => {
   });
 
   it('still reads a .csv through the same picker', async () => {
-    // One file input, both formats. The CSV path must not regress.
     const { modal, inv } = createModal();
     const csv = 'Coin Type,Denomination,Year\nMorgan Dollar,Dollar,1881\n';
     const file = new File([csv], 'coins.csv', { type: 'text/csv' });
@@ -222,8 +210,7 @@ describe('a workbook with several worksheets', () => {
   });
 
   it('shows one dropdown per distinct column, shared across sheets', async () => {
-    // The mapping is keyed by header TEXT, so two sheets that both have a
-    // `Coin Type` column are one question, not two.
+    // The mapping is keyed by header text, so a shared column is one dropdown.
     const { modal } = createModal();
     await modal['handleFileSelection'](selectionEvent(twoSheets()));
     modal['continueToMapping']();
@@ -234,9 +221,7 @@ describe('a workbook with several worksheets', () => {
   });
 
   it('maps correctly when a sheet has its columns in a different order', async () => {
-    // Position never carries meaning: each sheet is applied against its own
-    // header array. Without that, the Gold tab would import its prices as
-    // coin types.
+    // Each sheet is mapped against its own header array, not by position.
     const { modal, inv } = createModal();
     await modal['handleFileSelection'](selectionEvent(buildXlsxWorkbook([
       {
@@ -295,8 +280,6 @@ describe('a workbook with several worksheets', () => {
   });
 
   it('leaves an empty tab out of the picker selection but still lists it', async () => {
-    // A tab that vanished from the list would look like a bug. One that is
-    // listed with a reason shows the importer looked and explains itself.
     const { modal } = createModal();
     await modal['handleFileSelection'](selectionEvent(buildXlsxWorkbook([
       { name: 'Silver', rows: [['Coin Type', 'Denomination'], ['Morgan Dollar', 'Dollar']] },
@@ -340,9 +323,7 @@ describe('the preview, before anything is created', () => {
   });
 
   it('counts only the rows that will actually become coins', async () => {
-    // The button must promise only what the import will deliver. A coin
-    // needs two of Year / Coin Type / Denomination, so the year-only row
-    // here is not one.
+    // The year-only row lacks two of Year / Coin Type / Denomination.
     const { modal } = createModal();
     await modal['handleFileSelection'](oneSheet(
       ['Coin Type', 'Denomination', 'Year'],
@@ -377,10 +358,8 @@ describe('the preview, before anything is created', () => {
     const { modal } = createModal();
     await modal['handleFileSelection'](selectionEvent(buildXlsxWorkbook([
       { name: 'Silver', rows: [['Coin Type', 'Denomination'], ['Morgan Dollar', 'Dollar']] },
-      // A row with a denomination and nothing else: one of the three main
-      // details, so the backend would refuse it. An entirely BLANK row would
-      // not do here -- those are dropped as spreadsheet decoration long
-      // before the completeness rule sees them.
+      // Denomination only: fails the 2-of-3 rule. (Fully blank rows are
+      // dropped earlier, so would not test this.)
       { name: 'Gold', rows: [['Coin Type', 'Denomination'], ['', '$5']] }
     ])));
     modal['continueToMapping']();
@@ -389,9 +368,7 @@ describe('the preview, before anything is created', () => {
   });
 
   it('re-counts the moment the user changes a mapping', async () => {
-    // The preview is only worth having if it tracks what the user does. Here
-    // `Thing` is unrecognised, so nothing maps and nothing can be imported
-    // until it is pointed at Coin Type.
+    // `Thing` is unrecognised until it is mapped to Coin Type.
     const { modal } = createModal();
     await modal['handleFileSelection'](oneSheet(
       ['Thing', 'Denomination'],

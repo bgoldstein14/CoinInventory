@@ -1,25 +1,7 @@
  /*
- * spend-over-time.spec.ts
- * ---- WHAT THIS CURVE IS, AND WHAT IT IS NOT ----
- * It is CUMULATIVE SPEND: every purchase price, added up in purchase-date
- * order. That is genuinely derivable from the records on hand.
- *
- * It is NOT "what the collection was worth over time". Nothing in this app
- * stores a history of CurrentValue — there is one column holding one number,
- * overwritten in place whenever the owner re-appraises a coin — so a
- * value-over-time line would have to be invented. It is therefore not drawn.
- * See the header of spend-over-time.ts for what would have to be stored.
- *
- * THE TRAP THESE TESTS SET
- *
- * `purchaseDate` is a free-text NVARCHAR(30) column (server/db/coin-fields.ts)
- * that the server stores verbatim. It is USUALLY "YYYY-MM-DD" because the
- * Quicken importer normalises to that, but a CSV import or a hand edit can
- * put anything in it. A date parser that quietly accepts garbage puts a coin
- * at the wrong place on the time axis, which is a visible lie about when the
- * money was spent; one that quietly DROPS garbage understates the whole
- * curve. So unparseable dates are neither guessed nor dropped — they are
- * counted and reported.
+  * Tests for the cumulative spend curve. `purchaseDate` is free text stored
+  * verbatim, so unparseable dates are neither guessed nor dropped: they are
+  * counted and reported.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -51,8 +33,7 @@ describe('parsePurchaseDate', () => {
   });
 
   it('rejects a calendar-impossible date instead of rolling it over', () => {
-    // `new Date('2024-02-31')` does not throw — it silently becomes 2 March.
-    // A coin bought on a date that does not exist is bad data, not March.
+    // `new Date('2024-02-31')` silently becomes 2 March; this must be rejected.
     expect(parsePurchaseDate('2024-02-31')).toBeNull();
     expect(parsePurchaseDate('2024-13-01')).toBeNull();
   });
@@ -130,9 +111,7 @@ describe('computeSpendOverTime — what it refuses to draw', () => {
   });
 
   it('reports the undated spend so the view can say the curve is short of it', () => {
-    // $900 missing from a $1,000 curve is the difference between "I have
-    // spent a thousand pounds on this hobby" and a chart that says I spent a
-    // hundred. The number has to be on screen.
+    // Spend on undated coins must be reported, not silently left off.
     const series = computeSpendOverTime([
       statsCoin({ purchaseDate: '2024-03-15', purchasePrice: 100 }),
       statsCoin({ purchaseDate: 'who knows', purchasePrice: 900 })
@@ -142,8 +121,7 @@ describe('computeSpendOverTime — what it refuses to draw', () => {
   });
 
   it('keeps a dated but unpriced coin ON the curve, as a step of zero', () => {
-    // The coin was definitely acquired that day. Its cost is unknown, which
-    // the count says; its acquisition is a fact, which the coin count shows.
+    // Dated but unpriced: on the curve for coin count, not for spend.
     const series = computeSpendOverTime([
       statsCoin({ purchaseDate: '2024-01-01', purchasePrice: 200 }),
       statsCoin({ purchaseDate: '2024-02-01', purchasePrice: 0 })
@@ -156,8 +134,7 @@ describe('computeSpendOverTime — what it refuses to draw', () => {
   });
 
   it('refuses a curve made entirely of unpriced coins', () => {
-    // Every point would be zero; a flat line along the axis reads as "I
-    // spent nothing", not as "nothing was recorded".
+    // All unpriced: a flat zero line would read as "spent nothing".
     const series = computeSpendOverTime([
       statsCoin({ purchaseDate: '2024-01-01' }),
       statsCoin({ purchaseDate: '2024-02-01' })

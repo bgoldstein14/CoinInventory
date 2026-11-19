@@ -1,24 +1,9 @@
 /*
- * routes/failure-report.spec.ts — "which kind of failure was that?"
- * THE BUG THESE TESTS EXIST FOR. A route that wraps everything in
- * `sendDbError(..., 'Failed to retrieve coins')` reports a database fault
- * even when the database handed over every row and it was `res.json()` that
- * threw, unable to BUILD the response string. That message sends whoever
- * reads it hunting a connection problem that does not exist.
- *
- * So there are three distinct failures hiding behind one message, and the
- * user must be able to tell them apart:
- *
- *   connection — we never reached the database. Nothing is known about the data.
- *   database   — the database answered, and the answer was an error.
- *   delivery   — the data came OUT of the database and we failed afterwards.
- *                This is the only one where we can promise the data is intact.
- *
- * Every assertion below is about that three-way split and about never
- * claiming the stronger thing than we know. It is the same rule that makes
- * `computeMeltValue` return null rather than $0.00, applied to status instead
- * of to numbers.
-  */
+ * The three failure stages (see routes/failure-report.ts): connection,
+ * database, and delivery (data retrieved, then the send failed). Only delivery
+ * may promise the data is intact; every test checks we never claim more than
+ * we know.
+ */
 
 import { describe, it, expect } from 'vitest';
 
@@ -41,18 +26,9 @@ function invalidStringLength(): RangeError {
 }
 
 /**
- * A handle-level failure, in the vocabulary SQLite actually speaks.
- *
- * This used to be `{ code: 'ECONNCLOSED' }`, one of the mssql socket codes.
- * Those are gone with the driver and db/errors.ts no longer recognises them:
- * a dead database is now a SQLite RESULT CODE, and 526 is
- * SQLITE_CANTOPEN_ISDIR — an extended code whose low byte is 14
- * (SQLITE_CANTOPEN), which is the masking db/errors.ts does. Using an
- * extended code here rather than a bare 14 keeps that masking under test.
- *
- * The message is the one `node:sqlite` really produces, so the message-based
- * backstop in isConnectionError() sees the same text in the test as in
- * production.
+ * A handle-level failure as SQLite reports it: 526 (SQLITE_CANTOPEN_ISDIR),
+ * an extended code whose low byte is 14, so db/errors.ts's masking is tested.
+ * The message matches what node:sqlite produces.
  */
 function deadConnection(): Error {
   return Object.assign(new Error('unable to open database file'), {
@@ -77,8 +53,7 @@ describe('isSerialisationFailure', () => {
   });
 
   it('recognises it from the message alone, whatever class it arrived as', () => {
-    // Errors crossing a realm boundary lose their prototype; the message is
-    // the only thing guaranteed to survive.
+    // Errors crossing a realm lose their prototype; only the message survives.
     expect(isSerialisationFailure(new Error('Invalid string length'))).toBe(true);
   });
 
@@ -95,10 +70,7 @@ describe('isSerialisationFailure', () => {
   });
 
   it('does NOT claim an ordinary query error is a serialisation failure', () => {
-    // The cost of a false positive here is telling the user "your data is
-    // safe and the database is working" when the database just told us it
-    // is not. That is the original bug with its sign flipped, so this
-    // function stays narrow.
+    // A false positive would claim the data is safe after a database error, so this stays narrow.
     expect(isSerialisationFailure(new Error('Invalid column name Wibble'))).toBe(false);
     expect(isSerialisationFailure(new Error('unable to open database file'))).toBe(false);
     expect(isSerialisationFailure(null)).toBe(false);
@@ -121,21 +93,17 @@ describe('failureStageFor', () => {
   });
 
   it('calls a serialisation error a delivery failure even with nothing else to go on', () => {
-    // The sniffing path: a route that has not been split into "fetch" and
-    // "send" still reports honestly, because the error itself says so.
+    // The sniffing fallback, for routes not using sendJson().
     expect(failureStageFor(invalidStringLength())).toBe('delivery');
   });
 
   it('calls anything a delivery failure once the caller says the data was retrieved', () => {
-    // The STRUCTURAL path, and the one that matters most: sendJson() only
-    // ever catches throws from res.json(), which by definition happen after
-    // the rows are in hand. No sniffing required or wanted.
+    // The structural path: sendJson() only catches throws from res.json().
     expect(failureStageFor(new Error('something exotic'), { retrieved: true })).toBe('delivery');
   });
 
   it('still says delivery when the data was retrieved and a connection error follows', () => {
-    // "The rows came out of the database" is a fact that a later connection
-    // blip cannot undo. Reporting 'connection' here would resurrect the lie.
+    // A later connection blip doesn't undo that the rows were retrieved.
     const dead = deadConnection();
     expect(failureStageFor(dead, { retrieved: true })).toBe('delivery');
   });
@@ -166,9 +134,7 @@ describe('buildFailureReport', () => {
   });
 
   it('never repeats the old lie: a delivery failure does not mention retrieving', () => {
-    // THE REGRESSION GUARD. 'Failed to retrieve coins' is the exact string
-    // that sends a reader looking at SQL Server. It must not appear anywhere
-    // in what a delivery failure tells the user.
+    // Regression guard: a delivery failure must not say 'Failed to retrieve coins'.
     const report = buildFailureReport(invalidStringLength(), { ...base, retrieved: true });
     const spoken = `${report.message} ${report.reassurance ?? ''}`;
 
@@ -212,25 +178,12 @@ describe('buildFailureReport', () => {
 });
 
 /*
- * ===== AGAINST ERRORS THE REAL DATABASE ACTUALLY THROWS =====
- *
- * Everything above hands this module an error object a human wrote. That is
- * the right way to test a pure function exhaustively, and it is also the one
- * thing those tests CANNOT establish: that the errors the engine produces
- * look anything like the ones the test imagined. Under the mssql mock nobody
- * ever checked, and the link was the first thing the engine change could have
- * broken — the whole chain is SQLite result code -> db/sql-api.ts's
- * translation into a SQL Server number -> db/errors.ts -> this module.
- *
- * So these two drive it from the other end: break the database for real, and
- * ask what stage the resulting error is sorted into.
+ * Errors the real database produces, so the chain SQLite code ->
+ * db/sql-api.ts -> db/errors.ts -> this module is tested end to end.
  */
 describe('errors the real database produces', () => {
   it('sorts a real constraint violation into the database stage, not the connection one', async () => {
-    // A genuine duplicate primary key. SQLite raises
-    // SQLITE_CONSTRAINT_PRIMARYKEY (1555); db/sql-api.ts re-dresses it as
-    // 2627, which is also what makes isConnectionError() refuse it outright
-    // (an error with a SQL Server number is by definition a query problem).
+    // A duplicate primary key: SQLite's 1555 becomes 2627, a query problem.
     await insertCoin({ CoinId: 'dup-1', Denomination: '$1' });
 
     const err = await errorFrom(() =>
@@ -245,8 +198,7 @@ describe('errors the real database produces', () => {
     expect(sqlErrorNumber(err)).toBe(2627);
     expect(failureStageFor(err)).toBe('database');
 
-    // And the user is told the route's own message, with nothing promised
-    // about their data.
+    // The route's own message, with no promise about the data.
     const report = buildFailureReport(err, {
       context: 'POST /api/coins',
       subject: 'coin',
@@ -257,14 +209,9 @@ describe('errors the real database produces', () => {
   });
 
   it('sorts a real dead handle into the connection stage', async () => {
-    // The handle is closed underneath the data layer, which is as close as a
-    // single-file engine gets to "the connection dropped". `node:sqlite`
-    // raises ERR_INVALID_STATE / 'database is not open'.
-    //
-    // Note this goes through the DbConnection directly rather than through
-    // withDb(): withDb retries a connection-class failure once, and the
-    // retry would open a fresh in-memory database and succeed, which is the
-    // behaviour db/pool.ts is supposed to have.
+    // Closing the handle is the nearest equivalent of a dropped connection
+    // (ERR_INVALID_STATE). Uses the connection directly, since withDb() would
+    // retry and succeed.
     const connection = await getPool();
     try {
       await withTestDb((database) => database.close());
@@ -278,7 +225,7 @@ describe('errors the real database produces', () => {
         fallbackMessage: 'Failed to retrieve coins',
       }).message).toMatch(/unreachable/i);
     } finally {
-      // The handle is gone; the next test needs a sound one.
+      // The next test needs a working handle.
       await rebuildTestDatabase();
     }
   });

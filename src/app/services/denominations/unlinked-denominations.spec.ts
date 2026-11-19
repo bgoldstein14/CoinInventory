@@ -1,22 +1,9 @@
  /*
- * unlinked-denominations.spec.ts — the cleanup screen's whole brain
- *
- * WHAT IS BEING PROTECTED HERE
- *
- * This module decides which coins are shown as "needs a denomination", why,
- * and -- when the button is pressed -- what gets written to
- * every coin in a group at once. Two of those are dangerous:
- *
- *   * A WRONG CLASSIFICATION sends him to the wrong fix. Telling him nothing
- *     in the reference list matches `__OTHER__` invites him to ADD
- *     `__OTHER__` to the reference list, which would be a real denomination
- *     row named after a UI sentinel, for ever.
- *   * A WRONG WRITE rewrites `Coins.Denomination` on several coins at once.
- *     Design §4.1 is explicit that nothing may write that column except a
- *     label the user explicitly chose, and this is the only bulk writer of it
- *     in the application.
- *
- * So most of what follows is about refusals and about exactness.
+  * Tests for the unlinked-denominations census and bulk fix. The risks: a wrong
+  * classification sends the user to the wrong fix (e.g. suggesting `__OTHER__`
+  * be added to the reference list), and a wrong write rewrites
+  * `Coins.Denomination` on many coins at once (§4.1 allows only a label the
+  * user chose).
   */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -35,7 +22,7 @@ import {
   runUnlinkedFix,
 } from './unlinked-denominations';
 
-/** A coin with everything blank EXCEPT whatever the test overrides. */
+/** A coin with everything blank except the overrides. */
 function coin(overrides: Partial<CoinRecord>): CoinRecord {
   return {
     id: 'c1',
@@ -69,11 +56,10 @@ function denomination(overrides: Partial<Denomination> & { denominationId: numbe
   };
 }
 
-/* A deliberately small lookup with the three shapes that matter:
- *   '8 Reales'  under TWO issuers  -> ambiguous
- *   'Quarter'   under ONE issuer   -> resolvable / linkable
- *   'Penny'     under TWO issuers  -> resolvable to DIFFERENT ids depending
- *                                     on the coin's own country            */
+/* A small lookup with the three shapes that matter:
+ *   '8 Reales'  under two issuers -> ambiguous
+ *   'Quarter'   under one issuer  -> resolvable / linkable
+ *   'Penny'     under two issuers -> different ids depending on the coin's country */
 const LOOKUP: Denomination[] = [
   denomination({ denominationId: 10, label: '8 Reales', country: 'MX' }),
   denomination({ denominationId: 11, label: '8 Reales', country: 'ES' }),
@@ -86,12 +72,8 @@ const LOOKUP: Denomination[] = [
 
 describe('censusUnlinkedDenominations — which coins need attention, and why', () => {
   it('says nothing at all until the lookup has arrived', () => {
-    /* THE BUG THIS PREVENTS, and it would have been the first thing the owner
-     * saw on every start-up: `GET /api/denominations` has not landed yet, so
-     * the lookup is []. Every coin in the collection then fails to resolve,
-     * and a naive census reports "105 coins have no denomination" one second
-     * before they all link. The banner would flash on every launch and the
-     * pane would be wrong for anyone who opened it quickly. */
+    /* The lookup hasn't loaded yet ([]): the census must not report every coin
+     * as unlinked on start-up. */
     const census = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Quarter', denominationId: 20 })],
       []
@@ -114,11 +96,8 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('lists a coin whose link points at a denomination that is no longer active', () => {
-    /* §4.4 nulls the id when a denomination is deleted, so this state is not
-     * supposed to happen — but "not supposed to" is not "cannot", and a coin
-     * pointing at a soft-deleted row renders `Other (...)` exactly like an
-     * unlinked one. The screen's contract is "every coin that does not show a
-     * real denomination", so it must catch this too. */
+    /* A coin pointing at a soft-deleted row displays `Other (...)` like an
+     * unlinked one, so it is included. */
     const census = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Retired Thing', denominationId: 50 })],
       LOOKUP
@@ -138,18 +117,9 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('classifies the __OTHER__ sentinel as nothing recorded, NOT as unknown', () => {
-    /* *** THE OWNER'S ONE REAL CASE. ***
-     * Migration 014 reported exactly one unresolved value across his whole
-     * collection: a Peruvian coin holding the literal string `__OTHER__`,
-     * residue from a fixed editor bug. `denominationDisplay` already renders
-     * that coin as `—`, i.e. "nothing recorded".
-     *
-     * `resolveDenomination` cannot know that: it sees text, finds no row
-     * naming it, and answers 'unknown'. If this screen repeated the
-     * resolver's verdict it would tell him "nothing in the reference list
-     * resolver's verdict it would say "nothing in the reference list
-     * matches __OTHER__ -- add it to the list", which would put a
-     * denomination named after a UI sentinel into the database permanently. */
+    /* The one value migration 014 found on a live database: a Peruvian coin
+     * holding `__OTHER__`. The resolver calls it 'unknown'; the screen must treat
+     * it as nothing recorded, so it never suggests adding `__OTHER__` to the list. */
     const census = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: '__OTHER__', country: 'Peru' })],
       LOOKUP
@@ -207,10 +177,8 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('reports a coin the resolver CAN place as resolvable, with the one answer', () => {
-    /* How a user reaches this state: a coin reads 'Denarius', the Roman
-     * Empire was not in the reference list when it was imported, and they
-     * have just added it on the Denominations pane. Reporting that group as
-     * "nothing matches" afterwards would be a lie, and the fix is one click. */
+    /* After the user adds the missing issuer (here the Roman Empire), the group
+     * is resolvable in one click, not "nothing matches". */
     const census = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Denarius', country: 'Roman Empire' })],
       LOOKUP
@@ -223,18 +191,10 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('never merges coins the same text resolves DIFFERENTLY for', () => {
-    /* *** THE BULK-WRITE SAFETY PROPERTY. ***
-     * 'Penny' under Great Britain is id 30; under Australia it is id 31. If
-     * the grouping keyed on the text alone, one group would hold both coins
-     * and one click would file the Australian penny under Great Britain --
-     * silently, on a screen whose whole purpose is to fix exactly that kind
-     * of mistake. */
-    /* THE AUSTRALIAN COIN IS FIRST ON PURPOSE. The two groups are identical
-     * on every tie-break the sort applies -- same reason, same coin count,
-     * same heading 'Penny' -- so the only thing separating them is the final
-     * comparison on `key`. Feeding them in id order would leave the expected
-     * output equal to the INSERTION order, and deleting that last tie-break
-     * would then be a no-op the test could not see. */
+    /* 'Penny' under Great Britain is id 30, under Australia id 31; grouping by
+     * text alone would let one click file the Australian coin under Great Britain.
+     * The Australian coin comes first so only the final `key` tie-break can
+     * order the two identical-looking groups. */
     const census = censusUnlinkedDenominations(
       [
         coin({ id: 'b', denomination: 'Penny', country: 'Australia' }),
@@ -252,10 +212,7 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('folds spellings together through the SAME alias table the editor uses', () => {
-    /* '3CS' and 'Three Cent Silver' are one denomination. Two groups would
-     * mean two decisions for one answer, which is the thing that makes people
-     * abandon a cleanup. The heading names both spellings so the user can see
-     * what is in the group before acting on it. */
+    /* '3CS' and 'Three Cent Silver' are one group; the heading names both spellings. */
     const lookup = [denomination({ denominationId: 60, label: '3¢ Silver', country: 'US' })];
     const census = censusUnlinkedDenominations(
       [
@@ -272,8 +229,7 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('skips unsaved drafts and says how many it skipped', () => {
-    // A draft has no database row, so a PUT would 404. It is also a coin the
-    // user is typing right now, which is not a cleanup candidate.
+    // Drafts have no database row (a PUT would 404) and are still being typed.
     const census = censusUnlinkedDenominations(
       [coin({ id: 'draft' }), coin({ id: 'saved' })],
       LOOKUP,
@@ -286,10 +242,8 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
   });
 
   it('orders groups: one-click fixes first, then by how many coins they hold', () => {
-    /* The input below is deliberately in the WRONG order for every tie-break
-     * at once -- nothing-recorded first, the 1-coin ambiguous group before the
-     * 2-coin one -- so that removing the sort cannot leave the expectation
-     * accidentally satisfied. */
+    /* Input is in the wrong order for every tie-break, so removing the sort
+     * can't leave the expectation satisfied by accident. */
     const census = censusUnlinkedDenominations(
       [
         coin({ id: 'z1', denomination: '' }),
@@ -335,8 +289,7 @@ describe('censusUnlinkedDenominations — which coins need attention, and why', 
 
 describe('describeUnlinkedCensus — the count, said out loud, including zero', () => {
   it('says so plainly when there is nothing to fix', () => {
-    /* "Every coin has a denomination" is a useful thing to be told. A screen
-     * that renders nothing is indistinguishable from a broken one. */
+    /* The zero state says so, rather than rendering nothing. */
     const census = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Quarter', denominationId: 20 })],
       LOOKUP
@@ -370,9 +323,7 @@ describe('describeUnlinkedCensus — the count, said out loud, including zero', 
 
 describe('describeUnlinkedReason — telling the user what is wrong, in their words', () => {
   it('explains each reason without using the resolver\'s vocabulary', () => {
-    /* 'ambiguous' and 'any-issuer' are the RESOLVER'S words and they are the
-     * right words inside the code. On screen they are jargon in front of
-     * somebody who just wants their coin to say "8 Reales". */
+    /* Plain-language sentences, not the resolver's terms. */
     const described = (['resolvable', 'ambiguous', 'unknown', 'nothing-recorded'] as const).map(
       (reason) => describeUnlinkedReason(reason)
     );
@@ -384,7 +335,7 @@ describe('describeUnlinkedReason — telling the user what is wrong, in their wo
       expect(sentence.toLowerCase()).not.toContain('null');
     }
 
-    // And they are four DIFFERENT sentences, not one sentence four times.
+    // Four different sentences.
     expect(new Set(described).size).toBe(4);
   });
 });
@@ -400,9 +351,8 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
     ).groups[0];
 
   it('writes the id and the CHOSEN LABEL to every coin in the group', () => {
-    /* §4.1's write rule, applied to a group: both fields, and they agree from
-     * then on. The text written is the label of the row the user picked --
-     * NOT the text the coin happened to be carrying. */
+    /* Both fields are written and agree: the text is the chosen row's label, not
+     * the coin's existing text. */
     const plan = planUnlinkedFix(ambiguous(), 10, LOOKUP);
 
     expect(plan.refusal).toBe('');
@@ -415,10 +365,8 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('writes the label of the row that was chosen, never the recorded text', () => {
-    /* The coin says 'Three Cent Silver'; the reference row is '3¢ Silver'.
-     * Writing the coin's own spelling back would leave the text and the id
-     * disagreeing on a DELIBERATE action, which is precisely the divergence
-     * §4.1 allows only for imports and deletions. */
+    /* The coin's own spelling must not be written back: after a deliberate choice
+     * text and id must agree (§4.1). */
     const lookup = [denomination({ denominationId: 60, label: '3¢ Silver', country: 'US' })];
     const group = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Three Cent Silver', country: 'Mexico' })],
@@ -437,9 +385,7 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('refuses an id the active lookup does not hold', () => {
-    /* Belt and braces over the UI. An id that has been removed or retired
-     * since the pane was rendered must not become a write -- the server would
-     * accept the FK and the coin would point at a row nothing can display. */
+    /* An id removed or retired since the pane was rendered must not be written. */
     const retired = planUnlinkedFix(ambiguous(), 50, LOOKUP);
     expect(retired.candidates).toEqual([]);
     expect(retired.refusal).toBe('That denomination is no longer in the list.');
@@ -450,10 +396,8 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('leaves a country the user has already recorded exactly as it is', () => {
-    /* The editor's rule (`denominationChoiceUpdates`), reused rather than
-     * restated: the user has said what country this is, and their answer
-     * stands. '8 Reales' coins often say 'United States'; linking them
-     * to Mexico's row must not quietly rewrite that. */
+    /* The editor's rule (`denominationChoiceUpdates`): a coin's existing country
+     * stands, so linking 'United States' 8 Reales to Mexico's row doesn't change it. */
     const plan = planUnlinkedFix(ambiguous(), 10, LOOKUP);
     for (const candidate of plan.candidates) {
       expect(candidate.updates.country).toBeUndefined();
@@ -462,8 +406,8 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('fills a BLANK country when exactly one issuer could be meant', () => {
-    // Same editor rule, other branch: 'Quarter' exists under one issuer only,
-    // so a coin with no country gains 'United States'.
+    // Other branch of the same rule: 'Quarter' has one issuer, so a coin with no
+    // country gains 'United States'.
     const group = censusUnlinkedDenominations(
       [coin({ id: 'a', denomination: 'Quarter', country: '' })],
       LOOKUP
@@ -475,11 +419,8 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('sets the country to the chosen issuer when, and only when, asked to', () => {
-    /* The second half of the ambiguous fix: "pick the issuer, OR set the
-     * country". Picking Mexico's 8 Reales for a coin filed under the United
-     * States links it correctly but leaves the country wrong, and the country
-     * is a display and search field (§4.2). So the user may opt in -- and
-     * because it overwrites a value they typed, it is opt-IN, never default. */
+    /* Opt-in "set the country": overwrites the coin's country with the chosen
+     * issuer (country is a display and search field, §4.2). Never the default. */
     const plan = planUnlinkedFix(ambiguous(), 10, LOOKUP, { setCountry: true });
 
     expect(plan.countryWrites).toBe(2);
@@ -493,9 +434,7 @@ describe('planUnlinkedFix — what the bulk button would write', () => {
   });
 
   it('never sends a field outside the three it is allowed to write', () => {
-    /* This project has a history of whole-record writes blanking columns the
-     * user never touched. `onlyUnlinkedFixFields` is the enforcement and this
-     * is the test that names the same list. */
+    /* The payload contains only UNLINKED_FIX_FIELDS (enforced by onlyUnlinkedFixFields). */
     const plan = planUnlinkedFix(ambiguous(), 10, LOOKUP, { setCountry: true });
     for (const candidate of plan.candidates) {
       for (const key of Object.keys(candidate.updates)) {
@@ -519,9 +458,7 @@ describe('describeUnlinkedFixPlan — the question asked before a bulk write', (
     ).groups[0];
 
   it('says the number plainly, and what will be written', () => {
-    /* §4.4's rule for the delete dialog applies just as much to a bulk
-     * write: say the number. "Link these coins?" with no figure is how a
-     * user ends up rewriting forty rows meaning to rewrite four. */
+    /* The confirmation states the number of coins. */
     expect(describeUnlinkedFixPlan(planUnlinkedFix(ambiguous(), 10, LOOKUP))).toBe(
       'Link 2 coins to "8 Reales" (Mexico)?\n\n' +
         'Their Denomination text will be set to "8 Reales".'
@@ -561,9 +498,7 @@ describe('describeUnlinkedFixOutcome — what happened', () => {
   });
 
   it('reports a partial run with the number that did NOT make it', () => {
-    // "4 of 5" is the honest form. "Linked 4 coins" after asking about 5
-    // would leave one silently unfixed on a screen the user is about to
-    // close.
+    // Partial runs read "4 of 5".
     expect(
       describeUnlinkedFixOutcome(
         { attempted: 5, linked: 4, failed: 1, failures: [{ coinId: 'a', label: '1890', reason: 'locked' }] },

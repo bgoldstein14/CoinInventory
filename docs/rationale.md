@@ -1,39 +1,39 @@
 # Why the code is the way it is
 
-This is the reasoning behind the design decisions in this project — the
-arguments that used to live in long comment blocks in the source files.
+The reasoning behind the design decisions in this project. The code says
+*what* happens and the tests say what must *keep* happening; these pages say
+*why*, and in particular why an obvious-looking alternative was not taken.
 
-The code says *what* happens. The tests say what must *keep* happening. This
-document says *why*, and in particular why some obvious-looking alternative was
-rejected. Most of what is here is the second kind: a record of roads not taken,
-so that nobody has to walk down them again to find out they are closed.
+This is not a changelog. If a decision is reversed, the entry is rewritten.
 
-It is not a changelog and not a history of the project. If a decision has since
-been reversed, the entry should be rewritten, not annotated.
+For how each feature behaves, see [how-it-works.md](how-it-works.md); for the
+module map, see [architecture.md](architecture.md).
 
 ## How to use it
 
 You do not need to read this to work on the code. Reach for it when you are
 about to change something and the existing shape looks wrong or needlessly
-complicated — that is exactly the situation these sections were written for.
-Several of them exist because the simpler-looking version was tried and caused
-data loss.
+complicated. Several of these rules exist because the simpler version loses
+data.
 
-A handful of source files carry a one-line pointer to the section that explains
-them. Everything else is navigable from the contents below.
+A few source files carry a one-line pointer to the section that explains them.
 
 ## Contents
 
 ### [Server and database](rationale/server.md)
 
-How the Express/SQL Server side is put together.
+The Express and SQLite side.
 
-- The database layer — why the pool code is defensive, and why no route may reset it
-- Images — why the coin list carries none and the grid fetches them one at a time
-- `SourcePath` — why the rescue lives on the server rather than the client
-- The `imagePaths` payload shape
-- Support bundles — why a Desktop file rather than an upload, and a hand-written ZIP rather than a dependency
-- Migrations — read-don't-run verification, and why schema and data changes stay in separate files
+- Where the database file lives, and why every open is idempotent
+- The data layer: one handle and one lock, the checks SQLite does not make, why `withDb()` retries once
+- Why decimals are REAL, widths are enforced in code, and text compares NOCASE
+- The schema version
+- Images: why the coin list carries none and the grid fetches thumbnails one at a time
+- `SourcePath`: why the rescue lives on the server; the `imagePaths` payload shape
+- Original files: why the server streams them, and the security trade-off
+- Backup and restore: snapshot pinning, metadata in the copy, no cancel on restore
+- Problem reports: a Desktop file rather than an upload, no zip, redaction before writing
+- The denomination seed and the Wikidata lookup
 
 ### [Core services](rationale/services-core.md)
 
@@ -44,29 +44,32 @@ Precious metals, importing, spreadsheets and the inventory store.
 - Why one adapter sits between the reference data and a coin record
 - Why the importer flags a guess instead of refusing or dropping
 - What the importer tolerates, and the few things it refuses
-- Why the spreadsheet import became its own subsystem
-- Why the inventory store is split into plain helper classes
+- Why the spreadsheet import became its own subsystem; header synonyms
+- Why the inventory store is split into plain helper classes; drafts; photos; failure stages
+- Cached denomination index, HTTP retries, IndexedDB keys
 - Why the statistics module is hand-rolled SVG
 
 ### [Image matching and denominations](rationale/image-and-denominations.md)
 
-The photo matcher, the import pipeline, and the denomination reference model.
+The photo matcher, the batch image import, and the denomination model.
 
 - Why the matcher is so suspicious
-- Numismatics the code depends on
-- Filename conventions in this collection
-- Silence is a statement — but only about the strike
+- Numismatics the code depends on; filename conventions in this collection
+- Silence is a statement, but only about strike and authenticity
 - Why the strike is its own field and not part of the grade
-- The margin gate, disqualified coins, and Tier 3's escape hatch
-- How the import came to look frozen, and why it knows where a file came from
-- Re-importing a folder; why photos are downscaled
-- Denominations — why a coin carries two fields
+- Why the score is damped; the margin gate and disqualified coins; Tier 3's escape hatch
+- Sibling inference and photo sets: containment versus equality
+- Two kinds of "not a coin"
+- Progress and double-click safety; why the base folder has no default
+- Re-importing a folder; sequential attach; why photos are downscaled
+- Denominations: two fields, null as a result, the cleanup screen
+- Things that are deliberately not done
 
 ### [User interface](rationale/ui.md)
 
-Components, the domain model, and the screens.
+Components, the domain model and the screens.
 
-- The domain model and shared types
+- The domain model and shared types; collection status
 - The coin editor
 - Reference data, Settings and spot prices
 - The inventory grid and detail panels
@@ -76,12 +79,11 @@ Components, the domain model, and the screens.
 
 ## Two conventions worth knowing before you read
 
-**"Fails open" and "fails closed"** appear throughout. A check that *fails open*
-lets the operation continue when it cannot reach an answer; one that *fails
-closed* refuses. Which one a given check uses is always a deliberate choice, and
-the reasoning is given where it is made.
+**"Fails open" and "fails closed"** appear throughout. A check that *fails
+open* lets the operation continue when it cannot reach an answer; one that
+*fails closed* refuses. Which one a check uses is always a deliberate choice,
+and the reason is given where it is made.
 
-**A blank is better than a wrong number.** This recurs in the precious-metal
-code, the statistics panel and the grid. A figure the app cannot work out is
-rendered as an em dash, never as `0`. A wrong number silently looks like a fact;
-a blank is visible and the user can fix it.
+**A blank is better than a wrong number.** A figure the app cannot work out is
+rendered as an em dash, never as `0`. A wrong number looks like a fact; a blank
+is visible and the user can fix it.

@@ -1,16 +1,12 @@
 <#
     Runs the Coin Inventory servers (Express API + Angular dev server).
 
-    This script is started by start-coin-inventory.ps1 and does nothing but
-    invoke "npm start" in the project directory.
+    Started as a child process by start-coin-inventory.ps1 in this folder;
+    runs "npm start" in the project directory. Not an entry point.
 
-    Note: this script deliberately does NOT touch .coin-inventory.lock.
-    The lock file belongs to the launcher (start-coin-inventory.ps1), which
-    creates it and removes it in its own "finally" block. The previous
-    version deleted the lock here too, which meant this child process could
-    remove the launcher's lock while the launcher was still running -- so a
-    second launch would think nothing was running and start a duplicate set
-    of servers fighting over ports 3000 and 4200.
+    Must not touch .coin-inventory.lock. The launcher owns it: removing it
+    here, while the launcher is still running, would let a second launch
+    start a duplicate set of servers on ports 3000 and 4200.
 #>
 
 $ErrorActionPreference = 'Stop'

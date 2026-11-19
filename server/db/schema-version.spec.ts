@@ -1,22 +1,8 @@
 /**
- * db/schema-version.spec.ts — THE STAMP, AND THE THREE WAYS IT COULD GO
- * WRONG.
- *
- * `PRAGMA user_version` is the only part of §16 that cannot be added
- * retrospectively. A backup written without it is a file nobody can ever
- * identify: not this build, not next year's, not a support engineer with
- * a SQLite browser. So the thing worth testing is not "does the number get
- * written" but the three ways the write could be harmful:
- *
- *   1. NOT WRITTEN AT ALL  -> every backup is anonymous, for ever
- *   2. WRITTEN DOWNWARDS   -> a file from a later build is relabelled as
- *                             one this build understands, and the restore
- *                             that would have refused it now accepts it
- *   3. WRITTEN ON A FILE   -> the number stops meaning "this shape" and
- *      WHOSE SCHEMA FAILED    starts meaning "we tried"
- *
- * The second is the dangerous one, and it is the reason stampSchemaVersion
- * is not a one-line `exec`.
+ * The schema version stamp (PRAGMA user_version), which lets a backup be
+ * identified later. Covers the three ways stamping could go wrong: not
+ * written, written downwards over a newer file's version, or written on a
+ * file whose schema failed to apply.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -47,13 +33,8 @@ describe('SCHEMA_VERSION — the number itself', () => {
     expect(SCHEMA_VERSION).toBeGreaterThan(0);
   });
 
-  it('starts at 1, which means "db/schema.sql at the dealer-readiness release"', () => {
-    /* Asserted so that a casual bump is a deliberate act with a failing
-     * test in front of it. Bumping this number is a promise to EVERY
-     * earlier build that it should refuse the file — see the long note in
-     * db/schema.ts — and it must not happen for a change an earlier build
-     * could have read quite happily. */
-    expect(SCHEMA_VERSION).toBe(1);
+  it('is 2: version 1 plus the CoinCatalogRefs table', () => {
+    expect(SCHEMA_VERSION).toBe(2);
   });
 
   it('is distinct from the unstamped value, or the two could not be told apart', () => {
@@ -83,10 +64,7 @@ describe('stampSchemaVersion', () => {
   });
 
   it('stamps an EXISTING collection that predates stamping', () => {
-    // Every database the owner already has reads 0. Their shape is already
-    // correct — nothing in the schema changed when the stamp was added —
-    // so recording what they are is all that is owed, and it has to happen
-    // on an ordinary open rather than needing a migration.
+    // Existing databases read 0 and have the correct shape; an ordinary open stamps them.
     const database = blankDatabase();
     try {
       applySchema(database);
@@ -113,7 +91,6 @@ describe('stampSchemaVersion', () => {
     }
   });
 
-  /* *** THE DANGEROUS ONE. *** */
   it('NEVER writes the version DOWN', () => {
     const database = blankDatabase();
     try {
@@ -125,9 +102,7 @@ describe('stampSchemaVersion', () => {
       expect(stamp.newerThanThisBuild).toBe(true);
       expect(stamp.before).toBe(42);
       expect(stamp.after).toBe(42);
-      // The file still says what it really is. Relabelling it would
-      // destroy the only record of that, and the restore that would have
-      // refused it would start accepting it.
+      // The file keeps its real version, so an older build's restore still refuses it.
       expect(readSchemaVersion(database)).toBe(42);
     } finally {
       database.close();
@@ -135,9 +110,7 @@ describe('stampSchemaVersion', () => {
   });
 
   it('reports a newer file rather than throwing, so the app still opens', () => {
-    // Refusing to open would leave a user whose file is from a newer build
-    // with no application at all. The warning is in the log; the number is
-    // in the result.
+    // Not fatal: the warning goes to the log, the number to the result.
     const database = blankDatabase();
     try {
       database.exec('PRAGMA user_version = 7');
@@ -150,8 +123,7 @@ describe('stampSchemaVersion', () => {
 
 describe('the live database the application opens', () => {
   it('is stamped by the time the first query runs', async () => {
-    // Not a unit test of the stamper — a test that db/pool.ts actually
-    // calls it. The stamp is worthless if it only happens in a spec.
+    // Checks db/pool.ts actually calls the stamper.
     await getPool();
     const version = await withTestDb((database) => readSchemaVersion(database));
     expect(version).toBe(SCHEMA_VERSION);

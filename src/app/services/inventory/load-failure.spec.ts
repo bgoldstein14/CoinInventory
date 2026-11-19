@@ -1,26 +1,10 @@
  /*
- * load-failure.spec.ts — "my data is broken" vs "the app could not show it"
- *
- * THE BUG, from the owner's log on 2026-11-08:
- *
- *     [INFO]  Retrieved 105 coins
- *     [ERROR] GET /api/coins error | Invalid string length
- *     [ERROR] [frontend] Failed to connect to database | 500 Internal Server Error
- *
- * The third line is this half of the app, and it is the line the owner
- * actually saw. The database had just handed over all 105 coins; the front
- * end announced a connection failure anyway, because `hydrate()` had exactly
- * one failure message and that message named the database.
- *
- * The server now says which stage failed (server/routes/failure-report.ts).
- * This module is what the client does with that, and the requirement it is
- * tested against is blunt:
- *
- *   A NON-TECHNICAL USER MUST BE ABLE TO TELL "MY DATA IS BROKEN" FROM
- *   "THE APP HAD A PROBLEM SHOWING IT".
- *
- * The technical line (RangeError, status codes) must be AVAILABLE and must
- * not be the headline.
+  * Tests for describeLoadFailure: a non-technical user must be able to tell "my
+  * data is broken" from "the app had a problem showing it". E.g. the server
+  * reads all coins but fails to serialise the response; that must not be
+  * reported as a database connection failure. The server reports the failing
+  * stage (server/routes/failure-report.ts). The technical line is available but
+  * isn't the headline.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -31,7 +15,7 @@ function httpError(status: number, statusText: string, body: unknown): unknown {
   return { status, statusText, error: body };
 }
 
-/** What the server now sends when res.json() could not build the response. */
+/** What the server sends when res.json() couldn't build the response. */
 const DELIVERY_BODY = {
   error:
     'The coin list could not be sent to the screen. Your data is safe and the database is working — the problem is in sending it, not reading it.',
@@ -43,7 +27,7 @@ describe('describeLoadFailure — the 2026-11-08 delivery failure', () => {
   it('does not say the database failed', () => {
     const failure = describeLoadFailure(httpError(500, 'Internal Server Error', DELIVERY_BODY));
 
-    // The exact sentence the owner was shown while the database was fine.
+    // The database was fine, so the title must not say it is unavailable.
     expect(failure.title).not.toMatch(/database unavailable/i);
     expect(failure.message).not.toMatch(/cannot connect/i);
     expect(failure.message).not.toMatch(/failed to connect/i);
@@ -86,14 +70,13 @@ describe('describeLoadFailure — a genuine connection failure', () => {
 
     expect(failure.stage).toBe('connection');
     expect(failure.title).toMatch(/database unavailable/i);
-    // We never reached the database, so we know nothing about the data and
-    // must not say we do.
+    // The database was never reached, so nothing is claimed about the data.
     expect(failure.dataSafe).toBe(false);
     expect(failure.message).not.toMatch(/your data is safe/i);
   });
 
   it('treats a request that never reached the server as a connection failure', () => {
-    // status 0: backend down, DNS, CORS, offline. No body at all.
+    // status 0: backend down, DNS, CORS, offline; no body.
     const failure = describeLoadFailure(httpError(0, 'Unknown Error', null));
 
     expect(failure.stage).toBe('connection');
@@ -102,7 +85,7 @@ describe('describeLoadFailure — a genuine connection failure', () => {
   });
 
   it('treats a 503 with no body as a connection failure', () => {
-    // An older backend, or a proxy answering on its behalf.
+    // An older backend, or a proxy answering for it.
     const failure = describeLoadFailure(httpError(503, 'Service Unavailable', null));
 
     expect(failure.stage).toBe('connection');
@@ -126,9 +109,7 @@ describe('describeLoadFailure — everything else', () => {
   });
 
   it('does not guess when the body says nothing about the stage', () => {
-    // An old server, or a proxy's own 500 page. "Unknown" is the honest
-    // answer and it must NOT be quietly rounded to "database unavailable" —
-    // that rounding is the whole bug.
+    // An old server or a proxy's 500 page: "unknown", never "database unavailable".
     const failure = describeLoadFailure(httpError(500, 'Internal Server Error', null));
 
     expect(failure.stage).toBe('unknown');
@@ -145,8 +126,7 @@ describe('describeLoadFailure — everything else', () => {
   });
 
   it('ignores a stage value it does not recognise', () => {
-    // Forward compatibility: a future server stage must not be mistaken for
-    // one of ours, and must not be echoed into a confident claim.
+    // An unknown future stage must not be mistaken for a known one.
     const failure = describeLoadFailure(
       httpError(500, 'Internal Server Error', { error: 'something', stage: 'wibble' })
     );

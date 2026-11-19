@@ -1,11 +1,4 @@
-/**
- * image-thumbnail.spec.ts
- *
- * Only the arithmetic is tested. The canvas work around it cannot be — there
- * is no jsdom here, and no canvas in Node — so it is kept to the handful of
- * lines that genuinely need a browser, and the decision that governs the
- * output size lives in this pure function instead.
- */
+/** Tests for the thumbnail size calculation (the canvas work needs a browser). */
 import { describe, expect, it } from 'vitest';
 import { thumbnailSize } from './image-thumbnail';
 import { THUMBNAIL_MAX_EDGE_PX } from './report-images';
@@ -24,14 +17,11 @@ describe('thumbnailSize', () => {
   });
 
   it('NEVER enlarges an image that is already small', () => {
-    // Scaling a 200px photo up to 480 would make the file bigger and the
-    // picture no clearer — the exact opposite of what this is for.
     expect(thumbnailSize(200, 150, 480)).toEqual({ width: 200, height: 150 });
   });
 
   it('never rounds an edge down to zero', () => {
-    // A canvas of width 0 throws. A 2000x1 image is absurd but a corrupt
-    // record can produce one, and it must not take the whole report down.
+    // A canvas of width 0 throws; a corrupt record can produce a 2000x1 image.
     const size = thumbnailSize(2000, 1, 480);
     expect(size.width).toBe(480);
     expect(size.height).toBeGreaterThanOrEqual(1);

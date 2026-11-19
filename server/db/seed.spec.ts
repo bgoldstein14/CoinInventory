@@ -1,27 +1,10 @@
 /**
- * db/seed.spec.ts — the reference data, and the three ways re-seeding goes
- * wrong.
+ * The reference data seed. It runs on every open, so it must be idempotent:
  *
- * db/seed.ts runs on EVERY open, which is what makes "is this a new
- * database?" a question nobody has to answer. That only works if the seed is
- * genuinely idempotent, and "idempotent" here means three separate things,
- * each with its own way of failing silently:
- *
- *   1. IT MUST NOT DUPLICATE. 70 issuers must stay 70 on the thousandth
- *      launch. The consequence of a duplicate is worse than untidiness —
- *      migrations/seed-sql.ts's header spells it out: two '8 Reales' rows
- *      under Mexico make every resolution of that text AMBIGUOUS, and
- *      ambiguous resolves to NULL. A duplicated seed row does not add a
- *      denomination, it DELETES one.
- *   2. IT MUST NOT OVERWRITE. A row the user renamed keeps his name.
- *   3. IT MUST NOT RESURRECT. A row the user soft-deleted stays deleted. An
- *      `INSERT OR REPLACE` would bring every removed denomination back on
- *      the next launch, which looks exactly like the delete button not
- *      working.
- *
- * Design §4.10b is why this exists at all: the seeded rows are REGENERATED
- * rather than migrated, so Stage 2 only has to move the owner's own
- * additions and his coins' links.
+ *   1. no duplicates (a duplicate '8 Reales' under Mexico would make that
+ *      label ambiguous, which resolves to NULL);
+ *   2. no overwriting a row the user renamed;
+ *   3. no resurrecting a row the user soft-deleted.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -59,9 +42,7 @@ describe('the first seed', () => {
     try {
       const report = seedReferenceData(database, seed);
 
-      // The numbers design §4.10b quotes. If the JSON grows these move, and
-      // that is fine — what must not happen is a count that disagrees with
-      // the file it was generated from.
+      // Counts must match the source file.
       expect(report.issuers).toBe(seed.issuers.length);
       expect(report.denominations).toBe(seed.denominations.length);
       expect(count(database, 'Issuers')).toBe(seed.issuers.length);
@@ -77,10 +58,7 @@ describe('the first seed', () => {
   });
 
   it('links every denomination to its issuer', () => {
-    // The join is by issuer NAME, through ids AUTOINCREMENT assigned moments
-    // earlier. A mistake here leaves rows with IssuerId NULL, which looks
-    // like perfectly ordinary unresolved data and is invisible until the
-    // user opens the picker and finds Mexico empty.
+    // Denominations join to issuers by name; a mistake leaves IssuerId NULL.
     const database = freshDatabase();
     try {
       seedReferenceData(database);
@@ -91,9 +69,7 @@ describe('the first seed', () => {
   });
 
   it('fills Country from the issuer ISO code where there is one, and the name otherwise', async () => {
-    // Exactly what migration 013 does. The column is flagged debt (design
-    // §4.2) but the editor dropdown still reads it, so a blank would make
-    // every seeded row invisible there.
+    // Country = IsoCode or Name, as migration 013 does; the editor dropdown reads it.
     const [mexican] = await queryRows(
       "SELECT Country FROM Denominations WHERE Label = '8 Reales' AND Country = 'MX' LIMIT 1"
     );
@@ -112,12 +88,7 @@ describe('the first seed', () => {
   });
 
   it('carries the non-ASCII labels through intact', () => {
-    // migrations/seed-sql.ts emits every non-ASCII character as NCHAR(n),
-    // because a generated .sql file's correctness would otherwise depend on
-    // sqlcmd picking the right code page. This seeder binds the strings as
-    // parameters straight out of a UTF-8 JSON file, so they never become
-    // text in a file at all and the convention does not apply — but the
-    // characters still have to arrive.
+    // Non-ASCII characters must arrive intact (bound as parameters from UTF-8 JSON).
     const database = freshDatabase();
     try {
       seedReferenceData(database);
@@ -177,7 +148,7 @@ describe('re-seeding is idempotent', () => {
   });
 
   it('never produces the same label twice under one issuer', () => {
-    // The duplicate that DELETES a denomination rather than adding one.
+    // A duplicate would make the label ambiguous, effectively deleting it.
     const database = freshDatabase();
     try {
       seedReferenceData(database);
@@ -205,13 +176,10 @@ describe('re-seeding is idempotent', () => {
 
       // The rename stands...
       expect(count(database, "Issuers WHERE Name = 'Estados Unidos Mexicanos'")).toBe(1);
-      // ...and the seed did NOT take the now-free name as an invitation to
-      // insert a second row. (It will: matching is by name, and the name is
-      // no longer taken. That is the documented behaviour and it is what
-      // migration 013 does too — recorded here so it is a known
-      // consequence of renaming rather than a surprise.)
+      // ...but matching is by name, so the freed name 'Mexico' is seeded again
+      // (same as migration 013).
       expect(count(database, "Issuers WHERE Name = 'Mexico'")).toBe(1);
-      // Crucially, the user's row kept its denominations; the new one has none.
+      // The user's row kept its denominations; the new one has none.
       const renamed = database
         .prepare(
           'SELECT COUNT(*) AS c FROM Denominations WHERE IssuerId = ' +
@@ -225,9 +193,7 @@ describe('re-seeding is idempotent', () => {
   });
 
   it('does not resurrect a row the user soft-deleted', () => {
-    // The failure an `INSERT OR REPLACE` would introduce: every removed
-    // catalogue comes back on the next launch, which reads to the user as
-    // the delete button not working.
+    // INSERT OR REPLACE would bring deleted rows back on every launch.
     const database = freshDatabase();
     try {
       seedReferenceData(database);
@@ -247,9 +213,7 @@ describe('re-seeding is idempotent', () => {
   });
 
   it('matches case-insensitively, so a differently-cased row is not a second row', () => {
-    // The lookup name columns are COLLATE NOCASE (see db/schema.sql), which
-    // restores SQL Server's case-insensitive default. Without it 'sear'
-    // would become a sixteenth catalogue on the next launch.
+    // COLLATE NOCASE: 'sear' must not become a sixteenth catalogue.
     const database = freshDatabase();
     try {
       seedReferenceData(database);
@@ -287,9 +251,7 @@ describe('the small lookup seeds', () => {
   });
 
   it('keeps the blank mint mark, which is a real value and not missing data', async () => {
-    // A coin struck in Philadelphia before 1980 carries no mint mark, and
-    // Coins.MintMark stores the LABEL. "Tidying" the empty string into a
-    // NULL would make those coins unselectable.
+    // Pre-1980 Philadelphia coins have no mint mark; Coins.MintMark stores the label.
     const rows = await queryRows("SELECT Label, Description FROM MintMarks WHERE Label = ''");
     expect(rows).toHaveLength(1);
     expect(rows[0]['Description']).toBe('No mintmark / Philadelphia pre-1980');
@@ -303,17 +265,13 @@ describe('the small lookup seeds', () => {
 
 describe('the whole seed runs in one transaction', () => {
   it('leaves nothing behind when it fails part way through', async () => {
-    // 1,274 guarded inserts outside a transaction would be 1,274 commits,
-    // and a crash in the middle would leave a database that is seeded enough
-    // to look finished and not enough to work.
+    // One transaction: a crash mid-seed must not leave a half-seeded database.
     const database = freshDatabase();
     try {
       const seed = readSeedFile();
       const broken = {
         issuers: seed.issuers,
-        // A label far past NVARCHAR(100) is not what fails here — SQLite
-        // does not care — so break it with something SQLite does enforce:
-        // a NOT NULL column.
+        // Break it with a NOT NULL violation (SQLite doesn't enforce lengths).
         denominations: [
           ...seed.denominations.slice(0, 5),
           { issuer: seed.issuers[0].key, label: null as unknown as string, faceValue: null, sortOrder: 1 },
@@ -321,7 +279,7 @@ describe('the whole seed runs in one transaction', () => {
       };
 
       expect(() => seedReferenceData(database, broken as never)).toThrow();
-      // Rolled all the way back: not one issuer survived either.
+      // Rolled back completely: no issuers either.
       expect(count(database, 'Issuers')).toBe(0);
       expect(count(database, 'Denominations')).toBe(0);
     } finally {
@@ -332,26 +290,18 @@ describe('the whole seed runs in one transaction', () => {
 
 describe('what Stage 2 must know about the seeded ids', () => {
   it('assigns DenominationId by AUTOINCREMENT, so the numbers are local to this database', async () => {
-    // Written as a test rather than only as a comment, because getting this
-    // wrong in Stage 2 silently attaches the owner's Morgan dollars to
-    // whatever happens to occupy that id here. His Coins.DenominationId must
-    // be re-resolved by (issuer name, label), not copied.
+    // Ids are assigned locally, so the SQL Server import must re-resolve
+    // Coins.DenominationId by (issuer name, label), not copy it.
     const [us] = await queryRows(
       "SELECT DenominationId AS id FROM Denominations WHERE Label = '$1' AND Country = 'US'"
     );
-    // The legacy SQL Server database seeded '$1' at DenominationId 11.
-    // There is no reason for the two to agree, and this asserts only that
-    // the id is a real key — the point is that nothing may ASSUME 11.
+    // The legacy database had '$1' at id 11; nothing may assume that here.
     expect(typeof us['id']).toBe('number');
     expect(us['id']).toBeGreaterThan(0);
   });
 
   it('never reuses an id after a hard delete, because the keys are AUTOINCREMENT', async () => {
-    // A bare INTEGER PRIMARY KEY picks max(rowid) + 1 and so RECYCLES the id
-    // of a deleted row. AUTOINCREMENT does not. Without it, deleting the
-    // last catalogue and adding another would hand the new one an id that
-    // coins, exported CSVs and an open browser tab still believe means
-    // something else.
+    // AUTOINCREMENT: a deleted top row's id must not be reused.
     await withTestDb((database) => {
       database.prepare("INSERT INTO Catalogs (Name, SortOrder, IsActive) VALUES ('Temp', 98, 1)").run();
     });

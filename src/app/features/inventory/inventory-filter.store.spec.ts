@@ -1,28 +1,11 @@
 /*
- * InventoryFilterStore — status filtering and the search haystack.
+ * InventoryFilterStore: status filtering and the search haystack.
  *
- * MERGED FILE. Three specs were folded in here, each keeping the header it
- * arrived with as a banner above its own block:
- *   inventory-filter-status.spec.ts       -> 'the status filter',
- *                                            'searching for a coin by where
- *                                             it is stored'
- *   inventory-filter-catalog.spec.ts      -> 'searching by catalogue reference'
- *   inventory-filter-denomination.spec.ts -> 'searching by what the grid
- *                                             actually shows' and the three
- *                                             blocks after it
+ * Two coin factories, not interchangeable: `makeCoin` is a populated Morgan
+ * dollar for the status tests; `makeBlankCoin` leaves every text field empty
+ * so the "nothing leaks into the haystack" assertions are meaningful.
  *
- * TWO COIN FACTORIES, AND THEY ARE NOT INTERCHANGEABLE.
- *   `makeCoin` defaults to a populated Morgan dollar and belongs to the
- *   status block, which needs coins that look like coins.
- *   `makeBlankCoin` defaults every field to an empty string and belongs to
- *   the catalogue and denomination blocks, whose whole point is that nothing
- *   leaks into the search haystack. Those assertions are only meaningful
- *   while every other field is blank: hand one of them a populated coin and
- *   it still passes while testing nothing. Do not merge the two.
- *
- * These tests build InventoryFilterStore with no StorageService, so there is
- * deliberately no `import 'fake-indexeddb/auto'` here — they must keep
- * running without an ambient indexedDB.
+ * Built without a StorageService, so no fake-indexeddb import is needed.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -49,11 +32,7 @@ function makeCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
   } as CoinRecord;
 }
 
-/**
- * Blank by default. For the catalogue and denomination blocks, where a coin
- * carrying any other text would make the "nothing leaks into the haystack"
- * assertions vacuous.
- */
+/** Blank by default, so haystack assertions aren't satisfied by fixture text. */
 function makeBlankCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
   return {
     id: crypto.randomUUID(), denomination: '', year: '', coinType: '',
@@ -65,20 +44,8 @@ function makeBlankCoin(overrides: Partial<CoinRecord> = {}): CoinRecord {
   } as CoinRecord;
 }
 
-/*
- * ANTI-VACUITY GUARD FOR THE TWO FACTORIES ABOVE.
- *
- * This file was merged from three, each of which had its own `makeCoin`.
- * Two of them defaulted to blank and one to a populated Morgan dollar, and
- * the obvious tidy-up — folding them into a single factory — silently
- * destroys the catalogue and denomination blocks: every "nothing leaks into
- * the haystack" assertion keeps passing while testing nothing, because the
- * leak it looks for is now supplied by the fixture itself.
- *
- * That was MEASURED, not guessed: swapping makeBlankCoin's defaults for the
- * populated ones left all 28 tests in this file green. Nothing else here can
- * see the mistake, so this is the thing that does.
- */
+// Guards makeBlankCoin: if it gained populated defaults, the haystack tests
+// below would still pass while testing nothing.
 describe('the blank fixture really is blank', () => {
   it('leaves every searchable text field empty, or the haystack tests are vacuous', () => {
     const blank = makeBlankCoin();
@@ -92,11 +59,7 @@ describe('the blank fixture really is blank', () => {
   });
 });
 
-/**
- * The only thing InventoryFilterStore touches on InventoryService. Building a
- * real one would drag in HttpClient, IndexedDB and the spot-price machinery
- * for no gain.
- */
+/** Minimal InventoryService stub: the store only reads `inventory` here. */
 function storeOver(coins: CoinRecord[]): InventoryFilterStore {
   return new InventoryFilterStore({ inventory: signal(coins) } as unknown as InventoryService);
 }
@@ -126,30 +89,7 @@ function storeWithDenominations(
   } as unknown as InventoryService);
 }
 
-/*
- * ---------------------------------------------------------------------------
- * From inventory-filter-status.spec.ts:
- *
- * Filtering the grid by collection status, and finding a coin by where it is
- * stored.
- *
- * These tests go straight at the store rather than through the App shell:
- * InventoryFilterStore reads exactly one thing off InventoryService — the
- * `inventory` signal — so a two-line stub is a complete and honest test
- * double, and the result runs under Node with no DOM.
- *
- * WHAT IS BEING GUARDED
- * Being able to SEE the want list is the half of this feature that makes the
- * other half safe. The totals exclude coins the owner does not have; without
- * a way to filter the grid down to exactly those coins, "my collection is
- * worth less than I thought" and "I have forty coins on a want list" would
- * be indistinguishable.
- *
- * The other thing pinned here is the "no filter" case. A status filter that
- * accidentally hid unstatused coins would hide every coin saved before the
- * field existed — which is the whole collection.
- * ---------------------------------------------------------------------------
- */
+/* ---- Status filter and storage-location search ---- */
 
 describe('the status filter', () => {
   const coins = [
@@ -162,9 +102,6 @@ describe('the status filter', () => {
   ];
 
   it('starts with every status ticked, so everything is shown', () => {
-    /* The filter is a SET now, not a single choice with an "All statuses"
-     * option on top. All five ticked IS what that option used to mean, so
-     * the option had nothing left to say and was removed. */
     const store = storeOver(coins);
     expect([...store.collectionStatusFilter()])
       .toEqual(['owned', 'wanted', 'ordered', 'for-sale', 'sold']);
@@ -186,9 +123,6 @@ describe('the status filter', () => {
   });
 
   it('shows SEVERAL statuses at once, which the dropdown could not', () => {
-    /* The reason for the change. "What I own and what is up for sale, but
-     * not the want list" is an ordinary question and it was unaskable: the
-     * old control offered one status or all of them and nothing between. */
     const store = storeOver(coins);
     store.collectionStatusFilter.set(['owned', 'for-sale']);
 
@@ -197,12 +131,7 @@ describe('the status filter', () => {
   });
 
   it('shows NOTHING when no status is ticked', () => {
-    /* DELIBERATE, and the alternative was considered. Reading an empty set
-     * as "show everything" would make all-ticked and none-ticked mean the
-     * same thing -- which is precisely the redundancy that removing the
-     * "All statuses" option got rid of, put back one layer down. Each box
-     * says "include this status"; include none and nothing is included.
-     * The filter bar prints a line saying so next to the empty boxes. */
+    // Deliberate: an empty set is not treated as "show everything".
     const store = storeOver(coins);
     store.clearCollectionStatuses();
 
@@ -228,9 +157,7 @@ describe('the status filter', () => {
   });
 
   it('counts a coin with NO stored status as Owned', () => {
-    // Every coin saved before the field existed arrives this way. Filtering
-    // to "Owned" and getting back only the newer ones would make the owner
-    // think he had lost the rest.
+    // Coins saved before the status field existed must count as Owned.
     const store = storeOver(coins);
     store.collectionStatusFilter.set(['owned']);
 
@@ -238,10 +165,7 @@ describe('the status filter', () => {
   });
 
   it('never hides an unstatused coin while everything is ticked', () => {
-    /* The safety property of the whole feature, restated for the set.
-     * A statusless coin normalises to Owned, Owned is ticked by default,
-     * so the entire pre-migration-010 collection is visible on first load.
-     * Get this wrong and the owner opens the app to an empty grid. */
+    // A statusless coin normalises to Owned, which is ticked by default.
     const store = storeOver([makeCoin({ coinType: 'Seated' })]);
     expect(store.filteredInventory()).toHaveLength(1);
   });
@@ -260,8 +184,6 @@ describe('the status filter', () => {
 
 describe('searching for a coin by where it is stored', () => {
   it('finds a coin by its storage location', () => {
-    // "Which coins are in the safe deposit box?" is the question the field
-    // exists to answer, and the search box is where the user will ask it.
     const store = storeOver([
       makeCoin({ coinType: 'Morgan', storageLocation: 'Safe deposit box 2' }),
       makeCoin({ coinType: 'Peace', storageLocation: 'Dansco 7070, page 4' })
@@ -272,8 +194,7 @@ describe('searching for a coin by where it is stored', () => {
   });
 
   it('does not blow up on a coin with no storage location', () => {
-    // A `.toLowerCase()` on undefined would throw inside a computed and
-    // take the whole grid down.
+    // `.toLowerCase()` on undefined would throw inside the computed.
     const store = storeOver([makeCoin({ coinType: 'Morgan' })]);
     store.searchQuery.set('morgan');
 
@@ -282,36 +203,16 @@ describe('searching for a coin by where it is stored', () => {
 });
 
 /*
- * ---------------------------------------------------------------------------
- * From inventory-filter-catalog.spec.ts:
- *
- * Searching for a catalogue reference.
- *
- * WHY THIS MATTERS MORE THAN AN ORDINARY SEARCH FIELD
- *   For an ancient coin the catalogue reference is frequently the ONLY thing
- *   that identifies it: no year, no denomination, no grade, and a coin type
- *   that is a guess. "Sear 6819" is how the owner finds that coin, so a
- *   catalogue column the grid can display but the search box cannot find
- *   would miss the entire point of adding the field.
- *
- *   The specific trap is that the grid composes the displayed string from a
- *   foreign key plus a number. If the search builds its own version of that
- *   string, the two drift: the grid shows "Sear 6819", the user types exactly
- *   what he sees, and nothing comes back. Both go through
- *   coinCatalogReference(), and these tests are what hold that true.
- *
- *   The `?? ''` trap from the storage-location field applies here too: a
- *   coin saved before these fields existed has neither, and `undefined`
- *   joined into the haystack puts the literal word "undefined" in it, so a
- *   search for "undefined" returns the whole collection.
- * ---------------------------------------------------------------------------
+ * ---- Catalogue reference search ----
+ * The search must match the string the grid shows (both use
+ * coinCatalogReference()), and missing fields must not add "undefined".
  */
 
 const catalogCoins = [
-  makeBlankCoin({ coinType: 'Bar Kochba', catalogId: 3, catalogNumber: '736' }),
-  makeBlankCoin({ coinType: 'Byzantine follis', catalogId: 1, catalogNumber: '6819' }),
+  makeBlankCoin({ coinType: 'Bar Kochba', catalogRefs: [{ catalogId: 3, catalogNumber: '736' }] }),
+  makeBlankCoin({ coinType: 'Byzantine follis', catalogRefs: [{ catalogId: 1, catalogNumber: '6819' }, { catalogId: null, catalogNumber: 'Cohen 45' }] }),
   // A reference that arrived from an import: a number, no catalogue resolved.
-  makeBlankCoin({ coinType: 'Unattributed', catalogNumber: '44/5' }),
+  makeBlankCoin({ coinType: 'Unattributed', catalogRefs: [{ catalogId: null, catalogNumber: '44/5' }] }),
   // The ordinary modern coin: no catalogue reference at all.
   makeBlankCoin({ coinType: 'Morgan', denomination: '$1', year: '1881' })
 ];
@@ -350,12 +251,28 @@ describe('searching by catalogue reference', () => {
   });
 
   it('still works when the catalogue list has not loaded yet', () => {
-    // Hydration is two phases: coins arrive first, lookups afterwards, and a
-    // lookup is allowed to fail outright without breaking the app. The number
-    // must remain searchable in the meantime.
+    // Lookups hydrate after coins and may fail; the number stays searchable.
     const store = storeWithCatalogs(catalogCoins, []);
     store.searchQuery.set('6819');
     expect(store.filteredInventory().map(coin => coin.coinType)).toEqual(['Byzantine follis']);
+  });
+
+  it('finds a coin by a reference that is not its main one', () => {
+    const store = storeWithCatalogs(catalogCoins);
+    store.searchQuery.set('cohen 45');
+    expect(store.filteredInventory().map(coin => coin.coinType)).toEqual(['Byzantine follis']);
+  });
+
+  it('sorts by the main reference', () => {
+    const store = storeWithCatalogs(catalogCoins);
+    store.searchQuery.set('');
+    store.sortState.set({ column: 'catalogReference', direction: 'asc' });
+    // Hendin 736, Sear 6819 (+1), then the number-only 44/5 sorts first as text; Morgan has none.
+    const order = store.filteredInventory().map(coin => coin.coinType);
+    expect(order.indexOf('Bar Kochba')).toBeLessThan(order.indexOf('Byzantine follis'));
+    store.sortState.set({ column: 'catalogReference', direction: 'desc' });
+    const reversed = store.filteredInventory().map(coin => coin.coinType);
+    expect(reversed.indexOf('Byzantine follis')).toBeLessThan(reversed.indexOf('Bar Kochba'));
   });
 
   it('leaves searches that have nothing to do with catalogues alone', () => {
@@ -366,34 +283,9 @@ describe('searching by catalogue reference', () => {
 });
 
 /*
- * ---------------------------------------------------------------------------
- * From inventory-filter-denomination.spec.ts — the four blocks below:
- *
- * Searching for a denomination.
- *
- * THE FAILURE THESE TESTS PREVENT
- *   A coin visible in the grid as `8 Reales` that the search box can only
- *   find under `Pillar Dollar`. The user types what he can see, nothing
- *   comes back, and he concludes the coin is gone. Same shape as the
- *   catalogue reference (the 'searching by catalogue reference' block
- *   above): the string on screen is derived from an id, not read out of a
- *   column.
- *
- * WHY THE HAYSTACK CARRIES BOTH THE LABEL AND THE RECORDED TEXT
- *   They can differ, and after an import they usually do: the column keeps
- *   saying `Pillar Dollar` while the id says `8 Reales`.
- *
- *     THE LABEL, because it is what the grid shows. Without it a resolved
- *     coin is visible and unfindable.
- *
- *     THE TEXT, because it is the original wording and the artefact a
- *     migration review reads; dropping it would be a REGRESSION. Adding the
- *     label is strictly additive: it can never make a visible coin
- *     unfindable.
- *
- *   For an unresolved coin the two coincide — the text is inside the string
- *   on screen — so there is nothing to choose between.
- * ---------------------------------------------------------------------------
+ * ---- Denomination search ----
+ * The haystack holds both the resolved label (what the grid shows) and the
+ * recorded text (what the source said); after an import they often differ.
  */
 
 /** A coin whose id and text disagree — the ordinary post-import state. */
@@ -424,8 +316,7 @@ describe('searching by what the grid actually shows', () => {
   });
 
   it('finds an id-less coin by the Label its TEXT resolves to', () => {
-    // The column says 'Trime'; the lookup row — and therefore the grid —
-    // say '3CS'. This is the state of every coin that has no id yet.
+    // Column says 'Trime'; the lookup (and the grid) say '3CS'.
     expect(found('3cs')).toEqual(['Three Cent']);
   });
 
@@ -434,17 +325,13 @@ describe('searching by what the grid actually shows', () => {
   });
 
   it('finds every unresolved coin by the word the grid labels them with', () => {
-    // Typing what is on screen is the whole contract, and the unresolved
-    // form is on screen. Exactly one of these three coins names nothing the
-    // lookup knows, so exactly one comes back.
+    // Only one of the three coins is unresolved, so only it matches.
     expect(found('other (')).toEqual(['Trade']);
   });
 });
 
 describe('searching by what the source recorded', () => {
   it('still finds a resolved coin by the text it was imported with', () => {
-    // NOT a nice-to-have: the recorded text is the artefact a migration
-    // review reads, and losing it would be a regression.
     expect(found('pillar dollar')).toEqual(['Pillar']);
   });
 
@@ -455,9 +342,7 @@ describe('searching by what the source recorded', () => {
 
 describe('the un-migrated and un-hydrated states', () => {
   it('searches the plain text when no lookup has arrived', () => {
-    // The store is built with a two-line service stub in several specs, and
-    // phase 2 of hydration is allowed to fail. Neither may take the search
-    // box down, and neither may change what it matches.
+    // Stubbed services and failed hydration must not change what is matched.
     const coins = [makeBlankCoin({ coinType: 'Morgan', denomination: '$1' })];
     const store = storeWithDenominations(coins, []);
     store.searchQuery.set('$1');
@@ -473,8 +358,6 @@ describe('the un-migrated and un-hydrated states', () => {
   });
 
   it('matches the same coins before and after an id is written', () => {
-    // Writing an id must not change what the search box finds, in either
-    // direction. Same coin, same text, id absent and id present.
     const before = [makeBlankCoin({ coinType: 'Dollar', denomination: '$1' })];
     const after = [
       makeBlankCoin({ coinType: 'Dollar', denominationId: US_DOLLAR, denomination: '$1' })
@@ -486,10 +369,7 @@ describe('the un-migrated and un-hydrated states', () => {
 
 describe('nothing leaks into the haystack', () => {
   it('puts no placeholder or undefined in it for a coin with no denomination', () => {
-    // The em-dash a blank cell renders is NOT searchable text — a search for
-    // it would return every unrecorded coin in the collection, which is not
-    // a question anyone is asking. Same trap as the literal 'undefined' the
-    // storage-location field had to be defended from.
+    // The em-dash placeholder is not searchable text.
     const blank = [makeBlankCoin({ coinType: 'Mystery', denomination: '' })];
     expect(found('—', blank)).toEqual([]);
     expect(found('undefined', blank)).toEqual([]);

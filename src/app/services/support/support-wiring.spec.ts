@@ -1,18 +1,8 @@
 /**
- * support-wiring.spec.ts — the three joins that make the feature reachable.
- *
- * ---- WHY THESE ARE WORTH A TEST ----
- * Every one of them is the kind of thing that is "obviously done" and
- * silently is not. This codebase already has the scar: the batch image
- * import had a modal, a visibility signal and an open/close pair, and
- * nothing ever called openImageImportModal() — so the whole feature was
- * unreachable from the UI and nobody noticed. App.handleImportSelection
- * carries a comment about it.
- *
- *   1. errors the user saw are actually recorded, or the report's "recent
- *      errors" section is permanently empty;
- *   2. the toolbar emits a request, or there is no way in;
- *   3. the shell listens, or the button does nothing.
+ * Checks the wiring that makes "Report a problem" reachable:
+ *   1. errors the user saw are recorded in the recent-errors buffer;
+ *   2. the toolbar emits a request;
+ *   3. the app shell handles it.
  */
 
 import 'fake-indexeddb/auto';
@@ -29,7 +19,7 @@ import { NotificationService } from '../notification.service';
 import { RecentErrorsService } from './recent-errors.service';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-// ---- 1. Errors reach the buffer ----
+// 1. Errors reach the buffer
 
 describe('GlobalErrorHandler feeds the recent-errors buffer', () => {
   function createHandler() {
@@ -77,12 +67,11 @@ describe('GlobalErrorHandler feeds the recent-errors buffer', () => {
   });
 });
 
-// ---- 2. The toolbar offers a way in ----
+// 2. The toolbar offers a way in
 
 describe('AppToolbar', () => {
   it('emits a help request', () => {
-    // `input.required()` in a field initializer needs an injection context,
-    // so the toolbar cannot simply be `new`-ed the way a plain class can.
+    // `input.required()` field initializers need an injection context.
     const toolbar = runInInjectionContext(Injector.create({ providers: [] }), () => new AppToolbar());
     const spy = vi.fn();
     toolbar.helpRequested.subscribe(spy);
@@ -93,7 +82,7 @@ describe('AppToolbar', () => {
   });
 });
 
-// ---- 3. The shell listens ----
+// 3. The shell listens
 
 describe('the App shell', () => {
   function createApp(): App {

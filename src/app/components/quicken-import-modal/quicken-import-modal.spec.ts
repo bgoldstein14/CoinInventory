@@ -69,23 +69,15 @@ describe('QuickenImportModal', () => {
   });
 
   /*
-   * END-TO-END: the certification company and the CAC sticker have to survive
-   * the whole trip -- security name -> parsed attributes -> QuickenImportRecord
-   * -> CoinRecord -> the object handed to ApiService.createCoin().
-   *
-   * `importQuicken()` is the last hop we can observe from a unit test: the
-   * CoinRecord it emits is exactly the body that gets POSTed to
-   * /api/coins (see coin-collection.ts addCoins(), which passes each coin
-   * straight to ApiService.createCoin()). So asserting on the emitted record
-   * is asserting on the request payload.
-   */
+     * Cert company and CAC sticker survive from security name to the emitted
+     * CoinRecord, which is the body POSTed to /api/coins.
+     */
   it('carries certCompany and hasCacSticker onto the imported CoinRecord', () => {
     const { modal } = createModal();
     let emitted: unknown[] = [];
     modal.imported.subscribe(coins => { emitted = coins; });
 
-    // "PCGS/CAC" = PCGS slab carrying a green CAC sticker -- two separate
-    // facts about the same coin.
+    // "PCGS/CAC" = PCGS slab with a green CAC sticker.
     modal['quickenText'].set(
       `!Type:Invst\nD2024-02-01\nNBuy\nY1909 S-VDB 1¢ - PCGS/CAC AU58\nT1150.00\n^`
     );
@@ -109,8 +101,7 @@ describe('QuickenImportModal', () => {
 
     const coin = emitted[0] as { certCompany: string; hasCacSticker: boolean };
     expect(coin.certCompany).toBe('');
-    // The backend binds this to a BIT NOT NULL column, so it must be a real
-    // boolean rather than a missing property.
+    // Must be a real boolean: the backend column is BIT NOT NULL.
     expect(coin.hasCacSticker).toBe(false);
   });
 
@@ -154,9 +145,7 @@ describe('QuickenImportModal', () => {
     expect(Object.keys(grouped)).toEqual(expect.arrayContaining(['Checking', 'Savings']));
   });
 
-  // Filter fixtures must use REAL Quicken security names. A placeholder like
-  // "Old Coin" carries none of the three main details, so the parser never
-  // produces a record and the filter under test gets an empty list.
+  // Fixtures need real Quicken security names; a placeholder parses to no record.
   it('applies QIF date filter during import', () => {
     const { modal } = createModal();
     modal['quickenText'].set(
@@ -195,9 +184,8 @@ describe('QuickenImportModal', () => {
     expect(modal['importedRecords']()[0].denomination).toBe('25¢');
   });
 
-  // --- 2-of-3 main-detail rule, seen from the modal ---
+  // --- 2-of-3 main-detail rule ---
 
-  // A QIF with one good coin and one that only has a year.
   const mixedQif =
     `!Type:Invst\nD01/15/2024\nNBuy\nY1921 Morgan Dollar MS63\nT50\n^` +
     `\n!Type:Invst\nD01/16/2024\nNBuy\nY1943 Steel\nT25\n^`;
@@ -226,23 +214,14 @@ describe('QuickenImportModal', () => {
   });
 
   /*
-   * THERE IS NO "IMPORT ANYWAY" OVERRIDE, AND THERE MUST NEVER BE ONE.
-   *
-   * Forcing a record that fails the 2-of-3 rule into the import produces a
-   * coin that appears in the grid but is never saved -- the backend rejects
-   * a coin with no denomination outright
-   * (400 {"error":"denomination is required"}) -- so every later edit fails
-   * against an id the server has never heard of.
-   *
-   * The rule: THE UI MUST NEVER OFFER TO CREATE A COIN THE BACKEND WOULD
-   * REFUSE.
-   */
+     * No "import anyway" override: the backend rejects a coin with no
+     * denomination, so a forced record would appear in the grid but never save.
+     */
   it('offers no way to force an excepted coin into the import', () => {
     const { modal } = createModal();
     const surface = modal as unknown as Record<string, unknown>;
 
-    // No override state, handlers or template accessor may exist at all;
-    // hiding the button would not be enough.
+    // No override state, handlers or template accessor may exist at all.
     expect(surface['overriddenSecurities']).toBeUndefined();
     expect(surface['overrideException']).toBeUndefined();
     expect(surface['undoOverride']).toBeUndefined();
@@ -266,8 +245,7 @@ describe('QuickenImportModal', () => {
   });
 
   it('still reports the excepted coin in full so the user can act on it', () => {
-    // Refusing the row must not cost the user the REPORTING; the exceptions
-    // panel is load-bearing, not decoration.
+    // The rejected row must still be reported.
     const { modal } = createModal();
     modal['quickenText'].set(mixedQif);
     modal['previewImport']();
@@ -279,9 +257,7 @@ describe('QuickenImportModal', () => {
     expect(exception.reason).toContain('Only 1 of 3 required details found');
   });
 
-  /* The 1969 Peru 100 Soles, end to end: a non-US coin whose country is
-   * named in the security string. It must come through the NORMAL path --
-   * with no override to fall back on, there is no other path it could use. */
+  /* Peru 100 Soles: a non-US coin named in the security string, through the normal path. */
   const peruQif =
     `!Account\nNGold Coins\n^\n` +
     `!Type:Invst\nD12/15/2023\nNBuy\nY1969 Peru 100 Soles - NGC MS64\nI3,199\nQ1\nT3,199.00\nM1.3544 ounces of gold\n^`;
@@ -305,8 +281,7 @@ describe('QuickenImportModal', () => {
     expect(coin.year).toBe('1969');
     expect(coin.denomination).toBe('100 Soles');
     expect(coin.country).toBe('Peru');
-    // Blank Coin Type is the accepted outcome: Year + Denomination already
-    // satisfy the 2-of-3 rule.
+    // Blank Coin Type is fine: Year + Denomination satisfy the 2-of-3 rule.
     expect(coin.coinType).toBe('');
     // And the alloy fields, inferred from country + denomination + year.
     expect(coin.metalContent).toBe('Gold');
@@ -333,24 +308,13 @@ describe('QuickenImportModal', () => {
   });
 
   /*
-   * A guessed reading, seen from the preview.
-   *
-   * The parser flags a reading it had to assume (see `AmbiguousReading` in
-   * coin.model.ts; a bare "3¢" dated 1865-1873 is today's only producer of
-   * one). What this component owes the user:
-   *
-   *   - DEFAULT: the row imports. A flag is NOT an exception. If this ever
-   *     stops being true, the import counts silently fall.
-   *   - FIX IT NOW: switch the denomination to the other candidate, and have
-   *     everything derived from it follow.
-   *   - CANCEL IT: drop the row from this import, reversibly.
-   *
-   * "Fix it later" needs nothing here -- the coin editor already allows it.
-   */
+     * Guessed readings (see `AmbiguousReading`): the row imports by default,
+     * can be switched to the other candidate (derived fields follow), or
+     * dropped reversibly.
+     */
   describe('a reading the parser had to guess at', () => {
-    // "1870 3¢" sits in the 1865-1873 window where the three-cent silver and
-    // the three-cent nickel were both being struck. Nothing in the name says
-    // proof, so the parser assumes the far commoner nickel -- and says so.
+    // "1870 3¢": three-cent silver and nickel were both struck; the parser
+        // assumes the commoner nickel and flags it.
     const ambiguousQif =
       `!Account\nNType Coins\n^\n` +
       `!Type:Invst\nD01/15/2024\nNBuy\nY1870 3¢ - AU\nT100.00\n^` +
@@ -364,7 +328,7 @@ describe('QuickenImportModal', () => {
       modal['quickenText'].set(ambiguousQif);
       modal['previewImport']();
 
-      // Both coins. The flagged one is NOT quarantined and NOT an exception.
+      // The flagged row is not an exception.
       expect(modal['importedRecords']()).toHaveLength(2);
       expect(modal['rejectedRecords']()).toHaveLength(0);
       expect(modal['recordsToImport']()).toHaveLength(2);
@@ -382,7 +346,6 @@ describe('QuickenImportModal', () => {
       expect([...guess!.alternatives].sort()).toEqual(['3CN', '3CS']);
       expect(guess!.why).toContain('1865-1873');
 
-      // ...and says nothing at all about the coin it was sure of.
       const morgan = modal['importedRecords']().find(r => r.coinType === 'Morgan')!;
       expect(modal['ambiguity'](morgan)).toBeNull();
     });
@@ -396,18 +359,14 @@ describe('QuickenImportModal', () => {
       modal['previewImport']();
       modal['chooseDenomination'](previewRow(modal), '3CS');
 
-      // The preview updates immediately -- the choice re-runs the parse.
+      // The choice re-runs the parse.
       const fixed = previewRow(modal);
       expect(fixed.denomination).toBe('3CS');
-      // And the fields that hang off the denomination came with it. This is
-      // the whole reason the choice goes to the parser rather than being
-      // written over the finished record here.
+      // Fields derived from the denomination follow, because the choice goes to the parser.
       expect(fixed.coinType).toBe('Three Cent Silver');
       expect(fixed.pmPercent).toBe(90);
 
-      // The correction then has to survive `importQuicken`'s deliberate
-      // re-parse, which is why it is keyed on the security name and not on
-      // `id` (a fresh UUID every parse).
+      // Survives the re-parse in `importQuicken` because it is keyed on the security name.
       modal['importQuicken']();
       const coin = emitted.find(
         c => (c as { coinType: string }).coinType === 'Three Cent Silver'
@@ -425,8 +384,7 @@ describe('QuickenImportModal', () => {
       modal['previewImport']();
       modal['toggleDropped'](previewRow(modal));
 
-      // Dropped, but still LISTED -- struck through in the table -- because
-      // hiding it would put the Undo button out of reach.
+      // Still listed, struck through, so Undo stays reachable.
       expect(modal['isDropped'](previewRow(modal))).toBe(true);
       expect(modal['importedRecords']()).toHaveLength(2);
       expect(modal['recordsToImport']()).toHaveLength(1);
@@ -435,15 +393,12 @@ describe('QuickenImportModal', () => {
       expect(emitted).toHaveLength(1);
       expect((emitted[0] as { coinType: string }).coinType).toBe('Morgan');
 
-      // Same button, both directions.
       modal['toggleDropped'](previewRow(modal));
       expect(modal['recordsToImport']()).toHaveLength(2);
     });
 
     it('only ever offers the drop control on a row that was guessed', () => {
-      // The template gates the Drop button on `ambiguity(record)`, so this is
-      // the condition that keeps a two-candidate escape hatch from quietly
-      // becoming a general per-row picker over 400 certain rows.
+      // The Drop button is gated on `ambiguity(record)`, so certain rows get none.
       const { modal } = createModal();
       modal['quickenText'].set(ambiguousQif);
       modal['previewImport']();
@@ -454,9 +409,7 @@ describe('QuickenImportModal', () => {
     });
 
     it('still has no way to force an under-detailed coin in', () => {
-      // The ambiguity channel adds an escape hatch for a GUESS. It must not
-      // have reopened the one for a coin the backend would refuse -- see the
-      // "IMPORT ANYWAY IS GONE" note above.
+      // The guess controls must not reintroduce an override for rejected coins.
       const { modal } = createModal();
       modal['quickenText'].set(
         ambiguousQif + `\n!Type:Invst\nD01/17/2024\nNBuy\nY1943 Steel\nT25\n^`
@@ -475,9 +428,7 @@ describe('QuickenImportModal', () => {
       `\n!Type:Invst\nD02/20/2024\nNSell\nY1964 Quarter\nT6\n^`;
 
     it('imports them by default, because the tick box starts UNTICKED', () => {
-      /* THE REVERSAL, asserted at the dialog rather than at the parser.
-       * This modal used to drop every sold coin and never say so -- it did
-       * not even render `skippedRecords`. */
+      /* Sold coins are imported and listed by default. */
       const { modal } = createModal();
       modal['quickenText'].set(boughtThenSold);
       modal['previewImport']();
@@ -489,9 +440,7 @@ describe('QuickenImportModal', () => {
     });
 
     it('marks what it imports as Sold, so it is not counted as owned', () => {
-      /* A coin sold in 2013 arriving as Owned would be added to the
-       * collection's value and put on the insurance schedule. The QIF
-       * already knows which coins those are. */
+      /* A sold coin must not import as Owned (it would count toward value and insurance). */
       const { modal } = createModal();
       let emitted: CoinRecord[] = [];
       modal.imported.subscribe(coins => { emitted = coins; });
@@ -525,10 +474,7 @@ describe('QuickenImportModal', () => {
     });
 
     it('IMPORTS THE SALE ITSELF, not just the status', () => {
-      /* The status says "gone". The date and the price say when and for
-       * how much, which is the part the owner reports on -- and the part
-       * that makes this coin satisfy the same "is it sold?" rule a CSV row
-       * satisfies, so the filter means one thing on both paths. */
+      /* Sold date and price come across, so the "is it sold?" rule matches CSV import. */
       const { modal } = createModal();
       let emitted: CoinRecord[] = [];
       modal.imported.subscribe(coins => { emitted = coins; });
@@ -583,14 +529,7 @@ describe('QuickenImportModal', () => {
 });
 
 /*
- * The template is read off disk and the HTML comments are stripped FIRST.
- * The comment added beside this paragraph explains the decision in prose
- * that contains the very words these assertions look for ("Purchased From",
- * "account name"), so without stripping, every test below would pass on the
- * explanation rather than on the sentence the user reads.
- *
- * `[\s\S]`, not `[sS]` — that typo silently disabled four assertions
- * elsewhere in this repo and was only found by accident.
+ * HTML comments are stripped first so assertions match visible text only.
  */
 const QIF_TEMPLATE = readFileSync(
   join(__dirname, 'quicken-import-modal.html'),
@@ -604,11 +543,6 @@ describe('what the dialog says a Quicken file can and cannot fill', () => {
     }
   });
 
-  /*
-   * Measured on the real corpus: purchase date and price arrive on 457 of
-   * 457 records, buyer and seller on none of them. The blank is deliberate,
-   * so the dialog has to say so.
-   */
   it('says Purchased From and Sold To are left empty, and why', () => {
     expect(QIF_TEMPLATE).toContain('Purchased From');
     expect(QIF_TEMPLATE).toContain('Sold To');
@@ -619,10 +553,6 @@ describe('what the dialog says a Quicken file can and cannot fill', () => {
     expect(QIF_TEMPLATE).toMatch(/CSV or Excel/i);
   });
 
-  /*
-   * "Purchased From is left blank" alone reads as a defect someone should
-   * fix. Saying what IS filled is what makes it read as a choice.
-   */
   it('does not state the omission without stating what arrives', () => {
     const omission = QIF_TEMPLATE.indexOf('Purchased From');
     const filled = QIF_TEMPLATE.indexOf('Purchase Date');

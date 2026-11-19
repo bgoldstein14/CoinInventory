@@ -1,8 +1,6 @@
 /**
- * Tests for the other end of the feature: an image imported from a folder must
- * carry the absolute path of its original file all the way into the request
- * body — without disturbing the append-and-dedupe behaviour of the import, and
- * without breaking the rule that an edit sends ONLY the fields that changed.
+ * An image imported from a folder carries the absolute path of its original
+ * file into the request body, while edits still send only changed fields.
  */
 import '@angular/compiler';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -85,13 +83,8 @@ describe('runAttach — recording where the original file lives', () => {
   });
 
   it('still appends and de-duplicates the displayed imagePaths', async () => {
-    // The second argument is unchanged by this feature: plain data URLs, the
-    // coin's existing photos first, and no duplicates.
-    //
-    // `existingPhotoMode: 'add'` is now needed to reach that path. Appending
-    // used to be unconditional, which is the bug that caused a re-imported
-    // folder to attach every photo in it a second time -- so the
-    // See services/image-import/existing-photo-mode.ts.
+    // imagePaths: plain data URLs, existing photos first, no duplicates.
+    // Appending requires `existingPhotoMode: 'add'` (see existing-photo-mode.ts).
     const existing = makeCoin({ imagePaths: ['data:image/jpeg;base64,ALREADY-HERE'] });
     const files = new Map([['obverse.jpg', pickedFile('obverse.jpg', 'obverse.jpg')]]);
     const attach = vi.fn();
@@ -109,8 +102,6 @@ describe('runAttach — recording where the original file lives', () => {
   });
 
   it('records a null path when no base folder was given', async () => {
-    // Importing without a base folder still works — it just cannot document
-    // where anything came from, which is how the import behaved before.
     const files = new Map([['a.jpg', pickedFile('a.jpg', 'a.jpg')]]);
     const attach = vi.fn();
 
@@ -137,14 +128,14 @@ describe('the attached path reaches the server', () => {
   it('sends imagePaths as { imageData, sourcePath } once a path is known', async () => {
     const { inv, mockApiService } = createTestInventoryService();
     const coin = makeCoin({ imagePaths: [] });
-    // Set directly so the coin counts as already existing on the server (not a
-    // draft), which is what puts the edit on the minimal-PUT route.
+    // Set directly so the coin is not a draft and the edit takes the
+    // minimal-PUT route.
     inv.inventory.set([coin]);
 
     const imageData = 'data:image/jpeg;base64,SHRUNK';
     const sourcePath = '\\\\NAS\\Coin Pictures\\Proofs\\a.jpg';
 
-    // This is exactly what BatchImportSession does on confirm.
+    // As BatchImportSession does on confirm.
     imageSourcePaths.recordAll([{ imageData, sourcePath }]);
     inv.updateCoin(coin.id, { imagePaths: [imageData] });
 
@@ -158,14 +149,12 @@ describe('the attached path reaches the server', () => {
     expect(sentId).toBe(coin.id);
     expect(body['imagePaths']).toEqual([{ imageData, sourcePath }]);
 
-    // THE PARTIAL-UPDATE GUARANTEE: only the field that changed is sent. A
-    // previous refactor sent whole records and blanked out untouched columns.
+    // Only the changed field is sent.
     expect(Object.keys(body)).toEqual(['imagePaths']);
   });
 
   it('keeps the plain-string form when no path is known', async () => {
-    // The backend has always accepted a bare base64 string, and that stays the
-    // normal case — the object form only appears when it carries information.
+    // The object form is only used when there is a path to send.
     const { inv, mockApiService } = createTestInventoryService();
     const coin = makeCoin();
     inv.inventory.set([coin]);
@@ -179,9 +168,8 @@ describe('the attached path reaches the server', () => {
   });
 
   it('does not wipe the paths of images it is not changing', async () => {
-    // PUT /api/coins/:id REPLACES the whole image set, so deleting or
-    // re-ordering ONE photo re-sends all of them. Without the registry the
-    // others would go back as bare strings and lose their recorded paths.
+    // PUT replaces the whole image set, so the registry must re-attach the
+    // paths of photos that weren't changed.
     const { inv, mockApiService } = createTestInventoryService();
     const keep = 'data:image/jpeg;base64,KEEP';
     const drop = 'data:image/jpeg;base64,DROP';
@@ -204,7 +192,6 @@ describe('the attached path reaches the server', () => {
   });
 
   it('leaves other fields as plain values', async () => {
-    // Only `imagePaths` is ever rewritten; an ordinary edit is untouched.
     const { inv, mockApiService } = createTestInventoryService();
     inv.inventory.set([makeCoin()]);
 

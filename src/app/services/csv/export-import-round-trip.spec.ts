@@ -1,16 +1,7 @@
 /**
- * Tests that Export -> CSV produces a file the importer can fully read back.
- *
- * WHY THEY MATTER
- *
- * The CSV modal tells the user that an exported file doubles as a template,
- * because every column will auto-map. That only holds while the export's
- * columns and `CSV_MAPPABLE_FIELDS` -- which drives both auto-mapping and the
- * mapping dropdown -- stay in step. A hand-written header list drifts from
- * that list (it once grew a `Source` column the importer could map neither
- * automatically nor by hand), so the export now DERIVES its columns from it.
- * The first test below holds by construction and is the one that catches a
- * regression there.
+ * Tests that Export -> CSV produces a file the importer can fully read back:
+ * export columns are derived from `CSV_MAPPABLE_FIELDS`, so every column must
+ * auto-map, and values must survive the round trip.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -19,12 +10,8 @@ import { isSoldRecord } from '../import-sold';
 import { BOM } from './byte-order-mark';
 
 /**
- * CsvService has no injected dependencies, so it can be constructed directly.
- *
- * `downloadBlob` is replaced because it reaches for `document` to trigger a
- * browser download, and these specs run in Node with no DOM. Swapping it for a
- * capture lets the tests assert on the REAL generated file content rather than
- * on some reimplementation of it.
+ * CsvService constructed directly, with `downloadBlob` replaced by a capture
+ * (it needs `document`), so tests assert on the real generated file content.
  */
 function serviceCapturing(): {
   csv: CsvService;
@@ -53,8 +40,7 @@ function coin(overrides: Partial<CoinRecord> = {}): CoinRecord {
 
 describe('Export -> CSV round trip', () => {
   it('every exported header auto-maps on re-import', () => {
-    // The regression test for the original defect. Before the fix, "Source"
-    // came back unmapped.
+    // Every exported column, including Source, must auto-map.
     const { csv } = serviceCapturing();
     const headers = csv.exportHeaderLabels();
     const mapping = csv.autoMapHeaders(headers);
@@ -84,8 +70,7 @@ describe('Export -> CSV round trip', () => {
 
   it('survives a full export then re-import with values intact', () => {
     const { csv, written } = serviceCapturing();
-    // 26.73 is the Morgan dollar weight in GRAMS, which is what the weight
-    // field holds since migration 008.
+    // 26.73 is the Morgan dollar weight in grams.
     csv.exportCsv([coin({ notes: 'Toned, with a comma', weight: 26.73 })]);
 
     const rows = csv.parseCsv(written());
@@ -97,28 +82,16 @@ describe('Export -> CSV round trip', () => {
     expect(reimported.grade).toBe('MS63');
     expect(reimported.purchasePrice).toBe(1250);
     expect(reimported.weight).toBe(26.73);
-    // Quoted field containing a comma must come back whole.
+    // A quoted field containing a comma must come back whole.
     expect(reimported.notes).toBe('Toned, with a comma');
   });
 });
 
 /**
- * The weight column's unit, and the compatibility decision that came with it.
- *
- * `Coins.Weight` held TROY OUNCES until server/migrations/008-weight-to-grams.sql
- * multiplied every stored value by 31.1034768. The CSV label moved with it,
- * from `Weight (oz)` to `Weight (g)`, which deliberately breaks auto-mapping
- * for files exported before the change.
- *
- * That break is the behaviour under test here, because it is the kind of thing
- * a later reader "fixes" out of kindness. Recognising the old header would
- * import a Morgan dollar as 0.7734 GRAMS -- a 31x understatement, silent, and
- * entirely plausible-looking in a grid. Recognising it AND converting would be
- * arithmetically right but would make a cell's meaning depend on the text
- * above it, so a spreadsheet already converted to grams but left with the old
- * heading would be multiplied by 31 instead. An unmapped column is visible on
- * the mapping screen and costs one dropdown selection; neither silent error is
- * recoverable.
+ * The weight column is grams (server/migrations/008-weight-to-grams.sql). Old
+ * exports headed `Weight (oz)` deliberately stay unmapped: mapping them would
+ * import ounces as grams, and converting by header text would double-convert
+ * sheets already in grams.
  */
 describe('the weight column is grams, not troy ounces', () => {
   it('labels the exported column Weight (g)', () => {
@@ -133,16 +106,13 @@ describe('the weight column is grams, not troy ounces', () => {
   });
 
   it('does NOT auto-map the old Weight (oz) header, on purpose', () => {
-    // The whole point. If this assertion ever fails, read the block comment
-    // above before changing it -- a passing "fix" here is a silent 31x data
-    // error for every pre-008 export anyone re-imports.
+    // A pre-008 `Weight (oz)` column must stay unmapped.
     const { csv } = serviceCapturing();
     expect(csv.autoMapHeaders(['Weight (oz)'])['Weight (oz)']).toBeUndefined();
   });
 
   it('leaves the rest of an old file importing normally', () => {
-    // An unmapped weight column must not poison the row around it. This is the
-    // same guarantee the removed Dealer column was given.
+    // An unmapped weight column must not affect the rest of the row.
     const { csv } = serviceCapturing();
     const headers = ['Coin Type', 'Weight (oz)', 'Grade'];
     const mapping = csv.autoMapHeaders(headers);
@@ -154,10 +124,7 @@ describe('the weight column is grams, not troy ounces', () => {
   });
 
   it('still auto-maps a bare Weight header, via the field key', () => {
-    // autoMapHeaders matches on the key as well as the label, so a plain
-    // `Weight` column keeps working. It carries no unit either way, so there
-    // is nothing extra to be inferred from it -- and no claim being made about
-    // what unit the numbers under it are in.
+    // A plain `Weight` header still maps, via the key.
     const { csv } = serviceCapturing();
     expect(csv.autoMapHeaders(['Weight'])['Weight']).toBe('weight');
   });
@@ -165,9 +132,7 @@ describe('the weight column is grams, not troy ounces', () => {
 
 describe('the Source column', () => {
   it('preserves provenance through an export and re-import', () => {
-    // A coin that originally came from Quicken stays 'quicken'. Before Source
-    // was importable, every re-imported row was relabelled 'csv', quietly
-    // rewriting where the collection's data came from.
+    // Provenance survives a round trip.
     const { csv, written } = serviceCapturing();
     csv.exportCsv([coin({ source: 'quicken' })]);
 
@@ -177,7 +142,7 @@ describe('the Source column', () => {
   });
 
   it('falls back to csv for an unrecognised provenance value', () => {
-    // Provenance is a closed set in CoinRecord, and a CSV cell is just text.
+    // Source is a closed set in CoinRecord; a CSV cell is just text.
     const { csv } = serviceCapturing();
     const headers = ['Coin Type', 'Source'];
     const mapping = csv.autoMapHeaders(headers);
@@ -204,20 +169,9 @@ describe('the Source column', () => {
 });
 
 /**
- * THE SEVEN TRANSACTION FIELDS, END TO END.
- *
- * The transactions rework folded the old `Transactions` table onto the coin:
- * `purchaseDate`, `purchasePrice`, `purchasedFrom`, `soldDate`, `soldPrice`,
- * `soldTo` and `transactionNotes`. Five of the seven were mappable and two --
- * `purchasedFrom` and `transactionNotes` -- were not in CSV_MAPPABLE_FIELDS
- * at all, so a collector's spreadsheet with a `Dealer` column had nowhere to
- * put it and an export dropped the deal note on the floor.
- *
- * CSV and Excel are the paths where that information genuinely exists -- a
- * Quicken investment register names an account where a spreadsheet names a
- * dealer -- so these are the paths that must carry all seven. The QIF side of
- * the same decision is in quicken-import.service.ts, under THE PAYEE IS NOT A
- * DEALER, and it fills neither counterparty on purpose.
+ * The seven transaction fields (purchaseDate, purchasePrice, purchasedFrom,
+ * soldDate, soldPrice, soldTo, transactionNotes) round-trip through CSV. The QIF
+ * import fills neither counterparty (see quicken-import.service.ts).
  */
 describe('the seven transaction fields', () => {
   const TRANSACTION_FIELDS = [
@@ -232,10 +186,7 @@ describe('the seven transaction fields', () => {
   });
 
   it('round-trips all seven through an export and re-import', () => {
-    // Export columns are DERIVED from CSV_MAPPABLE_FIELDS, so a field that
-    // is mappable is exportable by construction -- but "by construction" has
-    // been wrong before (the Source column), and a value that survives the
-    // whole loop is the only proof that matters.
+    // A value surviving the whole loop is the proof that the field is exportable.
     const { csv, written } = serviceCapturing();
     csv.exportCsv([coin({
       purchaseDate: '2024-03-15',
@@ -273,8 +224,7 @@ describe('the seven transaction fields', () => {
 
     expect(imported.purchasedFrom).toBe('Heritage');
     expect(imported.transactionNotes).toBe('Lot 2214, 20% premium');
-    // *** THE COIN'S OWN NOTE IS UNTOUCHED. *** Two database columns, two
-    // CSV columns, and neither may absorb the other.
+    // The coin's own note is a separate column and must be untouched.
     expect(imported.notes).toBe('Rim nick at 4 o’clock');
   });
 
@@ -292,10 +242,7 @@ describe('the seven transaction fields', () => {
   });
 
   it('leaves both blank when a sheet has Purchase Notes AND Sale Notes', () => {
-    // One field, two claimants of equal confidence: rule 3 in
-    // csv/header-synonyms.ts leaves a tie unplaced rather than picking. The
-    // two columns hold different text and only the user knows which to keep,
-    // so he is asked on the mapping screen.
+    // Two equal claimants: the tie is left for the user (rule 3 in header-synonyms.ts).
     const { csv } = serviceCapturing();
     const mapping = csv.autoMapHeaders(['Coin Type', 'Purchase Notes', 'Sale Notes']);
 
@@ -305,8 +252,7 @@ describe('the seven transaction fields', () => {
   });
 
   it('keeps the dealer out of Sold To and the buyer out of Purchased From', () => {
-    // The one mapping in this file that would be silently wrong rather than
-    // merely absent: a swap claims a sale that never happened.
+    // A swap here would record a sale that never happened.
     const { csv } = serviceCapturing();
     const headers = ['Seller', 'Buyer'];
     const imported = csv.mapRowToCoin(
@@ -320,7 +266,7 @@ describe('the seven transaction fields', () => {
   });
 
   it('counts a coin with only a buyer as sold, now that the buyer can be mapped', () => {
-    // The third arm of services/import-sold.ts, reachable from a sheet.
+    // A buyer alone marks the record as sold (import-sold.ts).
     const { csv } = serviceCapturing();
     const headers = ['Coin Type', 'Sold To'];
     const imported = csv.mapRowToCoin(
@@ -330,7 +276,7 @@ describe('the seven transaction fields', () => {
     );
 
     expect(isSoldRecord(imported)).toBe(true);
-    // And the dealer on the BUY side must never trip the same rule.
+    // The buy-side dealer must not trip the same rule.
     const bought = csv.mapRowToCoin(
       ['Morgan Dollar', 'Harbourstone Coins'],
       ['Coin Type', 'Dealer'],
@@ -341,17 +287,9 @@ describe('the seven transaction fields', () => {
 });
 
 /**
- * The byte-order mark, and the silent trap that came with adding it.
- *
- * Without a BOM, Excel decodes a UTF-8 export as windows-1252 and every `¢`
- * and `½` in a denomination comes out as nonsense: both are two-byte UTF-8
- * sequences beginning `0xC2`, which windows-1252 renders as a stray `Â`, and
- * both are ordinary content in a US coin inventory ("½ Cent", "25¢").
- *
- * Adding the BOM on its own is a net loss, though: if the importer does not
- * strip one, re-importing our own export leaves the FIRST column unmapped
- * and says nothing about it. The re-import assertions below are the real
- * test; the "starts with a BOM" ones only stop it being removed again.
+ * Exports start with a BOM so Excel decodes `¢` and `½` correctly, and the
+ * importer strips it so the first column still maps on re-import. The
+ * re-import assertions are the important ones.
  */
 describe('CSV exports are written as UTF-8 with a byte-order mark', () => {
   it('prefixes all three exports, which is what makes Excel decode UTF-8', () => {
@@ -370,9 +308,7 @@ describe('CSV exports are written as UTF-8 with a byte-order mark', () => {
   });
 
   it('re-imports its own export with the first column still mapped', () => {
-    // THE regression test. `Coin Type` is the first exported column; with a
-    // BOM glued to it and no stripping, it reads `﻿Coin Type`, matches
-    // nothing, and every coin loses its type without a word of warning.
+    // `Coin Type` is the first column; with an unstripped BOM it would match nothing.
     const { csv, written } = serviceCapturing();
     csv.exportCsv([coin()]);
 
@@ -394,7 +330,7 @@ describe('CSV exports are written as UTF-8 with a byte-order mark', () => {
 
     expect(reimported.denomination).toBe('½ Cent');
     expect(reimported.notes).toBe('Marked 25¢ on the flip');
-    // And no stray Â anywhere in the file itself.
+    // No stray Â anywhere in the file.
     expect(written()).not.toContain('Â');
   });
 
@@ -417,10 +353,7 @@ describe('the blank template', () => {
   });
 
   it('keeps every example row aligned with the header row', () => {
-    // The example rows are keyed by field, not positional arrays: a
-    // positional array has to match CSV_MAPPABLE_FIELDS in order AND length
-    // by hand, so adding one field shifts every example value a column to
-    // the left. This asserts the alignment.
+    // Example rows are keyed by field, so adding a field can't shift values a column.
     const { csv, written } = serviceCapturing();
     csv.downloadCsvTemplate();
 
@@ -441,21 +374,9 @@ describe('the blank template', () => {
   });
 
   it('demonstrates a unit-carrying weight in GRAMS, and no ounce form at all', () => {
-    // The examples double as documentation, so they should show the forms the
-    // parser handles rather than only the easy case -- but only the forms that
-    // are SAFE in this column.
-    //
-    // 'ozt' and '1/10 oz' are NOT safe here. parseNumericCell reads the
-    // NUMBER and discards whatever unit follows it, and resolves a fraction
-    // on sight, so in a GRAMS column '0.7734 ozt' records 0.7734 grams and
-    // '1/10 oz' records a tenth of a gram. In the template's one job -- being
-    // the file people copy -- that is a trap.
-    //
-    // So: a gram example WITH its unit (safe, and it makes the unit
-    // unmissable), and nothing that looks like an ounce. The negative
-    // assertions are the
-    // point of the test -- they stop the old examples being restored by
-    // somebody who reads the parser's tolerance as an invitation.
+    // Template examples show only forms safe in a grams column: a gram value with
+    // its unit, nothing in ounces. parseNumericCell ignores units, so '0.7734 ozt'
+    // or '1/10 oz' would be recorded as grams.
     const written = (() => {
       const { csv, written } = serviceCapturing();
       csv.downloadCsvTemplate();

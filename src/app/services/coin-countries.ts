@@ -1,119 +1,54 @@
  /*
- * coin-countries.ts — WHICH COUNTRY IS THIS, AND WHAT IS ITS DENOMINATION?
- *
- * WHAT THIS FILE OWNS
- *   Two readings taken from a Quicken security name:
- *
- *     detectCountry("1969 Peru 100 Soles - NGC MS64")      -> "Peru"
- *     detectForeignDenomination("1969 Peru 100 Soles ...")  -> "100 Soles"
- *
- *   Both return '' when they cannot tell, and the caller is expected to leave
- *   the field alone rather than invent something.
- *
- * ---- WHY THIS EXISTS ----
- * Without it the QIF parser hard-codes `country: 'United States'` and its
- * denomination table understands only US face values ("$20", "50c",
- * "Dollar"). A name like
- *
- *     Y1969 Peru 100 Soles - NGC MS64
- *
- * then parses with a Year and nothing else, fails the 2-of-3 completeness
- * rule (Year / Coin Type / Denomination), and lands in the exceptions list.
- * With the country and the denomination both read it imports on two of
- * three, with Coin Type legitimately blank.
- *
- * ---- WHY NOT REUSE image-matching/denomination-units.ts ----
- * It is doing a genuinely different job. It reads US face values out of PHOTO
- * FILENAMES, where its governing rule is "a bare number means nothing, a
- * number bound to a unit means a lot" -- the unit being "$", the cent sign,
- * or a hyphen welding a digit to the word "cent". Its vocabulary is US-only
- * by design and it is forbidden from ever reading a bare digit.
- *
- * This file keeps the same *principle* -- a number is only a denomination
- * when it is bound to a currency unit -- but applies it to a world-coinage
- * vocabulary that file does not have and should not grow. Nothing is
- * duplicated: there is no overlap between "100 Soles" and "$20".
- *
- * ---- THE CONSERVATISM RULE, APPLIED TO CURRENCY UNITS ----
- * Some currency units name their country unambiguously. "Soles" is Peru;
- * nowhere else has ever struck a Sol. Those units are allowed to IMPLY a
- * country even when the name never says it.
- *
- * Other units are shared by a dozen issuers. "20 Francs" could be France,
- * Belgium, Switzerland or Luxembourg. "50 Pesos" could be Mexico, Chile,
- * Colombia or Argentina. For those, the DENOMINATION is still read -- it is
- * unambiguous -- but the COUNTRY is left blank unless the name says it
- * outright. Guessing "Mexico" for an Argentine coin would quietly attach the
- * wrong melt reference to it, which is the failure mode this whole project
- * tries to avoid.
+  * Reads a country and a foreign denomination from a Quicken security name, and
+  * bridges country codes and names across the app.
+  *
+  *     detectCountry("1969 Peru 100 Soles - NGC MS64")             -> "Peru"
+  *     detectForeignDenomination("1969 Peru 100 Soles - NGC MS64") -> "100 Soles"
+  *
+  * Both return '' when unsure; the caller then leaves the field alone. Without
+  * them a name like that parses with only a Year and fails the 2-of-3 rule.
+  *
+  * Like image-matching/denomination-units.ts (US face values in filenames), a
+  * number counts as a denomination only when bound to a currency unit, but this
+  * file covers world coinage.
+  *
+  * Units with a single issuer may imply the country ("Soles" is Peru). Shared
+  * units ("20 Francs", "50 Pesos") give the denomination but leave the country
+  * blank unless the name states it, since a wrong country would attach the
+  * wrong melt reference.
   */
 
 /** A country the parser can recognise by name. */
 interface CountryEntry {
   /**
-   * The canonical spelling written into the record. These must match the
-   * `country` values used in `pm-reference.ts`, or a recognised country would
-   * silently lose its precious-metal lookup.
+   * Canonical spelling written into the record. Must match the `country` values
+   * in pm-reference.ts, or the precious-metal lookup would silently fail.
    */
   canonical: string;
   /**
-   * The two-letter ISO code this country is ALSO known by in this app.
-   *
-   * THE CODE-VERSUS-NAME MISMATCH, IN ONE PLACE
-   *
-   * The app stores a country two different ways depending on which table you
-   * are looking at, and nothing joins them without this field:
-   *
-   *   Denominations.Country  -> a two-letter CODE.  'US', 'GB'
-   *                             (16 US rows and 22 GB rows in the seed)
-   *   Coins.Country          -> a FULL NAME.        'United States'
-   *                             (what every creation path writes)
-   *
-   * So a British coin says "Great Britain" while its denominations say "GB",
-   * and a naive `coin.country === denomination.country` comparison matches
-   * nothing at all. `resolveCountryName()` below is the bridge: run BOTH
-   * sides through it and compare the canonical names that come back.
-   *
-   * This is deliberately the only place the mapping lives. Putting a second
-   * copy in the editor would be how the two drift apart.
-   *
-   * Optional because not every entry has one — 'Scotland' has no ISO alpha-2
-   * code of its own, and a historic issuer may have none either. An entry
-   * without a code is still fully usable by name.
+   * Two-letter ISO code for this country. Denominations.Country stores codes
+   * ('US', 'GB') while Coins.Country stores full names ('United States'), so the
+   * two are compared through `resolveCountryName()`. This table is the only
+   * place that mapping lives. Optional: e.g. 'Scotland' has no alpha-2 code.
    */
   code?: string;
   /**
-   * Whole-word patterns that name this country. Every one is anchored with
-   * \b on both sides and compiled case-insensitively, the same whole-token
-   * discipline the grading-company patterns in `quicken-import.service.ts`
-   * use, so "India" cannot match inside "Indian Head".
+   * Whole-word, case-insensitive patterns naming this country, so "India" can't
+   * match inside "Indian Head".
    */
   patterns: readonly RegExp[];
 }
 
  /*
- * THE COUNTRY VOCABULARY
- *
- * Deliberately broad -- this is a gold collection and world gold turns up in
- * all of these -- but every entry was checked against one question: COULD
- * THIS WORD APPEAR IN A US COIN'S NAME? Several nearly could, and those are
- * the entries carrying a negative look-ahead:
- *
- *   "Panama"   -> the 1915-S PANAMA-PACIFIC commemoratives are US coins, so
- *                 Panama only counts when "Pacific" does not follow.
- *   "Spanish"  -> the 1935 OLD SPANISH TRAIL half dollar is a US coin, so
- *                 "Spanish" only counts when "Trail" does not follow.
- *   "India"    -> written \bindia\b so that "Indian Head" and "Indian
- *                 Princess" (both US types) cannot match.
- *   "Colombia" -> spelled with an 'o'. The US "Columbian" Exposition half
- *                 dollar is spelled with a 'u' and is therefore safe; no
- *                 "Columbia" spelling is listed here on purpose.
- *   "Guinea"   -> OMITTED ENTIRELY. The Guinea is an English GOLD COIN, and
- *                 a name reading "1760 Guinea" means the coin, not the
- *                 African republic.
+  * Country vocabulary. Entries that could appear in a US coin's name are guarded:
+  *   "Panama"   not followed by "Pacific" (1915-S Panama-Pacific commemoratives)
+  *   "Spanish"  not followed by "Trail" (1935 Old Spanish Trail half dollar)
+  *   "India"    whole word only ("Indian Head", "Indian Princess" are US types)
+  *   "Colombia" spelled with an 'o'; the US "Columbian" Exposition half is safe
+  *   "Guinea"   omitted: the Guinea is an English gold coin
   */
 const COUNTRIES: readonly CountryEntry[] = [
-  // --- The Americas ---
+  // The Americas
   { canonical: 'United States', code: 'US', patterns: [/\bunited\s+states\b/i, /\bu\.?s\.?a\.?\b/i, /\bamerican?\b/i] },
   { canonical: 'Canada', code: 'CA', patterns: [/\bcanad(?:a|ian)\b/i] },
   { canonical: 'Mexico', code: 'MX', patterns: [/\bmexic(?:o|an)\b/i] },
@@ -130,15 +65,14 @@ const COUNTRIES: readonly CountryEntry[] = [
   { canonical: 'Cuba', code: 'CU', patterns: [/\bcuban?\b/i] },
   { canonical: 'Guatemala', code: 'GT', patterns: [/\bguatemalan?\b/i] },
   { canonical: 'Costa Rica', code: 'CR', patterns: [/\bcosta\s+rica(?:n)?\b/i] },
-  // See the header note: "Panama-Pacific" is a US commemorative series.
+  // "Panama-Pacific" is a US commemorative series.
   { canonical: 'Panama', code: 'PA', patterns: [/\bpanama\b(?!\s*[-–]?\s*pacific)/i] },
   { canonical: 'Nicaragua', code: 'NI', patterns: [/\bnicaraguan?\b/i] },
   { canonical: 'Honduras', code: 'HN', patterns: [/\bhondura(?:s|n)\b/i] },
   { canonical: 'Dominican Republic', code: 'DO', patterns: [/\bdominican\b/i] },
   { canonical: 'Haiti', code: 'HT', patterns: [/\bhaiti(?:an)?\b/i] },
 
-  // --- Europe ---
-  // "Great Britain" is the canonical spelling because pm-reference.ts uses it.
+  // Europe. "Great Britain" is canonical because pm-reference.ts uses it.
   {
     canonical: 'Great Britain', code: 'GB',
     patterns: [/\bgreat\s+britain\b/i, /\bbritain\b/i, /\bbritish\b/i, /\bengl(?:and|ish)\b/i, /\bunited\s+kingdom\b/i, /\bu\.?k\.?\b/i]
@@ -171,7 +105,7 @@ const COUNTRIES: readonly CountryEntry[] = [
   { canonical: 'Iceland', code: 'IS', patterns: [/\biceland(?:ic)?\b/i] },
   { canonical: 'Turkey', code: 'TR', patterns: [/\bturk(?:ey|ish)\b/i, /\bottoman\b/i] },
 
-  // --- Africa and the Middle East ---
+  // Africa and the Middle East
   { canonical: 'South Africa', code: 'ZA', patterns: [/\bsouth\s+africa(?:n)?\b/i, /\bkrugerrand\b/i, /\btransvaal\b/i] },
   { canonical: 'Egypt', code: 'EG', patterns: [/\begypt(?:ian)?\b/i] },
   { canonical: 'Morocco', code: 'MA', patterns: [/\bmorocc(?:o|an)\b/i] },
@@ -183,11 +117,11 @@ const COUNTRIES: readonly CountryEntry[] = [
   { canonical: 'Nigeria', code: 'NG', patterns: [/\bnigerian?\b/i] },
   { canonical: 'Kenya', code: 'KE', patterns: [/\bkenyan?\b/i] },
 
-  // --- Asia and Oceania ---
+  // Asia and Oceania
   { canonical: 'China', code: 'CN', patterns: [/\bchin(?:a|ese)\b/i] },
   { canonical: 'Japan', code: 'JP', patterns: [/\bjapan(?:ese)?\b/i] },
   { canonical: 'Korea', code: 'KR', patterns: [/\bkorean?\b/i] },
-  // \bindia\b only -- "Indian Head" and "Indian Princess" are US coin types.
+  // Whole word only: "Indian Head" and "Indian Princess" are US coin types.
   { canonical: 'India', code: 'IN', patterns: [/\bindia\b/i] },
   { canonical: 'Thailand', code: 'TH', patterns: [/\bthailand\b/i, /\bsiam(?:ese)?\b/i] },
   { canonical: 'Vietnam', code: 'VN', patterns: [/\bviet\s?nam(?:ese)?\b/i] },
@@ -201,16 +135,11 @@ const COUNTRIES: readonly CountryEntry[] = [
 ];
 
  /*
- * THE CURRENCY-UNIT VOCABULARY
- *
- * `singular`/`plural` are the spellings accepted in the text. `canonical` is
- * what gets written into the Denomination field, so "100 soles" and
- * "100 SOLES" both normalise to "100 Soles".
- *
- * `impliesCountry` is the conservatism switch described in the header. It is
- * set ONLY where the unit has exactly one issuer in practice. Anything shared
- * -- Peso, Franc, Mark, Pound, Dinar, Krona, Rupee, Escudo, Lira, Ducat,
- * Real, Crown, Dollar -- deliberately leaves it undefined.
+  * Currency-unit vocabulary. `singular`/`plural` are accepted spellings;
+  * `canonical` is written to the Denomination field ("100 SOLES" -> "100 Soles").
+  * `impliesCountry` is set only for units with one issuer; shared units (Peso,
+  * Franc, Mark, Pound, Dinar, Krona, Rupee, Escudo, Lira, Ducat, Real, Crown,
+  * Dollar) leave it undefined.
   */
 interface CurrencyUnit {
   canonical: string;
@@ -218,12 +147,12 @@ interface CurrencyUnit {
   plural?: string;
   /** Extra spellings, e.g. "Soles" is itself the plural of "Sol". */
   aliases?: readonly string[];
-  /** Set only when this unit has one unmistakable issuer. */
+  /** Set only when this unit has a single issuer. */
   impliesCountry?: string;
 }
 
 const CURRENCY_UNITS: readonly CurrencyUnit[] = [
-  // --- Units that name their own country ---
+  // Units that name their own country
   { canonical: 'Soles', singular: 'sol', plural: 'soles', impliesCountry: 'Peru' },
   { canonical: 'Bolivares', singular: 'bolivar', plural: 'bolivares', impliesCountry: 'Venezuela' },
   { canonical: 'Bolivianos', singular: 'boliviano', plural: 'bolivianos', impliesCountry: 'Bolivia' },
@@ -234,10 +163,8 @@ const CURRENCY_UNITS: readonly CurrencyUnit[] = [
   { canonical: 'Lempiras', singular: 'lempira', plural: 'lempiras', impliesCountry: 'Honduras' },
   { canonical: 'Guaranies', singular: 'guarani', plural: 'guaranies', impliesCountry: 'Paraguay' },
   { canonical: 'Rand', singular: 'rand', impliesCountry: 'South Africa' },
-  // The Pond is the gold coin of the old South African Republic (ZAR), the
-  // "Kruger pond". Safe to bind to a country because, like Soles, nobody
-  // else ever struck one -- and the number-binding rule means the ordinary
-  // English word "pond" can never match on its own.
+  // The "Kruger pond" of the old South African Republic; nobody else struck one.
+  // The number-binding rule keeps the English word "pond" from matching alone.
   { canonical: 'Pond', singular: 'pond', plural: 'ponde', impliesCountry: 'South Africa' },
   { canonical: 'Forint', singular: 'forint', impliesCountry: 'Hungary' },
   { canonical: 'Zlotych', singular: 'zloty', plural: 'zlotych', aliases: ['zlote'], impliesCountry: 'Poland' },
@@ -255,7 +182,7 @@ const CURRENCY_UNITS: readonly CurrencyUnit[] = [
   { canonical: 'Corona', singular: 'corona', plural: 'coronas', aliases: ['korona', 'kronen'], impliesCountry: 'Austria' },
   { canonical: 'Piastres', singular: 'piastre', plural: 'piastres', aliases: ['piaster', 'piasters'] },
 
-  // --- Units shared by several issuers: denomination only, no country ---
+  // Units shared by several issuers: denomination only, no country
   { canonical: 'Pesos', singular: 'peso', plural: 'pesos' },
   { canonical: 'Francs', singular: 'franc', plural: 'francs' },
   { canonical: 'Marks', singular: 'mark', plural: 'marks', aliases: ['marc', 'marcos'] },
@@ -275,11 +202,8 @@ const CURRENCY_UNITS: readonly CurrencyUnit[] = [
   { canonical: 'Pfennig', singular: 'pfennig', plural: 'pfennige' },
   { canonical: 'Kopeks', singular: 'kopek', plural: 'kopeks', aliases: ['kopeck', 'kopecks'] },
   { canonical: 'Ducats', singular: 'ducat', plural: 'ducats' },
-  /* The euro has no impliesCountry, deliberately. Twenty-odd states issue
-   * one, so "50 Euro" proves the denomination and nothing about the mint --
-   * exactly the situation the francs and pesos above are in. A name like
-   * "2025 Italy 50 Euro 1/2 oz. Gold Proof" names its country anyway, and
-   * detectCountry reads that from the word "Italy" without help from here. */
+  // No impliesCountry: many states issue euros. The country comes from the name
+  // itself when stated (e.g. "2025 Italy 50 Euro").
   { canonical: 'Euro', singular: 'euro', plural: 'euro', aliases: ['euros'] }
 ];
 
@@ -293,18 +217,10 @@ const UNIT_SPELLINGS: readonly { spelling: string; unit: CurrencyUnit }[] = CURR
   .sort((left, right) => right.spelling.length - left.spelling.length);
 
 /**
- * `100 Soles`, `20 francs`, `8 Reales`.
- *
- * Built once from the vocabulary above. The number is capped at four digits
- * (hyperinflation denominations such as "5000 Lei" exist) and must be
- * followed by whitespace or a hyphen and then a known unit -- the "a number
- * is only a denomination when it is BOUND TO A UNIT" rule.
- *
- * The leading `(?:^|[^\w$¢£.])` guard is what stops this matching
- * the tail of something bigger:
- *   - `[^\w]`       so "1969" in a year cannot be read as a quantity
- *   - `[^$¢£]` so a US "$20" is never re-read here
- *   - `[^.]`        so the "50" in a price like "2.50 Pesos" is not taken
+ * `100 Soles`, `20 francs`, `8 Reales`: up to four digits (e.g. "5000 Lei"),
+ * then whitespace or a hyphen, then a known unit.
+ * The leading `(?:^|[^\w$¢£.])` guard stops it matching the tail of a year
+ * ("1969"), a US "$20", or a price like "2.50 Pesos".
  */
 const NUMBER_AND_UNIT = new RegExp(
   `(?:^|[^\\w$¢£.])(\\d{1,4})[\\s-]+(${UNIT_SPELLINGS.map((entry) => entry.spelling).join('|')})\\b`,
@@ -315,17 +231,13 @@ const NUMBER_AND_UNIT = new RegExp(
 export interface ForeignDenomination {
   /** Normalised denomination for the record, e.g. "100 Soles". */
   denomination: string;
-  /**
-   * The country this unit proves, or '' when the unit is shared by several
-   * issuers. See the conservatism rule in the header.
-   */
+  /** The country this unit proves, or '' when several issuers share it. */
   impliedCountry: string;
 }
 
 /**
- * Reads a `<number> <foreign currency unit>` denomination out of a security
- * name. Returns null when there is none -- which is the normal case for this
- * collection, where 43 of 44 coins are US.
+ * Reads a `<number> <foreign currency unit>` denomination from a security name.
+ * Returns null when there is none (the usual case: most coins are US).
  */
 export function detectForeignDenomination(securityName: string): ForeignDenomination | null {
   const text = String(securityName ?? '');
@@ -337,8 +249,7 @@ export function detectForeignDenomination(securityName: string): ForeignDenomina
   const hit = UNIT_SPELLINGS.find((entry) => entry.spelling === spelling);
   if (!hit) return null;
 
-  // A quantity of exactly 1 reads better in the singular: "1 Ducat", not
-  // "1 Ducats". Everything else uses the canonical (usually plural) form.
+  // A quantity of 1 uses the singular ("1 Ducat").
   const unitText =
     quantity === '1'
       ? hit.unit.singular.charAt(0).toUpperCase() + hit.unit.singular.slice(1)
@@ -351,17 +262,9 @@ export function detectForeignDenomination(securityName: string): ForeignDenomina
 }
 
 /**
- * Reads a country out of a security name.
- *
- * Two sources, in priority order:
- *   1. The country NAMED in the text ("Peru", "Mexico", "Great Britain").
- *   2. Failing that, a currency unit that can only belong to one country
- *      ("100 Soles" with no other clue still proves Peru).
- *
- * Returns '' when neither fires. The caller decides what to do with that --
- * the QIF importer keeps its long-standing default of "United States",
- * because this is an American collector's export and that default has been
- * right for every record but one.
+ * Reads a country from a security name: a country named in the text first,
+ * otherwise a currency unit with a single issuer ("100 Soles" -> Peru).
+ * Returns '' when neither applies; the QIF importer then defaults to "United States".
  */
 export function detectCountry(securityName: string): string {
   const text = String(securityName ?? '');
@@ -377,28 +280,14 @@ export function detectCountry(securityName: string): string {
   return foreign?.impliedCountry ?? '';
 }
 
-/* ===========================================================================
- * THE CODE <-> NAME BRIDGE
- * ---------------------------------------------------------------------------
- * Everything below exists because the app spells "the same country" two
- * different ways, as documented on `CountryEntry.code`:
- *
- *     a DENOMINATION says its country is   'GB'
- *     a COIN          says its country is  'Great Britain'
- *
- * Neither spelling is wrong and neither is going away — the denomination
- * lookup table is seeded with codes, and every coin-creation path in the app
- * writes full names. Rather than rewrite one side (a data migration, with the
- * risk that goes with it), both sides are run through `resolveCountryName()`
- * and the CANONICAL NAME that comes out is what gets compared.
- *
- * That single choice also buys tolerance for free text, which matters because
- * the coin's Country field is a text box the user can type anything into:
- * 'GB', 'uk', 'British', 'United Kingdom' and 'Great Britain' all resolve to
- * the one canonical 'Great Britain'.
- * =========================================================================== */
+/*
+ * Code <-> name bridge. Denominations store codes ('GB'), coins store names
+ * ('Great Britain'). Both sides go through `resolveCountryName()` and the
+ * canonical names are compared. This also tolerates free text: 'GB', 'uk',
+ * 'British', 'United Kingdom' all resolve to 'Great Britain'.
+ */
 
-/** Code (upper-cased) -> canonical name. Built once from the table above. */
+/** Code (upper-cased) -> canonical name. */
 const CANONICAL_BY_CODE: ReadonlyMap<string, string> = new Map(
   COUNTRIES.filter((entry) => entry.code).map((entry) => [entry.code!.toUpperCase(), entry.canonical])
 );
@@ -409,25 +298,12 @@ const CANONICAL_BY_NAME: ReadonlyMap<string, string> = new Map(
 );
 
 /**
- * Resolve ANY country spelling this app might hold to one canonical name.
- *
- * Accepts, in this priority order:
- *   1. the canonical name itself     -> 'Great Britain', 'great britain'
- *   2. a two-letter code             -> 'GB', 'gb', 'US'
- *   3. anything the patterns know    -> 'UK', 'British', 'England'
- *
- * Returns '' when it cannot tell. THAT RETURN VALUE IS LOAD-BEARING: callers
- * are required to treat '' as "no opinion" and fall back to showing
- * everything, never to filtering down to nothing. A country this file has
- * never heard of must not strand the user with an empty dropdown.
- *
- * Why the code check comes BEFORE the patterns: the patterns are written for
- * prose ("1911 British Sovereign") and none of them matches a bare 'GB' or
- * 'US', so without the explicit code lookup the denomination table's own
- * spelling would resolve to nothing.
- *
- * Why the exact-name check comes before BOTH: it is the common case (a coin
- * already holding 'United States') and it skips 70-odd regex tests.
+ * Resolves any country spelling to one canonical name. Checked in order:
+ *   1. the canonical name itself   'Great Britain', 'great britain'
+ *   2. a two-letter code           'GB', 'gb', 'US' (the prose patterns don't match bare codes)
+ *   3. the name patterns           'UK', 'British', 'England'
+ * Returns '' when unknown; callers must treat that as "no opinion" and show
+ * everything rather than filter to nothing.
  */
 export function resolveCountryName(value: string | null | undefined): string {
   const text = String(value ?? '').trim();
@@ -451,16 +327,9 @@ export function resolveCountryName(value: string | null | undefined): string {
 }
 
 /**
- * Do these two spellings mean the same country?
- *
- * The comparison the whole country/denomination link is built on. Both sides
- * are resolved first, so 'GB' and 'Great Britain' are equal.
- *
- * The fallback matters: when NEITHER side resolves (two denominations filed
- * under a made-up code such as 'XX', say) they are compared as plain text, so
- * an unknown country still groups with itself instead of every unknown
- * collapsing into one heap. If only one side resolves, they are not equal —
- * we know one of them and it is not the other.
+ * Whether two spellings mean the same country ('GB' equals 'Great Britain').
+ * If neither resolves they are compared as plain text, so an unknown code still
+ * groups with itself; if only one resolves they differ.
  */
 export function isSameCountry(left: string | null | undefined, right: string | null | undefined): boolean {
   const leftText = String(left ?? '').trim();
@@ -476,24 +345,13 @@ export function isSameCountry(left: string | null | undefined, right: string | n
   return leftText.toLowerCase() === rightText.toLowerCase();
 }
 
-/**
- * A country spelling turned into something worth showing a human.
- *
- * 'GB' becomes 'Great Britain'; anything unrecognised is handed back exactly
- * as stored, because an unknown value is still the user's data and hiding it
- * behind a placeholder would be worse than showing it raw.
- */
+/** Display form: 'GB' becomes 'Great Britain'; unrecognised values are returned as stored. */
 export function countryDisplayName(value: string | null | undefined): string {
   const text = String(value ?? '').trim();
   return resolveCountryName(text) || text;
 }
 
-/**
- * Every canonical country name, alphabetically.
- *
- * Feeds the Country box's <datalist> of suggestions. It is a SUGGESTION list,
- * not a constraint — see the comment on the input in coin-editor-form.html.
- */
+/** Every canonical country name, sorted; suggestions for the Country box's <datalist>. */
 export function allCountryNames(): string[] {
   return COUNTRIES.map((entry) => entry.canonical).sort((left, right) => left.localeCompare(right));
 }

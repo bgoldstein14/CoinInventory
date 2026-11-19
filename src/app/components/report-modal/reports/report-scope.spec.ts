@@ -1,12 +1,4 @@
-/**
- * report-scope.spec.ts
- *
- * THE BUG THIS PREVENTS
- * A printed listing of 12 coins, produced while a category filter was on,
- * looks exactly like a printed listing of a 12-coin collection. Nothing on
- * the paper says otherwise, and the person reading it a year later has no way
- * to tell. This line of text is the whole defence, so its content is tested.
- */
+/** Tests for the printed scope line (active filters, counts and sort order). */
 import { describe, expect, it } from 'vitest';
 import { ReportScopeInput, describeReportScope } from './report-scope';
 
@@ -82,7 +74,7 @@ describe('describeReportScope', () => {
   });
 
   it('uses the report heading for the sort column, not the grid abbreviation', () => {
-    // The grid header reads 'MM'. On paper that means nothing.
+    // The grid header reads 'MM'.
     expect(describeReportScope(scope({ sort: { column: 'mintMark', direction: 'asc' } })))
       .toContain('Sorted by Mint Mark');
   });

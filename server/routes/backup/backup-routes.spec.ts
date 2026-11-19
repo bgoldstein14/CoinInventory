@@ -1,16 +1,9 @@
 /**
- * routes/backup/backup-routes.spec.ts — the HTTP surface, over real files.
- *
- * The routes themselves are thin, which is the design: nothing in them is
- * load-bearing for safety, because backup/restore.ts validates on its own
- * authority. So what is worth asserting here is exactly the part that
- * ISN'T covered by the modules underneath:
- *
- *   - a refusal is a 400 with a sentence, not a 500 with a stack trace
- *   - an inspection of a bad file is a 200 with a verdict, because the
- *     inspection succeeded and its answer is "no"
- *   - the job endpoints actually track a job from start to finish
- *   - a client that skips the inspect call cannot get past the restore
+ * The backup/restore HTTP routes over real files. The routes are thin
+ * (backup/restore.ts validates on its own), so this checks what the modules
+ * underneath don't: refusals are 400 with a sentence, a bad file's inspection
+ * is 200 with a verdict, jobs are tracked to completion, and skipping inspect
+ * doesn't bypass the restore's checks.
  */
 
 import fs from 'fs';
@@ -68,22 +61,15 @@ describe('GET /api/backup/suggestion', () => {
     expect(response.body.directory).toBeTruthy();
     expect(response.body.fileName).toMatch(/^coin-inventory-backup-\d{4}-\d{2}-\d{2}-\d{4}\.db$/);
     expect(response.body.databasePath).toBe(database.file);
-    // So the dialog can warn BEFORE a 600 MB write, not after.
+    // So the dialog can warn about space beforehand.
     expect(response.body.databaseSizeBytes).toBeGreaterThan(0);
   });
 });
 
 /**
- * The listing endpoint, over HTTP.
- *
- * *** IT READS A DIRECTORY THE CLIENT NAMES. *** The rules themselves are
- * held by backup/list-db-files.spec.ts, where they can be asserted without
- * a web server. What is worth proving HERE is that the HTTP layer does not
- * widen them, and that the three answers a user can get — "here they are",
- * "that folder is empty", "there is no such folder" — arrive as three
- * distinguishable things rather than one.
- *
- * No file database is needed: the route never opens the collection.
+ * The listing endpoint over HTTP. The rules are tested in
+ * backup/list-db-files.spec.ts; this checks HTTP doesn't widen them and that
+ * "found", "empty" and "no such folder" are distinguishable. No database needed.
  */
 describe('GET /api/backup/files', () => {
   let folder = '';
@@ -108,16 +94,14 @@ describe('GET /api/backup/files', () => {
     expect(response.body.files[0].name).toBe('coin-inventory-backup-2026-11-14-1432.db');
     expect(response.body.files[0].sizeBytes).toBe(1);
     expect(typeof response.body.files[0].modifiedAt).toBe('string');
-    // The whole point: the client gets a path it can hand straight to the
-    // restore without the user retyping it.
+    // A path the client can pass straight to restore.
     expect(response.body.files[0].path).toBe(
       path.join(path.resolve(folder), 'coin-inventory-backup-2026-11-14-1432.db')
     );
   });
 
   it('does not escape the folder it was given', async () => {
-    // Nothing from a sub-folder, nothing from the parent. Naming a folder
-    // reveals that folder's databases and no others.
+    // Nothing from a sub-folder or the parent.
     const child = path.join(folder, 'inner');
     const grandchild = path.join(child, 'deeper');
     fs.mkdirSync(grandchild, { recursive: true });
@@ -132,7 +116,7 @@ describe('GET /api/backup/files', () => {
   });
 
   it('calls an empty folder empty, with a 200', async () => {
-    // A normal outcome, and it must not read as a failure.
+    // An empty folder is a normal outcome.
     const response = await request(app).get('/api/backup/files').query({ directory: folder });
 
     expect(response.status).toBe(200);
@@ -149,8 +133,7 @@ describe('GET /api/backup/files', () => {
   });
 
   it('404s a path that is a file rather than a folder', async () => {
-    // The likeliest mistake once there is a file picker: pasting the
-    // backup's own path into the folder box.
+    // Pasting the backup file's own path into the folder box.
     const file = path.join(folder, 'backup.db');
     fs.writeFileSync(file, 'x');
 
@@ -161,8 +144,7 @@ describe('GET /api/backup/files', () => {
   });
 
   it('400s a blank folder box rather than listing the working directory', async () => {
-    // Without the guard an empty box resolves to the server's own cwd,
-    // which is both useless and a directory nobody asked about.
+    // An empty box would otherwise resolve to the server's cwd.
     const response = await request(app).get('/api/backup/files').query({ directory: '  ' });
 
     expect(response.status).toBe(400);
@@ -170,8 +152,7 @@ describe('GET /api/backup/files', () => {
   });
 
   it('survives a repeated or structured query parameter', async () => {
-    // `?directory[0]=x` arrives as an object; `.trim()` on it would throw
-    // a TypeError and produce a 500 where a 400 belongs.
+    // A bracketed param must give a 400, not a TypeError and 500.
     const response = await request(app).get('/api/backup/files?directory[0]=C:%5Ctemp');
     expect(response.status).toBeLessThan(500);
   });
@@ -188,8 +169,7 @@ describe('POST /api/backup/jobs', () => {
     expect(finished.percent).toBe(100);
     expect(finished.result.coinCount).toBe(4);
     expect(fs.existsSync(finished.result.path)).toBe(true);
-    // The destination is reported back as the REAL path, which may differ
-    // from what was asked for if the name had to gain a " (2)".
+    // The reported destination is the real path, including any " (2)".
     expect(finished.destination).toBe(finished.result.path);
   });
 
@@ -204,11 +184,8 @@ describe('POST /api/backup/jobs', () => {
     expect(response.body.error).toMatch(/no folder called/i);
   });
 
-  /* "Only one backup at a time" is asserted in backup/jobs.spec.ts and
-   * not here. Over HTTP it is a race: a small test database finishes
-   * copying before supertest can send the second request, so the test
-   * would pass or fail on how fast the disk was that morning. The rule
-   * lives in startBackupJob() and is tested there, synchronously. */
+  // "One backup at a time" is tested in backup/jobs.spec.ts; over HTTP it
+  // would be a timing race.
 
   it('404s for a job id it has never heard of', async () => {
     database = await useFileDatabase('job-unknown');
@@ -228,7 +205,7 @@ describe('POST /api/backup/jobs/:id/cancel', () => {
 
     const cancelled = await request(app).post(`/api/backup/jobs/${started.body.id}/cancel`);
     expect(cancelled.status).toBe(200);
-    // `accepted`, not `cancelled`: the copy notices on its next batch.
+    // `accepted`: the copy notices on its next batch.
     expect(cancelled.body.accepted).toBe(true);
 
     let finalState = 'running';
@@ -239,9 +216,8 @@ describe('POST /api/backup/jobs/:id/cancel', () => {
       await new Promise((resolve) => setTimeout(resolve, 10));
     }
 
-    // Either outcome is legitimate — a small database can finish before
-    // the cancel is seen — but it must be one of them, and a cancelled job
-    // must have left nothing behind.
+    // A small database may finish before the cancel is seen; either is fine,
+    // but a cancelled job must leave nothing behind.
     expect(['cancelled', 'done']).toContain(finalState);
     if (finalState === 'cancelled') {
       expect(fs.readdirSync(database.backupDirectory)).toEqual([]);
@@ -257,9 +233,7 @@ describe('POST /api/backup/jobs/:id/cancel', () => {
 
 describe('POST /api/restore/inspect', () => {
   it('answers 200 with a REFUSAL verdict, not an error status', async () => {
-    // The inspection succeeded. Its answer is "no". A 400 here would make
-    // "you picked the wrong file" indistinguishable from "the endpoint is
-    // broken", and the body is what the dialog needs to explain it.
+    // 200 with a "no" verdict, not a 400.
     database = await useFileDatabase('inspect-refuse');
     const impostor = path.join(database.backupDirectory, 'photo.db');
     fs.writeFileSync(impostor, 'not a database');
@@ -314,8 +288,7 @@ describe('POST /api/restore', () => {
     expect(aside).toBeTruthy();
     expect(fs.existsSync(aside)).toBe(true);
 
-    // And the API is serving the restored collection on the very next
-    // request, with no restart.
+    // The next request serves the restored collection, with no restart.
     const coins = await request(app).get('/api/coins');
     expect(coins.status).toBe(200);
     expect(coins.body).toHaveLength(3);
@@ -326,7 +299,7 @@ describe('POST /api/restore', () => {
     await insertCoins(3);
     const finished = await runBackupJob(database.backupDirectory);
 
-    // Byte 60 of a SQLite header is user_version, big-endian.
+    // Byte 60 of a SQLite header is user_version (big-endian).
     const handle = fs.openSync(finished.result.path, 'r+');
     const buffer = Buffer.alloc(4);
     buffer.writeUInt32BE(99, 0);
@@ -339,15 +312,13 @@ describe('POST /api/restore', () => {
 
     expect(response.status).toBe(400);
     expect(response.body.error).toMatch(/newer version of Coin Inventory/i);
-    // The dialog gets the inspection too, so it can show the counts next
-    // to the refusal rather than an error on its own.
+    // The inspection comes back with the refusal.
     expect(response.body.inspection.schemaVersion).toBe(99);
     expect(await liveCoinCount()).toBe(3);
   });
 
   it('cannot be talked past by a client that skips the inspect call', async () => {
-    // The route does not get to decide; backup/restore.ts validates again
-    // on its own authority. This is that, proved from outside.
+    // backup/restore.ts validates on its own, even without inspect.
     database = await useFileDatabase('restore-route-direct');
     await insertCoins(3);
 

@@ -1,21 +1,10 @@
  /*
- * chart-geometry.spec.ts
- *
- * The charts are hand-rolled SVG partly so they can be tested at all: this
- * suite runs under Node with NO jsdom, so a library-backed chart could only
- * ever be asserted as "we called the library". See chart-geometry.ts for the
- * rest of that reasoning.
- *
- * What is pinned here is the mark rules, so a later "tidy-up" that thickens a
- * bar to fill its row, drops the 2px gap, or lets a value label overflow its
- * bar fails a test:
- *
- *   - bars <= 24px thick, with a >= 2px surface gap between neighbours
- *   - a 4px rounded data-end, SQUARE at the baseline
- *   - a value never clipped by its own bar: outside the tip if it fits there,
- *     inside the bar end if it fits there, otherwise not drawn at all (the
- *     tooltip carries it)
- *   - a zero draws nothing rather than a 1px sliver that reads as a value
+  * Tests the chart mark rules in chart-geometry.ts:
+  *   - bars <= 24px thick, with a >= 2px gap between neighbours
+  *   - a 4px rounded data-end, square at the baseline
+  *   - a value label outside the tip if it fits, else inside the bar end,
+  *     else not drawn (the tooltip carries it)
+  *   - a zero draws nothing
   */
 
 import { describe, expect, it } from 'vitest';
@@ -29,8 +18,6 @@ import {
   niceTicks,
   truncateLabel
 } from './chart-geometry';
-
-// ---- barPath ----
 
 describe('barPath', () => {
   it('rounds the data-end and leaves the baseline end square', () => {
@@ -56,8 +43,6 @@ describe('barPath', () => {
     expect(barPath(0, 0, 100 / 3, 20)).toContain('33.33');
   });
 });
-
-// ---- estimateTextWidth / truncateLabel ----
 
 describe('estimateTextWidth', () => {
   it('grows with the text and with the font size', () => {
@@ -86,8 +71,6 @@ describe('truncateLabel', () => {
     expect(truncateLabel('AB', 1, 12).length).toBeLessThanOrEqual(2);
   });
 });
-
-// ---- layoutRankedBars ----
 
 const BAR_OPTS = {
   width: 400,
@@ -136,9 +119,7 @@ describe('layoutRankedBars — scaling', () => {
   });
 
   it('draws nothing at all when every value is zero — no full-width bars', () => {
-    // max = 0. Dividing by it would give NaN; defaulting it to 1 would make
-    // every bar full width, which says "all equal and large" about a
-    // collection where nothing is known.
+    // max = 0: must not divide by zero or draw every bar at full width.
     const chart = layoutRankedBars(
       [
         { label: 'A', value: 0, valueText: '—' },
@@ -219,8 +200,7 @@ describe('layoutRankedBars — where the value label goes', () => {
   });
 
   it('moves the value inside the bar end when the gutter is too narrow for it', () => {
-    // A long value text and almost no gutter: outside would overflow the
-    // SVG, so it goes inside the (wide) bar, right-anchored at the end.
+    // Long value text, little gutter: drawn inside the wide bar, right-anchored.
     const chart = layoutRankedBars(
       [{ label: 'Dime', value: 10, valueText: '$123,456,789.00' }],
       { ...BAR_OPTS, width: 400, labelWidth: 60, valueWidth: 4 }
@@ -234,9 +214,7 @@ describe('layoutRankedBars — where the value label goes', () => {
   });
 
   it('DROPS the value rather than clipping it when it fits in neither place', () => {
-    // The anti-pattern this prevents: `overflow: hidden` on the segment,
-    // which crops the first or last characters and is worse than no label.
-    // The value stays reachable on hover and in the figures beside the chart.
+    // Fits nowhere: not drawn rather than clipped; the tooltip still has it.
     const chart = layoutRankedBars(
       [{ label: 'Tiny', value: 1, valueText: '$1,234,567.89' }],
       { width: 200, labelWidth: 150, valueWidth: 2, rowHeight: 24 }
@@ -245,8 +223,6 @@ describe('layoutRankedBars — where the value label goes', () => {
     expect(chart.bars[0].valueVisible).toBe(false);
   });
 });
-
-// ---- niceTicks ----
 
 describe('niceTicks', () => {
   it('rounds to clean numbers that span the data', () => {
@@ -260,7 +236,7 @@ describe('niceTicks', () => {
   });
 
   it('produces clean decimals without binary-float noise', () => {
-    // The classic failure: 0.1 + 0.2 === 0.30000000000000004 printed on an axis.
+    // Float noise such as 0.30000000000000004 must not reach the axis.
     for (const tick of niceTicks(0, 1, 5)) {
       expect(String(tick).length).toBeLessThan(6);
     }
@@ -282,8 +258,6 @@ describe('niceTicks', () => {
     expect(ticks[ticks.length - 1]).toBeGreaterThanOrEqual(0.05);
   });
 });
-
-// ---- layoutLineChart ----
 
 const LINE_OPTS = {
   width: 600,
@@ -330,7 +304,7 @@ describe('layoutLineChart — scaling', () => {
 
   it('puts zero on the baseline and the maximum at the top of the y scale', () => {
     const chart = layoutLineChart(series, LINE_OPTS);
-    // y grows downwards in SVG, so the biggest value has the SMALLEST y.
+    // y grows downwards in SVG, so the biggest value has the smallest y.
     expect(chart.points[0].y).toBe(chart.plotBottom);
     expect(chart.points[2].y).toBeLessThan(chart.points[0].y);
   });

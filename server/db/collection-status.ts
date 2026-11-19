@@ -1,38 +1,14 @@
 /**
- * db/collection-status.ts — the five values Coins.CollectionStatus may hold.
+ * The values Coins.CollectionStatus (NVARCHAR(20) NOT NULL DEFAULT 'owned')
+ * may hold: owned, wanted, ordered, for sale, sold.
  *
- * THE COLUMN
- *   CollectionStatus NVARCHAR(20) NOT NULL DEFAULT 'owned'
+ * A copy of src/app/types/collection-status.ts, since the server project
+ * can't import from src/. db/collection-status.spec.ts fails if they differ.
+ * Adding or renaming a status means changing both lists and adding a migration.
  *
- * Records where a coin sits in the collecting cycle: owned, wanted, ordered,
- * for sale, or sold. The argument for those five particular values — and for
- * it being ONE field rather than a separate wish-list table — is in
- * src/app/types/collection-status.ts and is not repeated here.
- *
- * *** THIS FILE IS A SECOND COPY OF THAT LIST. KEEP IT IN STEP. ***
- * server/ is a separate TypeScript project — its tsconfig has rootDir "." and
- * includes only the files beneath it — so it cannot import from src/app/.
- * db/collection-status.spec.ts READS src/app/types/collection-status.ts off
- * disk and fails the build if the two lists or the two defaults disagree, the
- * same technique db/coin-fields.spec.ts uses against setup-database.sql.
- *
- * IF YOU ADD OR RENAME A STATUS, three things change together: this array,
- * the Angular array, and a new migration widening or re-checking the column.
- * The spec will tell you if you forget the second.
- *
- * WHY THE SERVER VALIDATES AT ALL rather than binding whatever the request
- * body carried — two reasons the column itself makes sharp:
- *
- *   NOT NULL — binding null aborts the INSERT with a constraint violation and
- *     the user cannot save a coin at all. An absent `collectionStatus` in a
- *     request body (every request from an older client, and every request
- *     that is a partial edit of something else) must become 'owned', not
- *     null. normalizeNullable() — the default normalizer in coin-fields.ts —
- *     would turn an empty string into exactly the null that breaks it.
- *
- *   FIVE VALUES — this is a closed set that decides whether a coin counts
- *     towards the value of the collection. Arbitrary text in it would be a
- *     sixth value that nothing downstream has a rule for.
+ * The server normalizes the value because the column is NOT NULL (an empty
+ * value must become 'owned', not null) and the set is closed (it decides
+ * whether a coin counts towards the collection's value).
  */
 
 /** Every value Coins.CollectionStatus may hold, in the app's declared order. */
@@ -46,28 +22,18 @@ export const COLLECTION_STATUSES = [
 
 export type CollectionStatus = (typeof COLLECTION_STATUSES)[number];
 
-/**
- * What a coin is when nothing says otherwise — and what migration 010 stamps
- * on every row that existed before the column did.
- */
+/** The default status; migration 010 also stamped it on pre-existing rows. */
 export const DEFAULT_COLLECTION_STATUS: CollectionStatus = 'owned';
 
 /**
- * The declared width of the column, mirrored here so the spec can assert that
- * no token could ever be silently truncated by the driver.
- *
- * It must equal the NVARCHAR length in setup-database.sql and the maxLength on
- * the `collectionStatus` entry in coin-fields.ts. 20 leaves room for a longer
- * future token without a second ALTER.
+ * The column's declared width. Must match setup-database.sql and the
+ * `collectionStatus` maxLength in coin-fields.ts.
  */
 export const MAX_COLLECTION_STATUS_LENGTH = 20;
 
 /**
- * Spellings that are not the stored token but unambiguously mean one.
- *
- * Only 'for-sale' needs any, because it is the only token with a hyphen in it
- * and therefore the only one a human writes differently from how it is
- * stored. Keyed after lower-casing and collapsing whitespace.
+ * Alternate spellings that map to a token. Only 'for-sale' needs any (it's
+ * the only hyphenated one). Keys are lower-cased with whitespace collapsed.
  */
 const STATUS_SYNONYMS: Readonly<Record<string, CollectionStatus>> = {
   'for sale': 'for-sale',
@@ -75,19 +41,10 @@ const STATUS_SYNONYMS: Readonly<Record<string, CollectionStatus>> = {
 };
 
 /**
- * Turn anything a request body might carry into a value this column accepts.
- *
- * ALWAYS returns one of the five tokens — never null, never undefined, never
- * the caller's text. Used as the `normalize` hook on the `collectionStatus`
- * entry in coin-fields.ts, so it runs for both the INSERT in POST /api/coins
- * and the UPDATE in PUT /api/coins/:id, and as the read-side default in
- * row-mappers.ts.
- *
- * An unrecognised value becomes 'owned' rather than being rejected with a 400.
- * That is deliberate: the alternative is a save that fails over a word, which
- * for a field the user may not even have been editing would be a baffling
- * place for an error to appear. 'owned' is also the honest reading — the coin
- * is in his collection file.
+ * Converts any request value into one of the valid tokens; never returns
+ * null or the caller's text. Used by COIN_FIELDS for INSERT and UPDATE and
+ * by row-mappers.ts on read. Unrecognised values become 'owned' rather than
+ * failing the save.
  */
 export function normalizeCollectionStatus(value: unknown): CollectionStatus {
   if (typeof value !== 'string') return DEFAULT_COLLECTION_STATUS;

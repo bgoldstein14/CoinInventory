@@ -1,14 +1,7 @@
 /**
- * Tests for the resizable full-size photo window's arithmetic and its choice
- * between the original file and the stored copy.
- *
- * WHY THESE ARE WORTH TESTING
- * The resizing itself is one line of CSS (`resize: both`) and cannot be
- * tested here at all — this suite runs under Node with no DOM. The three numbers that CSS is given — the opening
- * size, the maximum and the minimum — are pure arithmetic, and they are the
- * part that can silently be wrong. In particular the MAXIMUM is the whole
- * reason the viewer bothers to fetch the original file at all, so it gets the
- * most attention below.
+ * Tests for the photo window's sizing arithmetic and its choice between the
+ * original file and the stored copy. The CSS resize itself can't be tested
+ * without a DOM; the numbers fed to it can.
  */
 import { describe, expect, it } from 'vitest';
 import { buildImagePathView } from './image-path-display';
@@ -32,9 +25,6 @@ const fileUrl = (path: string) => `http://localhost:3000/api/images/file?path=${
 
 describe('chooseViewerSource — original file versus stored copy', () => {
   it('shows the ORIGINAL when the backend has confirmed the file is there', () => {
-    // This is the case that makes "up to the highest resolution of the
-    // picture" mean anything: the stored copy is downscaled, the original is
-    // not.
     const view = buildImagePathView(SOURCE_PATH, 'present', fileUrl);
 
     expect(chooseViewerSource(STORED, view)).toEqual({
@@ -50,19 +40,14 @@ describe('chooseViewerSource — original file versus stored copy', () => {
   });
 
   it('falls back to the stored copy while the existence check is UNKNOWN', () => {
-    // 'unknown' means the server has not answered (or could not be reached).
-    // Pointing an <img> at a URL we are only hoping about would give the user
-    // a broken-image icon in place of their photo — strictly worse than the
-    // copy we already hold. The viewer re-evaluates when the answer arrives.
+    // 'unknown' = the server has not answered; avoid a broken-image icon.
     const view = buildImagePathView(SOURCE_PATH, 'unknown', fileUrl);
 
     expect(chooseViewerSource(STORED, view)).toEqual({ url: STORED, kind: 'stored' });
   });
 
   it('falls back to the stored copy when no original path was ever recorded', () => {
-    // Every photo added by drag-and-drop is in this state, as is anything
-    // imported before source paths were tracked. It is the normal case, not
-    // an error.
+    // The normal case for drag-and-drop photos.
     const view = buildImagePathView(null, 'unknown', fileUrl);
 
     expect(chooseViewerSource(STORED, view)).toEqual({ url: STORED, kind: 'stored' });
@@ -75,10 +60,7 @@ describe('chooseViewerSource — original file versus stored copy', () => {
 
 describe('initialViewerSize — "about 1/2 the display"', () => {
   it('fits a big camera original inside half the screen, keeping its shape', () => {
-    // 4032 x 3024 (4:3) into a 960 x 540 box: the HEIGHT is the binding
-    // constraint, so the window ends up 540 tall and 720 wide — half the
-    // display's height, and the photo's own proportions, so the image fills
-    // the window with no letterboxing on opening.
+    // 4032 x 3024 (4:3) into a 960 x 540 box: height binds, giving 720 x 540.
     const size = initialViewerSize({ width: 4032, height: 3024 }, SCREEN);
 
     expect(size).toEqual({ width: 720, height: 540 });
@@ -92,16 +74,13 @@ describe('initialViewerSize — "about 1/2 the display"', () => {
   });
 
   it('never enlarges a photo that is already smaller than half the screen', () => {
-    // The scale is capped at 1. Blowing a 400 x 300 photo up to half a
-    // 1920-wide monitor would just be a blurry rectangle, and it would also
-    // contradict the maximum, which is the photo's native size.
+    // Scale is capped at 1.
     expect(initialViewerSize({ width: 400, height: 300 }, SCREEN))
       .toEqual({ width: 400, height: 300 });
   });
 
   it('falls back to a plain half-screen box before the image has loaded', () => {
-    // naturalWidth/naturalHeight are 0 until the image loads, and the window
-    // still has to have a size in the meantime.
+    // naturalWidth/naturalHeight are 0 until the image loads.
     expect(initialViewerSize(null, SCREEN)).toEqual({ width: 960, height: 540 });
     expect(initialViewerSize({ width: 0, height: 0 }, SCREEN)).toEqual({ width: 960, height: 540 });
   });
@@ -114,18 +93,12 @@ describe('initialViewerSize — "about 1/2 the display"', () => {
 
 describe('maxViewerSize — "up to the highest resolution of the picture"', () => {
   it('is the image\'s native pixel size, even when that exceeds the screen', () => {
-    // Deliberately NOT clamped to the viewport. A camera original is bigger
-    // than the monitor, and being able to grow out to its real resolution is
-    // the entire feature; the backdrop scrolls to reach the rest.
+    // Not clamped to the viewport; the backdrop scrolls.
     expect(maxViewerSize({ width: 4032, height: 3024 }))
       .toEqual({ width: 4032, height: 3024 });
   });
 
   it('caps a fallback stored copy at ITS native size, which is much smaller', () => {
-    // The promise that matters: no stretching a 600px image to 4000px and
-    // wondering why it went soft. Nothing special implements this
-    // — the cap is simply the natural size of whatever actually loaded, so
-    // the fallback caps itself.
     expect(maxViewerSize({ width: 600, height: 450 }))
       .toEqual({ width: 600, height: 450 });
   });
@@ -143,9 +116,7 @@ describe('minViewerSize — a floor that can never cross the ceiling', () => {
   });
 
   it('drops below the flat minimum for a photo smaller than it', () => {
-    // If it did not, CSS min-width would beat max-width and the window would
-    // be STUCK larger than the image's native resolution — the one thing this
-    // module promises cannot happen.
+    // Otherwise CSS min-width would beat max-width.
     const natural = { width: 120, height: 90 };
 
     expect(minViewerSize(natural)).toEqual({ width: 120, height: 90 });

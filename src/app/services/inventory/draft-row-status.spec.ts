@@ -1,14 +1,7 @@
 /*
- * "A coin you are still typing is not an error."
- *
- * The owner added a coin, typed a Year, and got a red toast telling him it
- * could not be saved. `canCreateCoin` has since stopped the doomed POST, so
- * the toast no longer fires; what these tests pin down is the PRESENTATION
- * that was wrong anyway — the row and the panel now say what to type next,
- * quietly, instead of leaving the whole message in a tooltip.
- *
- * The phrasing rule being tested throughout: SAY WHAT TO DO, NOT WHAT IS
- * MISSING.
+ * A coin still being typed is not an error: the row and detail panel say what
+ * to type next rather than showing an error. Rule under test: say what to do,
+ * not what is missing.
  */
 import { describe, expect, it } from 'vitest';
 import { canCreateCoin } from './coin-create-requirements';
@@ -32,17 +25,13 @@ describe('the state the owner was actually in', () => {
   });
 
   it('carries a visible phrase, not only a sentence for a tooltip', () => {
-    // The chip's whole message used to live in a `title`. A tooltip needs a
-    // mouse, a pause and the guess that hovering would say anything, so it
-    // cannot be the primary signal.
+    // Shown in the chip itself, not only in a tooltip.
     expect(describeDraftRow(yearOnly).chip).toBe('Needs Denomination');
   });
 });
 
 describe('a year and a coin type but no denomination', () => {
-  // Passes the shared 2-of-3 rule and is still refused by POST /api/coins,
-  // which requires a denomination outright. The row looked identical to a
-  // saved one before any of this existed.
+  // Passes 2-of-3 but POST /api/coins still requires a denomination.
   const coin = { year: '1921', coinType: 'Morgan' };
 
   it('is genuinely unsaveable', () => {
@@ -86,10 +75,8 @@ describe('a denomination on its own', () => {
 });
 
 describe('a denomination the server accepts but the completeness rule does not', () => {
-  // "Other" and "Unknown" are placeholders to `isCoinDetailPresent` and
-  // perfectly acceptable to the server's `if (!body.denomination)`. The gate
-  // is both rules, so the row is still a draft and must still say something
-  // useful.
+  // "Other" and "Unknown" are placeholders to `isCoinDetailPresent` but accepted
+  // by the server; the row is still a draft and must say something useful.
   it('asks for the two details the 2-of-3 rule is short of', () => {
     const status = describeDraftRow({ denomination: 'Unknown' });
     expect(canCreateCoin({ denomination: 'Unknown' })).toBe(false);
@@ -118,9 +105,8 @@ describe('a row that has everything it needs', () => {
 });
 
 describe('a save that was attempted and REFUSED', () => {
-  // The one case that is a genuine error. The red toast stays (see
-  // CoinEditor.onDraftCreateFailed); this is how the row keeps saying so
-  // after the toast has gone.
+  // The one real error: the save was refused (the toast is in
+  // CoinEditor.onDraftCreateFailed); the row keeps saying so afterwards.
   const coin = { year: '1921', coinType: 'Morgan', denomination: 'Dollar' };
   const refusal = 'Not saved yet — the last attempt failed: 500 Server Error. Edit this row to retry.';
 
@@ -132,8 +118,7 @@ describe('a save that was attempted and REFUSED', () => {
   });
 
   it('is NOT reported while the user still has something to type', () => {
-    // A half-typed row must never be dressed up as a failed save, however
-    // recently one failed.
+    // A half-typed row is never presented as a failed save.
     const status = describeDraftRow({ year: '1921' }, { lastAttempt: refusal });
     expect(status.failed).toBe(false);
     expect(status.chip).toBe('Needs Denomination');

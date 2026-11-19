@@ -1,15 +1,6 @@
 /**
- * report-images.spec.ts
- *
- * Photographs are the reason this feature exists — a CSV cannot carry them —
- * and they are also the only way this feature can hurt anybody. The stored
- * copy in `imagePaths` is a ~1600px JPEG at roughly 250 KB of base64; 300
- * coins with two apiece is about 150 MB. Two separate defences are tested
- * here:
- *
- *   1. a PLAN that caps how many photographs are asked for, and
- *   2. a COLLECTOR that loads one coin at a time and keeps only the
- *      thumbnail, so the full-size originals are never all live at once.
+ * Tests for the photograph plan (per-coin caps) and the collector (one coin
+ * at a time, thumbnails only, byte budget).
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CoinRecord } from '../../../types/coin.model';
@@ -42,16 +33,11 @@ function fakeImage(bytes: number): string {
 
 describe('the caps themselves', () => {
   it('asks for at most two photographs per coin', () => {
-    // Obverse and reverse. That is what a numismatic record is, and it is
-    // what an insurer needs to identify the coin. A third angle doubles the
-    // page count for no identifying value.
+    // Obverse and reverse.
     expect(IMAGES_PER_COIN_CAP).toBe(2);
   });
 
   it('thumbnails to a size that still prints legibly', () => {
-    // Printed at roughly 1.1in on the page, 480px is about 430 dpi — past
-    // what any home printer resolves — while costing roughly a tenth of the
-    // bytes of the stored 1600px copy.
     expect(THUMBNAIL_MAX_EDGE_PX).toBeGreaterThanOrEqual(320);
     expect(THUMBNAIL_MAX_EDGE_PX).toBeLessThanOrEqual(640);
   });
@@ -68,9 +54,7 @@ describe('coinPhotoCount', () => {
   });
 
   it('falls back to the server imageCount when the payloads were not sent', () => {
-    // GET /api/coins?includeImages=false omits `imagePaths` ENTIRELY (the
-    // key is absent, not an empty array) and sends `imageCount` instead.
-    // Without this branch the report quietly prints no photographs.
+    // The list endpoint omits the `imagePaths` key entirely and sends `imageCount`.
     const withoutPayloads = { ...coin('c1'), imageCount: 3 } as unknown as CoinRecord;
     delete (withoutPayloads as unknown as Record<string, unknown>)['imagePaths'];
     expect(coinPhotoCount(withoutPayloads)).toBe(3);
@@ -134,8 +118,6 @@ describe('collectReportImages', () => {
   });
 
   it('keeps ONLY the thumbnail, never the full-size original', async () => {
-    // If the originals leaked into the result, a 300-coin report would be
-    // the 150 MB string this cap exists to prevent.
     const original = fakeImage(250_000);
     const thumbnail = fakeImage(20_000);
     const plan = planReportImages([coin('c1', ['a'])]);
@@ -181,8 +163,6 @@ describe('collectReportImages', () => {
   });
 
   it('skips a coin whose images cannot be loaded instead of failing the report', async () => {
-    // A report that refuses to print because one photograph is unreadable is
-    // worse than a report with one photograph missing.
     const plan = planReportImages([coin('c1', ['a']), coin('c2', ['a'])]);
     const collected = await collectReportImages(plan, deps({
       loadCoinImages: vi.fn(async (coinId: string) => {
@@ -212,8 +192,7 @@ describe('makeCoinImageLoader', () => {
   });
 
   it('fetches when the list endpoint omitted the payloads', async () => {
-    // The list endpoint's default shape: `imagePaths` absent, `imageCount`
-    // present.
+    // The list endpoint's default shape: `imagePaths` absent, `imageCount` present.
     const withoutPayloads = { ...coin('c1'), imageCount: 2 } as unknown as CoinRecord;
     delete (withoutPayloads as unknown as Record<string, unknown>)['imagePaths'];
 

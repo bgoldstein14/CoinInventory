@@ -1,36 +1,16 @@
 /**
- * routes/coins/images.ts — the coin image sub-resource.
+ * The coin image sub-resource (CoinImages: one row per image, ordered by
+ * SortOrder). Mounted at /api/coins:
  *
- * Images are stored as base64 text in the CoinImages table, one row per image,
- * ordered by SortOrder. Mounted (via routes/coins/index.ts) at /api/coins:
+ *   GET    /:id/images            full images for one coin
+ *   POST   /:id/images            append images
+ *   DELETE /:id/images/:imageId   remove one image
  *
- *   GET    /:id/images            -> GET    /api/coins/:id/images
- *   POST   /:id/images            -> POST   /api/coins/:id/images
- *   DELETE /:id/images/:imageId   -> DELETE /api/coins/:id/images/:imageId
- *
- * The GET is the on-demand half of "don't ship every image on every app load":
- * GET /api/coins omits image payloads (see routes/coins/list-query.ts) and the
- * detail panel / gallery pulls the full images for the single coin the user is
- * looking at from here.
- *
- * Note that adding images here APPENDS to whatever the coin already has, while
- * `PUT /api/coins/:id` with an `imagePaths` key REPLACES the whole set. Both
- * behaviours are deliberate; see routes/coins/writes.ts.
- *
- * Because this route only ever appends, it does NOT need the SourcePath rescue
- * that the replacing PUT does (write-helpers.ts, replaceImages): nothing here
- * deletes an existing row, so no recorded path can be lost. A new row inserted
- * with no sourcePath is a new unknown, not a destroyed known.
- *
- * Each image also carries an optional `sourcePath`: the absolute path of the
- * ORIGINAL full-resolution file on the machine hosting the app. ImageData is
- * only a downscaled copy, so SourcePath is what lets the UI link to the real
- * photo and show the user where it came from. Serving that file is a separate
- * concern and lives in routes/images/ — which also explains why the backend has
- * to serve it at all instead of the browser opening it directly.
- *
- * Every database call goes through `withDb()` and there are no resetPool()
- * calls — see db/index.ts for why that matters.
+ * GET /api/coins omits image payloads, so the detail panel loads them here.
+ * POST appends (so needs no SourcePath rescue), while PUT /api/coins/:id with
+ * `imagePaths` replaces the whole set. `sourcePath` is the original
+ * full-resolution file on the host; ImageData is a downscaled copy. Serving
+ * originals is in routes/images/.
  */
 
 import { Router, Request, Response } from 'express';
@@ -45,16 +25,13 @@ import { originFromRequest, referenceUrlFor } from '../images/reference-url';
 const router = Router();
 
 /**
- * What one row's `imageData` should be on the wire.
+ * What one row's `imageData` is on the wire:
  *
- * STORED      the base64 data URL, exactly as it is in the database.
- * REFERENCED  ImageData is NULL and SourcePath is where the picture lives,
- *             so the client is handed the URL that streams that file.
- * NEITHER     null. A row with no picture and no path holds no photograph;
- *             saying so plainly is better than inventing a broken URL.
+ *   stored      the base64 data URL as stored
+ *   referenced  ImageData NULL, SourcePath set: the URL that streams that file
+ *   neither     null
  *
- * Exported for direct unit testing — it is the whole of the read side of the
- * referenced storage mode.
+ * Exported for tests.
  */
 export function resolveImageData(
   storedImageData: unknown,
@@ -81,38 +58,16 @@ export function resolveImageData(
 //     { "imageId": 13, "imageData": "data:image/jpeg;base64,...", "sortOrder": 1,
 //       "sourcePath": null } ]
 //
-// `imageId` is what DELETE /api/coins/:id/images/:imageId needs, so returning
-// it here lets the gallery delete an image without another round trip.
+// `imageId` lets the gallery call DELETE without another round trip. But ids
+// change on every coin save: PUT with `imagePaths` deletes and re-inserts all
+// rows. A stale id matches nothing (the DELETE succeeds with no effect), never
+// a different image. Nothing in the client calls the DELETE today; if that
+// changes, re-fetch first or make PUT reconcile rows instead of replacing.
 //
-// *** BUT THE ID GOES STALE ON EVERY COIN SAVE -- READ THIS BEFORE USING IT. ***
+// `sourcePath` is the original file on the host, or null if unknown.
 //
-// `PUT /api/coins/:id` carrying `imagePaths` replaces the whole image set:
-// every row is deleted and re-inserted (write-helpers.ts, `replaceImages`).
-// `ImageId` is IDENTITY, so the rows come back with entirely new ids. An id
-// fetched here, held while the user edits and saves the coin, then used in a
-// DELETE, matches NOTHING -- the delete affects zero rows and reports success.
-// The photo stays on screen and nothing explains why. It cannot delete the
-// WRONG image (a stale IDENTITY value matches no row rather than another one),
-// so the failure mode is an inert button, not corruption.
-//
-// Nothing in the client calls the DELETE today, which is the only reason this
-// is harmless. If you are wiring up per-image delete: re-fetch this endpoint
-// immediately before the DELETE, or change the PUT to reconcile rows instead
-// of replacing them. The latter is the real fix and a deliberately larger
-// change; the replacement semantics are intentional (routes/coins/writes.ts).
-//
-// `sourcePath` is where the ORIGINAL full-resolution file lives on the host
-// machine (imageData is only a downscaled copy). It is null for every image
-// imported before that column existed, and the UI treats null as "no link to
-// offer". Having it here is what lets the detail view show the file's location
-// and, after one POST /api/images/exists round trip, grey out the link for
-// files that have since been moved or deleted.
-//
-// Two "nothing found" cases that are deliberately NOT the same thing:
-//   - the coin exists but has no photos  -> 200 with []   (a normal, valid state)
-//   - the coin does not exist at all     -> 404           (a real error)
-// Hence the cheap existence check before the image query: without it we could
-// not tell those two apart, because both produce an empty image recordset.
+// The coin existing with no photos is 200 []; a missing coin is 404, hence the
+// existence check first.
 router.get('/:id/images', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
@@ -124,8 +79,7 @@ router.get('/:id/images', async (req: Request, res: Response) => {
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT CoinId FROM Coins WHERE CoinId = @id');
 
-      // Returning null (rather than throwing) keeps the 404 out of the catch
-      // block, matching the pattern used by the other coin handlers.
+      // Null keeps the 404 out of the catch block.
       if (coin.recordset.length === 0) return null;
 
       const result = await db.request()
@@ -136,19 +90,13 @@ router.get('/:id/images', async (req: Request, res: Response) => {
 
       return result.recordset.map((row: Record<string, unknown>) => ({
         imageId: row['ImageId'],
-        /* REFERENCED PHOTOGRAPHS: ImageData is NULL because the user chose to
-         * keep the picture on disk rather than in the database. The client
-         * still needs something an `<img src>` can load, so the row is
-         * rendered as the URL of this server's own file-streaming route.
-         * That URL is a transport form only — image-payload.ts turns it back
-         * into "path, no picture" when the coin is saved again, so a round
-         * trip cannot quietly convert a referenced photo into a stored one.
-         * See routes/images/reference-url.ts. */
+        // Referenced photo: return the URL of the file-streaming route.
+        // image-payload.ts turns it back into "path, no picture" on save, so a
+        // round trip can't convert it into a stored photo (see
+        // routes/images/reference-url.ts).
         imageData: resolveImageData(row['ImageData'], row['SourcePath'], origin),
         sortOrder: row['SortOrder'],
-        // Normalise SQL NULL (and a driver that omits the column entirely, as
-        // happens against a database where migration 002 has not been run yet)
-        // to JSON null, so the client only ever has one "unknown" to handle.
+        // NULL or missing column (pre-migration 002) become JSON null.
         sourcePath: (row['SourcePath'] as string | null | undefined) ?? null,
       }));
     });
@@ -160,9 +108,7 @@ router.get('/:id/images', async (req: Request, res: Response) => {
     }
 
     logInfo(`Retrieved ${images.length} image(s) for coin ${id}`);
-    // Base64 payloads: after the coin list, the likeliest response in the
-    // whole API to be unbuildable. Sent as its own step so a failure here
-    // is never reported as a database fault.
+    // Sent separately so a serialization failure isn't reported as a database fault.
     sendJson(res, 'GET /api/coins/:id/images', images, "coin's photographs");
   } catch (err) {
     sendDbError(res, 'GET /api/coins/:id/images', err, 'Failed to retrieve images', "coin's photographs");
@@ -177,20 +123,13 @@ router.get('/:id/images', async (req: Request, res: Response) => {
 //   { "images": [{ "imageData": "data:...", "sourcePath": "C:\\pics\\a.jpg" }] }
 //   { "image": "data:..." } / { "imageData": "data:..." }    <- single image
 //
-// A bare string carries no source path, so it is stored with SourcePath NULL —
-// identical to how every pre-existing row looks. The per-element parsing lives
-// in image-payload.ts; see normalizeImageEntry() for the exact rules.
-//
-// This handler is TRANSACTIONAL on purpose: an image batch either lands
-// completely or not at all. Autocommitting each INSERT would leave images 1-4
-// of 8 committed behind a 500, and the user's retry would insert them a second
-// time. insertImages() (POST /api/coins, PUT /api/coins/:id) behaves the same
-// way, so the two write paths stay consistent.
+// Bare strings are stored with SourcePath NULL. Parsing is in image-payload.ts.
+// Transactional so a batch lands completely or not at all (a partial commit
+// plus a retry would duplicate images).
 router.post('/:id/images', async (req: Request, res: Response) => {
   const id = toSingleValue(req.params['id']);
 
-  // Collapse the three accepted body shapes into one array: `images` is the
-  // array form, `image` / `imageData` the single-image convenience keys.
+  // Collapse the accepted body shapes into one array.
   const rawImages: unknown[] = Array.isArray(req.body?.images)
     ? req.body.images
     : [req.body?.images ?? req.body?.image ?? req.body?.imageData];
@@ -201,9 +140,7 @@ router.post('/:id/images', async (req: Request, res: Response) => {
     logInfo(`Adding ${images.length} image(s) to coin ${id}`);
 
     const insertedIds = await withDb(async (db) => {
-      // The existence check is a plain read and stays outside the transaction:
-      // it decides whether we do any work at all, and holding a transaction
-      // open across it would buy nothing.
+      // Plain read outside the transaction: it only decides whether to do any work.
       const coin = await db.request()
         .input('id', DB_BINDINGS.coinId, id)
         .query('SELECT CoinId FROM Coins WHERE CoinId = @id');
@@ -212,33 +149,27 @@ router.post('/:id/images', async (req: Request, res: Response) => {
 
       const transaction = new DbTransaction(db);
 
-      // `began` tracks whether begin() actually succeeded, so safeRollback is
-      // never handed a transaction that was never started.
+      // Only roll back a transaction that actually began.
       let began = false;
 
       try {
         await transaction.begin();
         began = true;
 
-        // MAX(SortOrder) is read INSIDE the transaction so a concurrent insert
-        // cannot invalidate it between reading it and using it.
+        // Read inside the transaction so a concurrent insert can't invalidate it.
         const maxOrder = await new DbRequest(transaction)
           .input('coinId', DB_BINDINGS.coinId, id)
           .query('SELECT IFNULL(MAX(SortOrder), -1) AS max_order FROM CoinImages WHERE CoinId = @coinId');
 
-        // An aggregate always returns a row, but start from zero rather than
-        // crash if the driver hands back an empty recordset.
+        // Start from zero if the aggregate returns no row.
         let nextOrder = ((maxOrder.recordset[0]?.['max_order'] as number | undefined) ?? -1) + 1;
 
         const ids: number[] = [];
         for (const image of images) {
           const result = await new DbRequest(transaction)
             .input('coinId', DB_BINDINGS.coinId, id)
-            // NULL here is the REFERENCED storage mode, not a missing value:
-            // the row records where the picture is and the database does not
-            // carry it. normalizeImageEntries() has already refused any entry
-            // that has neither a picture nor a path, so a NULL ImageData row
-            // always has a SourcePath. See image-payload.ts.
+            // NULL is the referenced mode; normalizeImageEntries() guarantees
+            // such a row has a SourcePath.
             .input('imageData', DB_BINDINGS.imageData, image.imageData)
             .input('sortOrder', DB_BINDINGS.sortOrder, nextOrder++)
             .input('sourcePath', DB_BINDINGS.imageSourcePath, image.sourcePath)
@@ -256,7 +187,6 @@ router.post('/:id/images', async (req: Request, res: Response) => {
         await transaction.commit();
         return ids;
       } catch (innerErr) {
-        // Roll back WITHOUT letting a rollback failure mask the real cause.
         await safeRollback(began ? transaction : null, 'POST /api/coins/:id/images');
         throw innerErr;
       }

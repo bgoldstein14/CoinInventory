@@ -1,34 +1,13 @@
  /*
- * append-needs-loaded-photos.spec.ts
- *
- * THE WORST BUG THIS CHANGE COULD HAVE INTRODUCED, pinned.
- *
- * The batch photo import's "Keep both" mode appends: it builds
- *
- *     [...the coin's existing photographs, ...the new ones]
- *
- * and hands that COMPLETE array to `PUT /api/coins/:id`, which deletes every
- * CoinImages row for the coin and re-inserts exactly what it was given.
- *
- * That code used to read the existing half as `coin?.imagePaths ?? []`. It
- * was correct only because `GET /api/coins` inlined every photograph, so the
- * array was always there. Now it is ABSENT by default — and `?? []` turns an
- * absent array into an empty one, which means "Keep both" would have sent
- * ONLY the new photographs and silently deleted every photograph already on
- * the coin -- on a real collection, with a 200 response and nothing in any
- * log.
- *
- * THE RULE
- *
- * APPEND IS ONLY SAFE WHEN WE KNOW WHAT WE ARE APPENDING TO. So, per coin:
+ * "Keep both" sends [...existing, ...new] to PUT /api/coins/:id, which
+ * replaces the coin's whole image set. Coins from the list endpoint carry
+ * `imageCount` but no `imagePaths`, so treating a missing array as empty
+ * would delete every existing photo. Per coin:
  *
  *   - photographs already in memory  -> use them
- *   - `imageCount` says zero         -> [] is a fact, not a guess. Safe.
- *   - otherwise                      -> fetch them. If the fetch fails,
- *                                       SKIP THE COIN. Do not write.
- *
- * Skipping costs the user a re-run of an import. Guessing costs photographs
- * that no longer exist anywhere.
+ *   - `imageCount` is zero           -> [] is known to be correct
+ *   - otherwise                      -> fetch them; if that fails, skip the
+ *                                       coin and write nothing
   */
 
 import { describe, expect, it, vi } from 'vitest';
@@ -119,19 +98,14 @@ describe('"Keep both" when the coin\'s photographs are not in memory', () => {
       loadExistingImages
     });
 
-    // THE ASSERTION THIS FILE EXISTS FOR. Not "attach was called with the old
-    // photos" — attach was NOT CALLED. A PUT that cannot be built correctly
-    // must not be built at all.
     expect(attach).not.toHaveBeenCalled();
-    // And the user is told, rather than being left to discover it.
+    // Reported to the user as a failure.
     expect(result.failures).toHaveLength(1);
     expect(result.failures[0]!.fileName).toBe('new.jpg');
     expect(result.coinsTouched).toBe(0);
   });
 
   it('WRITES NOTHING when no loader was supplied at all', async () => {
-    // A caller that forgets to wire the loader must fail safe, not fall back
-    // to the behaviour that deletes photographs.
     const attach = vi.fn();
 
     const result = await runAttach([makeRow('new.jpg', 'c1')], baseOptions([listLoadedCoin('c1', 4)], attach));
@@ -169,8 +143,7 @@ describe('"Keep both" when the coin\'s photographs are not in memory', () => {
   });
 
   it('still empties the coin under "replace", without a pointless fetch', async () => {
-    // 'replace' MEANS "delete what is there", so there is nothing to read
-    // first — and reading it would be a few megabytes spent to throw away.
+    // 'replace' discards the existing photos, so there is nothing to fetch.
     const attach = vi.fn();
     const loadExistingImages = vi.fn(async () => ['SHOULD-NOT-BE-USED']);
 

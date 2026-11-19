@@ -1,21 +1,9 @@
 /**
- * BUG: a failed coin creation left a phantom row in the grid.
- *
- *   22:55:22 [ERROR] Failed to create coin 423f9821-... | 400 denomination is required
- *   22:56:14 [WARN]  No thumbnail available for coin 423f9821-...
- *
- * The owner added a coin with no denomination. The client's save rule is the
- * 2-of-3 rule (any two of Year / Coin Type / Denomination); the server's rule
- * is `if (!body.denomination) -> 400`. A coin with a Year and a Coin Type
- * passes the first and is refused by the second, so the row sat in the grid
- * being POSTed and refused over and over — silently, because the
- * create-failure toast is de-duplicated per coin — and the grid went on to
- * request a thumbnail for a coin the database had never heard of.
- *
- * The decision taken here is MARK, NOT REMOVE: the row stays on screen (the
- * user typed it, and discarding someone's typing is its own bug) but it is
- * honestly marked unsaved, it says why, and nothing about it pretends to the
- * rest of the app that a database row exists.
+ * A failed coin creation must not leave a row that looks saved. The client's
+ * 2-of-3 rule passes a coin with Year and Coin Type, but the server requires a
+ * denomination (`if (!body.denomination) -> 400`). The row stays on screen
+ * (the user's typing is kept) but is marked unsaved with the reason, and
+ * nothing treats it as a database row.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { of, throwError } from 'rxjs';
@@ -42,9 +30,8 @@ describe('the create gate agrees with what POST /api/coins will accept', () => {
   });
 
   it('mirrors the server truthiness check and nothing stricter', () => {
-    // The server says `if (!body.denomination)`. "Other" is truthy, so the
-    // server stores it; the stricter coin-completeness placeholder test would
-    // not, and using that here would stop coins saving that save today.
+    // "Other" is truthy, so the server stores it; the stricter placeholder test
+    // would wrongly block it.
     expect(meetsServerCreateRules({ denomination: 'Other' })).toBe(true);
     expect(meetsServerCreateRules({ denomination: '' })).toBe(false);
     expect(meetsServerCreateRules({})).toBe(false);
@@ -72,7 +59,7 @@ describe('a draft the server would refuse is never POSTed', () => {
     inv.updateCoin(coin.id, { year: '1921', coinType: 'Morgan' });
     await vi.advanceTimersByTimeAsync(5000);
 
-    // Before the fix this POSTed and came back 400 every time.
+    // A POST that can only be refused is not sent.
     expect(mockApiService.createCoin).not.toHaveBeenCalled();
     expect(inv.isDraftCoin(coin.id)).toBe(true);
   });
@@ -118,14 +105,14 @@ describe('a create that fails for some OTHER reason stays visible and honest', (
     inv.updateCoin(coin.id, { year: '1921', denomination: 'Dollar' });
     await vi.advanceTimersByTimeAsync(1000);
 
-    // The typing is not thrown away...
+    // The typing is kept...
     expect(inv.inventory()).toHaveLength(1);
     expect(inv.inventory()[0].year).toBe('1921');
-    // ...but the row does not pretend to be saved.
+    // ...but the row is not presented as saved.
     expect(inv.isDraftCoin(coin.id)).toBe(true);
     expect(mockNotification.showError).toHaveBeenCalledTimes(1);
 
-    // The toast is transient; the row's own hint is not.
+    // The toast is transient; the row's hint is not.
     const hint = inv.draftHint(inv.inventory()[0]);
     expect(hint).not.toBe('');
     expect(hint.toLowerCase()).toContain('failed');
@@ -164,9 +151,8 @@ describe('the same hole on the BULK create path (imports)', () => {
     await vi.advanceTimersByTimeAsync(0);
 
     expect(inv.inventory()).toHaveLength(1);
-    // Before the fix this was false: the change tracker had been seeded with
-    // a "confirmed" baseline for a row the server never accepted, so the next
-    // edit PUT to a coin that does not exist and 404ed forever.
+    // The tracker must not keep a "confirmed" baseline for a row the server never
+    // accepted, or later edits would PUT to a missing coin.
     expect(inv.isDraftCoin('bulk-1')).toBe(true);
   });
 

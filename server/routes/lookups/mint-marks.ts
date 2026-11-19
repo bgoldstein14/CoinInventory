@@ -1,22 +1,14 @@
 /**
- * routes/lookups/mint-marks.ts — the MintMarks reference table.
+ * The MintMarks reference table: the mint letter ("D" = Denver) plus a
+ * description. Soft delete (IsActive = 0); GET returns active rows. Mounted
+ * at /api:
  *
- * A mint mark is the little letter stamped on a coin ("D" = Denver) plus a
- * human-readable description. Like Denominations it uses a SOFT delete
- * (IsActive = 0) so historic coins keep their mark, and GET returns only the
- * active rows.
+ *   GET    /mintmarks      active mint marks, ordered by label
+ *   POST   /mintmarks      create one (returns the new MintMarkId)
+ *   PUT    /mintmarks/:id  edit label / description
+ *   DELETE /mintmarks/:id  soft-delete (IsActive = 0)
  *
- * Mounted (via routes/lookups/index.ts) at /api:
- *
- *   GET    /mintmarks      -> active mint marks, ordered by label
- *   POST   /mintmarks      -> create one (returns the new MintMarkId)
- *   PUT    /mintmarks/:id  -> edit label / description
- *   DELETE /mintmarks/:id  -> soft-delete (IsActive = 0)
- *
- * Every database call runs inside `withDb()` and every parameter type comes
- * from DB_BINDINGS so it matches setup-database.sql. Note MintMarks.Label is
- * only NVARCHAR(20) — that short length is intentional and is one of the
- * columns the schema-drift test in db/coin-fields.spec.ts guards.
+ * MintMarks.Label is only NVARCHAR(20).
  */
 
 import { Router, Request, Response } from 'express';

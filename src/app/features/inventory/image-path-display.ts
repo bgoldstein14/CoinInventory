@@ -1,25 +1,12 @@
 /*
- * Deciding HOW to render one image's original path.
+ * Render model for one image's original-file path. Pure functions, no Angular.
  *
- * Pure functions, no Angular. Everything the template needs is worked out here
- * and handed over as a plain object, which keeps the markup free of nested
- * conditionals and makes all of the behaviour unit-testable without a browser.
- *
- * THE THREE (well, four) CASES
- *   present  the backend confirmed the file is readable
- *            -> a real link, opening in a new tab
- *   missing  the backend looked and it is not there
- *            -> NOT a link: no href, no underline, no pointer, not focusable,
- *               and a muted colour. The path text stays visible, because the
- *               user explicitly wants it as a record of where the file *was*.
- *   unknown  we could not ask (server unreachable, check not finished)
- *            -> plain text, no claim either way. Showing "missing" here would
- *               tell the user his whole photo library had vanished every time
- *               the backend restarted.
- *   none     no path was ever recorded (every image imported before this
- *            feature, or one added through the gallery's file picker)
- *            -> render nothing at all. An empty or dead affordance is worse
- *               than no affordance.
+ *   present  backend confirmed the file is readable -> link, opens in a new tab
+ *   missing  backend looked and it is gone -> muted, non-clickable text kept as
+ *            a record of where the file was
+ *   unknown  could not ask (server unreachable, check pending) -> plain text,
+ *            no claim either way
+ *   none     no path recorded -> render nothing
  */
 
 import { ImageFileExistence } from '../../types/coin-image.model';
@@ -42,31 +29,17 @@ export interface ImagePathView {
   title: string;
 }
 
-/**
- * How many characters of a path to show before shortening it.
- *
- * The detail sidebar is narrow and a real path here is long
- * (`\\NAS\Coin Pictures\Business Strikes\1865 3CN - MS60 - Obverse.jpg`
- * is 76 characters), so some shortening is needed. 58 keeps the interesting
- * part — the filename — fully visible in the sidebar at its normal width.
- */
+/** Max characters of a path to show; keeps the filename visible in the sidebar. */
 export const PATH_DISPLAY_LIMIT = 58;
 
 /**
- * Shorten a path from the MIDDLE, keeping both ends.
- *
- * Truncating the end (`\\NAS\Coin Pic…`) would hide the filename,
- * which is the part the user actually reads. Truncating the start would hide
- * which share it came from. So the middle — the least informative part, the
- * intermediate folders — is what gives way. The full path is always available
- * in the `title` tooltip regardless.
+ * Shorten a path from the middle, keeping the share name and the filename.
+ * The full path is always in the `title` tooltip.
  */
 export function middleEllipsis(path: string, limit = PATH_DISPLAY_LIMIT): string {
   if (path.length <= limit) return path;
 
-  // One character of the budget is spent on the ellipsis itself. The remainder
-  // is split with slightly more going to the tail, because the filename lives
-  // there and matters more than the leading share name.
+  // One character goes to the ellipsis; the tail (filename) gets the larger half.
   const budget = limit - 1;
   const tailLength = Math.ceil(budget / 2);
   const headLength = budget - tailLength;
@@ -90,11 +63,10 @@ function explain(existence: ImageFileExistence): string {
 /**
  * Build the render model for one image's original-file path.
  *
- * @param sourcePath  the recorded absolute path, or null/empty for "none"
- * @param existence   what the backend said about it
- * @param buildFileUrl how to turn a path into a backend URL. Passed in rather
- *                     than imported so this module stays free of Angular and of
- *                     ApiService — in the app this is `ApiService.imageFileUrl`.
+ * @param sourcePath   the recorded absolute path, or null/empty for "none"
+ * @param existence    what the backend said about it
+ * @param buildFileUrl turns a path into a backend URL (`ApiService.imageFileUrl`
+ *                     in the app); injected to keep this module Angular-free
  */
 export function buildImagePathView(
   sourcePath: string | null | undefined,
@@ -116,9 +88,7 @@ export function buildImagePathView(
     };
   }
 
-  // A link is offered ONLY for a file the backend has confirmed it can read.
-  // 'unknown' deliberately does NOT get a link: offering one we cannot honour
-  // produces a click that appears to do nothing, which is the worst outcome.
+  // Only a confirmed-present file gets a link.
   const isLink = existence === 'present';
 
   return {
@@ -127,9 +97,7 @@ export function buildImagePathView(
     displayPath: middleEllipsis(path),
     existence,
     isLink,
-    // Built through the backend, never as a `file:///` URL — Chrome and Edge
-    // silently block navigation from an http page to a file URL. See
-    // ApiService.imageFileUrl for the full explanation.
+    // Served through the backend: browsers block navigation from http to file:// URLs.
     fileUrl: isLink ? buildFileUrl(path) : null,
     title: `${path}\n${explain(existence)}`
   };

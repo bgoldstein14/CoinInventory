@@ -1,26 +1,6 @@
 /**
- * issue-url.spec.ts — the deep link, and the clipboard fallback.
- *
- * ---- WHY A DEEP LINK AND NOT AN API CALL ----
- * Filing the issue from inside the app would mean shipping a GitHub
- * credential in a public desktop application. Any token that can file an
- * issue can be extracted from the binary and abused; that is not solvable,
- * only deferrable, and this design does not defer it — there is no token.
- *
- * A pre-filled URL costs the user one click, needs no secret, and has the
- * side benefit that they see exactly what they are submitting in GitHub's
- * own editor before pressing the button.
- *
- * ---- WHY THE CLIPBOARD FALLBACK IS NOT OPTIONAL ----
- * A URL has a practical length limit — browsers and servers both start
- * refusing somewhere around 8 KB, and GitHub is no exception. A report with
- * 150 log lines in it will blow past that routinely. VS Code's issue
- * reporter hit exactly this and solved it exactly this way: put the body on
- * the clipboard and tell the user, in those words, that it was too large to
- * put in the link.
- *
- * Silently truncating would be the worst option: the user would file a
- * report that LOOKS complete and is missing the part that mattered.
+ * Tests for the pre-filled GitHub issue link and its clipboard fallback for
+ * bodies too long for a URL (see issue-url.ts).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -53,21 +33,13 @@ describe('normaliseRepositoryUrl', () => {
   });
 });
 
-/**
- * The address the dialog shows as a CLICKABLE LINK before anything has been
- * built. Attaching a file is a GitHub-side action — the app has no way to
- * upload one — so telling the user that without handing them the link is
- * telling them to go and find it.
- */
+/** The plain new-issue link shown before any report is built. */
 describe('issuePageUrl', () => {
   it('points at the new-issue page', () => {
     expect(issuePageUrl(REPO)).toBe('https://github.com/owner/coin-inventory/issues/new');
   });
 
-  /**
-   * No query string. There is no title or body to encode at this point, and
-   * a link ending `?title=&body=` reads as broken to anyone who looks at it.
-   */
+  /** No `?title=&body=` when there is nothing to encode. */
   it('carries no empty query string', () => {
     expect(issuePageUrl(REPO)).not.toContain('?');
   });
@@ -131,12 +103,7 @@ describe('planIssueSubmission', () => {
     expect(plan.url.length).toBeLessThanOrEqual(ISSUE_URL_MAX_CHARS);
   });
 
-  /**
-   * VS Code's wording, near enough, and for the same reason: the user is
-   * about to land on an empty issue form and needs to know, without
-   * guessing, that the content is on their clipboard and that pasting is
-   * now their job.
-   */
+  /** The user lands on an empty form and must be told the content is on the clipboard. */
   it('the fallback URL body tells the user to paste', () => {
     const plan = planIssueSubmission(REPO, 't', 'x'.repeat(20_000));
     expect(decodeURIComponent(plan.url)).toMatch(/paste/i);
@@ -148,15 +115,8 @@ describe('planIssueSubmission', () => {
     expect(plan.reason).toMatch(/too large|too long/i);
   });
 
-  /**
-   * The boundary is where this goes wrong in practice: a body that is a
-   * few characters over produces a URL the browser silently truncates, and
-   * the user files half a report without knowing it.
-   */
   it('decides on the ENCODED length, not the raw length', () => {
-    // Newlines encode to three characters each, so a body of 4000 newlines
-    // is 12,000 characters once encoded — comfortably over the limit even
-    // though the raw string is under it.
+    // Each newline encodes to three characters: 12,000 encoded from 4,000 raw.
     const plan = planIssueSubmission(REPO, 't', '\n'.repeat(4000));
     expect(plan.mode).toBe('clipboard');
   });
@@ -169,7 +129,7 @@ describe('planIssueSubmission', () => {
   });
 
   it('a body that fits exactly is still sent by URL', () => {
-    // Build a body whose encoded form lands just under the limit.
+    // A body whose encoded form lands just under the limit.
     const headroom = ISSUE_URL_MAX_CHARS - planIssueSubmission(REPO, 't', '').url.length - 10;
     const plan = planIssueSubmission(REPO, 't', 'z'.repeat(headroom));
     expect(plan.mode).toBe('url');

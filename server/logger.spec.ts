@@ -1,26 +1,10 @@
 /**
- * logger.spec.ts — that the logger OBEYS the rotation policy.
+ * The logger against a real directory: dated files, rolling at the cap,
+ * adopting a legacy app.log, pruning, and reading the newest lines across a
+ * roll. The policy arithmetic is in log-rotation.spec.ts.
  *
- * The policy arithmetic is tested in log-rotation.spec.ts. What is left here
- * is the part that can only be tested against a real directory:
- *
- *   - lines land in a dated file, not in an unbounded app.log
- *   - the day's file rolls when it hits the cap
- *   - a pre-rotation app.log is adopted into the scheme on first use
- *   - expired logs are pruned
- *   - readRecentLogLines() returns the NEWEST lines, across a roll
- *
- * WHY THE LOG DIRECTORY IS AN ENVIRONMENT VARIABLE
- * A logger that resolves `server/logs` at module load writes there
- * unconditionally, so any test of it scribbles into the developer's real log
- * — and, worse, into the real log the support bundle then reads. COIN_LOG_DIR
- * gives each test a throwaway directory. It is also genuinely useful in
- * production: the packaged build puts logs under %LOCALAPPDATA%\CoinInventory,
- * not next to the code.
- *
- * Each test imports the logger FRESH (vi.resetModules + dynamic import)
- * because the logger memoises its directory and its once-per-process startup
- * housekeeping.
+ * COIN_LOG_DIR gives each test a temp directory. Each test imports the logger
+ * fresh, since it memoises its directory and startup housekeeping.
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -44,8 +28,7 @@ function names(): string[] {
 
 beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'coin-logger-'));
-  // The logger echoes to the console by design; silence it so the test output
-  // is readable. Restored in afterEach by vi.restoreAllMocks().
+  // Silence the console echo; restored by vi.restoreAllMocks().
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
 });
@@ -111,8 +94,7 @@ describe('rolling at the size cap', () => {
     for (let i = 0; i < 40; i++) logger.logInfo(`line number ${i} padded out a bit`);
 
     for (const name of names()) {
-      // A file may finish at most one line over the cap — the size is checked
-      // before the write, not after. Anything beyond that is a rolling bug.
+      // At most one line over the cap (size is checked before the write).
       expect(fs.statSync(path.join(dir, name)).size).toBeLessThan(300 + 200);
     }
   });

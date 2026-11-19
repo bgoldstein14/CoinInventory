@@ -1,25 +1,11 @@
  /*
- * metal-inference.spec.ts
- *
- * WHAT THIS FILE PROVES
- *
- * Two things, and they pull in opposite directions on purpose:
- *
- *   1. THAT IT ANSWERS. A coin whose metal is obvious from its own description
- *      — "a US $20 is gold", "a Morgan is silver", "a Gold Eagle says so" —
- *      gets a Metal Content even when the exact alloy is not catalogued.
- *
- *   2. THAT IT REFUSES. Everywhere two metals genuinely shared a date or a
- *      face value, it answers nothing, because Metal Content feeds the melt
- *      calculation: a wrong metal produces a confidently wrong dollar figure,
- *      while a blank produces an honest dash.
- *
- * The WHOLE-ACCOUNT block at the bottom follows the precedent set by
- * `services/image-matching/real-filenames.spec.ts` and
- * `services/quicken-corpus-securities.spec.ts`: every security name in it is
- * a verbatim copy of a `Y` line in `testing/qif-corpus/GoldCoins.QIF`, and
- * nothing in it should be "cleaned up". The corpus is synthetic but the
- * SHAPES are not invented -- see `qif-corpus/generate-corpus.mjs`.
+  * Tests that metal inference answers when the metal is obvious (a US $20 is
+  * gold, a Morgan is silver) and refuses where two metals shared a date or face
+  * value, since a wrong metal gives a wrong melt value.
+  *
+  * The whole-account block at the bottom uses security names copied verbatim
+  * from `Y` lines in testing/qif-corpus/GoldCoins.QIF; don't tidy them (the
+  * corpus is synthetic but its shapes are real; see qif-corpus/generate-corpus.mjs).
   */
 
 import { describe, expect, it } from 'vitest';
@@ -33,18 +19,10 @@ import {
 import { composePmFields } from './pm-fill';
 import { QuickenImportService } from './quicken-import.service';
 
- /*
- * RULE 1 — AN EXPLICIT METAL WORD
- *
- * The strongest evidence, because it is not an inference: the source text
- * named the metal.
-  */
-
 describe('rule 1 — an explicit metal word', () => {
   it('takes the metal the caller already read out of the source text', () => {
-    // The Quicken importer produces `metalHint` from a security name; the
-    // Settings backfill produces it from the coin's own Metal Content. Both
-    // are statements, not guesses, which is why this rule is first.
+    // `metalHint` comes from the security name or the coin's own Metal Content:
+    // a statement, not a guess.
     const result = inferMetalContentDetailed({ metalHint: 'Gold' });
 
     expect(result?.metal).toBe('Gold');
@@ -52,7 +30,6 @@ describe('rule 1 — an explicit metal word', () => {
   });
 
   it('reads a metal word out of the COIN TYPE field', () => {
-    // The coin type often makes the metal obvious when nothing else does.
     expect(inferMetalContent({ coinType: 'Gold Eagle' })).toBe('Gold');
     expect(inferMetalContent({ coinType: 'American Silver Eagle' })).toBe('Silver');
     expect(inferMetalContent({ coinType: 'Gold Dollar' })).toBe('Gold');
@@ -61,41 +38,30 @@ describe('rule 1 — an explicit metal word', () => {
   });
 
   it('lets the coin type beat the denomination when the two could disagree', () => {
-    // A "$10" is a gold Eagle by face value, but a 1/10 oz PLATINUM Eagle also
-    // carries a $10 face. When the type says platinum, the type wins.
+    // $10 is also the 1/10 oz Platinum Eagle's face value; the type wins.
     expect(
       inferMetalContent({ coinType: 'Platinum Eagle', denomination: '$10', year: '1998' })
     ).toBe('Platinum');
   });
 
   it('does NOT read "CAC Gold" as the coin being gold', () => {
-    // CAC Gold is a STICKER TIER, not a metal, and it sits on silver coins all
-    // the time. The importer scrubs it; this module scrubs it again because a
-    // coin type is free text and could have had it pasted in.
+    // "CAC Gold" is a sticker tier, not a metal.
     expect(inferMetalContent({ coinType: 'Barber CAC Gold', year: '1900' })).toBe('Silver');
     expect(inferMetalContent({ coinType: 'Gold CAC' })).toBeNull();
   });
 
   it('does NOT read "Nickel" in a type name as the metal nickel', () => {
-    /* "Nickel" in a coin type names the DENOMINATION. A Jefferson Nickel dated
-     * 1943 is 35% SILVER and a Three Cent Nickel is 75% copper, so the word is
-     * wrong in both directions and is ignored entirely. */
+    /* "Nickel" in a type is the denomination: a 1943 Jefferson Nickel is 35%
+     * silver, a Three Cent Nickel 75% copper. Ignored. */
     expect(inferMetalContent({ coinType: 'Jefferson Nickel', year: '1943' })).toBeNull();
     expect(inferMetalContent({ coinType: 'Three Cent Nickel', year: '1870' })).toBeNull();
   });
 
   it('reads the FIRST metal named when a type somehow names two', () => {
-    // Compositions and descriptions follow a majority-first convention.
+    // Majority-first convention.
     expect(inferMetalContent({ coinType: 'Silver and Gold commemorative' })).toBe('Silver');
   });
 });
-
- /*
- * RULE 2 — A DENOMINATION THAT IS GOLD BY DEFINITION
- *
- * Not a statistical claim: these face values were never struck in anything but
- * gold by the United States.
-  */
 
 describe('rule 2 — a US denomination that is gold by definition', () => {
   const goldByFaceValue: { denomination: string; why: string }[] = [
@@ -115,15 +81,13 @@ describe('rule 2 — a US denomination that is gold by definition', () => {
   }
 
   it('answers for a year the reference table has no row for', () => {
-    // This is the whole point of the fallback. The table stops the $20 at 1933
-    // and the $5 at 1929; the FACE VALUE still settles the metal.
+    // Outside the table's year bands, but the face value still settles the metal.
     expect(inferMetalContent({ denomination: '$20', year: '1934', country: 'United States' })).toBe('Gold');
     expect(inferMetalContent({ denomination: '$5', year: '1990', country: 'United States' })).toBe('Gold');
   });
 
   it('accepts the collector\'s "G$" shorthand', () => {
-    // "G$1", "G$2.50", "G$3" — four of the owner's own securities are written
-    // this way. The "G" is what settles a $1, never the "1".
+    // The "G" settles a $1 (written this way in real security names).
     expect(inferMetalContent({ denomination: 'G$1', year: '1855' })).toBe('Gold');
     expect(inferMetalContent({ denomination: 'G$2.50', year: '1873' })).toBe('Gold');
   });
@@ -133,39 +97,31 @@ describe('rule 2 — a US denomination that is gold by definition', () => {
   });
 
   it('REFUSES a bare "$1", because the US struck it in four different metals', () => {
-    /* 1849-1889: a 26.73 g SILVER dollar AND a 1.672 g GOLD dollar, in the
-     * same years. Add the clad Eisenhower, the Susan B. Anthony and the
-     * manganese-brass Sacagawea and "$1" has worn four metals. The face value
-     * alone cannot tell them apart, so it says nothing. */
+    /* 1849-1889 had both silver and gold dollars (and later clad and
+     * manganese-brass ones), so "$1" alone says nothing. */
     expect(inferMetalContent({ denomination: '$1', year: '1860', country: 'United States' })).toBeNull();
     expect(inferMetalContent({ denomination: '$1', year: '1921', country: 'United States' })).toBeNull();
   });
 
   it('only applies the rule to US coinage', () => {
-    // Canada has struck BOTH gold and silver $20 coins, so a non-US "$20"
-    // proves nothing at all.
+    // Canada has struck both gold and silver $20 coins.
     expect(inferMetalContent({ denomination: '$20', year: '2011', country: 'Canada' })).toBeNull();
   });
 
   it('REFUSES a modern "$10", because that face value is gold AND platinum', () => {
-    /* The bullion programmes reused the old face values: $10 is the 1/4 oz
-     * American GOLD Eagle and also the 1/10 oz American PLATINUM Eagle (1997
-     * onward). The rule is switched off from 1986, the start of the bullion
-     * era, unless a type name settles it. */
+    /* $10 is also the 1/10 oz Platinum Eagle (1997 on), so the rule is off from
+     * 1986 unless a type name settles it. */
     expect(inferMetalContent({ denomination: '$10', year: '2005', country: 'United States' })).toBeNull();
-    // ...but a classic Eagle is unaffected.
+    // ...a classic Eagle is unaffected.
     expect(inferMetalContent({ denomination: '$10', year: '1901', country: 'United States' })).toBe('Gold');
   });
 
   it('says nothing about $25 or $50, where no safe year cutoff exists', () => {
-    // $50 is the 1 oz Gold Eagle, the 1 oz Gold Buffalo, the 1/2 oz PLATINUM
-    // Eagle and the 1915 Panama-Pacific commemorative, all at once.
+    // $50 is the Gold Eagle, Gold Buffalo, Platinum Eagle and 1915 Panama-Pacific.
     expect(inferMetalContent({ denomination: '$50', year: '1915', country: 'United States' })).toBeNull();
     expect(inferMetalContent({ denomination: '$25', year: '1995', country: 'United States' })).toBeNull();
   });
 });
-
-/* ---- RULE 3 — SERIES NAMES THAT IMPLY A METAL ---- */
 
 describe('rule 3 — series names that imply a metal', () => {
   const alwaysGold: string[] = [
@@ -188,20 +144,13 @@ describe('rule 3 — series names that imply a metal', () => {
 
   for (const coinType of alwaysSilver) {
     it(`"${coinType}" is Silver in every year the name was ever used`, () => {
-      // Morgan and Peace dollars were revived in 2021 — in 99.9% SILVER — so
-      // these two need no year band at all.
+      // Morgan and Peace were revived in 2021 in 99.9% silver, so no year band.
       expect(inferMetalContent({ coinType })).toBe('Silver');
     });
   }
 
-  /* -------------------------------------------------------------------------
-   * THE YEAR-GATED SILVER SERIES
-   * -------------------------------------------------------------------------
-   * US silver was interrupted by the Coinage Act of 1965, and several classic
-   * designs were later revived in GOLD for collectors (2016 saw gold Mercury
-   * dime, Standing Liberty quarter and Walking Liberty half centennials). So
-   * the design name alone does NOT prove silver — the name plus the year does.
-   * ---------------------------------------------------------------------- */
+  /* Year-gated silver series: the 1965 Coinage Act removed silver, and several
+   * designs were revived in gold in 2016, so name plus year proves silver. */
   const yearGated: { coinType: string; silverYear: string; notSilverYear: string; why: string }[] = [
     { coinType: 'Mercury',          silverYear: '1942', notSilverYear: '2016', why: 'the 2016 centennial Mercury dime is gold' },
     { coinType: 'Standing Liberty', silverYear: '1926', notSilverYear: '2016', why: 'the 2016 centennial quarter is gold' },
@@ -221,26 +170,19 @@ describe('rule 3 — series names that imply a metal', () => {
     });
 
     it(`"${coinType}" says nothing at all with no year to read`, () => {
-      // The gate is the point: a year-dependent rule must not fire on a record
-      // that has no year.
+      // A year-gated rule must not fire without a year.
       expect(inferMetalContent({ coinType })).toBeNull();
     });
   }
 
   it('reads the 1964 Kennedy half as silver and the 1965-70 40% issues as silver too', () => {
-    // The Kennedy half is the one exception to the 1965 cliff: it kept 40%
-    // silver for six more years. Less silver, but still silver.
+    // The Kennedy half kept 40% silver through 1970.
     expect(inferMetalContent({ coinType: 'Kennedy', year: '1964' })).toBe('Silver');
     expect(inferMetalContent({ coinType: 'Kennedy', year: '1970' })).toBe('Silver');
   });
 
-  /* -------------------------------------------------------------------------
-   * THE NAMES DELIBERATELY LEFT OFF THE LIST
-   * -------------------------------------------------------------------------
-   * Every one of these names coins in more than one metal, and the name alone
-   * cannot say which. The DENOMINATION plus the YEAR settles them wherever
-   * they can be settled, and that is `lookupCoinAlloy`'s job, not this one's.
-   * ---------------------------------------------------------------------- */
+  /* Names used on coins of more than one metal; denomination plus year settles
+   * them in `lookupCoinAlloy`, not here. */
   const ambiguousNames: { coinType: string; why: string }[] = [
     { coinType: 'Liberty Head', why: 'the 5¢ nickel, the $20 double eagle and the Type 1 gold dollar all use it' },
     { coinType: 'Indian Head',  why: 'the bronze cent, and the $2.50 / $5 / $10 gold' },
@@ -265,13 +207,8 @@ describe('rule 3 — series names that imply a metal', () => {
   });
 });
 
-/* ===========================================================================
- * RULE 4 — THE COMPOSITION TEXT
- * ---------------------------------------------------------------------------
- * The trap the brief calls out: composition strings name several metals,
- * majority first, so a naive "contains Copper" test turns a Double Eagle into
- * a copper coin.
- * ======================================================================== */
+/* Rule 4: compositions name several metals majority first, so a "contains
+ * Copper" test would make a Double Eagle copper. */
 
 describe('rule 4 — the majority metal in a composition string', () => {
   const realCompositions: { composition: string; metal: string; why: string }[] = [
@@ -291,17 +228,13 @@ describe('rule 4 — the majority metal in a composition string', () => {
   }
 
   it('prefers the PRECIOUS metal even when a base metal is the majority by weight', () => {
-    /* The 1943-45 wartime nickel is "56% Copper, 35% Silver, 9% Manganese" and
-     * pm-reference.ts records its Metal as SILVER, not copper. Metal Content
-     * feeds the melt calculation, so the precious component is the answer the
-     * field is actually asking for. Matching the reference table here is what
-     * stops an imported coin and a backfilled coin disagreeing. */
+    /* pm-reference.ts records the 1943-45 war nickel as Silver; matching it keeps
+     * imported and backfilled coins consistent. */
     expect(metalFromComposition('56% Copper, 35% Silver, 9% Manganese (wartime alloy)')).toBe('Silver');
   });
 
   it('reads a plating as a skin, not as the coin', () => {
-    // "Copper-plated zinc" is a zinc cent, not a copper one; "Zinc-coated
-    // steel" is the 1943 steel cent.
+    // "Copper-plated zinc" is a zinc cent; "Zinc-coated steel" the 1943 steel cent.
     expect(metalFromComposition('Copper-plated zinc (97.5% Zn, 2.5% Cu)')).toBe('Zinc');
     expect(metalFromComposition('Zinc-coated steel')).toBe('Steel');
   });
@@ -319,23 +252,18 @@ describe('rule 4 — the majority metal in a composition string', () => {
   });
 
   it('is the LAST resort — a stronger rule always wins', () => {
-    // A coin typed as a Morgan with a nonsense composition is still silver.
+    // A Morgan with a nonsense composition is still silver.
     expect(
       inferMetalContentDetailed({ coinType: 'Morgan', composition: '100% Copper' })?.rule
     ).toBe('series-name');
   });
 });
 
-/* ===========================================================================
- * THE OUTPUT VOCABULARY
- * ---------------------------------------------------------------------------
- * Whatever this module produces has to be one of the values seeded into the
- * `MetalContents` table by `server/setup-database.sql`, or the coin editor's
- * <select> cannot display it.
- * ======================================================================== */
+/* Output must be one of the `MetalContents` values seeded by
+ * server/setup-database.sql, or the editor's <select> can't show it. */
 
 describe('the output vocabulary', () => {
-  /** Copied verbatim from the INSERT INTO MetalContents in setup-database.sql. */
+  /** Copied verbatim from INSERT INTO MetalContents in setup-database.sql. */
   const SEEDED_METAL_CONTENTS = [
     'Gold', 'Silver', 'Platinum', 'Palladium', 'Copper', 'Nickel', 'Copper-Nickel',
     'Bronze', 'Brass', 'Zinc', 'Steel', 'Aluminum', 'Nickel-Brass', 'Clad', 'Other'
@@ -363,8 +291,7 @@ describe('the output vocabulary', () => {
   });
 
   it('rejects a metal word that is not in the dropdown', () => {
-    // "Electrum" is a real alloy and a real thing to collect, but it is not in
-    // MetalContents, so claiming it would produce an un-editable field.
+    // A real alloy, but not in MetalContents, so it would be un-editable.
     expect(canonicalMetal('Electrum')).toBeNull();
     expect(canonicalMetal('')).toBeNull();
     expect(canonicalMetal(undefined)).toBeNull();
@@ -377,13 +304,7 @@ describe('the output vocabulary', () => {
   });
 });
 
-/* ===========================================================================
- * STAYING CONSERVATIVE — the cases that must stay blank
- * ---------------------------------------------------------------------------
- * "Only assume when the evidence is strong, otherwise leave it and let the
- * user decide." The owner's standing principle, applied here because Metal
- * Content feeds the melt calculation.
- * ======================================================================== */
+/* Cases that must stay blank: only answer when the evidence is strong. */
 
 describe('the deliberate refusals', () => {
   const refusals: { what: string; evidence: Record<string, string>; why: string }[] = [
@@ -426,24 +347,20 @@ describe('the deliberate refusals', () => {
   }
 
   it('never lets a CATEGORY decide the metal', () => {
-    /* A coin filed under "Gold Coins" is a statement about the owner's filing
-     * cabinet, not about the coin. Collections routinely keep a silver token
-     * or a copper medal in a gold folder. `category` is not even a field this
-     * module accepts, which is the strongest form this guarantee can take —
-     * the test asserts that passing it changes nothing. */
+    /* `category` is a filing choice ("Gold Coins" folders hold silver tokens too)
+     * and isn't even an accepted field; passing it changes nothing. */
     const withCategory = { category: 'Gold Coins', denomination: '1¢', year: '1909' } as Record<string, string>;
 
     expect(inferMetalContent(withCategory)).toBeNull();
   });
 });
 
-/* ---- THE WIRING — composePmFields keeps the reference table authoritative ---- */
+/* composePmFields keeps the reference table authoritative */
 
 describe('composePmFields — the fallback never displaces the reference table', () => {
   it('uses the catalogued answer unchanged when there is one', () => {
     const fields = composePmFields('$20', '1927', 'United States', undefined, {
-      // Deliberately a coin type that would also infer Gold. The catalogued
-      // row must still be what comes back, all five fields intact.
+      // Would also infer Gold; the catalogued row must still win, all fields intact.
       coinType: 'Saint-Gaudens'
     });
 
@@ -452,30 +369,26 @@ describe('composePmFields — the fallback never displaces the reference table',
       composition: '90% Gold, 10% Copper',
       pmPercent: 90,
       pmWeightGrams: 30.09,
-      // The GROSS weight of the coin, which only the catalogued row can
-      // supply — see the next test for what happens without one.
+      // Gross weight, which only the catalogued row can supply.
       weight: 33.436
     });
   });
 
   it('supplies the metal ALONE when the table has no row', () => {
-    /* A 1934 $20 is outside every year band in pm-reference.ts, so the table
-     * answers nothing. It is still unarguably gold — but how many grams of
-     * gold is a different question, and one this module refuses to invent. */
+    /* A 1934 $20 is outside every band in pm-reference.ts: still gold, but the
+     * gold weight is not invented. */
     const fields = composePmFields('$20', '1934', 'United States');
 
     expect(fields).toEqual({ metalContent: 'Gold' });
     expect(fields?.composition).toBeUndefined();
     expect(fields?.pmPercent).toBeUndefined();
     expect(fields?.pmWeightGrams).toBeUndefined();
-    // Nor a gross weight. The coarse fallback reasons about METAL only; it
-    // has no idea what planchet an uncatalogued issue was struck on.
+    // No gross weight either: the fallback reasons about metal only.
     expect(fields?.weight).toBeUndefined();
   });
 
   it('never fills the unknown fields with zeros or empty strings', () => {
-    // A pmWeightGrams of 0 would be a lie that computeMeltValue reads as a
-    // recorded fact; an empty composition would look like somebody checked.
+    // pmWeightGrams 0 would read as a recorded fact; an empty composition as checked.
     const fields = composePmFields('', '', 'France', 'Gold');
 
     expect(Object.keys(fields ?? {})).toEqual(['metalContent']);
@@ -483,8 +396,7 @@ describe('composePmFields — the fallback never displaces the reference table',
   });
 
   it('reads the coin type when nothing else is known', () => {
-    // No catalogued row for a French 20 Francs, and no US denomination rule —
-    // but a coin type naming the metal settles it on its own.
+    // No catalogued row and no US rule, but the coin type names the metal.
     const fields = composePmFields('20 Francs', '1913', 'France', undefined, {
       coinType: 'Gold 20 Francs'
     });
@@ -499,18 +411,12 @@ describe('composePmFields — the fallback never displaces the reference table',
   });
 });
 
-/* ===========================================================================
- * A WHOLE ACCOUNT — qif-corpus/GoldCoins.QIF
- * ---------------------------------------------------------------------------
- * All 44 distinct security names in the `Gold Coins` account of the test
- * corpus, verbatim. Nothing here should be tidied: the missing hyphen in
- * "1898 $20 NGC/CAC MS64", the "G$" prefixes, the bare "1874 $5" with no
- * grade and the lone non-US entry each cover a branch.
- *
- * This is the file the owner's report was about — "when I just imported in all
- * the gold coins, every one of those should have had the content set to Gold
- * automatically". So the headline assertion is simply: all 44, all Gold.
- * ======================================================================== */
+/*
+ * All 44 distinct security names in the corpus's Gold Coins account, verbatim.
+ * Quirks such as the missing hyphen in "1898 $20 NGC/CAC MS64", the "G$"
+ * prefixes, the bare "1874 $5" and the one non-US entry each cover a branch.
+ * Headline: importing the account sets every coin's metal to Gold.
+ */
 
 /** Every distinct `Y` (security name) line in the Gold Coins account. */
 const GOLD_COINS_QIF_SECURITIES: readonly string[] = [
@@ -560,10 +466,7 @@ const GOLD_COINS_QIF_SECURITIES: readonly string[] = [
   '1967 Peru 100 Soles - PCGS MS65'
 ];
 
-/**
- * Runs one real security name through the FULL import, exactly as the import
- * button does, and returns the record it produced.
- */
+/** Runs one security name through the full import and returns the record. */
 function importedCoin(securityName: string) {
   const service = new QuickenImportService();
   const qif = `!Type:Invst\nD01/15/2024\nNBuy\nY${securityName}\nT100.00\n^\n`;
@@ -579,8 +482,7 @@ describe('GoldCoins.QIF — a whole account imported, end to end', () => {
   });
 
   it('gives every single one of them a Metal Content of Gold', () => {
-    // The owner's expectation, stated as one assertion. If this ever fails,
-    // the failure message names the coins that came out blank.
+    // All 44 must be Gold; a failure names the coins that came out blank.
     const blank = GOLD_COINS_QIF_SECURITIES.filter(
       (name) => importedCoin(name).metalContent !== 'Gold'
     );
@@ -589,20 +491,13 @@ describe('GoldCoins.QIF — a whole account imported, end to end', () => {
   });
 });
 
-/* ---------------------------------------------------------------------------
- * HOW MUCH OF THAT THE COARSE INFERENCE MANAGES ON ITS OWN
- * ---------------------------------------------------------------------------
- * The 44 above all pass through `lookupCoinAlloy` successfully, so the
- * fallback is never actually reached for this particular file. That is worth
- * writing down rather than leaving implied — and it is worth measuring what
- * the coarse rules WOULD have achieved unaided, because that is the capability
- * the next import of un-tabulated coins will depend on.
- *
- * The measurement below deliberately withholds the metal hint, so it tests the
- * coarse rules and nothing else.
- * ------------------------------------------------------------------------ */
+/*
+ * All 44 resolve through `lookupCoinAlloy`, so the fallback isn't reached for
+ * this file. This block measures what the coarse rules achieve alone (metal
+ * hint withheld), for future uncatalogued imports.
+ */
 describe('GoldCoins.QIF — what the coarse rules achieve unaided', () => {
-  /** The parsed coin, with the metal hint deliberately NOT supplied. */
+  /** The parsed coin, without the metal hint. */
   function coarseMetalFor(securityName: string): string | null {
     const coin = importedCoin(securityName);
     return inferMetalContent({
@@ -623,17 +518,12 @@ describe('GoldCoins.QIF — what the coarse rules achieve unaided', () => {
     const declined = GOLD_COINS_QIF_SECURITIES.filter((name) => coarseMetalFor(name) === null);
 
     expect(declined).toEqual([
-      // A "$1" is a silver dollar as often as a gold one, and "Liberty Head"
-      // names the 5¢ nickel and the $20 as well as the Type 1 gold dollar.
-      // Only the word "Gold" in the security name settles it — which is what
-      // `metalHint` carries, and which is why the real import gets it right.
+      // "$1" and "Liberty Head" are both ambiguous; only the word "Gold" (carried
+      // by `metalHint` in the real import) settles it.
       '1850-S $1 Gold - ANACS XF40',
-      // 1856 is a Gold Dollar transition year so the Coin Type is blank by
-      // design, leaving a bare "$1". The "G$" shorthand settles it.
+      // A Gold Dollar transition year leaves Coin Type blank and a bare "$1"; "G$" settles it.
       '1856 G$1 - NGC/CAC AU53',
-      // A Peruvian 100 Soles is gold, but nothing in the record says so: no
-      // metal word, no US denomination, no series name. The reference table
-      // has a row for it; the coarse rules correctly refuse to guess.
+      // Gold, but nothing in the record says so; the reference table has the row.
       '1967 Peru 100 Soles - PCGS MS65'
     ]);
   });
@@ -651,8 +541,7 @@ describe('GoldCoins.QIF — what the coarse rules achieve unaided', () => {
   });
 
   it('reads the 1873 gold dollar from its Coin Type when the face value cannot', () => {
-    // "1873 Open 3 G$1" parses to denomination "$1" — which says nothing — but
-    // to Coin Type "Indian Princess", which is a gold-only design.
+    // Denomination "$1" says nothing, but Coin Type "Indian Princess" is gold-only.
     expect(coarseMetalFor('1873 Open 3 G$1 - ANACS AU50')).toBe('Gold');
   });
 });

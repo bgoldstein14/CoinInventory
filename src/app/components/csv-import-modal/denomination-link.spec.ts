@@ -1,15 +1,7 @@
 /*
- * The import SCREEN, linking denominations.
- *
- * `csv/denomination-link.spec.ts` proves the mapper links a row. This file
- * proves the screen actually hands it the lookup table -- the half that can
- * silently fall off, because a mapper called with no lookup links nothing
- * and reports no error. It also covers the two things only the component can
- * answer:
- *
- *   - `.xlsx` converges on the same mapper, so a workbook links too;
- *   - the preview's count is INFORMATION. It never blocks the button and it
- *     never turns an unresolved row into a skipped one.
+ * The import screen passes the denominations lookup to the mapper (CSV and
+ * .xlsx), and the linked count is informational: it never blocks the button
+ * or turns a row into a skip.
  */
 
 import 'fake-indexeddb/auto';
@@ -35,8 +27,6 @@ function createModal() {
     ]
   });
   const modal = runInInjectionContext(injector, () => new CsvImportModal());
-  // The lookup as the server would have delivered it by the time anybody
-  // opens this dialog.
   inv.denominations.set([...SEED_DENOMINATIONS]);
   return { modal: modal as unknown as Record<string, any>, inv };
 }
@@ -64,9 +54,7 @@ describe('the CSV import screen links what it imports', () => {
   });
 
   it('passes the row\'s own Country column to the resolver', async () => {
-    // 'Penny' is Australian, New Zealand and Irish. Only the file's Country
-    // column can say which, so this fails the moment anything here passes a
-    // constant instead.
+    // 'Penny' exists in several countries; only the file's Country column decides.
     const { modal, inv } = createModal();
     await modal['handleFileSelection'](csvEvent(
       'Coin Type,Denomination,Year,Country\nPenny,Penny,1920,Australia\n'
@@ -83,7 +71,6 @@ describe('the CSV import screen links what it imports', () => {
       'Coin Type,Denomination,Year\nPillar Dollar,8 Reales,1753\n'
     ));
 
-    // Not a skip, not a warning: it is in the count on the button.
     expect(modal['plannedImportCount']()).toBe(1);
     expect(modal['plannedSkipCount']()).toBe(0);
 
@@ -113,9 +100,7 @@ describe('the CSV import screen links what it imports', () => {
   });
 
   it('links nothing, and complains about nothing, before the lookup arrives', async () => {
-    // A denominations list that has not loaded is the state every test
-    // helper starts in, and a real possibility on a slow connection. The
-    // import must still work, just without links.
+    // The import must still work before the denominations list has loaded.
     const { modal, inv } = createModal();
     inv.denominations.set([]);
     await modal['handleFileSelection'](csvEvent(
@@ -147,13 +132,11 @@ describe('the preview\'s link count', () => {
 
     expect(modal['plannedImportCount']()).toBe(3);
     expect(modal['plannedLinkedCount']()).toBe(2);
-    // And it is NOT a count of problems: nothing is skipped.
     expect(modal['plannedSkipCount']()).toBe(0);
   });
 
   it('reads zero when a column is mapped onto the wrong field', async () => {
-    // The reason the count is worth showing at all. Every row imports; the
-    // only visible symptom of the mis-mapping at preview time is this zero.
+    // A mis-mapped column shows up as zero links while every row still imports.
     const { modal } = createModal();
     await modal['handleFileSelection'](csvEvent(
       'Coin Type,Denomination,Year\nMorgan Dollar,MS63,1881\n'

@@ -1,13 +1,4 @@
-/**
- * print-window.spec.ts
- *
- * This is the one piece of the report pipeline that touches a browser, so it
- * is written to take its `window.open` as an argument — which makes the two
- * things that actually go wrong testable under Node with no DOM:
- *
- *   - the pop-up is blocked and `open()` answers null, and
- *   - the document is written but nothing ever calls print().
- */
+/** Tests for openPrintWindow, using a fake window opener. */
 import { describe, expect, it, vi } from 'vitest';
 import { PrintTarget, openPrintWindow } from './print-window';
 
@@ -37,8 +28,7 @@ describe('openPrintWindow', () => {
   });
 
   it('closes the document BEFORE printing', () => {
-    // Printing a stream that is still open gives a blank or half-rendered
-    // page in Chromium, which is the print path this app's shell uses too.
+    // Chromium prints a still-open document as a blank page.
     const order: string[] = [];
     const target = fakeWindow();
     (target.document.close as unknown as { mockImplementation: (fn: () => void) => void })
@@ -51,9 +41,7 @@ describe('openPrintWindow', () => {
   });
 
   it('reports a blocked pop-up instead of throwing', () => {
-    // window.open() returns null when the browser blocks it. Dereferencing
-    // that is a TypeError inside a click handler, which surfaces to the user
-    // as a button that does nothing at all.
+    // window.open() returns null when the browser blocks it.
     expect(openPrintWindow('<html></html>', () => null)).toBe('blocked');
   });
 

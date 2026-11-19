@@ -1,16 +1,4 @@
-<!--
-  The Statistics dialog.
-
-  EVERY FIGURE IN HERE IS ALREADY A STRING by the time it arrives. No pipe, no
-  `| currency`, no `toFixed`, no arithmetic anywhere in this template: the
-  suite runs under Node with no jsdom, so anything decided here is decided
-  where no test can see it. The component maps the pure statistics modules
-  onto `StatTile`s and pre-laid-out SVG geometry; this file only places them.
-
-  That matters most for the dash. `formatStatMoney(null)` is "—", and a
-  currency pipe would have turned the same null into "$0.00" — the exact lie
-  the whole screen exists to avoid.
--->
+<!-- Statistics dialog. Every figure arrives pre-formatted from the component; no pipes or arithmetic here. -->
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide stats" (click)="$event.stopPropagation()" role="dialog" aria-label="Collection statistics">
     <div class="modal-header">
@@ -19,18 +7,7 @@
     </div>
 
     <div class="modal-body">
-      <!--
-        NOTHING BELOW THIS POINT MAY BE SHOWN BEFORE THE COINS ARRIVE.
-
-        Every figure on this screen is computed over `inv.inventory()`,
-        which is an empty array until hydration finishes. Rendered then,
-        the screen states with complete confidence that the collection is
-        worth $0.00 and holds no gold — something the app does not know.
-        `notReadyNotice()` is non-null exactly while that is the case.
-
-        The modal-actions row stays OUTSIDE this guard: the close button
-        has to work whatever the connection is doing.
-      -->
+      <!-- Nothing is shown until the collection has loaded. The Done button stays outside this guard. -->
       @if (notReadyNotice(); as notice) {
         <p class="empty-state">{{ notice }}</p>
       } @else {
@@ -43,9 +20,7 @@
           }
         </section>
 
-        <!-- Stat tiles, not a bar chart: these are unrelated headline numbers
-             in different units, and charting them would compare dollars with
-             coins. -->
+        <!-- Headline figures -->
         <section class="stats-section">
           <div class="stat-tiles">
             @for (tile of headlineTiles(); track tile.label) {
@@ -67,8 +42,7 @@
           </div>
         </section>
 
-        <!-- Tiles rather than bars: a bar chart of gold against silver grams
-             is one whose largest bar is always the cheapest metal. -->
+        <!-- Precious metal held -->
         <section class="stats-section">
           <h3 class="stats-heading">Precious metal held</h3>
           <p class="hint-text">
@@ -100,18 +74,7 @@
           }
         </section>
 
-        <!-- COMPOSITION — ranked horizontal bars, one hue.
-
-             RANKED BARS, NOT A PIE OR A DONUT. Bars sharing one baseline let
-             the reader compare and rank the parts exactly; a ring of segments
-             does not, and falls apart past about six parts. The tail past ten
-             rows folds into a single "Other" bar in the de-emphasis grey, so
-             it never reads as a category of its own.
-
-             ONE HUE FOR EVERY BAR. These categories (denominations, countries,
-             grades) have no natural order, so shading each bar
-             darker-where-bigger would double-encode length as colour and make
-             a nominal scale look ranked. -->
+        <!-- Composition: ranked horizontal bars; the tail folds into "Other". -->
         <section class="stats-section">
           <h3 class="stats-heading">Composition</h3>
 
@@ -156,8 +119,6 @@
                 role="img"
                 [attr.aria-label]="'Coins by ' + dimensionLabel()"
               >
-                <!-- The baseline every bar grows from. Never dashed: a dashed
-                     line reads as a threshold rather than as chrome. -->
                 <line
                   class="chart-axis"
                   [attr.x1]="barChart().plotLeft"
@@ -167,9 +128,7 @@
                 />
 
                 @for (bar of barChart().bars; track bar.label; let i = $index) {
-                  <!-- Hit target first so the painted marks sit above it. It
-                       spans the whole row and is at least 24px tall, because a
-                       16px bar is a pinpoint nobody lands on reliably. -->
+                  <!-- Full-row hit target (at least 24px tall), drawn first so the marks sit above it. -->
                   <rect
                     class="chart-hit"
                     [attr.x]="bar.hitX"
@@ -193,9 +152,6 @@
                     dominant-baseline="middle"
                   >{{ barLabels()[i].text }}</text>
 
-                  <!-- A zero draws no path at all: `barPath` returns an empty
-                       string, and a <path> with no `d` paints nothing. A
-                       hairline here would read as a small value. -->
                   @if (bar.path) {
                     <path
                       class="chart-bar"
@@ -205,10 +161,7 @@
                     />
                   }
 
-                  <!-- Placed by the geometry: outside the tip if the reserved
-                       gutter holds it, inside the bar end if it fits there,
-                       and NOT DRAWN if neither — the readout below carries
-                       it. Never clipped. -->
+                  <!-- Hidden when it fits neither outside nor inside the bar; the readout below still shows it. -->
                   @if (bar.valueVisible) {
                     <text
                       [class]="bar.valueInside ? 'chart-value chart-value--inside' : 'chart-value'"
@@ -222,8 +175,6 @@
               </svg>
             </div>
 
-            <!-- The hover/focus readout. A live region rather than a floating
-                 box, so keyboard focus announces exactly what hover shows. -->
             <p class="chart-readout" aria-live="polite">{{ barReadout() ?? ' ' }}</p>
           } @else {
             <p class="empty-state">No coin has a {{ dimensionLabel().toLowerCase() }} recorded.</p>
@@ -237,9 +188,7 @@
           }
         </section>
 
-        <!-- One series, so no legend box — the heading already names what is
-             plotted. One direct label, at the end of the line; the axis and
-             the crosshair carry the rest. -->
+        <!-- Cumulative spend -->
         <section class="stats-section">
           <h3 class="stats-heading">Cumulative spend</h3>
 
@@ -310,9 +259,7 @@
 
             <p class="chart-readout" aria-live="polite">{{ activeSpendReadout() ?? ' ' }}</p>
 
-            <!-- The table twin: a tooltip must never be the only way to read
-                 a value, so every figure on the curve stays reachable with no
-                 pointer at all. -->
+            <!-- Table of the same figures, for reading without a pointer. -->
             <button type="button" class="secondary small-button" (click)="toggleSpendTable()">
               {{ showSpendTable() ? 'Hide figures' : 'Show figures' }}
             </button>
@@ -349,7 +296,6 @@
             <p class="stats-gap">{{ note }}</p>
           }
 
-          <!-- Unconditional. See VALUE_HISTORY_NOTE in the component. -->
           <p class="hint-text">{{ valueHistoryNote() }}</p>
         </section>
 

@@ -32,9 +32,7 @@ describe('denominationCountriesOf', () => {
   });
 
   it('never invents a heading with nothing under it', () => {
-    // The regression. With only 'United States' in the data, the old
-    // hard-coded list produced empty 'US' and 'GB' groups; the derived list
-    // produces one group that actually has entries.
+    // Only groups that have entries are produced.
     const countries = denominationCountriesOf([
       denomination({ country: 'United States' })
     ]);
@@ -44,9 +42,7 @@ describe('denominationCountriesOf', () => {
   });
 
   it('includes a country the hard-coded pair left out', () => {
-    // The Categories & Sets dialog can create a 'CA' denomination. Under the
-    // old template it existed but was unreachable, because there was no CA
-    // group to render it in.
+    // A 'CA' denomination created in Categories & Sets gets its own group.
     const countries = denominationCountriesOf([
       denomination({ denominationId: 1, country: 'US' }),
       denomination({ denominationId: 2, country: 'CA' })
@@ -76,8 +72,7 @@ describe('denominationCountriesOf', () => {
   });
 
   it('ignores inactive denominations', () => {
-    // The template does not render them, so counting them here would produce
-    // the empty-heading bug for a country whose entries are all retired.
+    // Countries whose entries are all inactive get no heading.
     const countries = denominationCountriesOf([
       denomination({ denominationId: 1, country: 'US', isActive: true }),
       denomination({ denominationId: 2, country: 'GB', isActive: false })

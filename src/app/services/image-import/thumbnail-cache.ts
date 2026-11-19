@@ -2,23 +2,13 @@ import { signal } from '@angular/core';
 
 /**
  * ThumbnailCache — holds the selected File handles and creates preview URLs
- * for them ON DEMAND.
+ * on demand.
  *
- * WHY THIS EXISTS (it is a performance rule, not a convenience)
- *
- * `URL.createObjectURL(file)` is cheap by itself, but the moment that URL goes
- * into an `<img src>` the browser reads and decodes the whole file. Selecting
- * the share's root gives us ~1,700 displayable photos averaging 2.5 MB, so
- * eagerly previewing all of them means gigabytes of decoded pixel data and a
- * dead tab.
- *
- * So the rule is: a preview URL exists only for a coin group the user has
- * actually opened. The import flow never needs a preview to do its job -
- * matching is done on filenames - which makes previews purely opt-in.
- *
- * The cache also owns REVOKING the URLs. An object URL keeps its file alive
- * for the lifetime of the document, so forgetting to revoke 1,700 of them is a
- * multi-gigabyte leak that survives closing the modal.
+ * Putting an object URL in an `<img src>` makes the browser decode the whole
+ * file, so previewing every photo in a large folder would exhaust memory.
+ * Preview URLs are only created for coin groups the user opens (matching uses
+ * filenames, not pixels). The cache also revokes them, since an object URL
+ * keeps its file alive for the life of the document.
  */
 export class ThumbnailCache {
   /** File handles from the picker, keyed by filename. */
@@ -40,7 +30,7 @@ export class ThumbnailCache {
    * Already-created URLs are left as they are, so re-opening a group is free.
    */
   create(fileNames: readonly string[]): void {
-    // Guarded because there is no createObjectURL in the Node test environment.
+    // No createObjectURL in the Node test environment.
     if (typeof URL === 'undefined' || !URL.createObjectURL) return;
 
     const next = { ...this.created() };
@@ -52,8 +42,7 @@ export class ThumbnailCache {
       next[fileName] = URL.createObjectURL(file);
       added = true;
     }
-    // Only touch the signal when something actually changed, so expanding an
-    // already-loaded group does not trigger a pointless re-render.
+    // Only update the signal when something changed, to avoid a re-render.
     if (added) this.created.set(next);
   }
 

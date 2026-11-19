@@ -1,12 +1,6 @@
  /*
- * collection-totals.spec.ts
- *
- * Every figure on a totals panel is a SUM, and the natural way to write the
- * sum of nothing is `0` — which reports a collection of 125 coins, 31 of them
- * never appraised, as though all 125 had been valued and 31 were worth
- * nothing. These tests pin the alternative: each measure is a
- * {total, knownCount, unknownCount} triple and `total` is `null`, not `0`,
- * when nothing is known. See collection-totals.ts for the reasoning.
+  * Each measure is a {total, knownCount, unknownCount} triple, with `total`
+  * null rather than 0 when nothing is known (see collection-totals.ts).
   */
 
 import { describe, expect, it } from 'vitest';
@@ -54,15 +48,8 @@ describe('computeCollectionTotals — one coin', () => {
 
 describe('computeCollectionTotals — a zero price is an ABSENT price', () => {
    /*
-   * This is the judgement call the whole file turns on, and it follows the
-   * precedent already set in inventory-metrics.ts: "A ZERO IS NOT A PRICE —
-   * IT IS THE ABSENCE OF ONE". That comment is about spot prices, and the
-   * same reasoning applies to a coin: nobody holds a coin they believe to be
-   * worth nothing, so a 0 in CurrentValue means "never appraised".
-   *
-   * The consequence is NOT that the coin is hidden. It is counted in
-   * `coinCount`, and it is counted in `unknownCount`, so the view can say
-   * "across 2 of 3 coins" out loud.
+    * A 0 current value means "never appraised": the coin is excluded from the
+    * total but still counted in `coinCount` and `unknownCount`.
     */
 
   it('excludes an unpriced coin from the value total and counts it as unknown', () => {
@@ -85,8 +72,7 @@ describe('computeCollectionTotals — a zero price is an ABSENT price', () => {
   });
 
   it('refuses a gain figure for a coin that knows only half the sum', () => {
-    // Cost recorded, never appraised. current - cost would read as -$100,
-    // which is a fabricated loss.
+    // Cost recorded, never appraised: must not read as a -$100 loss.
     const totals = computeCollectionTotals(
       [statsCoin({ purchasePrice: 100, currentValue: 0 })],
       PRICES
@@ -98,8 +84,7 @@ describe('computeCollectionTotals — a zero price is an ABSENT price', () => {
   });
 
   it('refuses a gain figure for an appraised coin whose cost was never recorded', () => {
-    // The mirror image: 0 cost would read as a 100% profit on a coin that
-    // might have cost anything at all.
+    // The reverse: a 0 cost must not read as 100% profit.
     const totals = computeCollectionTotals(
       [statsCoin({ purchasePrice: 0, currentValue: 500 })],
       PRICES
@@ -126,9 +111,7 @@ describe('computeCollectionTotals — a zero price is an ABSENT price', () => {
   });
 
   it('bases the gain PERCENTAGE on the same coins as the gain, not on every coin', () => {
-    // Cost across the comparable pair is 500, gain is -50, so -10%.
-    // Dividing by the full 550 of recorded cost would give -9.09% — a figure
-    // derived from two different populations.
+    // Cost of the comparable pair is 500 and gain -50, so -10% (not -50/550).
     const totals = computeCollectionTotals(
       [
         statsCoin({ purchasePrice: 100, currentValue: 150 }),
@@ -143,8 +126,7 @@ describe('computeCollectionTotals — a zero price is an ABSENT price', () => {
   });
 
   it('gives no percentage when the comparable coins cost nothing to buy', () => {
-    // All gifts, all appraised: a real gain, but no denominator to express it
-    // as a percentage of. Infinity% is not an answer.
+    // All gifts, all appraised: a gain but no cost to express it as a percentage of.
     const totals = computeCollectionTotals(
       [statsCoin({ purchasePrice: 0, currentValue: 80 })],
       PRICES
@@ -191,8 +173,7 @@ describe('computeCollectionTotals — melt value', () => {
   });
 
   it('refuses the whole melt total when no spot price has been loaded', () => {
-    // Not $0.00. The coins are fine; the price table is empty, and that is a
-    // two-click fix the user must be told about rather than shown as zero.
+    // No spot prices: unknown, not $0.00.
     const totals = computeCollectionTotals([goldEagle], NO_PRICES);
 
     expect(totals.melt.total).toBeNull();
@@ -201,9 +182,7 @@ describe('computeCollectionTotals — melt value', () => {
   });
 
   it('delegates to computeMeltValue rather than re-deriving purity', () => {
-    // A 90% silver Morgan: pmWeightGrams is ALREADY the pure silver weight.
-    // Applying pmPercent again here would understate it by 10% — the exact
-    // bug written up in inventory-metrics.ts and inventory-columns.ts.
+    // pmWeightGrams is already the pure silver weight; don't apply pmPercent again.
     const morgan = statsCoin({
       metalContent: 'Silver',
       pmWeightGrams: 24.057,
@@ -268,9 +247,7 @@ describe('computeCollectionTotals — extreme values', () => {
   });
 
   it('ignores a negative price as nonsense rather than subtracting it', () => {
-    // Nothing in the app should produce one, but a hand-edited JSON import
-    // can. A negative "cost" that quietly reduces the total is worse than a
-    // visible gap.
+    // Only a hand-edited import can produce a negative; it must not reduce the total.
     const totals = computeCollectionTotals(
       [statsCoin({ purchasePrice: -100, currentValue: 50 })],
       PRICES

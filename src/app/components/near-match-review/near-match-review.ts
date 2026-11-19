@@ -3,39 +3,10 @@ import { Component, input, output } from '@angular/core';
 import { BatchImageRow, NearMatchGroup } from '../../types/coin.model';
 
 /**
- * NearMatchReview — TIER 2 of the batch image import: one coin, and the photos
- * that are one yes/no away from being attached to it.
- *
- * WHAT A NEAR MATCH IS
- * The filename and the coin agree on all four identifying attributes — year,
- * coin type, denomination and grade — so they are the same coin; but something
- * ELSE is off (a mint mark that disagrees, a variety, a cert number, or simply
- * two coins fitting equally well), so the matcher's safety gates would not
- * attach it unasked. The rule itself lives in
- * `services/image-matching/near-match.ts`; this file only draws it.
- *
- * THE ONE DESIGN CONSTRAINT: one action, not a form. A row offers exactly
- * three things and nothing else:
- *
- *   Attach              accept the suggested coin
- *   a dropdown          pick one of the OTHER coins that also passed the
- *                       near-match test (never the whole inventory — a coin
- *                       the test rejected must not be one click away)
- *   Skip                leave this photo alone
- *
- * There is deliberately no free-text coin search here. The point of the three
- * tiers is that a file nobody can suggest a coin for never reaches this list
- * in the first place, so hand-solving does not belong on this screen.
- *
- * WHY THE UNIT IS A COIN AND NOT A FILE
- * A coin routinely has 8-10 photos: both faces, the slab label, numbered
- * retakes and derivative renderings. When they near-match, they all
- * near-match the same coin, and asking the same question five times is the
- * manual work this screen exists to remove — hence the group header's
- * "Attach all", which settles the whole coin at once.
- *
- * It is a dumb component: every piece of state arrives as an input and every
- * decision leaves as an output. The session owns the rows.
+ * Tier 2 of the batch image import: one coin and the photos that nearly match it.
+ * Each row offers Attach, a dropdown of other coins that also passed the near-match
+ * test (see services/image-matching/near-match.ts), or Skip. Presentational only:
+ * state arrives as inputs and decisions leave as outputs.
  */
 @Component({
   selector: 'app-near-match-review',

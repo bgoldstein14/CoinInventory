@@ -1,13 +1,7 @@
-<!--
-  TIER 2: one coin and the photos that are one yes/no away from it.
-
-  Nothing in here is attached until a button is pressed. A near match arrives
-  with no coin on it (`matchedRecordId` is null by construction) and the only
-  things that can give it one are the Attach buttons and the dropdown below.
--->
+<!-- Tier 2 near-match group: nothing is attached until a button is pressed. -->
 <div class="near-group" [class.near-group--done]="group().outstandingCount === 0">
 
-  <!-- The question, asked once for the whole coin. -->
+  <!-- Group header -->
   <div class="near-group-head">
     <div class="near-group-title">
       <span class="near-group-coin">{{ group().coinLabel }}</span>
@@ -26,7 +20,6 @@
         {{ photosShown() ? 'Hide photos' : 'Show photos' }}
       </button>
       @if (group().outstandingCount > 0) {
-        <!-- The control that turns a five-shot coin into one click. -->
         <button type="button" class="small-button" (click)="allAccepted.emit(group().coinId)">
           Attach all {{ group().outstandingCount | number }}
         </button>
@@ -37,9 +30,7 @@
     </div>
   </div>
 
-  <!-- Why this is a near match and not an automatic one. Taken from the first
-       row, because every row in the group points at the same coin and carries
-       the same reasoning. -->
+  <!-- Why this is a near match; every row in the group shares the same reasoning. -->
   @if (group().rows[0].result.nearMatch; as detail) {
     <p class="near-group-why">
       <span class="near-grade-note">{{ detail.gradeNote }}</span>
@@ -54,7 +45,7 @@
     </p>
   }
 
-  <!-- The photos. -->
+  <!-- Photos -->
   <ul class="near-rows">
     @for (row of group().rows; track row.fileName) {
       <li
@@ -69,8 +60,7 @@
         <div class="near-row-info">
           <span class="near-filename" [title]="row.fileName">{{ row.fileName }}</span>
 
-          <!-- "Here is what I read from the name" — a bad parse is then
-               obvious at a glance, which is the cheapest safety net we have. -->
+          <!-- Parsed filename chips, so a bad parse is obvious at a glance. -->
           <span class="parsed-chips">
             @for (chip of chipsFor(row.fileName); track chip) {
               <span class="parsed-chip">{{ chip }}</span>
@@ -88,10 +78,7 @@
           } @else {
             <button type="button" class="small-button" (click)="accepted.emit(row.fileName)">Attach</button>
 
-            <!-- The other ambiguous case: several coins fit this one image.
-                 Only coins that independently passed the near-match test are
-                 listed — offering one the test rejected would just be a
-                 one-click way to mis-file a photo. -->
+            <!-- Only coins that also passed the near-match test are offered. -->
             @if (row.result.nearMatch && row.result.nearMatch.candidates.length > 1) {
               <select
                 class="near-candidate-select"
@@ -107,10 +94,6 @@
               </select>
             }
 
-            <!-- Skip belongs here because this row HAS an apparent match.
-                 Tier 3 rows, which do not, are skipped already and carry no
-                 Skip; their one control is the opt-in "Attach anyway", which
-                 reveals nothing until it is clicked. -->
             <button type="button" class="secondary small-button" (click)="skipped.emit(row.fileName)">Skip</button>
           }
         </div>

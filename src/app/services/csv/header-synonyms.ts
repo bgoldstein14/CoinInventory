@@ -1,131 +1,56 @@
  /*
- * header-synonyms.ts — recognising a stranger's column headings.
- * ---- WHY THIS FILE EXISTS ----
- * Comparing a header to each field's key or label with `===` after
- * lower-casing is perfect and provably complete for the app's own
- * Export -> CSV: those columns are DERIVED from `CSV_MAPPABLE_FIELDS`, so
- * every one matches by construction (see export-import-round-trip.spec.ts).
- *
- * For anyone else's file it does almost nothing. A collector's workbook says
- * `Yr`, `Denom`, `MM`, `Cond`, `TPG`, `Cert #`, `Cost`, `FMV` -- not one of
- * which is a key or a label here -- so every column lands on the mapping
- * screen blank and the user faces twenty or thirty dropdowns before a single
- * coin can be imported. That applies equally to CSV and to the `.xlsx` path,
- * which is why the synonym table lives here rather than inside either
- * importer.
- *
- * ---- THE RULE THAT SHAPES EVERYTHING BELOW: A WRONG GUESS IS WORSE THAN A BLANK ----
- * A blank dropdown is a question the user answers in two seconds. A
- * filled-in dropdown is an answer they will not re-read. So a confident
- * wrong mapping does not cost two seconds, it costs the whole import --
- * silently, and usually only noticed months later when the numbers are wrong
- * and the original spreadsheet has moved on.
- *
- * Three mechanisms enforce that asymmetry:
- *
- *   1. NO SYNONYM FOR AN AMBIGUOUS WORD. `Price`, `Amount` and `Total` are
- *      deliberately absent. Each could be the purchase price, the current
- *      value or the sale price, and there is no way to tell from the heading.
- *
- *   2. EXACT BEATS SYNONYM. If one header matches a field's real key or label
- *      and another only matches a synonym of the same field, the exact one
- *      wins and the loose one is left blank. A sheet with both `Year` and
- *      `Date` columns keeps `Year` and asks about `Date`.
- *
- *   3. A TIE LEAVES BOTH BLANK. If two headers match the same field with the
- *      same confidence -- `Cost` and `Paid`, say -- neither is chosen. There
- *      is no principled way to pick, and picking wrong puts one column's
- *      numbers into the other's field.
- *
- * ---- WHAT NORMALISATION DOES *NOT* DO, AND WHY IT MATTERS HERE ----
- * `normalizeHeader` turns every run of non-alphanumeric characters into a
- * single space. It does NOT remove parenthesised text. That is deliberate and
- * load-bearing: `Weight (g)` and `Weight (oz)` differ only in the
- * parenthetical, and the gross-weight column is GRAMS since
- * server/migrations/008-weight-to-grams.sql. Collapsing the two would import
- * a Morgan dollar's 0.7734 troy ounces as 0.7734 grams -- a silent 31x
- * understatement that looks entirely plausible in a grid. The long comment in
- * csv.service.ts explains why leaving that column unmapped is the only honest
- * option; this file must not undo it.
- *
- * `Dealer` USED TO BE refused for a related reason -- the coin-level dealer
- * field was removed, so there was no field for that column to land on. There
- * is one again: `purchasedFrom`, the buy side's counterparty, and `dealer` is
- * now one of its synonyms. The refusal was never about the word; it was about
- * there being nowhere for it to go, and that has changed. (`Weight (oz)` is
- * not the same case and must stay refused: the field exists, the UNIT is
- * wrong.)
- *
- * ---- ONE SYNONYM IS DECIDED BY THE COLUMN'S VALUES, NOT BY ITS HEADING ----
- * `Date` is the only heading in the table that is ambiguous about WHICH KIND
- * of date it means. In numismatic usage a coin's date is its year, so `Date`
- * over `1881`, `1909-S`, `1873` is a Year column and mapping it is right.
- * The identical heading over `3/15/2024` is a calendar date, and only the
- * person who built the sheet knows whether it is when they bought the coin,
- * sold it, or catalogued it. Mapped onto Year it writes "2024" onto a Morgan
- * dollar under a dropdown that already says "Year", which nobody re-reads.
- *
- * So for that one heading the column's VALUES are consulted; the rules live
- * in csv/date-column-shape.ts, which also explains the sample size and how a
- * cell's Excel type is used where it is available. A column that turns out to
- * hold full dates makes NO claim at all -- it is not re-aimed at
- * `purchaseDate`, because that would be the same confident guess one field to
- * the left. Rule 1 above, applied to the one case where the heading alone
- * genuinely cannot tell.
- *
- * Every other date-ish synonym -- `date minted`, `date on coin`, `date
- * purchased`, `date sold` -- SAYS which date it is, so none of them is value-
- * checked. The ambiguity is in the word `date` standing on its own.
+  * Recognises other people's column headings (`Yr`, `Denom`, `MM`, `Cond`,
+  * `TPG`, `Cert #`, `Cost`, `FMV`) for both the CSV and `.xlsx` imports. The
+  * app's own export always matches exactly by key or label.
+  *
+  * A wrong guess is worse than a blank: a filled-in dropdown isn't re-read, so
+  * a confident wrong mapping silently corrupts the import. Hence:
+  *   1. No synonym for ambiguous words (`Price`, `Amount`, `Total` could be any
+  *      of three money fields).
+  *   2. Exact beats synonym: with both `Year` and `Date`, `Year` wins and
+  *      `Date` is left blank.
+  *   3. A tie leaves both blank (e.g. `Cost` and `Paid`).
+  *
+  * `normalizeHeader` keeps parenthesised text, so `Weight (g)` and
+  * `Weight (oz)` stay distinct. The weight column is grams and `Weight (oz)`
+  * must stay unmapped (see mappable-fields.ts).
+  *
+  * `Date` alone is the one heading checked against the column's values
+  * (rules in csv/date-column-shape.ts): coin years keep the `year` mapping;
+  * calendar dates withdraw the claim entirely rather than guessing
+  * `purchaseDate`. Headings that say which date (`Date Purchased`,
+  * `Date Sold`) are not value-checked.
   */
 
 import { CSV_MAPPABLE_FIELDS } from './mappable-fields';
 import { ColumnValueEvidence, classifyColumnValues } from './date-column-shape';
 
 /**
- * Reduce a header to a comparable form: lower case, every run of
- * non-alphanumeric characters collapsed to one space, trimmed.
- *
- * `Cert #` -> `cert`, `Est. Value` -> `est value`, `PURCHASE_PRICE` ->
- * `purchase price`, `Purchase $` -> `purchase`.
- *
- * Digits are KEPT (so `Weight (g)` -> `weight g` survives, and so would a
- * hypothetical `Grade 1`), and a header that normalises to nothing at all --
- * `---`, a run of spaces, a merged header cell's empty neighbour -- comes
- * back as the empty string, which never matches anything.
+ * Reduces a header to a comparable form: lower case, runs of non-alphanumerics
+ * collapsed to one space, trimmed.
+ *   `Cert #` -> `cert`, `Est. Value` -> `est value`, `PURCHASE_PRICE` -> `purchase price`
+ * Digits are kept (`Weight (g)` -> `weight g`); a header of only punctuation
+ * becomes '' and never matches.
  */
 export function normalizeHeader(raw: string): string {
   if (raw === null || raw === undefined) return '';
   return String(raw)
     .toLowerCase()
-    // Includes the non-breaking space that Windows-1252 exports are full of.
+    // Includes the non-breaking space common in Windows-1252 exports.
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
 }
 
 /**
- * Alternative spellings, by target field. Every entry is stored ALREADY
- * NORMALISED -- a spec asserts it -- so a lookup is a plain Map hit rather
- * than a scan.
+ * Alternative spellings by target field, stored already normalised (a spec
+ * checks this). A field's own key and label are not repeated.
  *
- * Omitted on purpose, each for a reason worth keeping:
- *
- *   price / amount / total   ambiguous between three money fields (see above)
- *   weight (oz) / ozt        wrong unit; see the header comment
- *   source                   provenance is ours, not the user's, to state --
- *                            it is importable only so an export round-trips
- *   auction house            ambiguous between the two counterparty fields:
- *                            the house you bought THROUGH and the house you
- *                            consigned TO are both "the auction house"
- *   consignor                names who put the coin INTO an auction, which
- *                            on a purchase row is somebody the buyer never
- *                            dealt with and may never learn
- *
- * `dealer` is NOT on that list any more. It was, while there was no field
- * for it; `purchasedFrom` is that field and `dealer` is its synonym below.
- *
- * A field's own key and label are NOT repeated here; exact matching already
- * covers them, and duplicating them would make this table look like the
- * source of truth when `CSV_MAPPABLE_FIELDS` is.
+ * Deliberately omitted:
+ *   price / amount / total   ambiguous between three money fields
+ *   weight (oz) / ozt        wrong unit
+ *   source                   importable only so an export round-trips
+ *   auction house            could be either counterparty
+ *   consignor                put the coin into an auction; not who the buyer dealt with
  */
 export const HEADER_SYNONYMS: Record<string, string[]> = {
   coinType: [
@@ -133,11 +58,8 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
     'name', 'description', 'design'
   ],
   denomination: ['denom', 'face value', 'face', 'face amount'],
-  // `Date` means the date STRUCK in numismatic usage -- it is what is printed
-  // on the coin -- which is why it belongs to Year and not to Purchase Date.
-  // A sheet that means the acquisition spells it out (`Date Purchased`,
-  // `Date Acquired`), and those are listed under purchaseDate below, so the
-  // two never compete for the same heading.
+  // `Date` means the year struck in numismatic usage; acquisition dates are
+  // spelled out (`Date Purchased`) under purchaseDate, so the two never compete.
   year: ['yr', 'date', 'coin date', 'date minted', 'year minted', 'mint year', 'date on coin'],
   category: ['cat', 'group', 'class', 'classification'],
   country: ['nation', 'issuer', 'origin', 'ctry', 'country of origin'],
@@ -153,37 +75,14 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
   ],
   variety: ['var', 'vam', 'attribution', 'variety attribution', 'die variety'],
    /*
-   * THE CATALOGUE REFERENCE. Every one of these points at the NUMBER field,
-   * and `catalogId` deliberately has no entry of its own.
-   *
-   * A column headed `Catalog` holds "Sear" or "Sear 6819", never the row id
-   * of a table in this application's database. `catalogNumber` is free text,
-   * so landing the whole reference there is harmless and useful: it is then
-   * visible in the grid, findable in the search box, and splittable in the
-   * editor. Aimed at `catalogId` instead it would be a word on its way to an
-   * INT column, normalised to NULL by the server and lost without a sound.
-   *
-   * `cat` is NOT here: it has meant Category since before catalogues were a
-   * field, and re-aiming it would move data between two unrelated columns
-   * for every user who has mapped such a sheet before. (It is also a prefix
-   * of every spelling below, which is exactly the kind of near-miss rule 1
-   * of this file exists to refuse.)
-   *
-   * `number`, `no` and `id` on their own are absent for the same reason as
-   * `price` and `amount`: a sheet's bare `Number` column could as easily be
-   * the certification number or the owner's own stock number, and there is
-   * no way to tell from the heading.
-   *
-   * A BARE `ref` IS ALSO ABSENT, and that is somebody else's decision being
-   * respected rather than a fresh one. This file already refused `Ref` as
-   * unplaceable before catalogues existed (there is a test on it), and the
-   * refusal still reads correctly: `Ref` over a column of slab numbers is a
-   * certification reference. `Reference` spelled out, and every `cat`/
-   * `catalog` form, are specific enough to claim.
+    * Catalogue references. Not included: `cat` (already means Category), bare
+    * `number`/`no`/`id` (could be cert or stock numbers), bare `ref` (often a
+    * cert reference).
     */
-  catalogNumber: [
+  catalogRefs: [
     'catalog', 'catalogue', 'catalog no', 'catalogue no', 'catalog num',
-    'catalogue num', 'catalogue number', 'catalog ref', 'catalogue ref',
+    'catalogue num', 'catalog number', 'catalogue number', 'catalog ref', 'catalogue ref',
+    'catalog references', 'catalogue references', 'catalog refs',
     'catalog reference', 'catalogue reference', 'cat no', 'cat num',
     'cat ref', 'reference', 'attribution no', 'km', 'km number',
     'sear', 'sear number', 'hendin', 'hendin number'
@@ -206,25 +105,9 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
     'appraised value', 'valuation'
   ],
   /*
-   * WHO SOLD IT TO ME. Note what is absent as much as what is here.
-   *
-   * `dealer` leads the list because it is the heading a collector's sheet
-   * actually uses. `seller` is safe DESPITE looking like the sale side: on
-   * an inventory row the owner is the seller only after he has sold it, and
-   * the column he labels "Seller" is the person he bought from. The sale
-   * side says so out loud -- `buyer`, `sold to buyer` -- so the two never
-   * compete for one heading.
-   *
-   * `sold by` is NOT here, and the near-miss is the reason. `sold` and
-   * `sold for` are synonyms of `soldPrice` two entries down, so a sheet
-   * headed `Sold By` would read as the sale side to anyone scanning this
-   * table even though it means the opposite. Rule 1 of this file's header
-   * exists for exactly that kind of heading: left unmatched, it arrives at
-   * the mapping screen blank and the user places it in two seconds.
-   *
-   * `from` on its own is refused: a sheet's `From` is as likely to be the
-   * start of a date or grade range. `auction house` and `consignor` are
-   * refused too; see the omissions list in this file's header.
+   * Who the coin was bought from. `seller` is safe: on an inventory row it is the
+   * person bought from. Not included: `sold by` (reads like the sale side next to
+   * `sold`/`sold for`), bare `from` (ambiguous), `auction house` and `consignor`.
    */
   purchasedFrom: [
     'dealer', 'dealer name', 'bought from', 'buy from', 'seller',
@@ -232,18 +115,10 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
   ],
   notes: ['note', 'comment', 'comments', 'remarks', 'memo'],
   /*
-   * THE DEAL'S NOTE. Every spelling here SAYS it is about the transaction,
-   * and that is the whole rule separating this list from `notes` above:
-   * a bare `Memo`, `Comment` or `Remarks` column is about the coin and
-   * belongs there. Nothing is listed in both, and a spec asserts it --
-   * the two are different database columns (Coins.Notes and
-   * Coins.TransactionNotes) and a synonym in both tables would quietly
-   * route one sheet's column to whichever field won the tie-break.
-   *
-   * `purchase notes` and `sale notes` both point here because there is one
-   * field for both legs. A sheet carrying BOTH columns therefore ties, and
-   * rule 3 leaves both blank for the user to place -- which is right: they
-   * hold different text and only he knows which to keep.
+   * Transaction notes: every spelling says it is about the deal. Bare `Memo`,
+   * `Comment`, `Remarks` belong to `notes`, and nothing is listed in both (a spec
+   * checks this). `purchase notes` and `sale notes` both land here, so a sheet
+   * with both ties and leaves both for the user to place.
    */
   transactionNotes: [
     'transaction notes', 'transaction note', 'transaction memo',
@@ -252,43 +127,30 @@ export const HEADER_SYNONYMS: Record<string, string[]> = {
   ],
   coinSet: ['set name', 'coin set', 'collection', 'album', 'folder'],
   metalContent: ['metal', 'metal type', 'precious metal'],
-  // Grams only. Anything that names ounces is refused -- see the file header.
+  // Grams only; anything naming ounces is refused.
   weight: ['grams', 'weight grams', 'weight in grams', 'wt g', 'gross weight g'],
   soldPrice: [
     'sold', 'sold for', 'sold amount', 'sold value', 'sale price',
     'sale amount', 'realized', 'realized price'
   ],
   soldDate: ['date sold', 'date of sale', 'sale date', 'sold on'],
-  // "Buyer" is who the coin went TO, never who it came from. The purchase
-  // side NOW HAS a column of its own (`purchasedFrom`, above) where it had
-  // none before, so this is the one pair in the table that could be got
-  // backwards: keep the two lists disjoint and keep every spelling here
-  // unmistakably about the SALE.
+  // Buyer = who the coin went to. Keep this list disjoint from purchasedFrom.
   soldTo: ['buyer', 'sold to buyer']
 };
 
 /**
- * Normalised headings whose claim must be checked against the column's
- * values before it is allowed to stand.
- *
- * Exactly one entry, and it should stay that way unless another genuinely
- * ambiguous word turns up. The test is not "could this column be
- * misread?" -- almost any could -- but "does the heading itself fail to say
- * what kind of thing is underneath?". `Date` does. `Date Purchased`,
- * `Date Minted` and `Sale Date` do not, so reading their values would be
- * second-guessing a user who already told us.
+ * Normalised headings whose claim must be checked against the column's values:
+ * only those that don't say what kind of value they hold. Currently just `date`.
  */
 const VALUE_CHECKED_SYNONYMS: ReadonlySet<string> = new Set(['date']);
 
-/** How sure we are about a match. Lower is more confident. */
+/** Match confidence; lower is more confident. */
 const EXACT = 0;
 const SYNONYM = 1;
 
 /**
- * normalised header text -> { field, tier }, built once.
- *
- * Exact entries are written first and synonyms are only added where they do
- * not already exist, so a synonym can never displace a real key or label.
+ * Normalised header -> { field, tier }, built once. Exact entries go in first,
+ * so a synonym never displaces a real key or label.
  */
 const LOOKUP: ReadonlyMap<string, { field: string; tier: number }> = (() => {
   const lookup = new Map<string, { field: string; tier: number }>();
@@ -311,27 +173,17 @@ const LOOKUP: ReadonlyMap<string, { field: string; tier: number }> = (() => {
 })();
 
 /**
- * The field one header on its own points at, or `undefined` when nothing in
- * the table is confident enough to say.
- *
- * Looks at the header in isolation, so it does not apply the
- * exact-beats-synonym or leave-a-tie-blank rules -- those need the whole row.
- * Use `mapHeadersToFields` for an actual import.
+ * The field a single header points at, or undefined. Doesn't apply the
+ * exact-beats-synonym or tie rules; use `mapHeadersToFields` for imports.
  */
 export function matchHeaderToField(header: string): string | undefined {
   return LOOKUP.get(normalizeHeader(header))?.field;
 }
 
 /**
- * May an ambiguous date-ish heading keep its claim on `year`?
- *
- * Yes when the column's values read as coin years, and yes when there are
- * no values to read -- either because the caller supplied none (a
- * header-only caller, or a sheet whose rows are not loaded yet) or because
- * the column is empty. A column with nothing in it cannot put a wrong value
- * anywhere, so falling back to the numismatic reading of the heading is
- * harmless, and it keeps every existing header-only caller behaving exactly
- * as it did. No when the values are calendar dates, a mix, or unreadable.
+ * Whether an ambiguous date heading keeps its claim on `year`: yes if the
+ * values read as coin years or there are no values, no for calendar dates,
+ * mixed or unreadable values.
  */
 function columnLooksLikeCoinYears(
   columnValues: ColumnValueEvidence | undefined,
@@ -345,32 +197,20 @@ function columnLooksLikeCoinYears(
 }
 
 /**
- * Map a complete header row onto coin fields.
+ * Maps a full header row onto coin fields. Keyed by header text exactly as in
+ * the file (what `mapRowToCoin` and the dropdown look up). Unplaced headers are
+ * absent from the result, not mapped to ''. Keying by text lets several sheets
+ * share one mapping regardless of column order.
  *
- * Returns a dictionary keyed by the header text EXACTLY as it appeared in the
- * file, because that is what `CsvService.mapRowToCoin` and the mapping
- * dropdown both look up. A header that is not placed is ABSENT from the
- * result rather than present with an empty value: the template reads
- * `mapping[header] ?? ''` to show "(skip)", and the Weight (oz) guard in
- * export-import-round-trip.spec.ts asserts `toBeUndefined()`.
- *
- * Keying by text rather than by column index is also what makes a multi-sheet
- * workbook import work: two sheets that both have a `Cost` column share the
- * one decision, and a sheet whose columns are in a different order still maps
- * correctly because each sheet is applied against its own header array.
- *
- * @param columnValues optional sampled cells per column, keyed by the same
- *   header text. Used only to settle an ambiguous `Date` heading (see the
- *   file header). Already-sampled, not the whole column: build it with
- *   `textColumnSamples` / `mergeColumnSamples` from csv/date-column-shape.ts,
- *   or take it from `WorkbookSheet.valueSamples`. Omitting it gives exactly
- *   the header-only behaviour this function has always had.
+ * @param columnValues optional sampled cells per column (from
+ *   `textColumnSamples` / `mergeColumnSamples` or `WorkbookSheet.valueSamples`),
+ *   used only to settle an ambiguous `Date` heading
  */
 export function mapHeadersToFields(
   headers: string[],
   columnValues?: ColumnValueEvidence
 ): Record<string, string> {
-  // Candidates per field, so the conflict rules below can see the whole row.
+  // Candidates per field, so the conflict rules can see the whole row.
   const claims = new Map<string, { header: string; tier: number }[]>();
 
   const seenHeaders = new Set<string>();
@@ -382,11 +222,8 @@ export function mapHeadersToFields(
     const match = LOOKUP.get(normalized);
     if (!match) continue;
 
-    // The one value-aware rule. A `Date` column that holds calendar dates
-    // withdraws its claim on `year` entirely rather than being re-aimed --
-    // see the note at the top of this file. Withdrawing rather than
-    // demoting also means a `Yr` column alongside it stops being a tie and
-    // wins outright, which is the right answer and not a special case.
+    // A `Date` column of calendar dates withdraws its claim on `year` entirely,
+    // so a `Yr` column alongside it wins outright instead of tying.
     if (match.tier === SYNONYM && VALUE_CHECKED_SYNONYMS.has(normalized)
         && !columnLooksLikeCoinYears(columnValues, header)) {
       continue;
@@ -401,7 +238,7 @@ export function mapHeadersToFields(
   for (const [field, candidates] of claims) {
     const bestTier = Math.min(...candidates.map(candidate => candidate.tier));
     const winners = candidates.filter(candidate => candidate.tier === bestTier);
-    // Exactly one most-confident claimant, or nobody gets it. See rule 3.
+    // Exactly one most-confident claimant, or nobody (rule 3).
     if (winners.length === 1) mapping[winners[0].header] = field;
   }
 

@@ -1,14 +1,6 @@
 /**
- * Tests for how one image's original-file path is rendered.
- *
- * Three states: a clickable link while the file is there, the same text in a
- * different colour and NOT clickable once it is gone, and nothing at all
- * when no path was recorded.
- *
- * These assert the render model rather than poking at real DOM nodes: the
- * frontend test suite runs in Node with no browser, and the template is a
- * direct, type-checked projection of this object (the template itself is
- * validated by `ng build`).
+ * Tests for the render model of one image's original-file path (the suite has
+ * no DOM; the template is a direct projection of this object).
  */
 import { describe, expect, it } from 'vitest';
 import { buildImagePathView, middleEllipsis, PATH_DISPLAY_LIMIT } from './image-path-display';
@@ -28,9 +20,7 @@ describe('buildImagePathView — file is present', () => {
   });
 
   it('points at the backend route with the path URL-encoded', () => {
-    // NOT a file:/// URL: Chrome and Edge silently block navigation from an
-    // http page to a file URL, so the click would appear to do nothing.
-    // Encoding matters because a Windows path has backslashes and spaces.
+    // Not a file:/// URL, which browsers block from an http page.
     expect(view.fileUrl).toBe(
       'http://localhost:3000/api/images/file?path=C%3A%5CPics%5Ca.jpg'
     );
@@ -42,8 +32,6 @@ describe('buildImagePathView — file is present', () => {
 
     expect(encoded).toContain('%5C%5CNAS');
     expect(encoded).toContain('Coin%20Pictures');
-    // A raw backslash or space in a query string is exactly the kind of thing
-    // that quietly truncates a URL.
     expect(encoded).not.toContain(' ');
     expect(encoded).not.toContain('\\');
   });
@@ -58,9 +46,7 @@ describe('buildImagePathView — file is missing', () => {
   const view = buildImagePathView(SHORT_PATH, 'missing', fileUrl);
 
   it('is not a link at all', () => {
-    // No URL is even built, so there is nothing for the template to put in an
-    // href — which is what keeps the element unfocusable and un-clickable
-    // rather than merely styled to look that way.
+    // No URL means no href, so the element is genuinely not clickable.
     expect(view.isLink).toBe(false);
     expect(view.fileUrl).toBe(null);
   });
@@ -81,7 +67,7 @@ describe('buildImagePathView — file is missing', () => {
 });
 
 describe('buildImagePathView — existence unknown', () => {
-  // The backend could not be reached. We know nothing, so we claim nothing.
+  // The backend could not be reached.
   const view = buildImagePathView(SHORT_PATH, 'unknown', fileUrl);
 
   it('shows the path as plain text rather than claiming the file is gone', () => {
@@ -111,15 +97,13 @@ describe('buildImagePathView — no path recorded', () => {
   });
 
   it('treats undefined and an empty/whitespace path the same way', () => {
-    // The server normalises a SQL NULL and a missing column alike to JSON
-    // null, and trims blank strings away — but the UI must not depend on that.
+    // The server already normalises these, but the UI must not depend on it.
     for (const value of [undefined, '', '   ']) {
       expect(buildImagePathView(value, 'present', fileUrl).hasPath).toBe(false);
     }
   });
 
   it('does not build a link even when told the file is present', () => {
-    // Nothing to link to, so "present" is meaningless here.
     expect(buildImagePathView('', 'present', fileUrl).fileUrl).toBe(null);
   });
 });
@@ -135,9 +119,7 @@ describe('middleEllipsis', () => {
 
     expect(short.length).toBeLessThanOrEqual(PATH_DISPLAY_LIMIT);
     expect(short).toContain('\u2026');
-    // The share is still identifiable...
     expect(short.startsWith('\\\\NAS')).toBe(true);
-    // ...and the filename, the part the user actually reads, survives.
     expect(short.endsWith('Obverse.jpg')).toBe(true);
   });
 

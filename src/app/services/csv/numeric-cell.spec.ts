@@ -1,17 +1,6 @@
 /**
- * Tests for parsing a numeric CSV cell.
- *
- * These pin down a real, silent data-loss bug. The importer used to parse its
- * four numeric columns with:
- *
- *     Number(value.replace(/[$,]/g, '')) || 0
- *
- * `Number()` returns NaN unless the WHOLE string is a number, and `|| 0` then
- * turned that NaN into a zero. So a weight typed the way a collector actually
- * writes it -- "0.7734 ozt" -- imported as 0, with no warning anywhere. Weight
- * feeding melt value made it worse: the coin lost its melt figure too.
- *
- * Every case below that carries a unit or a fraction returned 0 before.
+ * Tests for parseNumericCell. Values with units or fractions ("0.7734 ozt",
+ * "1/10 oz") must parse to their number, not fall back to 0.
  */
 import { describe, expect, it } from 'vitest';
 import { isUnreadableNumericCell, parseNumericCell } from './numeric-cell';
@@ -29,7 +18,7 @@ describe('parseNumericCell', () => {
   });
 
   it('reads a weight that carries its unit', () => {
-    // THE headline regression. All four of these were 0.
+    // Units after the number are ignored.
     expect(parseNumericCell('0.7734 ozt')).toBe(0.7734);
     expect(parseNumericCell('0.7734oz')).toBe(0.7734);
     expect(parseNumericCell('1 oz')).toBe(1);
@@ -37,10 +26,8 @@ describe('parseNumericCell', () => {
   });
 
   it('reads a fractional-ounce weight', () => {
-    // Fractional gold is sold as 1/10, 1/4 and 1/2 oz, so these are ordinary
-    // values in a weight column -- not edge cases. Note that without the
-    // fraction rule "1/10 oz" would read as 1: a tenth-ounce coin recorded as
-    // a full ounce, overstating its melt value tenfold.
+    // Fractional bullion weights (1/10, 1/4, 1/2 oz) are ordinary values; without
+    // the fraction rule "1/10 oz" would read as 1.
     expect(parseNumericCell('1/10 oz')).toBe(0.1);
     expect(parseNumericCell('1/4 oz')).toBe(0.25);
     expect(parseNumericCell('1/2')).toBe(0.5);
@@ -51,13 +38,13 @@ describe('parseNumericCell', () => {
   });
 
   it('reads the parenthesised negative spreadsheets export', () => {
-    // Excel renders a negative as (1,250.00) rather than -1,250.00.
+    // Excel renders a negative as (1,250.00).
     expect(parseNumericCell('(1,250.00)')).toBe(-1250);
     expect(parseNumericCell('($95.50)')).toBe(-95.5);
   });
 
   it('does not let a bracket and a minus sign cancel each other out', () => {
-    // "(-5)" is still negative five, not positive five.
+    // "(-5)" is still negative five.
     expect(parseNumericCell('(-5)')).toBe(-5);
   });
 
@@ -66,8 +53,7 @@ describe('parseNumericCell', () => {
   });
 
   it('falls back to 0 for a cell with no number in it', () => {
-    // Unchanged from the old behaviour: the importer builds a complete
-    // CoinRecord and has no channel for reporting a bad cell.
+    // The importer builds a complete CoinRecord and can't report a bad cell.
     expect(parseNumericCell('n/a')).toBe(0);
     expect(parseNumericCell('unknown')).toBe(0);
     expect(parseNumericCell('')).toBe(0);
@@ -85,8 +71,7 @@ describe('parseNumericCell', () => {
   });
 
   it('never returns NaN or Infinity, whatever it is handed', () => {
-    // The caller writes this straight onto a CoinRecord and then into SQL, so
-    // a non-finite value would propagate rather than fail fast.
+    // The value is written to a CoinRecord and SQL, so it must always be finite.
     for (const input of ['', 'abc', '$', '-', '.', '1/0', '()', 'e5', 'NaN', '1e999']) {
       const result = parseNumericCell(input);
       expect(Number.isFinite(result), `input ${JSON.stringify(input)}`).toBe(true);
@@ -112,9 +97,7 @@ describe('isUnreadableNumericCell', () => {
   });
 
   it('is true for a non-empty cell it had to fall back to 0 for', () => {
-    // This is the signal a future "these cells could not be read" panel would
-    // use. Nothing consumes it yet, which is why an unreadable cell still
-    // becomes 0 silently -- see the note in numeric-cell.ts.
+    // Not consumed yet; an unreadable cell still becomes 0 (see numeric-cell.ts).
     expect(isUnreadableNumericCell('n/a')).toBe(true);
     expect(isUnreadableNumericCell('ask dealer')).toBe(true);
   });

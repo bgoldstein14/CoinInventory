@@ -1,56 +1,17 @@
- /*
- * matching-thresholds.ts
- *
- * WHAT THIS FILE OWNS
- *   Every "magic number" the image matcher uses, and nothing else. No logic
- *   lives here -- just named constants and the reasoning behind each value.
- *
- * WHY IT IS ITS OWN FILE
- *   These are the dials. When the matcher feels too eager (it auto-attaches
- *   images it should have asked about) or too shy (it sends obvious matches to
- *   review), this is the ONLY file you need to open. Keeping the numbers apart
- *   from the code that consumes them means you can read the whole tuning story
- *   in one screen, and it makes an accidental change very easy to spot in a
- *   diff.
- *
- *   Treat a change in here as a behaviour change: the scoring tests in
- *   image-matching.service.spec.ts are written against these exact values.
-  */
-
- /*
- * TUNING CONSTANTS
- * These are the numbers you would change if the matcher feels too eager or
- * too shy. Each one is explained so you can reason about a change.
-  */
+/*
+ * Tuning constants for the image matcher: attribute weights, damping and the
+ * auto-assign gates. No logic lives here. Scoring tests are written against
+ * these exact values, so a change here is a behaviour change.
+ */
 
 /**
- * Per-attribute weights. They sum to 1.0 so the raw score is already a
- * fraction of "perfect evidence".
+ * Per-attribute weights (total 1.08; the damping table below uses that total).
  *
- * Year is weighted highest because in a coin collection the year is the single
- * most discriminating fact -- most collections have many Morgan Dollars but
- * only one or two from any given year+mint.
- *
- * Mint mark is weighted LOW on purpose. That looks backwards, but it is what
- * keeps two coins differing only by mint mark (1881-S vs 1881-O) only ~0.10
- * apart -- inside the runner-up margin, so they both go to review instead of
- * one being silently chosen.
- *
- * CERT COMPANY and GRADE are the two smallest weights, and deliberately so.
- * This collection's filenames name them constantly:
- *
- *     1904 $20 - PCGS MS63 - small.jpg
- *     1875-S 20-cent ANACS XF40.jpg
- *
- * but on their own they barely discriminate: hundreds of coins are "PCGS" and
- * dozens share any given grade. They earn their keep TOGETHER -- "PCGS MS63"
- * narrows a collection down hard -- so match-scorer.ts only counts them as a
- * strong attribute when BOTH agree, and then only as ONE strong attribute
- * between them, never two. Their small weights mean they can tip a close race
- * but can never carry a match on their own.
- *
- * The weights total 1.08 rather than 1.0; the coverage figures in the damping
- * table below are computed against that total.
+ * - Year is highest: it is the most discriminating fact in a collection.
+ * - Mint mark is low so coins differing only by mint mark (1881-S vs 1881-O)
+ *   land ~0.10 apart, inside the runner-up margin, and go to review.
+ * - Cert company and grade are smallest: alone they barely discriminate.
+ *   match-scorer.ts counts them as one strong attribute only when both agree.
  */
 export const WEIGHTS = {
   year: 0.30,
@@ -62,66 +23,42 @@ export const WEIGHTS = {
   grade: 0.03
 } as const;
 
-/** Sum of every weight (1.0). Used to measure "how much evidence was usable". */
+/** Sum of every weight. Used to measure how much evidence was usable. */
 export const TOTAL_WEIGHT = Object.values(WEIGHTS).reduce((sum, w) => sum + w, 0);
 
 /**
- * Coverage damping.
+ * Coverage damping: the normalized score is multiplied by
+ * FLOOR + RANGE * (comparable weight / TOTAL_WEIGHT), so one matching
+ * attribute cannot produce a "perfect" score.
  *
- * Problem: if the only comparable attribute is the year and it matches, the
- * naive normalized score is 1.0 -- "perfect", from one coincidence.
+ *   coin type only        -> x0.761 (never auto)
+ *   year only             -> x0.783 (never auto)
+ *   denomination + type   -> x0.833 (just under the bar)
+ *   year + denomination   -> x0.856 (can auto)
+ *   year + denom + type   -> x0.917
  *
- * Fix: multiply the normalized score by how much of the available evidence we
- * were actually able to compare (`coverage`). Coverage is the comparable
- * weight divided by TOTAL_WEIGHT (now 1.08), so with these constants:
- *
- *   weight 0.22 (coin type only)        -> x0.761 -> max score 0.76 (never auto)
- *   weight 0.30 (year only)             -> x0.783 -> max score 0.78 (never auto)
- *   weight 0.48 (denomination + type)   -> x0.833 -> just under the bar
- *   weight 0.56 (year + denomination)   -> x0.856 -> can auto
- *   weight 0.78 (year + denom + type)   -> x0.917 -> comfortably auto
- *   weight 0.87 (all four core attrs)   -> x0.942 -> comfortably auto
- *
- * So a filename that only gives us a denomination and a design name (no year)
- * can never auto-assign: we would have no way to tell a 1904 Liberty Head
- * Double Eagle from a 1907 one.
- *
- * The 0.22 line is the one that governs ANCIENT coins. "Constantine - RIC 34 -
- * Obverse.jpg" has no year and no denomination, so coin type is its only
- * comparable attribute and its score is capped at 0.76 -- below the 0.85 bar,
- * and only one strong attribute where the gate demands two. Ancients therefore
- * always go to review with a ranked shortlist. That is by design.
+ * Without a year a match never auto-assigns. Ancient coins usually only have a
+ * coin type, so they always go to review with a ranked shortlist.
  */
 export const DAMPING_FLOOR = 0.70;
 export const DAMPING_RANGE = 0.30;
 
 /**
- * Auto-assign gate (a): the top candidate must score at least this much.
- * 0.85 is set just above the "denomination + coin type, no year" case (0.833)
- * and just below the "year + denomination" case (0.856).
+ * Auto-assign gate (a): minimum top score. Sits between the
+ * "denomination + type" (0.833) and "year + denomination" (0.856) caps.
  */
 export const AUTO_SCORE_THRESHOLD = 0.85;
 
-/**
- * Auto-assign gate (b): at least this many independent strong attributes must
- * agree. One matching attribute is never enough, no matter how clean.
- */
+/** Auto-assign gate (b): minimum number of independent strong attributes. */
 export const MIN_STRONG_ATTRIBUTES = 2;
 
 /**
- * Auto-assign gate (c): the top candidate must beat the runner-up by this much.
- *
- * 0.15 is chosen so that a difference in a single low-weight attribute cannot
- * decide a match. Two coins differing only by mint mark land ~0.10 apart; two
- * coins differing only by year land ~0.30 apart. So mint-mark-only ambiguity
- * always goes to review, while a clear year difference does not.
+ * Auto-assign gate (c): required lead over the runner-up. Mint-mark-only
+ * differences (~0.10) go to review; year differences (~0.30) do not.
  */
 export const AUTO_MARGIN_THRESHOLD = 0.15;
 
-/**
- * Below this score we do not even suggest the coin as the "best guess" --
- * the image is reported as 'none'. (Weak candidates may still be listed.)
- */
+/** Below this score the image is reported as 'none' (candidates may still be listed). */
 export const REVIEW_SCORE_THRESHOLD = 0.35;
 
 /** Candidates scoring below this are not worth showing at all. */

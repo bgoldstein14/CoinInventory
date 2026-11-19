@@ -4,9 +4,8 @@ import { NotificationService } from './notification.service';
 import { RecentErrorsService } from './support/recent-errors.service';
 
 /**
- * Angular's global error handler: catches anything thrown anywhere in the
- * app, logs it, remembers it for the problem report, and shows a toast.
- * Registered in app.config.ts.
+ * Global error handler: logs anything thrown in the app, records it for the
+ * problem report, and shows a toast. Registered in app.config.ts.
  */
 @Injectable()
 export class GlobalErrorHandler implements ErrorHandler {
@@ -14,13 +13,9 @@ export class GlobalErrorHandler implements ErrorHandler {
   private readonly notifications = inject(NotificationService);
 
   /**
-   * The in-memory tail that "Help > Report a problem" reads.
-   *
-   * WHY IT IS NOT ENOUGH TO RELY ON this.logging: LoggingService stops
-   * POSTing to the backend for thirty seconds after a failed send, and the
-   * backend being unreachable is exactly when the errors worth reporting
-   * happen. Without this line the report's "recent errors" section would be
-   * reliably empty in the one situation it exists for.
+   * In-memory list of recent errors for "Help > Report a problem". Kept separately
+   * from LoggingService, which pauses backend sends after a failure, so errors
+   * are still captured while the backend is unreachable.
    */
   private readonly recentErrors = inject(RecentErrorsService);
 
@@ -31,8 +26,6 @@ export class GlobalErrorHandler implements ErrorHandler {
 
     this.logging.error('Unhandled error', message);
 
-    // Remember it for the problem report. Recorded here rather than inside
-    // LoggingService so it survives the backend being down.
     this.recentErrors.record(message, error instanceof Error ? error.stack : undefined);
 
     this.notifications.showError(message);

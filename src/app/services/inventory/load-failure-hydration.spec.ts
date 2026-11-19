@@ -1,24 +1,16 @@
  /*
- * load-failure-hydration.spec.ts — the start-up path, end to end.
- *
- * load-failure.spec.ts pins the DECISION. This file pins the PATH: that
- * ConnectionManager.hydrate() actually routes its one failure branch through
- * it, writes both signals, and tells the user the right thing.
- *
- * The exact scenario is the owner's, 2026-11-08: the backend returns 500
- * because `res.json()` could not build the response for 105 coins. The
- * database was never in any trouble. What the app said was:
- *
- *     [ERROR] [frontend] Failed to connect to database | 500 Internal Server Error
- *
- * and that line is what this file exists to make impossible.
+  * The start-up path end to end: ConnectionManager.hydrate() routes its failure
+  * through describeLoadFailure, sets both signals, and tells the user the right
+  * thing. Scenario: the backend returns 500 because the coin list couldn't be
+  * serialised, though the database was fine; the app must not report a
+  * database connection failure.
   */
 
 import { describe, expect, it } from 'vitest';
 import { throwError } from 'rxjs';
 import { createTestInventoryService } from '../../testing/test-helpers';
 
-/** The 500 the backend now sends when the coin list cannot be serialised. */
+/** The 500 the backend sends when the coin list can't be serialised. */
 const DELIVERY_FAILURE = {
   status: 500,
   statusText: 'Internal Server Error',
@@ -30,7 +22,7 @@ const DELIVERY_FAILURE = {
   },
 };
 
-/** A backend that is not there at all. */
+/** No backend at all. */
 const NO_SERVER = { status: 0, statusText: 'Unknown Error', error: null };
 
 async function hydrateWith(failure: unknown) {
@@ -62,8 +54,7 @@ describe('hydration failing after the data was read', () => {
   it('keeps connectionError in step, so nothing that reads it sees a stale lie', async () => {
     const { inv } = await hydrateWith(DELIVERY_FAILURE);
 
-    // One failure, one wording. The old signal is kept only for the readers
-    // that already existed; it must never disagree with the new one.
+    // One failure, one wording: the older signal must match the new one.
     expect(inv.connectionError()).toBe(inv.loadFailure()?.message);
   });
 
@@ -98,7 +89,7 @@ describe('a successful hydration leaves no trace of a failure', () => {
     (mockApiService.getCoins as any).mockReturnValue(of([]));
     await inv.hydrate();
 
-    // Both, or the banner outlives the problem it describes.
+    // Both are cleared, or the banner outlives the problem.
     expect(inv.loadFailure()).toBeNull();
     expect(inv.connectionError()).toBeNull();
   });

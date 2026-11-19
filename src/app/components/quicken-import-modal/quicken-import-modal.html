@@ -4,12 +4,7 @@
       <h2>Import from Quicken (QIF)</h2>
       <div class="modal-header-actions">
         <button type="button" class="secondary small-button" (click)="previewImport()" [disabled]="!quickenText()">Preview</button>
-        <!--
-          The count is `recordsToImport()`, not `importedRecords()`: a row the
-          user cancelled is still listed in the preview (struck through, with
-          an Undo) but is not going to be imported, so the button must not
-          promise it.
-        -->
+        <!-- Counts recordsToImport(): cancelled rows are still listed but not imported. -->
         <button type="button" class="small-button" (click)="importQuicken()" [disabled]="recordsToImport().length === 0 || importing()">
           @if (importing()) {
             Importing...
@@ -66,10 +61,7 @@
           </label>
         </div>
 
-        <!-- UNTICKED BY DEFAULT, ON PURPOSE. Everything comes in, coins the
-             owner has already sold included, so the money he spent and the
-             money he got back stay reportable. Ticking this narrows the
-             import to what he still holds. -->
+        <!-- Unticked by default so sold coins are imported too. -->
         <label class="qif-sold-toggle">
           <input
             type="checkbox"
@@ -82,14 +74,6 @@
           column, so a coin is taken to be sold when its buys and sells net to
           nothing — and the sale's date and amount are then imported with it.</p>
 
-        <!-- WHY THIS SAYS WHAT IS FILLED AS WELL AS WHAT IS NOT.
-             "Purchased From is left blank" on its own reads as a limitation
-             someone should fix. It is a choice: the only counterparty-shaped
-             line in an investment block is the payee, which in these files is
-             routinely the account itself ("Misc. Coins"), and filling the
-             field with that gives the user something to clear on every coin.
-             Measured on the real corpus: purchase date and price arrive on
-             457 of 457 records, buyer and seller on none. -->
         <p class="hint-text">
           Quicken records what you paid and when, and the sale if there was one, so
           <strong>Cost</strong>, <strong>Purchase Date</strong>, <strong>Sold Price</strong> and
@@ -145,23 +129,8 @@
         </div>
       }
 
-      <!--
-        GUESSED READINGS.
-
-        Some Quicken names do not say which of two coins they mean. A bare
-        "3¢" dated 1865-1873 is the standing example: the three-cent silver
-        and the three-cent nickel were both being struck, and the date cannot
-        separate them. The parser still answers, but the answer arrives
-        labelled as an assumption, with the reasoning attached.
-
-        THIS IS NOT THE EXCEPTIONS PANEL AND MUST NEVER BECOME IT. An
-        exception is a row that CANNOT be imported. A guessed row imports by
-        default, exactly like any other row; this panel exists so the user
-        knows which ones to look at, and the preview table below carries the
-        two controls for acting on them (re-point the denomination, or drop
-        the row). Styled as a warning rather than an error for the same
-        reason.
-      -->
+      <!-- Guessed readings: these rows import normally (unlike exceptions); the
+           preview table below lets the user re-point or drop them. -->
       @if (ambiguousCount() > 0) {
         <div class="ambiguity-list" role="region" aria-label="Assumptions made while reading Quicken names">
           <h3>Assumptions — imported, but worth a look ({{ ambiguousCount() }})</h3>
@@ -185,17 +154,8 @@
         </div>
       }
 
-      <!--
-        Exceptions: coins the parser could read but refused to import because
-        fewer than 2 of Year / Coin Type / Denomination were present.
-
-        These are always SHOWN and never silently dropped -- that reporting is
-        the whole point of the panel. What they cannot be is imported, and
-        there must be no "Import anyway" button: the backend rejects a coin
-        with no denomination with 400 "denomination is required", so a forced
-        row is one the grid shows and the database never holds. The fix for a
-        row landing here is to fix its name in Quicken and re-import.
-      -->
+      <!-- Exceptions: fewer than 2 of Year / Coin Type / Denomination. No "Import anyway":
+           the backend rejects a coin with no denomination. -->
       @if (rejectedRecords().length > 0) {
         <div class="exception-list" role="region" aria-label="Import exceptions">
           <h3>Exceptions — not imported ({{ rejectedRecords().length }})</h3>
@@ -230,16 +190,7 @@
         </div>
       }
 
-      <!--
-        WHAT THE TICK BOX IS HOLDING OUT.
-
-        Only ever non-empty while "Import only coins I still own" is ticked.
-        It is listed rather than counted because this used to happen
-        UNCONDITIONALLY and INVISIBLY: 379 of the QIF corpus's 484 coin
-        records were discarded by the net-quantity rule and no part of this
-        dialog said so. A filter the user asked for still has to show its
-        work.
-      -->
+      <!-- Coins held out by "Import only coins I still own" (only while ticked). -->
       @if (skippedRecords().length > 0) {
         <div class="exception-list" role="region" aria-label="Coins left out as sold">
           <h3>No longer held — left out ({{ skippedRecords().length }})</h3>
@@ -290,37 +241,16 @@
                     <th>Denomination</th>
                     <th>Year</th>
                     <th>Grade</th>
-                    <!--
-                      Certification company ("PCGS", "NGC", ...) and the green
-                      CAC sticker, both parsed out of the Quicken security
-                      name. Shown here so the user can spot a bad parse on the
-                      preview screen instead of after the import.
-                    -->
                     <th>Cert Co.</th>
                     <th title="Green CAC sticker">CAC</th>
                     <th>Mint Mark</th>
                     <th>Variety</th>
-                    <!--
-                      Country, Metal and PM % are worked out from the coin's
-                      country, denomination and YEAR (pm-reference.ts). They
-                      are shown here because they are deliberately left blank
-                      whenever the combination does not pin the alloy down --
-                      seeing the dash on the preview is how the user knows to
-                      fill it in rather than discovering a wrong melt value
-                      later.
-                    -->
+                    <!-- Country, Metal and PM % are blank when the combination does not pin the alloy down. -->
                     <th>Country</th>
                     <th title="Metal / Composition">Metal</th>
                     <th title="Precious metal purity">PM %</th>
                     <th>Value</th>
-                    <!--
-                      Row actions. Empty for every row the parser was sure
-                      about; a Drop / Undo button on the ones it guessed at.
-                      Deliberately NOT a select-every-row checkbox column:
-                      this is a way out of an assumption the user disagrees
-                      with, not a general row picker, and a column of 400
-                      ticked boxes would bury the handful that matter.
-                    -->
+                    <!-- Drop / Undo, only on guessed rows. -->
                     <th><span title="Leave a guessed row out of this import">Action</span></th>
                   </tr>
                 </thead>
@@ -328,18 +258,8 @@
                   @for (record of groupedImportedRecords()[accountName]; track record.id) {
                     <tr [class.preview-row--guessed]="ambiguity(record)" [class.preview-row--dropped]="isDropped(record)">
                       <td>{{ record.coinType || '—' }}</td>
-                      <!--
-                        THE DENOMINATION CELL IS WHERE A GUESS BECOMES VISIBLE.
-
-                        A certain reading prints as plain text, exactly as it
-                        always has. A guessed one becomes a two-option picker
-                        holding the alternatives the parser was choosing
-                        between, so switching to the other candidate is one
-                        click and no typing. Changing it re-runs the parse
-                        with the answer, which is what keeps the Coin Type and
-                        the Metal / PM % cells on this same row consistent
-                        with the denomination the user just chose.
-                      -->
+                      <!-- A guessed denomination becomes a picker; changing it re-runs the parse so
+                           derived cells stay consistent. -->
                       <td>
                         @if (ambiguity(record); as guess) {
                           <span class="guess-flag" [title]="guess.why" aria-hidden="true">&#9888;</span>
@@ -361,11 +281,6 @@
                       <td>{{ record.year || '—' }}</td>
                       <td>{{ record.grade || '—' }}</td>
                       <td>{{ record.certCompany || '—' }}</td>
-                      <!--
-                        A check mark only when the sticker was actually
-                        detected; an em dash otherwise, matching every other
-                        "nothing here" cell in this table.
-                      -->
                       <td>
                         @if (record.hasCacSticker) {
                           <span class="cac-indicator" title="Green CAC sticker">&#10003;</span>
@@ -379,12 +294,7 @@
                       <td [title]="record.composition || ''">{{ record.metalContent || '—' }}</td>
                       <td>{{ record.pmPercent !== undefined ? record.pmPercent + '%' : '—' }}</td>
                       <td><strong>${{ record.currentValue | number: '1.2-2' }}</strong></td>
-                      <!--
-                        Cancel the match. Offered only on a guessed row, and
-                        reversible from the same button, so the action cannot
-                        be taken by accident and does not need the file
-                        re-loading to undo.
-                      -->
+                      <!-- Drop, offered only on a guessed row and reversible. -->
                       <td>
                         @if (ambiguity(record)) {
                           <button

@@ -1,29 +1,8 @@
  /*
- * denomination-units.spec.ts
- *
- * WHAT THIS FILE PINS DOWN
- *   The one rule that tells a coin's FACE VALUE from a PRICE:
- *
- *     A DOLLAR AMOUNT IN A FILENAME IS THIS COIN'S FACE VALUE ONLY IF IT IS
- *     WRITTEN EXACTLY AS ONE OF THE AMOUNTS IN DOLLAR_FACE_VALUES, AND ONLY IF
- *     NOTHING ELSE IN THE NAME HAS ALREADY NAMED A DIFFERENT ONE.
- *
- *   It is true of COINS, not just of this code: a face value is struck by a
- *   mint and comes from a short, closed list ($1, $2.50, $3, $5, $10, $20 and,
- *   since 1986, the bullion $25 and $50), whereas a price is whatever this one
- *   happened to cost. So the question is "is there a coin worth that?", and
- *   the denomination table is the list of coins there are.
- *
- * WHAT IT REPLACED
- *   A count of decimal places: "whole dollars are a face value, an amount with
- *   cents is a price, except $2.50, which was whitelisted by name". That was a
- *   rule plus a hand-written exception, and it could not see that "$15" is not
- *   a coin or that a round "$50" beside the word "Dollar" is a purchase.
- *
- * WHY THE TESTS GO THROUGH `parseFilename` AND `parseCoin`
- *   Both are the real entry points, so these assertions fail if any layer
- *   between the filename and the answer stops honouring the rule -- not just
- *   if the table changes.
+ * Face value vs price: a dollar amount is the coin's face value only if it is
+ * written exactly as an amount in DOLLAR_FACE_VALUES and the words haven't
+ * already named a different denomination. Tested through the real entry
+ * points `parseFilename` and `parseCoin`.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -62,13 +41,9 @@ describe('a dollar amount is a face value only if a coin is worth exactly that',
   });
 
   it('$2.50 needs no special case any more -- it is simply in the table', () => {
-    /* THE POINT OF THE WHOLE REFACTOR. The old rule said "an amount with cents
-     * is a price" and then had to carve the Quarter Eagle back out by name.
-     * The Quarter Eagle was never an exception: it is one of the amounts a US
-     * coin is worth, and its cents are part of how that amount is spelled. */
     expect(fileKey('1911 $2.50 Indian - Obverse.jpg')).toBe('quarter eagle');
     expect(fileKey('1878 $2.50 Liberty - AU55 - Reverse.jpg')).toBe('quarter eagle');
-    // Both spellings of the same coin land on the same key, as they always did.
+    // Both spellings of the same coin land on the same key.
     expect(fileKey('1911 Quarter Eagle - Obverse.jpg')).toBe('quarter eagle');
     expect(recordKey('$2.50')).toBe('quarter eagle');
   });
@@ -79,9 +54,7 @@ describe('a dollar amount is a face value only if a coin is worth exactly that',
     ['1881-S Morgan $40 - Obverse.jpg',  '$40 -- likewise'],
     ['1881-S Morgan $99 - Obverse.jpg',  '$99 -- likewise']
   ])('%s yields no denomination at all (%s)', name => {
-    /* THE ROUND-NUMBER HOLE, CLOSED WHERE IT CAN BE. The old rule read every
-     * whole-dollar amount as a face value, so these all invented a coin. The
-     * table says no such coin exists, so they are prices and say nothing. */
+    // No coin has this face value, so it is a price.
     expect(fileKey(name)).toBeNull();
   });
 });
@@ -104,8 +77,6 @@ describe('an amount written with cents is money', () => {
   });
 
   it('a coin RECORD column answers the same way, from the same table', () => {
-    // This side has always worked by exact lookup; the filename side has now
-    // caught up with it.
     expect(recordKey('$50')).toBe('fifty dollar');
     expect(recordKey('$50.00')).toBeNull();
     expect(recordKey('$25.00')).toBeNull();
@@ -115,18 +86,15 @@ describe('an amount written with cents is money', () => {
 
 describe('a coin has one face value, so a second, different amount is the price', () => {
   it('the real filename this rule was written for stays an ordinary Peace dollar', () => {
-    // Verbatim from the share. The words say "Dollar"; $25.00 is what
-    // he paid for it.
+    // Real filename: the words say "Dollar"; $25.00 is the price.
     expect(fileKey('1925-S Peace Dollar $25.00.jpg')).toBe('dollar');
     expect(fileKey('1925-S Peace Dollar NGC 2599001 $25.00.jpg')).toBe('dollar');
     expect(parseFilename('1925-S Peace Dollar $25.00.jpg').coinTypeTokens).toContain('peace');
   });
 
   it('!! A ROUND PRICE IS A PRICE WHEN THE WORDS ALREADY NAMED THE COIN !!', () => {
-    /* The hole the old decimal rule could not close: "$50" with no cents is
-     * written exactly like the $50 Gold Eagle. The words are what give it
-     * away -- a Morgan is a ONE dollar coin, so a fifty dollar amount in the
-     * same name is money. */
+    // "$50" looks like the $50 Gold Eagle, but the words already named a
+    // one-dollar coin, so the amount is a price.
     expect(fileKey('1881-S Morgan Dollar $50.jpg')).toBe('dollar');
     expect(fileKey('1925-S Peace Dollar $25 - Obverse.jpg')).toBe('dollar');
     expect(fileKey('1913 50-Cent Canadian $20 - Obverse.jpg')).toBe('half dollar');
@@ -134,16 +102,14 @@ describe('a coin has one face value, so a second, different amount is the price'
   });
 
   it('an amount that AGREES with the words is the same coin said twice, and still wins', () => {
-    /* Agreement, not equality, and it is `denominationsAgree` in
-     * reference-tables.ts that decides -- so every alias and generic/specific
-     * pair already agreed there is inherited rather than re-litigated. The
-     * amount is the more precise of the two statements, so it is the answer. */
+    // Agreement is decided by `denominationsAgree`; the amount is the more
+    // precise statement, so it is the answer.
     expect(fileKey('2015 $25 Gold Eagle - MS70.jpg')).toBe('twenty five dollar');
     expect(fileKey('2015 $50 Gold Eagle - MS70.jpg')).toBe('fifty dollar');
     expect(fileKey('2015 $10 Gold Eagle.jpg')).toBe('eagle');
     expect(fileKey('1907 $20 Double Eagle - Obverse.jpg')).toBe('double eagle');
     expect(fileKey('1911 Quarter Eagle $2.50 - AU55.jpg')).toBe('quarter eagle');
-    // "Silver Eagle" IS "$1" -- the one alias row in the equivalence table.
+    // "Silver Eagle" is "$1" (an alias row in the equivalence table).
     expect(fileKey('1986 Silver Eagle $1.jpg')).toBe('dollar');
   });
 
@@ -154,12 +120,7 @@ describe('a coin has one face value, so a second, different amount is the price'
   });
 
   it('WITH NO WORDS, a round price is still read as a face value -- the honest limit', () => {
-    /* Stated rather than hidden. There is nothing in this name to separate a
-     * $50 coin from a coin that cost $50: the evidence is absent, not
-     * misread. The exposure is as old as "$1", "$5" and "$20", and in this
-     * collection the denomination is written first and a price carries cents.
-     * If this test ever starts failing because the name now parses as null,
-     * that is an improvement -- but it must be a deliberate one. */
+    // Known limit: nothing here distinguishes a $50 coin from a $50 price.
     expect(fileKey('1881-S Morgan $50 - Obverse.jpg')).toBe('fifty dollar');
   });
 });
@@ -182,7 +143,6 @@ describe('the Gold Eagle year resolution is untouched by all of this', () => {
   });
 
   it('a price in the name does not disturb the resolution', () => {
-    // The amount is thrown out as money, and the word + year decide as usual.
     expect(fileKey('2015 Gold Eagle $1,850.00 - MS70.jpg')).toBe('fifty dollar');
     expect(fileKey('2015 Gold Eagle $1,850.00 - MS70.jpg')).toBe(
       fileKey('2015 Gold Eagle - MS70.jpg')
@@ -212,23 +172,9 @@ describe('the cent forms are unaffected -- nobody prices a coin at "50c"', () =>
 });
 
  /*
- * THE SPACED FACE VALUE -- "2 cent", "3 cent", "20 cent"
- *
- * These are facts about how a FACE VALUE is read, which is what this file
- * owns; nothing here is specific to three-cent pieces. Collection-shaped
- * tests live in inventory-accounts.spec.ts.
- *
- * THE SPACED FORM IS A FACE VALUE, AND THE HYPHEN IS NO LONGER THE GUARD
- *
- *   Refusing the spaced form was once deliberate: the bare word "cent" is a
- *   spelling of the ONE CENT piece, so "2 cent" came out as a penny -- and a
- *   wrong denomination is a HARD VETO, which disqualified two-cent
- *   photographs from their own records.
- *
- *   "2 cent" IS the Two Cent piece, "3 cent" a three-cent piece and
- *   "20 cent" the Twenty Cent. The hyphen that used to be required is no
- *   longer what keeps stamps and paper money out; the non-coin detector is,
- *   and the last block below names the exact files it has to refuse.
+ * Spaced face values ("2 cent", "20 cent") read as the face value, not as a
+ * One Cent piece. Stamps and paper money are kept out by the non-coin
+ * detector (last block below).
   */
 describe('a spaced face value is a face value, because he said so', () => {
   it.each([
@@ -247,8 +193,6 @@ describe('a spaced face value is a face value, because he said so', () => {
   });
 
   it('still reads a four-digit year in front of "cent" as a DATE, not a count', () => {
-    // The spaced reader must not swallow "1870 Cent", which is a one-cent coin
-    // whose year happens to sit immediately before the word.
     expect(fileKey('1870 Cent - Obverse.jpg')).toBe('cent');
   });
 
@@ -257,27 +201,15 @@ describe('a spaced face value is a face value, because he said so', () => {
     '1864 3 cent silver - PF64 - Obverse.jpg',
     '1864 Three Cent Silver - PF64 - Obverse.jpg'
   ])('reads the METAL out of %s instead of settling for the generic', name => {
-    /* All three say SILVER in so many letters, so all three must produce the
-     * SPECIFIC key. Settling for the generic 'three cent' would leave the
-     * denomination veto unable to separate a 3CS from a 3CN -- and reading
-     * the bare "cent" instead would make it a ONE CENT piece, which is worse
-     * still, because that is a hard veto against its own record. */
+    // The generic 'three cent' would let a 3CS photo through the veto
+    // against a 3CN record.
     expect(fileKey(name)).toBe('three cent silver');
   });
 });
 
 describe('the spaced form must not let a stamp or paper money in', () => {
-  /* THE DEFENCE THE SPACED FACE VALUE WOULD OTHERWISE HAVE BROKEN.
-   *
-   * The first of these is a POSTAGE STAMP and the other two are FRACTIONAL
-   * CURRENCY -- paper, not coins -- and all three are verbatim from the
-   * share. The hyphen rule in denomination-units.ts was once documented as
-   * "the entire defence" against the first one, because "3 cent" with a
-   * space was refused outright.
-   *
-   * Now that the spaced form IS a face value, the defence comes from the word
-   * that says what the thing is. Each of these names one, so `detectNonCoin`
-   * rules the file out BEFORE the spaced reader is ever offered it. */
+  // A postage stamp and two pieces of fractional currency (real filenames).
+  // `detectNonCoin` rules them out before the spaced reader sees them.
   it.each([
     ['Stamp - 11 - 3 cent.jpg',        'stamp'],
     ['3-cent paper - Large.jpg',       'paper'],

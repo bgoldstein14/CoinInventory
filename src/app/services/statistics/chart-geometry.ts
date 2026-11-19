@@ -1,82 +1,50 @@
  /*
- * chart-geometry.ts — every number that ends up inside an SVG attribute.
- * ---- WHY THE CHARTS ARE HAND-ROLLED SVG AND NOT A LIBRARY ----
- * 1. THE BUNDLE. The production build is 752 kB initial against a 500 kB
- *    warning and a 1 MB HARD ERROR budget (angular.json). Chart.js is ~200 kB
- *    minified, ECharts ~1 MB, and the d3 modules needed for scales and shapes
- *    are ~60 kB. The first two breach the error budget on their own; all
- *    three would have to be lazy-loaded behind `await import(...)` like
- *    read-excel-file already is, which means a spinner on a dialog that
- *    otherwise opens instantly. Bar, line and donut geometry is a few dozen
- *    lines of arithmetic. It is not worth 200 kB.
- *
- * 2. THE TESTS. This project's frontend suite runs under Node with NO jsdom.
- *    Nothing renders, nothing can be screenshotted, `getBoundingClientRect`
- *    does not exist. A library-backed chart would be untestable here — the
- *    only assertion available would be "we called the library". Pulling the
- *    geometry out as pure functions over numbers makes the chart testable to
- *    the pixel with no DOM at all, which is why this file exists separately
- *    from the component that draws with it.
- *
- * ---- THE MARK RULES ENCODED HERE (from the project's data-viz guidance) ----
- *   - bars no thicker than 24px, never filling their row; the leftover is air
- *   - a >= 2px gap, in the surface colour, between neighbouring bars — the gap
- *     is what separates them, never a stroke drawn around them
- *   - a 4px rounded data-END, SQUARE at the baseline, so the bar visibly
- *     grows from the axis
- *   - a zero draws NOTHING: a 1px sliver reads as a small value
- *   - a value label is never clipped by its own bar. Outside the tip if it
- *     fits, inside the bar end if it fits there, otherwise not drawn — the
- *     hover tooltip is its overflow home. `overflow: hidden` cropping the
- *     first characters of a label is worse than having no label.
- *   - hit targets are bigger than the marks (>= 24px), because a 14px row is
- *     a pinpoint nobody lands on
+  * Pure geometry for the statistics charts (hand-rolled SVG). Kept as pure
+  * functions so charts are testable under Node without a DOM, and to avoid a
+  * charting library's bundle cost.
+  *
+  * Mark rules:
+  *   - bars at most 24px thick, separated by a >= 2px surface-coloured gap
+  *   - a 4px rounded data-end, square at the baseline
+  *   - a zero draws nothing (a 1px sliver reads as a small value)
+  *   - a value label is drawn outside the tip if it fits, inside the bar end if
+  *     it fits there, otherwise not at all (the tooltip shows it); never clipped
+  *   - hit targets at least 24px
   */
 
 /** Bars never exceed this, however tall their row. */
 export const MAX_BAR_THICKNESS = 24;
 
-/** The gap, in the surface colour, that separates neighbouring bars. */
+/** Gap between neighbouring bars, in the surface colour. */
 export const BAR_GAP = 2;
 
-/** The rounding on a bar's data-end. The baseline end stays square. */
+/** Rounding on a bar's data-end; the baseline end stays square. */
 export const BAR_END_RADIUS = 4;
 
-/** A pointer target smaller than this is a pinpoint. */
+/** Minimum pointer target size. */
 export const MIN_HIT_SIZE = 24;
 
-/** Breathing room between a bar's tip and its value label. */
+/** Space between a bar's tip and its value label. */
 const VALUE_PADDING = 6;
 
-/** Default size of the value text, used to work out whether it fits. */
+/** Default value text size, used to work out whether it fits. */
 const DEFAULT_VALUE_FONT_SIZE = 11;
 
-/** Two decimal places, and no "-0". Keeps float noise out of the markup. */
+/** Two decimal places and no "-0", to keep float noise out of the markup. */
 function r2(value: number): number {
   const rounded = Math.round(value * 100) / 100;
   return rounded === 0 ? 0 : rounded;
 }
 
 /**
- * Roughly how wide some text will render.
- *
- * An ESTIMATE, and it has to be: there is no DOM here to measure against, in
- * the app (where the chart is built before layout) or in the tests (where
- * there is no DOM at all). 0.6em per character is the usual approximation for
- * a UI sans at small sizes and errs slightly wide, which is the safe
- * direction — it drops a borderline label rather than clipping it.
+ * Estimated rendered text width (no DOM to measure). 0.6em per character errs
+ * slightly wide, so a borderline label is dropped rather than clipped.
  */
 export function estimateTextWidth(text: string, fontSize: number): number {
   return text.length * fontSize * 0.6;
 }
 
-/**
- * Shorten a label to fit a gutter, marking the cut with a single ellipsis.
- *
- * Returning a cut string rather than relying on CSS `text-overflow` because
- * SVG `<text>` does not support it; the alternatives are a `<foreignObject>`
- * or letting the name run across the chart.
- */
+/** Shortens a label to fit with an ellipsis (SVG `<text>` has no text-overflow). */
 export function truncateLabel(text: string, maxWidth: number, fontSize: number): string {
   if (estimateTextWidth(text, fontSize) <= maxWidth) return text;
 
@@ -88,13 +56,8 @@ export function truncateLabel(text: string, maxWidth: number, fontSize: number):
 }
 
 /**
- * The outline of a horizontal bar: square at the baseline (left), rounded at
- * the data-end (right).
- *
- * Returns an EMPTY path for a zero or negative width. A bar of zero must
- * leave no ink at all — a hairline where a category has no value is read as a
- * small value, which is exactly the class of silent wrongness this whole
- * feature is trying to avoid.
+ * Outline of a horizontal bar: square at the baseline (left), rounded at the
+ * data-end (right). Empty for a zero or negative width.
  */
 export function barPath(
   x: number,
@@ -124,7 +87,7 @@ export function barPath(
 export interface RankedBarItem {
   label: string;
   value: number;
-  /** Already formatted by the caller — geometry only measures it. */
+  /** Pre-formatted by the caller; only measured here. */
   valueText: string;
 }
 
@@ -154,12 +117,12 @@ export interface RankedBar {
   path: string;
   /** Vertical centre, for the category and value text baselines. */
   centerY: number;
-  /** False when the value text fits in neither place — see the header. */
+  /** False when the value text fits in neither place. */
   valueVisible: boolean;
   valueInside: boolean;
   valueAnchor: 'start' | 'end';
   valueX: number;
-  /** The full-width, >= 24px pointer/focus target for this row. */
+  /** Full-width, >= 24px pointer/focus target for this row. */
   hitX: number;
   hitY: number;
   hitWidth: number;
@@ -177,18 +140,8 @@ export interface RankedBarChart {
 }
 
 /**
- * Lay out a ranked horizontal bar chart.
- *
- * Horizontal rather than vertical because the categories are
- * long-named ("Standing Liberty Quarter", "United States") and a column chart
- * would have to rotate them; ranked bars on one shared baseline also compare
- * far more exactly than the pie or donut a part-to-whole request usually
- * reaches for.
- *
- * One hue for every bar. The categories (denominations, countries, grades)
- * have no natural order, so shading each bar darker-where-bigger would
- * double-encode length as colour, spend the only free channel on information
- * the bar length already carries, and make a nominal scale look ordered.
+ * Lays out a ranked horizontal bar chart (horizontal because category names
+ * are long). One hue for every bar: the categories have no natural order.
  */
 export function layoutRankedBars(
   items: readonly RankedBarItem[],
@@ -200,9 +153,7 @@ export function layoutRankedBars(
   const plotLeft = labelWidth;
   const plotWidth = Math.max(0, width - labelWidth - valueWidth);
 
-  // Not `|| 1`. If every value is zero, every bar must be zero-width: a fall
-  // back to a divisor of 1 would draw every bar at full width and say "all
-  // equal, all large" about a collection where nothing is known.
+  // Not `|| 1`: if every value is zero, every bar must be zero-width.
   const max = items.reduce((m, item) => Math.max(m, item.value), 0);
 
   const requested = options.barThickness ?? 18;
@@ -218,9 +169,7 @@ export function layoutRankedBars(
     const fitsOutside = width - tip >= needed;
     const fitsInside = barWidth >= needed;
 
-    // Hit target: the whole row, at least MIN_HIT_SIZE tall, centred on the
-    // bar. Deliberately the full chart width so the category name and the
-    // empty track to the right of a short bar are part of the target too.
+    // Hit target: the whole row width, at least MIN_HIT_SIZE tall, centred on the bar.
     const hitHeight = Math.max(rowHeight, MIN_HIT_SIZE);
 
     return {
@@ -255,12 +204,8 @@ export function layoutRankedBars(
 }
 
 /**
- * Axis ticks on round numbers that span the data.
- *
- * The textbook "nice numbers" algorithm: snap the range and the step to the
- * nearest 1, 2 or 5 times a power of ten. Ticks are re-rounded to twelve
- * significant figures on the way out because repeated addition of a step like
- * 0.2 otherwise puts `0.30000000000000004` on the axis.
+ * Axis ticks on round numbers (1, 2 or 5 times a power of ten) spanning the
+ * data. Rounded to 12 significant figures to remove float noise.
  */
 export function niceTicks(min: number, max: number, targetCount: number): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) {
@@ -302,7 +247,7 @@ export interface PlottedPoint {
   /** Pixel position inside the SVG. */
   x: number;
   y: number;
-  /** The original values, carried through for the tooltip. */
+  /** The original values, for the tooltip. */
   dataX: number;
   dataY: number;
 }
@@ -324,7 +269,7 @@ export interface LineChartLayout {
   points: PlottedPoint[];
   /** The `d` for the 2px stroke. Empty for an empty series. */
   linePath: string;
-  /** The same shape closed down to the baseline, for the 10% wash. */
+  /** The same shape closed down to the baseline, for the 10% fill. */
   areaPath: string;
   yTicks: { value: number; y: number }[];
   xTicks: { value: number; x: number }[];
@@ -336,15 +281,9 @@ export interface LineChartLayout {
 }
 
 /**
- * Lay out a single-series line chart on a time axis.
- *
- * The y scale ALWAYS starts at zero. This is a money curve: a scale that
- * started at the first value would exaggerate every subsequent rise, which is
- * the oldest trick in the chart book and is not one this app plays.
- *
- * A single data point is centred rather than divided by a zero x-range. One
- * purchase is a perfectly ordinary state for a new collection and must not
- * produce NaN in a `d=` attribute (which silently renders nothing).
+ * Lays out a single-series line chart on a time axis. The y scale always
+ * starts at zero so rises aren't exaggerated. A single point is centred
+ * (avoids NaN from a zero x-range).
  */
 export function layoutLineChart(
   series: readonly SeriesPoint[],
@@ -395,17 +334,12 @@ export function layoutLineChart(
     .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
     .join(' ');
 
-  // The wash under the line: the same outline, dropped to the baseline and
-  // closed. Drawn as its own path rather than as a filled line so the stroke
-  // can keep its round joins without the fill leaking round them.
+  // Separate fill path so the stroke keeps its round joins.
   const areaPath = `${linePath} V ${plotBottom} H ${points[0].x} Z`;
 
   const yTicks = yTickValues.map(value => ({ value, y: r2(scaleY(value)) }));
 
-  // X ticks are evenly spaced across the real range and always include both
-  // ends, so the axis cannot imply the series starts or stops somewhere it
-  // does not. A single point gets exactly one tick rather than a crowd of
-  // identical dates.
+  // X ticks are evenly spaced and include both ends; a single point gets one tick.
   const xTickCount = Math.max(1, Math.min(options.xTickCount ?? 4, series.length));
   const xTicks =
     xSpan === 0 || xTickCount === 1
@@ -430,13 +364,8 @@ export function layoutLineChart(
 }
 
 /**
- * The point nearest a pointer x, for the crosshair.
- *
- * The reader aims at a DATE, never at a 2px line — so the whole plot is a hit
- * surface and the crosshair snaps to whichever point is closest, clamping at
- * both ends rather than losing the readout off the edge.
- *
- * Returns -1 for an empty series so the caller can show nothing.
+ * Index of the point nearest a pointer x, for the crosshair; the whole plot is
+ * the hit area. Returns -1 for an empty series.
  */
 export function nearestPointIndex(points: readonly PlottedPoint[], x: number): number {
   if (points.length === 0) return -1;

@@ -1,47 +1,20 @@
 /*
- * routes/lookups/denomination-lookup.ts — the app's ONLY outbound request.
+ * Outbound lookup of denominations for an issuer:
  *
  *   GET /api/denomination-lookup?name=Burma
  *     -> { outcome, source, proposals: string[], reason }
  *
- * Nothing here writes to the database and nothing here can. It fetches a
- * list of candidate denomination names for an issuer the user has just
- * named, and the user decides, one by one, which of them are real. See
- * wikidata-denominations.ts for why Wikidata, why the query is shaped as it
- * is, and what the measured hit rate actually was.
+ * Fetches candidate denomination names for an issuer from Wikidata (see
+ * wikidata-denominations.ts); the user confirms each one. Read-only: it has no
+ * database access. Made server-side so there is one place to time out, log
+ * and stub, with no CORS dependency. The client skips the call entirely when
+ * the form's lookup checkbox is unticked.
  *
- * *** THE REQUEST IS MADE SERVER-SIDE ON PURPOSE. ***
- * It is one place to time out, one place to log, and one place a test can
- * replace `fetch`. Putting it in the browser would also make the Angular
- * app's behaviour depend on a third party's CORS headers.
- *
- * *** THIS ROUTE DOES NOT DECIDE WHETHER TO ASK. ***
- * The checkbox on the issuer form does, and the client must not call this
- * at all when it is unticked. "Unchecked must skip the request entirely,
- * not make it and discard the answer" was explicit, and the only way to
- * honour it is for the caller not to call. A route cannot un-send a packet.
- *
- * FOUR THINGS ARE NOT NEGOTIABLE HERE
- *
- * 1. IT NEVER RETURNS AN ERROR STATUS FOR A FAILED LOOKUP. No network, a
- *    504 from the endpoint, a timeout and a well-formed empty answer all
- *    come back as HTTP 200 with an `outcome` saying which. A lookup that
- *    finds nothing is a NORMAL OUTCOME, and a 500 would make the screen
- *    show an error dialog for the commonest case. A missing `name` is still
- *    a 400, because that is the caller being broken rather than the world
- *    being unhelpful.
- *
- * 2. IT TIMES OUT, AND SHORT. The endpoint is a shared public service and
- *    has been seen to take 65 seconds before answering 504. The user is
- *    standing in front of a form they have just filled in.
- *
- * 3. IT SENDS THE ISSUER NAME AND NOTHING ELSE. No machine name, no user
- *    name, no collection detail, and a User-Agent that identifies the
- *    application rather than its owner.
- *
- * 4. THE PROPOSALS ARE NOT TRUSTED. Everything shaping them is in the pure
- *    module, including the cap, the length limit and the de-duplication
- *    that stops two spellings of one coin being offered as two coins.
+ * - A failed or empty lookup is HTTP 200 with an `outcome`, not an error
+ *   status; only a missing `name` is a 400.
+ * - Short timeout: the public endpoint has taken 65 s to answer 504.
+ * - Sends only the issuer name, with a generic User-Agent.
+ * - Proposals are capped, length-limited and de-duplicated.
  */
 
 import { Router, Request, Response } from 'express';
@@ -58,16 +31,12 @@ import {
 const router = Router();
 
 /**
- * How long the user waits before the lookup is abandoned.
- *
- * Eight seconds. The measured successful queries took 0.2 to 6 seconds; the
- * failures took a minute. There is nothing to gain from the gap between
- * those two, and giving up lands on the same offline path the user would
- * have reached with no network at all.
+ * How long before the lookup is abandoned. Successful queries took 0.2-6 s;
+ * failures took a minute.
  */
 export const LOOKUP_TIMEOUT_MS = 8000;
 
-/** What happened, in the only three ways it is allowed to happen. */
+/** The three possible outcomes. */
 export type LookupOutcome = 'results' | 'none' | 'unavailable';
 
 export interface DenominationLookupResponse {
@@ -75,20 +44,11 @@ export interface DenominationLookupResponse {
   /** Named so the screen can say where a proposal came from. */
   source: string;
   proposals: string[];
-  /** For the log and the screen's one-line explanation. Never an error. */
+  /** For the log and the screen's one-line explanation. */
   reason: string | null;
 }
 
-/**
- * The `fetch` this route uses.
- *
- * Injectable so the route's own spec can run every branch -- a refusal, a
- * timeout, a 504, a malformed body -- without a network and without
- * depending on a third party being up while the test suite runs. That is
- * precisely the objection that kept this feature unbuilt: a path whose
- * correct behaviour is "returns nothing, and that is not an error" is
- * indistinguishable from a broken one unless it is exercised.
- */
+/** The `fetch` this route uses; injectable so specs can run every branch without a network. */
 type FetchLike = (url: string, init: { headers: Record<string, string>; signal: AbortSignal }) => Promise<{
   ok: boolean;
   status: number;
@@ -105,10 +65,7 @@ export function setLookupFetch(next: FetchLike): FetchLike {
   return previous;
 }
 
-/**
- * Ask Wikidata. Resolves, always -- it is the caller's job to read
- * `outcome`, not to catch.
- */
+/** Asks Wikidata. Always resolves; callers read `outcome`. */
 export async function lookUpDenominations(issuerName: string): Promise<DenominationLookupResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), LOOKUP_TIMEOUT_MS);
@@ -142,9 +99,7 @@ export async function lookUpDenominations(issuerName: string): Promise<Denominat
       reason: null,
     };
   } catch (error) {
-    // A DNS failure on a machine with no internet, an abort when the timer
-    // fired, a body that was not JSON. None of them is an error the user
-    // did anything about, and all of them mean the same thing to them.
+    // No internet, timeout abort or non-JSON body: all mean "unavailable".
     const aborted = (error as { name?: string } | null)?.name === 'AbortError';
     logWarn(`Denomination lookup for "${issuerName}" failed: ${aborted ? 'timed out' : String(error)}`);
 
@@ -160,15 +115,13 @@ export async function lookUpDenominations(issuerName: string): Promise<Denominat
 }
 
 router.get('/denomination-lookup', async (req: Request, res: Response) => {
-  // `?name=a&name=b` hands back an array and `?name[0]=x` an OBJECT.
-  // Collapse, and treat a non-string as absent rather than calling .trim()
-  // on an object and turning the caller's 400 into a 500.
+  // Repeated or bracketed query params arrive as arrays or objects; treat
+  // non-strings as absent so this stays a 400, not a 500.
   const rawName = req.query['name'];
   const firstName = Array.isArray(rawName) ? rawName[0] : rawName;
   const name = typeof firstName === 'string' ? firstName.trim() : '';
 
   if (!name) {
-    // The caller is broken, not the world. This is the one 400 here.
     res.status(400).json({ error: 'name is required' });
     return;
   }

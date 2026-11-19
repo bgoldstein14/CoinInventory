@@ -1,22 +1,11 @@
 // Shared visual primitives: buttons, badges, file pickers and the box-sizing
-// reset.
-//
-// WHY THIS PARTIAL EXISTS
-// Angular scopes a component's styles to that component's own markup. A rule
-// written in app.scss can style `<button>`s that app.html renders, but it can
-// NOT reach into a child component's template. So every component that renders
-// a button has to bring these rules in itself:
-//
-//     @use '../../styles/controls' as *;
-//
-// (`styles/_modal.scss` does the same job for the dialog components — it
-// predates this file and carries its own, slightly different, button look.)
+// reset. Component styles are scoped, so each component that needs these must
+// `@use '../../styles/controls' as *;`. Dialogs use `_modal.scss` instead.
 
 * { box-sizing: border-box; }
 button, input, textarea, select { font: inherit; }
 
-// ---- Section eyebrow ----
-// The small uppercase caption above a heading.
+// ---- Section eyebrow (small uppercase caption above a heading) ----
 
 .eyebrow {
   margin: 0 0 4px;
@@ -108,32 +97,9 @@ button.small-button {
   white-space: nowrap;
 }
 
-// ---- Grade badges, shaded by tier -------------------------------------
-//
-// One light shade per grade tier, so the grid can be read by colour alone.
-// The owner's brief: MS stays green, PF becomes a gold "more yellow than
-// what you'd use for a Gold CAC sticker", VF keeps the blue already in use
-// with XF a shade darker, and G / VG / F run through earth tones.
-//
-// The ladder reads, best to worst:
-//   PF / SP   gold      struck for collectors -- off the ladder, its own hue
-//   MS        green     uncirculated
-//   AU        teal      almost uncirculated: bridges the blue into the green
-//   XF        blue      deeper than VF
-//   VF        blue      the established shade, unchanged
-//   F         tan       lightest earth tone
-//   VG        tan       deeper
-//   G         brown     deeper still
-//   AG/FR/PO  brown     darkest; the bottom of the scale
-//
-// Every pair keeps its text well clear of its background so the number stays
-// legible at the small size these render at. `.badge--ungraded` below is
-// deliberately the only grey: grey means "no grade recorded", and nothing on
-// the ladder should be confusable with it.
-//
-// AU's teal is the one colour the owner did not specify. It sits between XF
-// and MS on the ladder and the hue sits between their blue and green, which
-// is the most obvious reading of a gap he left open.
+// ---- Grade badges, one shade per tier ----
+//   PF/SP gold, MS green, AU teal, XF/VF blue, F/VG tan, G and AG/FR/PO brown.
+// Grey is reserved for `.badge--ungraded` (no grade recorded).
 
 .badge--grade-pf { background: #fdf6d9; color: #7a6212; border: 1px solid #ecd98a; }
 .badge--grade-ms { background: #e5f3e6; color: #2b6b34; border: 1px solid #b9dfc0; }

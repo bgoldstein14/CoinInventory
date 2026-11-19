@@ -1,27 +1,11 @@
  /*
- * coin-image-hydration.spec.ts
- *
- * "The list gave us no photographs. Get this ONE coin's, on demand."
- *
- * `GET /api/coins` now returns `imageCount` and no `imagePaths`. The detail
- * panel, the gallery and the full-screen viewer all still bind to
- * `coin.imagePaths`, and all three only ever show the SELECTED coin — so the
- * migration is: when a coin is selected, fetch its photographs once and write
- * them onto the in-memory record.
- *
- * ---- WHY HYDRATE THE RECORD INSTEAD OF KEEPING A SEPARATE CACHE ----
- * Because the record is also what the WRITE path reads. "Set as main photo",
- * "delete this photo" and "add photos" all build a new array out of
- * `coin.imagePaths` and PUT it. A parallel cache would mean two copies of the
- * same list that can disagree, and the moment they disagree a save writes the
- * wrong set of photographs to the database.
- *
- * ---- THE RULE THAT MAKES THIS SAFE: HYDRATION IS NOT AN EDIT ----
- * Writing the server's own answer back onto the record must never look like
- * something the user typed. If it did, the debounced PUT would fire and send
- * `imagePaths` straight back — a pointless DELETE-and-reinsert of every image
- * row on a coin the user only LOOKED at, and a new chance to lose them.
- * Several tests below exist purely to pin "and no request was sent".
+  * `GET /api/coins` returns `imageCount` but no `imagePaths`; when a coin is
+  * selected its photos are fetched once and written onto the in-memory record
+  * (which the write paths also read, so no separate cache).
+  *
+  * Hydration must never look like an edit: otherwise the debounced PUT would
+  * send the images back, deleting and re-inserting every row. Several tests check
+  * that no request was sent.
   */
 import 'fake-indexeddb/auto';
 import '@angular/compiler';
@@ -42,7 +26,7 @@ function serverImages(): CoinImageRecord[] {
   ];
 }
 
-/** A coin as `GET /api/coins` hands it over: imageCount, no imagePaths key. */
+/** A coin as `GET /api/coins` returns it: imageCount, no imagePaths key. */
 function listLoadedCoin(imageCount = 2, id = 'coin-1'): CoinRecord {
   const coin = {
     id, denomination: 'Dollar', year: '1921', coinType: 'Morgan',
@@ -84,8 +68,7 @@ describe('InventoryService.loadCoinImages', () => {
 
     expect(getCoinImages).toHaveBeenCalledWith('coin-1');
     expect(images).toEqual([OBVERSE, REVERSE]);
-    // In SortOrder, because that order IS the display order and position 0 is
-    // the coin's main photo.
+    // SortOrder is display order; position 0 is the main photo.
     expect(liveCoin(inv).imagePaths).toEqual([OBVERSE, REVERSE]);
   });
 
@@ -102,9 +85,7 @@ describe('InventoryService.loadCoinImages', () => {
 
   it('makes NO request for a coin the list said has no photographs', async () => {
      /*
-     * The 105-coin arithmetic again, from the other end. Selecting coins one
-     * after another must not fire a request for every coin that obviously
-     * has nothing to fetch — `imageCount: 0` is already the answer.
+      * Coins with `imageCount: 0` must not trigger a fetch when selected.
       */
     const { inv, getCoinImages } = createHarness({ imageCount: 0 });
 
@@ -112,8 +93,7 @@ describe('InventoryService.loadCoinImages', () => {
 
     expect(images).toEqual([]);
     expect(getCoinImages).not.toHaveBeenCalled();
-    // And the record is hydrated with a genuine empty array, so the gallery
-    // can show its "add the first photo" empty state.
+    // Hydrated with a genuine empty array, so the gallery shows its empty state.
     expect(liveCoin(inv).imagePaths).toEqual([]);
   });
 
@@ -132,8 +112,7 @@ describe('InventoryService.loadCoinImages', () => {
 
     await inv.loadCoinImages('coin-1');
 
-    // The grid's "Unsaved" chip must not appear just because somebody opened
-    // a coin and looked at its pictures.
+    // Viewing a coin's pictures must not make it look unsaved.
     expect(inv.isDraftCoin('coin-1')).toBe(false);
   });
 
@@ -155,9 +134,7 @@ describe('InventoryService.loadCoinImages', () => {
 
     await inv.loadCoinImages('coin-1');
 
-    // This is what makes the "open the original photo" link work, and what
-    // lets an outgoing PUT carry the path back so the server does not have
-    // to look it up. See services/image-source-paths.ts.
+    // Needed for "open the original photo" links and outgoing PUTs (see image-source-paths.ts).
     expect(imageSourcePaths.pathFor(OBVERSE)).toBe('D:\\pics\\obv.jpg');
     expect(imageSourcePaths.pathFor(REVERSE)).toBeNull();
   });
@@ -165,8 +142,7 @@ describe('InventoryService.loadCoinImages', () => {
   it('does not clobber photographs the user has already changed on screen', async () => {
     const { inv, getCoinImages } = createHarness();
 
-    // The user attached a photo a moment ago; the record now holds the real
-    // array. Re-reading the server would throw that unsaved work away.
+    // A photo was just attached; re-reading the server would discard it.
     inv.inventory.set([{ ...listLoadedCoin(), imagePaths: ['data:image/jpeg;base64,JUST-ADDED'] }]);
 
     const images = await inv.loadCoinImages('coin-1');
@@ -177,10 +153,8 @@ describe('InventoryService.loadCoinImages', () => {
 
   it('rejects on a failed fetch instead of claiming the coin has none', async () => {
      /*
-     * A network failure must NOT become `imagePaths: []`. That value means
-     * "this coin has no photographs", and the batch import's append path
-     * would then PUT it — deleting every picture on the coin because the
-     * server was briefly unreachable.
+      * A network failure must not become `imagePaths: []`, which the batch import's
+      * append path would PUT, deleting every photo.
       */
     const { inv } = createHarness({ images: throwError(() => new Error('offline')) });
 
@@ -201,7 +175,7 @@ describe('InventoryService.loadCoinImages', () => {
   it('ensureCoinImages swallows the failure so a template can call it', async () => {
     const { inv } = createHarness({ images: throwError(() => new Error('offline')) });
 
-    // No try/catch at the call site, and no unhandled rejection.
+    // No try/catch at the call site and no unhandled rejection.
     expect(() => inv.ensureCoinImages('coin-1')).not.toThrow();
     await Promise.resolve();
     await Promise.resolve();
@@ -209,11 +183,9 @@ describe('InventoryService.loadCoinImages', () => {
 
   it('loads again after the whole inventory is replaced', async () => {
      /*
-     * A reconnect, a JSON import or "Retry connection" replaces every
-     * record, and the fresh ones have no `imagePaths` key again. There is
-     * deliberately no "already fetched" set to invalidate here — the record
-     * IS the cache — so this works with nobody having to remember to clear
-     * anything. This test is what pins that.
+      * A reconnect, JSON import or retry replaces every record, and the new ones
+      * have no `imagePaths` again. The record is the cache, so there is nothing to
+      * invalidate.
       */
     const { inv, getCoinImages } = createHarness();
 
@@ -241,9 +213,7 @@ describe('selecting a coin', () => {
 
     expect(getCoinImages).toHaveBeenCalledTimes(1);
     expect(getCoinImages).toHaveBeenCalledWith('coin-1');
-    // The other 104 coins in the collection are not touched. That is the
-    // entire difference between this and the response that could not be
-    // serialised.
+    // Other coins are not fetched.
     expect(getCoinImages).not.toHaveBeenCalledWith('coin-2');
   });
 });

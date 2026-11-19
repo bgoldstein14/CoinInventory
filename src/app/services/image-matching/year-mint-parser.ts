@@ -1,27 +1,10 @@
  /*
- * year-mint-parser.ts
- *
- * WHAT THIS FILE OWNS
- *   Pulling the YEAR and the MINT MARK out of a filename. Public entry points
- *   are `extractYear` and `extractMintMark`.
- *
- * WHY IT IS ITS OWN FILE
- *   These two belong together because in real filenames they are physically
- *   joined. Every one of these is from the share:
+ * Extracts the year and mint mark from a filename. Kept together because
+ * they are often joined in one token:
  *
  *       1875-CC 20-cent Choice F - Obverse.jpg     hyphen separated
- *       1875CC - VF30 - 2 - Obverse.jpg            NO separator at all
- *       1906-S $5 - XF-AU.jpg                      hyphen separated
- *       1873 - CLOSED.jpg                          NOT a mint mark
- *
- *   The no-separator form is the interesting one: "1875CC" is a SINGLE token,
- *   so the year extractor cannot just look for a four-digit token, and the
- *   mint extractor has to read it out of the middle of a word. Splitting the
- *   two apart into different files would mean two places had to agree on
- *   exactly which glued-together shapes are legal.
- *
- *   It is also, along with filename-parser.ts, where the matcher is most
- *   paranoid -- almost every rule here exists to REFUSE something.
+ *       1875CC - VF30 - 2 - Obverse.jpg            no separator
+ *       1873 - CLOSED.jpg                          not a mint mark
   */
 
 import { CAMERA_PREFIXES, MINT_CODES, MINT_NAMES } from './reference-tables';
@@ -29,27 +12,13 @@ import { indexOfSequence, isPlausibleYear } from './text-tokens';
 
 /**
  * A four-digit year with a mint code glued directly to it: "1875cc", "1906s".
- *
- * Kept deliberately tight. Only real mint codes are allowed after the digits,
- * so "1875th", "2008x" and "1913mm" are all rejected rather than silently
- * yielding a year.
+ * Only real mint codes are allowed, so "1875th" and "1913mm" are rejected.
  */
 const YEAR_WITH_GLUED_MINT = /^(1[6-9]\d{2}|2[01]\d{2})(cc|[pdswocm])$/;
 
 /**
- * Extract a year, but refuse camera sequence numbers.
- *
- * "IMG_2024.jpg" and "DSC_1998.jpg" are photos, not coins from 2024/1998.
- * A year-shaped number immediately preceded by a camera prefix is rejected.
- * Also accepts the glued form "1875CC". `tokenize` splits only on
- * non-alphanumerics, so "1875CC" arrives as one token and would otherwise
- * fail the plain four-digit test, leaving
- * "1875CC - VF30 - 2 - Obverse.jpg" with no year at all.
- *
- * (The "1875S" spelling happens to work anyway: `singularize` chops the
- * trailing "s" off tokens longer than three characters, turning it into a
- * plain "1875". The glued rule covers it properly rather than relying on that
- * side effect.)
+ * Extract a year. Accepts the glued form "1875CC" and rejects camera sequence
+ * numbers ("IMG_2024.jpg" is not a 2024 coin).
  */
 export function extractYear(tokens: string[], isFileName: boolean): number | null {
   for (let i = 0; i < tokens.length; i++) {
@@ -71,32 +40,22 @@ export function extractYear(tokens: string[], isFileName: boolean): number | nul
 }
 
 /**
- * Extract a mint mark ONLY from unambiguous forms.
- *
- * A bare "s", "d" or "c" token anywhere in a filename is NOT a mint mark. A
- * single letter must be positioned like a real mint mark:
+ * Extract a mint mark only from unambiguous forms; a bare "s" or "d"
+ * elsewhere is not a mint mark:
  *
  *   A. attached to the year        "1881-S", "1881_S", "1916 D", "1875CC"
  *   B. delimited on both sides     "morgan-cc-obverse"
  *   C. spelled out                 "carson city", "denver"
  *   D. explicitly labelled         "mintmark s", "mm: cc"
  *
- * If two different codes are found we return null -- ambiguous evidence is
- * treated as no evidence.
- *
- * Form A is what handles the real "1875-CC" / "1875CC" / "1906-S" names, and
- * it is also what REFUSES "1873 - CLOSED.jpg": the separator run is allowed to
- * be empty or any mix of spaces, hyphens and underscores, but the code that
- * follows must then END -- the trailing `(?![a-z0-9])` means the "C" of
- * "CLOSED" is rejected because a letter follows it. Without that lookahead
- * every "1873 - Closed 3" variety note would invent a Charlotte mint mark.
+ * Two different codes found -> null (ambiguous).
  */
 export function extractMintMark(separated: string, tokens: string[]): string | null {
   const found = new Set<string>();
 
   // A. year followed by an optional separator run and a 1-2 letter code.
-  //    `[\s_-]*` permits the no-separator form "1875cc"; the trailing
-  //    lookahead stops "1921_Peace" from yielding "p".
+  //    `[\s_-]*` permits "1875cc"; the trailing lookahead stops
+  //    "1921_Peace" yielding "p" and "1873 - CLOSED" yielding "c".
   const yearAdjacent = /(?:^|[^0-9a-z])(?:1[6-9]\d{2}|2[01]\d{2})[\s_-]*(cc|[pdswocm])(?![a-z0-9])/g;
   for (const match of separated.matchAll(yearAdjacent)) {
     found.add(match[1]);
@@ -126,11 +85,8 @@ export function extractMintMark(separated: string, tokens: string[]): string | n
 }
 
 /**
- * The glued year+mint token for a given year, if the token list holds one.
- *
- * filename-parser.ts uses this to drop "1875cc" from the coin-type words --
- * without it the token survives (it is neither a bare number nor a single
- * letter) and becomes fake design evidence.
+ * Glued year+mint tokens ("1875cc") in the list, so filename-parser.ts can
+ * drop them from the coin-type words.
  */
 export function gluedYearTokens(tokens: string[]): string[] {
   return tokens.filter(token => YEAR_WITH_GLUED_MINT.test(token));

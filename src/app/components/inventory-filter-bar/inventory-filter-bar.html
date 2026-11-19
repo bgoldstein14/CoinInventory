@@ -24,11 +24,7 @@
     Filters {{ filters().showAdvancedFilters() ? '▲' : '▼' }}
   </button>
 
-  <!-- The label says "Reference Data" but the output is
-       `manageCategoriesRequested`: the dialog maintains six reference types,
-       of which categories are only the first. The names differ on purpose —
-       renaming the output would touch the shell and every test that drives
-       it for no behavioural gain. -->
+  <!-- Opens the Reference Data dialog (categories are one of its six types). -->
   <button type="button" class="secondary small-button" (click)="manageCategoriesRequested.emit()">Reference Data</button>
   <button type="button" class="secondary small-button" (click)="reportsRequested.emit()">Reports</button>
   <button type="button" class="secondary small-button" (click)="statisticsRequested.emit()">Statistics</button>
@@ -68,20 +64,8 @@
           }
         </select>
       </label>
-      <!-- Collection status. Sits with the other closed-set controls rather
-           than in the always-visible toolbar row: narrowing to the want list
-           is a deliberate act, not something to do by accident, and the
-           toolbar has no room left. The options come from the store (which
-           re-exports COLLECTION_STATUS_OPTIONS) so this list, the editor's
-           dropdown and the grid can never offer different values.
-
-           TICK BOXES, NOT A DROPDOWN, AND NO "All statuses" ENTRY. The
-           dropdown could ask for one status or for all five, so "owned and
-           for sale but not the want list" was unaskable. All five start
-           ticked, which is what "All statuses" used to mean, so the entry
-           had nothing left to say. See collectionStatusFilter in
-           inventory-filter.store.ts — including the deliberate choice that
-           NONE ticked shows NO coins. -->
+      <!-- Collection status: one tick box per status so any combination can be
+           shown. None ticked shows no coins (see collectionStatusFilter). -->
       <div class="status-filter" role="group" aria-label="Filter by status">
         <div class="status-filter__head">
           <span>Status</span>
@@ -102,9 +86,7 @@
             </label>
           }
         </div>
-        <!-- Says out loud what an empty grid means, next to the thing that
-             caused it. Without this the screen is simply blank and the
-             user's first guess is that his coins have gone. -->
+        <!-- Explains an otherwise blank grid. -->
         @if (filters().collectionStatusFilter().length === 0) {
           <p class="status-filter__empty">
             No statuses ticked, so no coins are shown. Tick at least one, or press All.

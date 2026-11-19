@@ -1,197 +1,340 @@
 # Architecture
 
-How Coin Inventory is put together: the layout philosophy, the component
-boundaries, the stores, and the backend structure.
+How Coin Inventory is put together: the screen layout, the component
+boundaries, the stores, the services and the backend.
 
-For what each feature does and *why* it behaves the way it does, see
-[how-it-works.md](how-it-works.md). For running and building, see the
-[README](../README.md).
+For what each feature does and the rules it follows, see
+[how-it-works.md](how-it-works.md). For the reasoning behind non-obvious
+design choices, see [rationale.md](rationale.md). For running and building,
+see the [README](../README.md).
 
-## Architecture
+## Overview
 
-### Layout philosophy: inventory first
-
-The UI is organized around the principle that the inventory table *is* the application. Import workflows, category management, and other administrative functions live in modal dialogs — accessible from the toolbar but never dominating the main view. The layout is:
-
-1. **Header** — title and the toolbar
-2. **Toolbar** — action buttons (Add Coin, Import, Export, Settings)
-3. **Filter bar** — search, category filter, and a collapsible advanced panel for grade, value range, source, country, coin set
-4. **Main content grid** — inventory table (full width) + detail sidebar (shown when a coin is selected)
-5. **Bulk edit bar** — fixed bottom bar when coins are multi-selected
-6. **Modal dialogs** — Excel/CSV import, JSON import, Quicken (QIF) import, image import (Import ▾ → Images from folder), Reference Data maintenance, reports, spot prices, settings
-7. **Status bar** — the last row of the shell's flex column, showing the database connection state with a Retry button
-
-That last point used to read "fixed to the bottom of the window", and that was the bug. The status bar was `position: fixed; bottom: 0`, which took it out of the document flow — nothing reserved space for it, so it sat on top of the bottom of the inventory table and hid the last row, and the shell's `calc(100vh - 24px)` was an attempt to compensate that never quite lined up. It is now an ordinary flex item that occupies its own height, and the shell simply gets whatever is left.
-
-### Component structure
-
-`src/app/app.ts` is 277 lines and `app.html` is 139 (they were 878 and 751). The root component is only a shell: it owns the modal open/closed flags, the selected coin, and the wiring between child components. Everything that draws a region of the screen is its own component, and everything that holds state is its own store.
-
-Region components under `src/app/components/`:
-
-| Component | Selector | Location |
+| Part | Technology | Where |
 | --- | --- | --- |
-| `AppToolbar` | `app-toolbar` | `src/app/components/app-toolbar/` |
-| `InventoryFilterBar` | `app-inventory-filter-bar` | `src/app/components/inventory-filter-bar/` |
-| `InventoryTable` | `app-inventory-table` | `src/app/components/inventory-table/` |
-| `CoinDetailPanel` | `app-coin-detail-panel` | `src/app/components/coin-detail-panel/` |
-| `CoinEditorForm` | `app-coin-editor-form` | `src/app/components/coin-editor-form/` |
-| `CoinImageGallery` | `app-coin-image-gallery` | `src/app/components/coin-image-gallery/` |
-| `CoinPhotoViewer` | `app-coin-photo-viewer` | `src/app/components/coin-photo-viewer/` |
-| `CoinImagePathLink` | `app-coin-image-path-link` | `src/app/components/coin-image-path-link/` |
-| `BulkEditBar` | `app-bulk-edit-bar` | `src/app/components/bulk-edit-bar/` |
-| `NotificationToast` | `app-notification-toast` | `src/app/components/notification-toast/` |
+| Front end | Angular 22 standalone components, signals, no router | `src/app/` |
+| Back end | Express on Node 22+ | `server/` |
+| Database | SQLite through Node's built-in `node:sqlite` | one file, `%LOCALAPPDATA%\CoinInventory\coin-inventory.db` |
+| UI preferences | IndexedDB in the browser | `StorageService` |
 
-Modal components, same folder:
+The browser never touches the database or the disk. Every coin, photo and
+lookup goes through the REST API on port 3000; under `ng serve` the page is on
+port 4200 and calls the API by absolute URL.
 
-| Component | Selector | Location |
+## Front end
+
+### Layout: inventory first
+
+The inventory table is the application. Imports, reference data, reports and
+settings are modal dialogs opened from the toolbar. From top to bottom:
+
+1. **Header** with the toolbar (Add Coin, Import ▾, Export ▾, Settings, Help)
+2. **Filter bar**: search, category, status tick boxes, and a collapsible advanced panel
+3. **Main grid**: the inventory table, plus the detail sidebar when a coin is open
+4. **Bulk edit bar**: fixed at the bottom while coins are multi-selected
+5. **Status bar**: the last item of the shell's flex column (database state and a Retry button)
+
+The page is one fixed-height screen that scrolls internally. The root
+`:host` is a flex column: error banner, `.app-shell` (`flex: 1; min-height: 0`),
+status bar. The status bar is in normal flow, not `position: fixed`, so it
+never covers the last table row. Print styles release the height locks.
+
+### The app shell (`src/app/app.ts`)
+
+The shell owns only page-wide concerns: the connection banner, the status bar,
+which panel or modal is open, whole-file import/export, start-up hydration and
+the default selection.
+
+- **Every dialog's open flag lives in the shell.** The toolbar only emits which
+  menu entry was picked; `handleImportSelection` / `handleExportSelection`
+  route it. A modal nothing opens is unreachable, so `app.spec.ts` drives each
+  menu entry through these handlers.
+- **`openCoinDetail`** is the single path behind a row click, Enter/Space on a
+  row, and Add Coin. It is not a toggle; only the panel's Close button closes
+  the panel. `selectCoin` alone (used by filtering and start-up) never opens it.
+  When filtering hides the selected coin, the shell selects the first visible row.
+- **Focus.** Add Coin bumps a counter input so the panel focuses its first
+  field; closing the panel resets it. Row clicks never move focus, so arrow-key
+  navigation stays in the grid.
+- **Start-up.** `hydrate()` loads coins, lookups and the last saved spot prices.
+  Afterwards `autoRefreshSpotPrices()` fetches live prices in the background,
+  unawaited, at most once per session, and a failure shows no toast. If
+  start-up fails, the first successful Retry runs it.
+- **Unlinked-denomination banner.** The shell counts coins with no linked
+  denomination and shows an amber `role="status"` banner whose Review button
+  opens that pane of Reference Data. It stays silent at zero and until the
+  denomination lookup has loaded.
+- **Lazy loading.** Every dialog and the detail panel sit in `@defer` blocks.
+  The detail panel, gallery and viewer use `prefetch on idle`; the rest load
+  on demand. Each `@defer` keeps an inner `@if`, because a triggered `@defer`
+  never reverts. `@loading (after 100ms)` with no `@placeholder` draws nothing
+  on a normal open. The toolbar, filter bar, table, toast and bulk-edit bar are
+  never deferred. `app.spec.ts` checks this by reading `app.html` as text.
+- **No router.** `@angular/router` is installed but unused; adding routes means
+  `provideRouter([...])` in `app.config.ts`.
+
+### State stores
+
+Shared state lives in plain classes created by the shell with `new` (not DI)
+and passed to child components as signal inputs. That makes ownership explicit
+and lets a test create a throwaway store.
+
+| Store | File (`src/app/features/inventory/`) | Holds |
 | --- | --- | --- |
-| `QuickenImportModal` | `app-quicken-import-modal` | `src/app/components/quicken-import-modal/` |
-| `CsvImportModal` | `app-csv-import-modal` | `src/app/components/csv-import-modal/` |
-| `ImageImportModal` | `app-image-import-modal` | `src/app/components/image-import-modal/` |
-| `CategoryModal` | `app-category-modal` | `src/app/components/category-modal/` |
-| `ReportModal` | `app-report-modal` | `src/app/components/report-modal/` |
-| `SpotPriceModalComponent` | `app-spot-price-modal` | `src/app/components/spot-price-modal/` |
-| `SettingsModal` | `app-settings-modal` | `src/app/components/settings-modal/` |
+| Filters | `inventory-filter.store.ts` | Search, filters, sort, grouping and group order |
+| Columns | `inventory-columns.store.ts` | Visible columns |
+| Selection | `inventory-selection.store.ts` | Row tick boxes, shift-click ranges, bulk-edit target |
+| Images | `coin-images.store.ts` | Gallery and full-screen viewer state, file-to-base64, main photo |
+| File I/O | `inventory-file-io.ts` | JSON export and CSV / insurance CSV export |
 
-Two components exist only to keep the image-import modal's template from running away with itself, one per tier that needs buttons. Both are "dumb" — every piece of state arrives as an input and every decision leaves as an output, and the modal owns the row list:
+Pure helpers beside them:
 
-| Component | Selector | What it draws |
-| --- | --- | --- |
-| `CoinImageGroup` | `app-coin-image-group` | **Tier 1.** One coin and every photo the matcher attached to it — tick boxes, bulk rules and Skip |
-| `NearMatchReview` | `app-near-match-review` | **Tier 2.** One coin and the photos that are a single yes/no away from it: parsed-attribute chips, Attach / a dropdown of the other near candidates / Skip per photo, and an "Attach all" that settles the whole coin at once |
-
-(There is no component for **tier 3**: files with no apparent match are skipped automatically and listed as a plain read-only table in the modal itself, with no buttons on them. The old `ImageMatchResolver` card, which asked the user to resolve every unplaced photo by hand, was removed with the two-bucket screen it belonged to.)
-
-Each child component uses Angular's `inject()` pattern and `output()` to communicate back to the parent.
-
-**`CoinEditorForm` has two helper modules sitting beside it**, both plain classes/functions with no Angular injection. The reason is always the same in this project: `CoinEditorForm` takes a required signal `input()`, which means constructing it needs `TestBed` and a DOM, and this test suite runs under plain Node. Anything worth testing therefore has to be liftable out of the component.
-
-| File | What it owns |
+| File | What it decides |
 | --- | --- |
-| `coin-editor-form/custom-option-mode.ts` | "The user picked **Other**" as a piece of state, independent of the field's value — see "The 'Other' boxes" below |
-| `coin-editor-form/denomination-countries.ts` | Which `<optgroup>` headings the denomination dropdown shows, derived from the data rather than hard-coded |
+| `inventory-filter-persistence.ts` | Saving and validating restored filter state |
+| `grid-grouping.ts`, `group-order.ts` | Group-by rows, the "(No X)" bucket, custom group order |
+| `grid-keyboard.ts` | Arrow / Enter / Space handling and the roving tabindex |
+| `collection-zero-state.ts` | Which empty-grid message to show |
+| `denomination-sort.ts` | Ordering denominations by face value |
+| `image-path-display.ts` | How an image's original-file path is rendered |
+| `photo-viewer-window.ts` | The viewer window's initial and maximum size |
+| `coin-icons.ts` | Shared image asset paths (the CAC bean) |
+
+`src/app/features/app-settings.ts` holds the `AppSettings` shape shared by the
+shell, the Settings dialog and the image import. `src/app/features/confirm-action.ts`
+wraps `window.confirm` (see [how-it-works.md](how-it-works.md#confirmation-prompts)).
+
+### Components (`src/app/components/`)
+
+Each component uses `inject()` and `output()`. The frontend tests run under
+plain Node (jsdom only where unavoidable), and a component with a required
+signal `input()` cannot be built without `TestBed`, so the logic worth testing
+is lifted into a pure module beside the component.
+
+| Component | What it draws | Pure helpers beside it |
+| --- | --- | --- |
+| `AppToolbar` | Toolbar and split-button menus | |
+| `InventoryFilterBar` | Search, category, status, advanced filters | |
+| `InventoryTable` | The grid, grouping headings, thumbnails | |
+| `CoinDetailPanel` | The sidebar frame (Show images / Close / Delete, draft note) | `first-editable-field` |
+| `CoinEditorForm` | Every editable field of a coin | `custom-option-mode`, `denomination-picker`, `denomination-aliases`, `denomination-countries`, `country-denomination-link` |
+| `CoinImageGallery` | A coin's photos; the only per-coin upload point | |
+| `CoinPhotoViewer` | Full-size viewer | |
+| `CoinImagePathLink` | One image's original-file link (gallery, viewer, sidebar) | |
+| `BulkEditBar` | Bulk actions for ticked rows | |
+| `NotificationToast` | Toasts | |
+| `CsvImportModal` | Excel and CSV import (one dialog) | |
+| `QuickenImportModal` | QIF import | |
+| `ImageImportModal` | Batch image import | |
+| `CoinImageGroup` | Image import tier 1: one coin and its matched photos | |
+| `NearMatchReview` | Image import tier 2: one coin and its near-match photos | |
+| `CategoryModal` | Reference Data screen | `reference-sections`, `denomination-grouping`, `denomination-expansion`, `reference-usage`, `issuer-draft`, `issuer-kind`, `issuer-lookup` |
+| `ReportModal` | Printed reports | `reports/` (see below) |
+| `StatisticsModal` | Statistics and charts | uses `services/statistics/` |
+| `SpotPriceModalComponent` | Spot prices | |
+| `SettingsModal` | App settings, PM backfill, backup and restore | uses `services/backup/` |
+| `HelpModal` | Help and "Report a problem" entry | |
+| `SupportModal` | Problem report | uses `services/support/` |
+
+`report-modal/reports/` is the report pipeline: `build-report` →
+`ReportDocument` (`report-types`) → `report-html` → `print-window`, with
+`report-fields`, `report-totals`, `report-scope`, `report-images` and
+`image-thumbnail` as pure helpers. Only `print-window` touches the DOM.
 
 ### Directives (`src/app/directives/`)
 
-One directive, and it exists to fix a bug rather than to add a feature.
-
 | File | What it is |
 | --- | --- |
-| `numeric-field.ts` | `NumericField` — the `appNumericField` directive, applied to every number box in the coin editor |
-| `numeric-field-format.ts` | `formatNumericValue` / `parseNumericInput` — the pure parse/format pair, kept separate so it is testable without a DOM |
+| `numeric-field.ts` | `appNumericField`, applied to every number box in the coin editor |
+| `numeric-field-format.ts` | The pure parse/format pair it uses |
 
-See "Typing in a number box" under Features for the failure it fixes and the one rule that must not be broken.
+### Services (`src/app/services/`)
 
-### State stores (`src/app/features/`)
-
-These are plain classes created with `new`, not Angular services. They hold the state that more than one component needs, so the root component no longer has to act as a message bus between siblings.
-
-| File | Responsibility |
+| Service or module | Responsibility |
 | --- | --- |
-| `features/inventory/inventory-filter.store.ts` | Search text, category filter, advanced filters, sorting |
-| `features/inventory/inventory-selection.store.ts` | Checkbox multi-select, shift-click ranges, bulk edit target |
-| `features/inventory/inventory-columns.store.ts` | Which columns are visible; persisted to IndexedDB |
-| `features/inventory/coin-images.store.ts` | Gallery and full-screen photo viewer open/closed state |
-| `features/inventory/inventory-file-io.ts` | JSON export/import and CSV export (the hidden file-input plumbing) |
-| `features/inventory/denomination-sort.ts` | Ordering denominations by face value rather than alphabetically |
-| `features/inventory/coin-icons.ts` | Shared image asset paths (the CAC green bean) |
-| `features/inventory/image-path-display.ts` | Pure functions deciding *how* one image's original path is rendered — the three states, the tooltip wording, the middle-ellipsis shortening |
-| `features/app-settings.ts` | The `AppSettings` shape, shared by the shell, the Settings modal and the image importer's base folder |
-| `features/confirm-action.ts` | Safe wrapper around `window.confirm` for the two delete paths |
-
-### SCSS organization
-
-Component styles live with the component that owns them. Angular scopes a component's styles to that component's own markup, so a rule written in `app.scss` could not reach into a child template anyway — `_inventory-table.scss`, `_detail-panel.scss` and `_overlays.scss` were deleted and their contents moved into the owning components.
-
-`src/styles.scss` at the project root is the one genuinely global stylesheet — the only place a rule can reach `html` and `body`. It holds the margin/padding reset and `overflow: hidden`. It used to be empty; see "The page-level scrollbar is gone" above for why that mattered.
-
-What is left under `src/app/styles/` is only the genuinely shared material:
-
-| Partial | Contents |
-| --- | --- |
-| `_base.scss` | Host element, page background, resets |
-| `_layout.scss` | Shell, topbar, main content grid |
-| `_controls.scss` | Buttons, badges, file pickers, the box-sizing reset — and `.eyebrow`, which is now effectively dead; see below |
-| `_panel.scss` | The white rounded card shared by the inventory table and the detail sidebar |
-| `_field.scss` | `.detail-field` — a small caption sitting directly above its control |
-| `_modal.scss` | Shared modal backdrop and chrome |
-
-`app.scss` uses `base` and `layout`, plus the status bar and the database error banner. Each component imports whichever of `controls`, `panel`, `field` and `modal` it needs via `@use`.
-
-**`.eyebrow` is worth a note, because it is now a rule with no reachable markup.** The small uppercase caption above a heading used to appear in two places: the app header in `app.html`, and the detail panel's "Selected coin" header. The detail panel header was stripped when the redundant heading and badge rows were removed (see "Coin editor layout" below), so the only `.eyebrow` left in any template is `<p class="eyebrow">Numismatic portfolio</p>` in `app.html` — and `app.scss` does not `@use 'styles/controls'`, so that element is rendering unstyled. It is listed under "Known gaps" rather than quietly deleted, because the fix is a judgement call (either drop the rule or add the one-line `@use`) and the owner should make it.
-
-`styles/_field.scss` is unaffected by any of this and is still shared by two components.
-
-`_field.scss` is the newest of these and it exists for the usual reason: more than one component renders `.detail-field`, and Angular's style scoping means a rule written in one cannot reach another's template, so each has to `@use` it. The rule was promoted out of `coin-editor-form.scss` when the detail sidebar's add-transaction row was given real labels; that row has since gone with the `Transactions` table, but the rule stays shared, and the lesson with it — never use `placeholder` text as a field's only label, because it disappears the moment you type and is skipped by some screen readers. Component-specific width and layout modifiers deliberately stay in the component that uses them — only the base look is shared.
-
-### Services
-
-| Service | Responsibility |
-| --- | --- |
-| `InventoryService` | The single front door to the collection — owns the signals components read |
-| `ApiService` | HTTP calls to the Express backend |
-| `StorageService` | IndexedDB persistence for UI preferences (async get/set keyed by `StorageKeys`) |
-| `QuickenImportService` | QIF parser — accounts, transactions, denomination inference, grade, cert company, CAC sticker |
-| `CsvService` | CSV parsing, auto-mapping headers, export to CSV/insurance CSV |
+| `InventoryService` | The single front door to the collection; owns the signals components read |
+| `ApiService` | HTTP calls to the backend |
+| `StorageService` | IndexedDB persistence for UI preferences, keyed by `StorageKeys` |
+| `QuickenImportService` | QIF parser |
+| `CsvService` | CSV parsing, header mapping, CSV and insurance CSV export |
 | `ImageMatchingService` | Filename-to-coin matching |
-| `BatchImageImportService` | The engine behind "point at a folder and attach the photos to my coins" |
-| `CoinImagePathsService` | "Where did this photo come from, and is that file still there?" — with one batched existence check per coin and a session cache |
-| `SpotPriceService` | Spot prices, proxied through the backend |
-| `LoggingService` | Sends frontend log lines to `POST /api/log` so they interleave with server logs |
-| `NotificationService` | Toast messages (info/warning auto-dismiss, errors are sticky) |
-| `GlobalErrorHandler` | Angular `ErrorHandler` — logs unhandled errors and shows a toast |
-| `coin-completeness.ts` | The 2-of-3 completeness rule, shared by **all three** coin-creating paths: QIF import, CSV import and the manual "Add coin" path |
-| `coin-countries.ts` | Reading a country and a foreign denomination out of a Quicken security name |
-| `image-source-paths.ts` | `ImageSourcePathRegistry` — the side table mapping a displayed image to its original file's path |
-| `pm-reference.ts` | "What is this coin made of?" — the composition table behind both melt values and the QIF importer's alloy prefill |
-| `http-utils.ts` | `resolveApiBaseUrl` / `describeHttpError`, dependency-free so `LoggingService` can use them without dragging `HttpClient` into the test module graph |
+| `BatchImageImportService` | Plans and applies a batch photo import |
+| `CoinImagePathsService` | Per-coin original-file paths and existence checks, cached per session |
+| `SpotPriceService` | Spot prices, through the backend |
+| `LoggingService` | Console logging plus `POST /api/log` |
+| `NotificationService` | Toasts |
+| `GlobalErrorHandler` | Logs unhandled errors, records them for problem reports, shows a toast |
+| `coin-completeness.ts` | The 2-of-3 rule shared by every coin-creating path |
+| `coin-countries.ts` | Country names and codes; foreign denominations in QIF names |
+| `coin-photos.ts` | The one answer to "what photos does this coin have?" |
+| `image-source-paths.ts` | `ImageSourcePathRegistry`: displayed image → original file path |
+| `import-sold.ts` | The "is this record sold?" rule shared by all importers |
+| `pm-reference.ts`, `metal-inference.ts`, `pm-fill.ts` | Composition table, coarse metal fallback, and the adapter that writes both onto a coin |
+| `pm-autofill.ts`, `pm-backfill.ts` | Editor autofill and the Settings backfill |
+| `http-utils.ts` | `resolveApiBaseUrl`, `describeHttpError`, retry rules |
 
-Note that `coin-completeness.ts`, `coin-countries.ts`, `image-source-paths.ts`, `pm-reference.ts` and `http-utils.ts` are plain modules, not `@Injectable` services. `ImageSourcePathRegistry` in particular is deliberately *not* injectable: `InventoryService` has to stay constructible from an injection context providing only `ApiService`, `LoggingService` and `NotificationService`, which is how every existing test builds it, and a fourth injected dependency would break all of them. The class has no dependencies of its own, so a module-level singleton gives the same shared-instance guarantee with none of the wiring.
+Plain modules (everything ending in `.ts` without `.service`) are not
+injectable. `ImageSourcePathRegistry` is a module-level singleton because
+`InventoryService` must stay constructible from an injection context providing
+only `ApiService`, `LoggingService` and `NotificationService`.
 
-Three services were large enough to split into folders of focused helpers:
+Subfolders:
 
 | Folder | Files |
 | --- | --- |
-| `src/app/services/inventory/` | `coin-change-tracker`, `coin-editor`, `coin-collection`, `coin-draft-registry`, `lookup-manager`, `connection-manager`, `coin-factory`, `inventory-metrics` |
-| `src/app/services/image-matching/` | `coin-signature`, `filename-parser`, `filename-vocabulary`, `denomination-units`, `year-mint-parser`, `grade-parser`, `photo-markers`, `catalog-refs`, `non-coin-detector`, `match-scorer`, `match-decider`, `matching-thresholds`, `reference-tables`, `text-tokens` |
-| `src/app/services/image-import/` | `image-file-filter`, `batch-import-session`, `coin-lookup`, `row-decisions`, `selection-rules`, `thumbnail-cache`, `attach-runner`, `image-downscaler`, `photo-variant`, `source-path`, `base-folder-state`, `import-base-folder` |
+| `inventory/` | `coin-change-tracker`, `coin-collection`, `coin-create-requirements`, `coin-draft-registry`, `coin-editor`, `coin-factory`, `coin-image-hydrator`, `coin-thumbnail-revision`, `connection-manager`, `draft-row-status`, `inventory-metrics`, `load-failure`, `lookup-manager` |
+| `image-matching/` | `filename-parser`, `filename-vocabulary`, `text-tokens`, `year-mint-parser`, `denomination-units`, `grade-parser`, `grade-tolerance`, `photo-markers`, `catalog-refs`, `non-coin-detector`, `proof-strike`, `coin-signature`, `reference-tables`, `match-scorer`, `match-vetoes`, `match-decider`, `matching-thresholds`, `near-match`, `sibling-inference` |
+| `image-import/` | `batch-import-session`, `image-file-filter`, `photo-variant`, `photo-sets`, `row-decisions`, `selection-rules`, `coin-lookup`, `thumbnail-cache`, `existing-photo-mode`, `already-attached`, `attach-runner`, `image-downscaler`, `encode-budget`, `image-storage-settings`, `referenced-encoder`, `reference-url`, `source-path`, `base-folder-state`, `base-folder-check`, `import-base-folder`, `import-progress` |
+| `denominations/` | `denomination-display`, `denomination-resolution`, `denomination-index`, `unlinked-denominations` |
+| `csv/` | `mappable-fields`, `header-synonyms`, `date-column-shape`, `numeric-cell`, `byte-order-mark`, `import-plan` |
+| `xlsx/` | `read-workbook`, `workbook-sheets`, `workbook-cell-text`, `sheet-header-comparison` |
+| `statistics/` | `collection-totals`, `composition-breakdown`, `precious-metal-holdings`, `spend-over-time`, `chart-geometry`, `stats-format` |
+| `backup/` | `backup-runner`, `backup-folder-browser`, `picked-folder`, `backup-messages` |
+| `support/` | `support.service`, `issue-url`, `recent-errors.service` |
 
-`coin-draft-registry` is the newest of the inventory helpers and it fixes a small but annoying bug. Clicking "Add coin" used to build a completely empty `CoinRecord` and POST it immediately; the backend quite reasonably answered `400 {"error":"denomination is required"}`, so the user got a red error toast before typing a single character. The app saves aggressively — every edit is written a second later — and that is worth keeping, so the fix is not "add a Save button" but to delay only the *first* write until the coin has enough detail to be legal.
+The `inventory/` helpers are ordinary classes created by `InventoryService`;
+the signals are created in the service and passed in, so each piece of state
+exists once.
 
-### Backend structure (`server/`)
+### Types (`src/app/types/`)
 
-`server.ts` is wiring only. `db.ts`, `routes/coins.ts`, `routes/lookups.ts` and `routes/data.ts` were all replaced by folders.
+| File | Contents |
+| --- | --- |
+| `coin.model.ts` | `CoinRecord`, QIF records, image-matching and batch-import types, spot prices, denominations |
+| `coin-image.model.ts` | `AttachedImage`, `CoinImageRecord`, `ImageFileExistence` |
+| `reference-data.model.ts` | Issuers, usage counts, lookup outcomes (shared by API layer and screen) |
+| `inventory-columns.ts` | Column order, labels, cell formatting, grade badges |
+| `collection-status.ts` | Status tokens, `isHeldInCollection` |
+| `catalog-reference.ts` | Catalogue list and reference formatting |
+
+Batch-import types live in `coin.model.ts` so the modal, its child components
+and the services share them without importing each other.
+
+### Styles
+
+Angular scopes component styles to the component's own template, so each
+component holds its own styles and `@use`s the shared partials it needs.
+`src/styles.scss` is the only global sheet (margin reset, `body { overflow: hidden }`).
+
+| Partial (`src/app/styles/`) | Contents |
+| --- | --- |
+| `_base.scss` | Host element, page background, resets |
+| `_layout.scss` | Shell, top bar, main grid (sidebar 420px; below 900px it drops beneath the table) |
+| `_controls.scss` | Buttons, badges, grade badge colours, `box-sizing` |
+| `_panel.scss` | The white card used by the table and the detail panel |
+| `_field.scss` | `.detail-field`: a caption `<span>` above its control (never a placeholder as label) |
+| `_modal.scss` | Dialog backdrop and chrome |
+
+`app.scss` uses `base` and `layout` only, so the `.eyebrow` caption in
+`app.html` currently renders unstyled.
+
+### Testing layout
+
+- `src/app/testing/` holds fixtures and helpers and is excluded by
+  `tsconfig.app.json`, so nothing in it (or its dev-only dependencies such as
+  `fflate`) reaches the bundle.
+- Several specs read `.html`/`.ts` files as text because there is no DOM.
+  They strip comments first, so a comment quoting the rule cannot satisfy it.
+- Mocks of `ApiService` must stub every lookup getter, because
+  `ConnectionManager.loadLookupTables` calls them all during `hydrate()`.
+
+## Back end (`server/`)
+
+`server.ts` is wiring only: CORS, `express.json({ limit: '50mb' })`, the
+static Angular bundle, the routers, and the global error handler last.
+
+### Data layer (`server/db/`)
+
+| File | Contents |
+| --- | --- |
+| `driver.ts` | The only file that imports `node:sqlite`; opens the file and enables foreign keys |
+| `sql-api.ts` | The query API routes use (see below) |
+| `pool.ts` | `withDb`, single-flight open, retry, generation counter, `withDatabaseOffline` |
+| `config.ts` | Database file location and overrides |
+| `schema.sql`, `schema.ts` | The schema and its application on open |
+| `seed.ts` | Reference-data seeding from `issuers-denominations.json` |
+| `backup.ts` | File-level helpers for backup and restore |
+| `coin-fields.ts`, `bindings.ts` | Column maps with types, widths and normalisers |
+| `bind-values.ts`, `column-types.ts`, `value-normalizers.ts` | Value conversion and range/width checks |
+| `collection-status.ts` | Server copy of the status set |
+| `errors.ts`, `row-mappers.ts` | Error classification; row → JSON |
+
+**Query API.** Routes call `db.request().input(name, type, value).query(sql)`
+and receive `{ recordset, rowsAffected }`. `sql-api.ts` adds checks that
+SQLite itself does not make:
+
+- a string with more than one statement is rejected (`node:sqlite` would run
+  only the first, silently);
+- every `@name` in the SQL must be bound (SQLite would bind NULL);
+- all access is serialised through one FIFO lock, because there is a single
+  handle and a transaction spans `await`s.
+
+Transactions use `BEGIN IMMEDIATE`, which holds the lock until commit or
+rollback; always pair them with `try`/`catch` and `safeRollback()`, which keeps
+a failing rollback from masking the original error. `setQueryObserver()`
+exposes each statement and its bindings (used by specs that check generated
+UPDATEs).
+
+**Only `db/` may hold a SQLite handle**; `db/driver-isolation.spec.ts`
+enforces it. If a future host lacks `node:sqlite`, `driver.ts` is the one file
+to change (e.g. to `better-sqlite3`).
+
+**Connection lifecycle.** On every open the server creates the folder, applies
+the schema (all `IF NOT EXISTS`), seeds reference data, stamps the schema
+version and enables WAL. All of it is idempotent, so there is no first-run
+branch. `withDb()` is the only entry point for routes; it retries once, and
+only for connection-class errors. See [rationale/server.md](rationale/server.md).
+
+### Routes (`server/routes/`)
+
+| Path | Mounted at | Notes |
+| --- | --- | --- |
+| `health.ts` | `/api/health` | Launcher readiness probe; response shape is a contract |
+| `app-info.ts` | `/api/app-info` | The install folder; no database access |
+| `coins/` | `/api/coins` | `reads`, `writes`, `write-helpers`, `images`, `image-payload`, `image-source-paths`, `thumbnail`, `list-query`, `catalog-refs` |
+| `images/` | `/api/images` | `file`, `exists`, `allowed-types`, `reference-url`; no database access |
+| `lookups/` | `/api` | categories, coin sets, issuers, denominations, mint marks, metal contents, catalogs, reference usage, Wikidata denomination lookup |
+| `data/` | `/api` | spot prices, settings, frontend log |
+| `backup/` | `/api` | backup jobs and restore |
+| `support/` | `/api` | problem reports |
+| `db-error-response.ts`, `failure-report.ts` | | Error → HTTP status and failure stage |
+| `error-handler.ts` | | App-wide handler, mounted last |
+| `param-utils.ts` | | Request-parameter helpers |
+
+### Endpoints
+
+| Group | Endpoints |
+| --- | --- |
+| Health and host | `GET /api/health`, `GET /api/app-info` |
+| Coins | `GET /api/coins` (`?includeImages=true` to inline photos), `GET /api/coins/:id`, `POST /api/coins`, `PUT /api/coins/:id`, `DELETE /api/coins/:id` |
+| Coin images | `GET /api/coins/:id/images`, `POST /api/coins/:id/images`, `DELETE /api/coins/:id/images/:imageId`, `GET /api/coins/:id/thumbnail`, `POST /api/coins/image-source-paths` |
+| Original files | `GET /api/images/file?path=`, `POST /api/images/exists` |
+| Lookups | `GET/POST/DELETE /api/categories`, `/api/coin-sets`; `GET/POST/PUT/DELETE /api/issuers`, `/api/denominations`, `/api/mintmarks`, `/api/catalogs`; `GET /api/metalcontents`; `GET /api/reference-usage`; `GET /api/denomination-lookup` |
+| Spot prices | `GET /api/spot-prices/latest`, `GET /api/spot-prices/fetch`, `POST /api/spot-prices` |
+| Settings and log | `GET/PUT /api/settings/:key`, `POST /api/log` (always 204) |
+| Backup and restore | `GET /api/backup/suggestion`, `GET /api/backup/files?directory=`, `POST /api/backup/jobs` (202), `GET /api/backup/jobs/:id`, `POST /api/backup/jobs/:id/cancel`, `POST /api/restore/inspect`, `POST /api/restore` |
+| Support | `GET /api/support/config`, `POST /api/support/preview`, `POST /api/support/report` |
+
+Errors from database routes are `{ error, stage, detail }`; see
+[how-it-works.md](how-it-works.md#errors-and-failure-stages).
+
+### Other server folders
 
 | Path | Contents |
 | --- | --- |
-| `server/db/index.ts` | Barrel and the written-up story of the crash — read this first |
-| `server/db/pool.ts` | `getPool` / `resetPool` / `withDb`; the `'error'` listener, single-flight guard and generation counter |
-| `server/db/config.ts` | Builds the `sql.config` from `server/.env` |
-| `server/db/errors.ts` | `isConnectionError` / `sqlErrorNumber` |
-| `server/db/coin-fields.ts` | `COIN_FIELDS` — the Coins column map, with types, max lengths and normalizers |
-| `server/db/bindings.ts` | `DB_BINDINGS` — parameter types for every other table |
-| `server/db/value-normalizers.ts` | JSON value to SQL parameter value helpers |
-| `server/db/row-mappers.ts` | SQL row to JSON for the Angular app |
-| `server/migrations/` | Guarded, idempotent schema changes for a database that already has data in it |
-| `server/routes/health.ts` | `GET /api/health` — the launcher's readiness probe |
-| `server/routes/app-info.ts` | `GET /api/app-info` — one host-local fact the browser cannot know; see below |
-| `server/routes/coins/` | `index`, `reads`, `writes`, `write-helpers`, `images`, `image-payload`, `list-query` — mounted at `/api/coins` |
-| `server/routes/images/` | `index`, `file`, `exists`, `allowed-types` — mounted at `/api/images` |
-| `server/routes/lookups/` | `categories`, `coin-sets`, `denominations`, `metal-contents`, `mint-marks` — mounted at `/api` |
-| `server/routes/data/` | `spot-prices`, `spot-price-source`, `settings`, `frontend-log` — mounted at `/api` |
-| `server/routes/db-error-response.ts` | Translates SQL errors into HTTP status codes |
-| `server/routes/error-handler.ts` | The app-wide Express error handler, mounted last |
-| `server/routes/param-utils.ts` | Shared request-parameter helpers |
-| `server/process-safety.ts` | The `unhandledRejection` / `uncaughtException` handlers |
-| `server/logger.ts` | Appends timestamped lines to a rotated daily log under `server/logs/` |
-| `server/log-rotation.ts` | Daily log naming, the 5 MB per-file cap, ~14-day retention |
-| `server/support/` | The problem-report bundle: redaction, report text, zip writer |
-| `server/test-support/mssql-mock.ts` | The shared mssql mock used by every server spec |
+| `backup/` | `jobs`, `run-backup`, `restore`, `inspect`, `verdict`, `metadata`, `names`, `list-db-files` |
+| `support/` | `report`, `report-file`, `log-file`, `redaction` |
+| `logger.ts`, `log-rotation.ts` | Daily log files under `server/logs/` (override `COIN_LOG_DIR`), 5 MB cap per file, about 14 days kept |
+| `process-safety.ts` | `unhandledRejection` / `uncaughtException` handlers that log before exit |
+| `test-support/` | `sqlite-test-db`, `vitest-setup`, `real-file-db`, `schema-columns` |
 
-`routes/images/` is worth a note because it is unlike everything else in this backend: neither endpoint touches the database or the connection pool at all. `withDb()` and `sendDbError()` make no appearance there. They are about files on disk, which is why they live outside `/api/coins`.
+### Server tests
 
-`routes/app-info.ts` is the other router that never touches the database, and it exists for one small job. The batch image import screen has to ask the user for the absolute folder their photos live in, because the browser refuses to tell it (see "The base-folder input"). Starting that box empty is unhelpful, and the old prefill was worse: it hard-coded `\\NAS\Coin Pictures`, which is how the library is reachable from the *developer's* workstation, not from the machine hosting the app. A path valid on the wrong machine is the single most expensive mistake that screen can make, because it does not fail loudly — it stamps every imported row with a location that resolves to nothing. So the prefill is now something only the server can know and that is guaranteed to be host-local: the folder the app itself is installed in. It is very probably not where the photos are, and the screen says so — but it is the right shape, on the right machine, with the right drive letter, and the user edits it down from there. Once they do, the choice is remembered and this endpoint's answer is never consulted again. Deliberately independent of SQL Server, too: the import screen must open even when the database is down, and a cosmetic default is never worth failing a page load over.
-
-`routes/error-handler.ts` also fixes a real bug. It used to be four lines ending in an unconditional `res.status(500).json({ error: 'Internal server error' })`, which threw away information the error was already carrying. `express.json()` is configured with `limit: '50mb'`, and when a request body exceeds it, body-parser rejects the request with a `PayloadTooLargeError` that already has `status: 413` set on it. During a batch photo import that mattered: the real problem is "that batch of images is too big, send fewer at a time", which the user can act on, but what they saw was a generic server error suggesting the server itself was broken.
-
+Server specs run against a real in-memory SQLite database built from
+`db/schema.sql` and the real seed. `resetTestDatabase()` clears the
+user-data tables before each test; `rebuildTestDatabase()` also restores the seeded
+reference tables. `vitest-setup.ts` forces `COIN_INVENTORY_DB_PATH=':memory:'`
+before every test and fails any test that leaves it pointing elsewhere, so no
+test can write to the real collection folder. Backup and restore specs use
+`real-file-db.ts` (a real file in a temp directory) and must call
+`releaseFileDatabase()`.

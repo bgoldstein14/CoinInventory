@@ -1,16 +1,11 @@
 /**
- * Shared error -> HTTP status translation for the API route modules.
- *
- * A blanket 500 from every catch block leaves the Angular app unable to tell
- * "you typed something invalid" apart from "the database is on fire". Routes
- * instead do:
+ * Shared error -> HTTP status translation for the API routes:
  *
  *   } catch (err) {
  *     sendDbError(res, 'PUT /api/coins/:id', err, 'Failed to update coin');
  *   }
  *
- * and get a sensible status code with the error logged exactly once. Nothing
- * here calls resetPool() — see db/index.ts for why that matters.
+ * Gives a sensible status and logs the error once. Never calls resetPool().
  */
 
 import { Response } from 'express';
@@ -38,16 +33,10 @@ const CONFLICT_SQL_ERROR_NUMBERS = new Set([2627, 2601, 547]);
  */
 const BAD_REQUEST_SQL_ERROR_NUMBERS = new Set([8152, 2628, 245, 241, 8114]);
 
-/**
- * mssql driver codes raised when the *parameters* we were handed fail
- * validation before the query is even sent. Also a 400.
- */
+/** mssql driver codes for parameters that fail validation before sending (400). */
 const BAD_REQUEST_DRIVER_CODES = new Set(['EPARAM', 'EARGS']);
 
-/**
- * A route can throw this when it detects a validation problem inside a
- * transaction (where an early `res.status(400)` + `return` is awkward).
- */
+/** Thrown by a route that detects bad input inside a transaction (400). */
 export class ValidationError extends Error {
   constructor(message: string) {
     super(message);
@@ -56,15 +45,9 @@ export class ValidationError extends Error {
 }
 
 /*
- * A single `error` string cannot carry both "what happened" and "what it
- * means for your collection" (see routes/failure-report.ts). The body
- * therefore also carries:
- *
- *   stage   'connection' | 'database' | 'delivery' — WHICH part failed
- *   detail  one technical line, for whoever wants it (not shouted at the user)
- *   error   the sentence to show. For a delivery failure it is the headline
- *           PLUS the reassurance, so a client that reads nothing but `error`
- *           still gets the honest answer.
+ * Response body. Besides `error` (the sentence to show, including any
+ * reassurance), it carries `stage` (which part failed) and `detail` (one
+ * technical line). See routes/failure-report.ts.
  */
 export interface DbErrorBody {
   error: string;
@@ -77,28 +60,20 @@ function bodyFor(report: FailureReport): DbErrorBody {
   return { error: spokenMessage(report), stage: report.stage, detail: report.detail };
 }
 
-/**
- * What the caller knows about the failure beyond the error object itself.
- * All optional: a route that passes nothing behaves exactly as before.
- */
+/** Extra facts the caller knows about the failure. All optional. */
 export interface DbErrorOptions {
   /** Route label for the technical detail line, e.g. 'GET /api/coins'. */
   context?: string;
   /** The noun the delivery message names, e.g. 'coin list'. */
   subject?: string;
   /**
-   * TRUE ONLY WHEN THE DATA WAS ALREADY IN HAND. Set by sendJson(), which
-   * wraps nothing but the `res.json()` call, so anything it catches happened
-   * after a successful read by construction. Never set this by hand in a
-   * catch block that also covers the query.
+   * True only when the data was already in hand. Set by sendJson(); never
+   * set it in a catch block that also covers the query.
    */
   retrieved?: boolean;
 }
 
-/**
- * Works out the right HTTP status + client-facing body for a caught error.
- * Exported separately from sendDbError so it can be unit-tested directly.
- */
+/** The HTTP status and body for a caught error. Exported for tests. */
 export function classifyDbError(
   err: unknown,
   fallbackMessage: string,
@@ -111,10 +86,8 @@ export function classifyDbError(
     retrieved: options.retrieved,
   };
 
-  // DELIVERY FIRST, and only when the caller positively knows the data was
-  // retrieved. Everything below this point GUESSES from properties of the
-  // error; this branch does not have to guess, so it must not fall through
-  // into a guess that contradicts it.
+  // Delivery first, and only when the caller knows the data was retrieved;
+  // the branches below infer from the error.
   if (options.retrieved) {
     return { status: 500, body: bodyFor(buildFailureReport(err, ctx)) };
   }
@@ -166,20 +139,17 @@ export function classifyDbError(
     };
   }
 
-  // Everything else goes to the shared classifier. It is reached AFTER the
-  // specific SQL error numbers above, so a genuine query error is never
-  // mistaken for a dead connection; keep that ordering.
+  // Everything else goes to the shared classifier, after the specific SQL
+  // error numbers so a query error is never mistaken for a dead connection.
   const report = buildFailureReport(err, ctx);
 
-  // 503 for an unreachable database; 500 for a database fault or a response
-  // we could not build. A delivery failure is a 500 because it IS the
-  // server's fault — but the body says whose, and that the user's data is not
-  // involved.
+  // 503 for an unreachable database; 500 otherwise (the body says whether
+  // the user's data is involved).
   const status = report.stage === 'connection' ? 503 : 500;
   return { status, body: bodyFor(report) };
 }
 
-/** Local alias so the branches above stay readable. */
+/** Shorthand for technicalDetail(). */
 function detailOf(err: unknown, context: string): string {
   return buildFailureReport(err, { context, subject: 'data', fallbackMessage: '' }).detail;
 }
@@ -192,11 +162,8 @@ function detailOf(err: unknown, context: string): string {
  *                          e.g. 'PUT /api/coins/:id'.
  * @param err             - The caught error.
  * @param fallbackMessage - Message used for the generic 500 case.
- * @param subject         - Noun phrase for the thing the caller was waiting
- *                          for ('coin list', 'coin', 'spot price list'). Only
- *                          read when the failure turns out to be a delivery
- *                          one, which is the one case where the message has to
- *                          name it.
+ * @param subject         - Noun phrase for what the caller was waiting for
+ *                          ('coin list'); used only for delivery failures.
  * @param options         - Extra facts the caller knows; see DbErrorOptions.
  */
 export function sendDbError(
@@ -209,8 +176,7 @@ export function sendDbError(
 ): void {
   logError(`${context} error`, err);
 
-  // If the handler already started streaming a response there is nothing
-  // useful we can do beyond the log line above.
+  // A response already started; the log line is all we can do.
   if (res.headersSent) return;
 
   const { status, body } = classifyDbError(err, fallbackMessage, { ...options, context, subject });
@@ -218,26 +184,17 @@ export function sendDbError(
 }
 
 /*
- * sendJson — the "did the query fail, or only the send?" distinction made
- * structural rather than guessed.
- *
- * `res.json(payload)` runs JSON.stringify SYNCHRONOUSLY and can throw
- * (`RangeError: Invalid string length` on a large enough payload). A try
- * block wrapping both the query and the send cannot tell those apart, and
- * blames the database. This helper wraps NOTHING BUT the send, so anything it
- * catches provably happened after the data was in hand — which is why it may
- * pass `retrieved: true` and tell the user their data is safe.
- *
- * Use it in every handler that serialises data read out of the database.
- * Handlers that send a small literal (`{ success: true }`, a 404 body) do not
- * need it: those cannot fail to serialise.
+ * Sends JSON, attributing a failure to delivery rather than the database.
+ * res.json() runs JSON.stringify synchronously and can throw on a large
+ * payload; this wraps only the send, so anything it catches happened after
+ * the data was retrieved. Use it for data read from the database; small
+ * literals don't need it.
  */
 export function sendJson(res: Response, context: string, payload: unknown, subject: string): void {
   try {
     res.json(payload);
   } catch (err) {
-    // Express builds the whole string before touching the socket, so nothing
-    // has been written yet and a proper error response is still possible.
+    // Nothing has been written yet, so an error response is still possible.
     sendDbError(res, context, err, `Failed to send the ${subject}`, subject, { retrieved: true });
   }
 }

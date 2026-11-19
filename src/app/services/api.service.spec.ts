@@ -3,39 +3,22 @@ import { ApiService, describeHttpError, resolveApiBaseUrl } from './api.service'
 import { defer, firstValueFrom, of, throwError } from 'rxjs';
 
 /**
- * Builds a stand-in for Angular's `HttpErrorResponse`.
- *
- * We deliberately do NOT import the real class: doing so pulls Angular's XHR
- * backend into this test file and it then needs the JIT compiler. The helpers
- * under test identify HTTP errors structurally (by their numeric `status`),
- * so a plain object is an accurate stand-in.
+ * A stand-in for Angular's `HttpErrorResponse`. The real class would pull in the
+ * XHR backend (needing the JIT compiler); the helpers identify HTTP errors by
+ * their numeric `status`, so a plain object is accurate.
  */
 function httpError(status: number, statusText: string, body?: unknown) {
   return { status, statusText, error: body ?? null, name: 'HttpErrorResponse' };
 }
 
-/**
- * Tests for ApiService.
- *
- * This service wraps all backend HTTP calls via Angular's HttpClient.
- * It provides methods for:
- * - CRUD operations on coins, categories and coin sets
- * - Reference data (denominations, mint marks)
- * - Spot price proxy
- * - Logging
- *
- * ApiService uses constructor injection for HttpClient, so we pass a mock
- * HttpClient directly via the constructor for testing.
- */
+/** ApiService takes HttpClient by constructor injection, so a mock is passed directly. */
 describe('ApiService', () => {
   let service: ApiService;
   let mockHttpClient: any;
 
-  // All API calls go through baseUrl (http://localhost:3000)
   const baseUrl = 'http://localhost:3000';
 
   beforeEach(() => {
-    // Mock HttpClient
     mockHttpClient = {
       get: vi.fn(() => of([])),
       post: vi.fn(() => of({})),
@@ -43,11 +26,10 @@ describe('ApiService', () => {
       delete: vi.fn(() => of({})),
     };
 
-    // Create service with mocked HttpClient via constructor
     service = new (ApiService as any)(mockHttpClient);
   });
 
-  // --- Coins CRUD ---
+  // Coins
 
   it('getCoins calls GET /api/coins', () => {
     service.getCoins();
@@ -90,7 +72,7 @@ describe('ApiService', () => {
     expect(mockHttpClient.delete).toHaveBeenCalledWith(`${baseUrl}/api/coins/c1`);
   });
 
-  // --- Categories ---
+  // Categories
 
   it('getCategories calls GET /api/categories', () => {
     service.getCategories();
@@ -107,7 +89,7 @@ describe('ApiService', () => {
     expect(mockHttpClient.delete).toHaveBeenCalledWith(`${baseUrl}/api/categories/Old Category`);
   });
 
-  // --- Coin Sets ---
+  // Coin sets
 
   it('getCoinSets calls GET /api/coin-sets', () => {
     service.getCoinSets();
@@ -124,15 +106,7 @@ describe('ApiService', () => {
     expect(mockHttpClient.delete).toHaveBeenCalledWith(`${baseUrl}/api/coin-sets/Morgan Set`);
   });
 
-  // --- Transactions ---
-  //
-  // getTransactions / createTransaction / deleteTransaction were tested here
-  // and all three are gone with the /api/transactions endpoints. There is
-  // nothing to move: they asserted a URL. What replaces them is the
-  // assertion that no such method survives — a leftover one would be a
-  // second write path to the coin fields the deal record now lives in, and
-  // it would fail at runtime rather than at compile time, because the
-  // client reaches it through a plain HttpClient call.
+  // Transactions are coin fields now; no separate transaction endpoint may exist.
 
   it('no longer exposes any transaction endpoint', () => {
     const api = service as unknown as Record<string, unknown>;
@@ -141,7 +115,7 @@ describe('ApiService', () => {
     expect(api['deleteTransaction']).toBeUndefined();
   });
 
-  // --- Reference Data ---
+  // Reference data
 
   it('getDenominations calls GET /api/denominations', () => {
     service.getDenominations();
@@ -158,17 +132,14 @@ describe('ApiService', () => {
     expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/metalcontents`);
   });
 
-  // --- Spot Prices ---
+  // Spot prices
 
   it('fetchSpotPrices calls GET /api/spot-prices/fetch', () => {
     service.fetchSpotPrices();
     expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices/fetch`);
   });
 
-  // /latest and /fetch are easy to confuse and do completely different
-  // things: /fetch calls COMEX live, /latest reads back the newest row we
-  // saved ourselves. Only the second one is what makes melt values survive a
-  // restart, so the URL is worth pinning down.
+  // /fetch calls COMEX live; /latest reads back the newest saved row.
   it('getLatestSpotPrices calls GET /api/spot-prices/latest', () => {
     service.getLatestSpotPrices();
     expect(mockHttpClient.get).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices/latest`);
@@ -186,9 +157,7 @@ describe('ApiService', () => {
   });
 
   it('getLatestSpotPrices surfaces the empty-table answer unchanged', async () => {
-    // The route never 404s for an empty table — it answers 200 with zeros and
-    // two nulls. Callers rely on `fetchedAt: null` to tell "nothing saved"
-    // apart from real data, so nothing here may paper over it.
+    // An empty table gives 200 with zeros and null `fetchedAt`, which callers rely on.
     const empty = { gold: 0, silver: 0, platinum: 0, copper: 0, source: null, fetchedAt: null };
     mockHttpClient.get = vi.fn(() => of(empty));
 
@@ -196,15 +165,14 @@ describe('ApiService', () => {
   });
 
   it('saveSpotPrices calls POST /api/spot-prices with the provenance label', () => {
-    // Reminder for anyone adding a caller: this POST INSERTS A NEW HISTORY
-    // ROW every time. It must only be reached from a deliberate user action.
+    // Each call inserts a new history row; call only on a deliberate user action.
     service.saveSpotPrices({ gold: 2600, silver: 30, platinum: 950, copper: 4, source: 'Manual entry' });
     expect(mockHttpClient.post).toHaveBeenCalledWith(`${baseUrl}/api/spot-prices`, {
       gold: 2600, silver: 30, platinum: 950, copper: 4, source: 'Manual entry'
     });
   });
 
-  // --- Logging ---
+  // Logging
 
   it('postLog calls POST /api/log', () => {
     const logEntry = {
@@ -219,15 +187,14 @@ describe('ApiService', () => {
     expect(mockHttpClient.post).toHaveBeenCalledWith(`${baseUrl}/api/log`, logEntry);
   });
 
-  // --- Bounded retry on transient failures ---
+  // Bounded retry on transient failures
 
   it('retries a 503 on updateCoin with exponential backoff, then succeeds', async () => {
     vi.useFakeTimers();
 
     try {
       let attempts = 0;
-      // `defer` re-runs the factory on every (re)subscription, which is exactly
-      // what `retry` does — so this counts real attempts.
+      // `defer` re-runs the factory on every (re)subscription, so this counts attempts.
       mockHttpClient.put = vi.fn(() =>
         defer(() => {
           attempts++;
@@ -274,7 +241,7 @@ describe('ApiService', () => {
       );
 
       const result = firstValueFrom(service.deleteCoin('c1'));
-      // Attach the rejection handler before advancing so it is never floating.
+      // Attach the rejection handler before advancing the timers.
       const assertion = expect(result).rejects.toBeTruthy();
       await vi.advanceTimersByTimeAsync(5000);
       await assertion;
@@ -286,7 +253,7 @@ describe('ApiService', () => {
     }
   });
 
-  // --- Health check ---
+  // Health check
 
   it('healthCheck calls GET /api/health and maps success to true', async () => {
     mockHttpClient.get = vi.fn(() => of({ status: 'ok' }));
@@ -303,7 +270,7 @@ describe('ApiService', () => {
     await expect(firstValueFrom(service.healthCheck())).resolves.toBe(false);
   });
 
-  // --- App info (the image import's base-folder prefill) ---
+  // App info (image import base-folder prefill)
 
   it('getAppFolder calls GET /api/app-info and returns the folder', async () => {
     mockHttpClient.get = vi.fn(() => of({ appFolder: 'D:\\CoinInventory', source: 'module' }));
@@ -313,31 +280,27 @@ describe('ApiService', () => {
   });
 
   it('getAppFolder maps any failure to an empty string instead of erroring', async () => {
-    // This value only prefills a text box on the image-import screen. If the
-    // endpoint is missing (a backend that has not been rebuilt) or the server
-    // is down, the screen must still open with an empty box and its existing
-    // "no folder given" warning -- never a thrown error.
+    // Only a prefill: a missing endpoint or a down server must give '', not an error.
     mockHttpClient.get = vi.fn(() => throwError(() => httpError(404, 'Not Found')));
 
     await expect(firstValueFrom(service.getAppFolder())).resolves.toBe('');
   });
 
   it('getAppFolder tolerates a 200 with no appFolder in the body', async () => {
-    // A proxy or an older backend could answer successfully with a body of a
-    // different shape; `undefined` must not reach the text box.
+    // A different body shape must not put `undefined` in the text box.
     mockHttpClient.get = vi.fn(() => of({}));
 
     await expect(firstValueFrom(service.getAppFolder())).resolves.toBe('');
   });
 
-  // --- Base URL resolution ---
+  // Base URL resolution
 
   it('resolveApiBaseUrl falls back to localhost:3000 outside a browser', () => {
     // Unit tests run in Node, where `window` is undefined.
     expect(resolveApiBaseUrl()).toBe('http://localhost:3000');
   });
 
-  // --- Error message helper ---
+  // Error message helper
 
   it('describeHttpError extracts status, statusText and the server message', () => {
     const error = httpError(409, 'Conflict', { error: 'coin already exists' });
@@ -346,7 +309,7 @@ describe('ApiService', () => {
     expect(message).toContain('409');
     expect(message).toContain('Conflict');
     expect(message).toContain('coin already exists');
-    // Must stay short — the old code JSON.stringify'd the whole response.
+    // Must stay short, not the whole serialised response.
     expect(message.length).toBeLessThan(120);
   });
 

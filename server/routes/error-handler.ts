@@ -1,19 +1,10 @@
 /**
- * routes/error-handler.ts — the app-wide Express error handler.
+ * The app-wide Express error handler, mounted last. Catches errors that reach
+ * next(err), mostly from middleware (routes use sendDbError()).
  *
- * This is the last middleware server.ts mounts, and it catches anything that
- * reached `next(err)` without a route dealing with it. In practice that means
- * errors raised by MIDDLEWARE rather than by handlers, because every route
- * module funnels its own failures through sendDbError().
- *
- * IT HONOURS `err.status` RATHER THAN ALWAYS SENDING 500. `express.json()` is
- * configured with `limit: '50mb'`, and when a request body exceeds it
- * body-parser rejects the request with a PayloadTooLargeError that already
- * carries `status: 413` and `type: 'entity.too.large'`. Throwing that away
- * and reporting "Internal server error" is actively misleading during a batch
- * photo import: the real problem is "that batch of images is too big, send
- * fewer at a time", which the user can act on, while a generic server error
- * suggests there is nothing to be done.
+ * It honours an error's own status, notably body-parser's 413 when a request
+ * exceeds the 50 MB limit, so a batch image import gets an actionable message
+ * instead of a generic 500.
  */
 
 import { Request, Response, NextFunction } from 'express';
@@ -28,19 +19,9 @@ interface HttpishError {
 }
 
 /**
- * Works out the HTTP status to report for an unhandled error.
- *
- * Only a valid client-or-server status in the 400-599 range is trusted. Errors
- * from unrelated libraries sometimes carry a `status` field meaning something
- * entirely different (a process exit code, an enum value, a plain 0), and
- * `res.status()` throws on a value outside the HTTP range — which, inside the
- * error handler itself, would leave the request hanging with no response at
- * all. Anything we do not recognise falls back to 500.
- *
- * `statusCode` is checked as well as `status` because http-errors sets both and
- * some libraries set only one.
- *
- * Exported separately from the middleware so it can be unit-tested directly.
+ * The status for an unhandled error. Only `status`/`statusCode` values in
+ * 400-599 are trusted (other libraries use these fields for other things, and
+ * res.status() throws on out-of-range values); otherwise 500.
  */
 export function errorStatusFor(err: unknown): number {
   const candidate = err as HttpishError | null;
@@ -54,18 +35,12 @@ export function errorStatusFor(err: unknown): number {
 }
 
 /**
- * Works out the client-facing message for an unhandled error.
- *
- * The 413 case gets a specific, actionable message. Everything else keeps the
- * deliberately vague 'Internal server error': an unexpected error's message can
- * contain connection strings, file paths or SQL text, and none of that belongs
- * in a response body. The full error is always written to app.log by the
- * middleware below, which is where the detail should be read from.
+ * The client-facing message. 413 gets an actionable message; everything else
+ * gets 'Internal server error', since error text can contain paths or SQL.
+ * The full error is in app.log.
  */
 export function errorMessageFor(err: unknown, status: number): string {
   if (status === 413) {
-    // body-parser's own message is "request entity too large", which does not
-    // tell the user what to do about it. This one does.
     return 'The upload is too large for the server to accept (the limit is 50 MB per request). Try adding fewer images at a time.';
   }
 
@@ -73,18 +48,13 @@ export function errorMessageFor(err: unknown, status: number): string {
 }
 
 /**
- * The Express error-handling middleware itself.
- *
- * Express identifies error handlers by their FOUR-parameter signature, so
- * `_next` must stay in the list even though it is unused — removing it turns
- * this silently into an ordinary middleware that never runs.
+ * The error-handling middleware. Express recognises error handlers by their
+ * four parameters, so `_next` must stay.
  */
 export function globalErrorHandler(err: Error, _req: Request, res: Response, _next: NextFunction): void {
   logError('Unhandled error', err);
 
-  // If a response is already on the wire (a stream that failed halfway, say)
-  // there is nothing left to say to the client; the log line above is the
-  // whole of what we can do.
+  // Response already started; the log line is all we can do.
   if (res.headersSent) return;
 
   const status = errorStatusFor(err);

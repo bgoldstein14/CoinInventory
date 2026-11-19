@@ -1,13 +1,6 @@
 /**
- * backup/names.spec.ts — the names, and the two rules hidden in them.
- *
- *   1. a backup never overwrites a backup (uniqueFileName)
- *   2. the displaced collection is findable and recoverable (asideFileName)
- *
- * Both are pure string work, which is the point: they are the sort of
- * thing that is easy to get subtly wrong — a timezone, a dot in the wrong
- * place, a second collision — and impossible to notice until the day it
- * matters.
+ * Backup file names: a backup never overwrites a backup (uniqueFileName), and
+ * the displaced collection is easy to find and recover (asideFileName).
  */
 
 import { describe, expect, it } from 'vitest';
@@ -22,7 +15,7 @@ import {
   uniqueFileName,
 } from './names';
 
-/** 14 November 2026, 14:32:15 LOCAL — the names are built from local time. */
+/** 14 November 2026, 14:32:15 local time (names use local time). */
 const when = new Date(2026, 10, 14, 14, 32, 15);
 
 describe('timestamps', () => {
@@ -37,9 +30,7 @@ describe('timestamps', () => {
   });
 
   it('uses LOCAL time, not UTC', () => {
-    // The user reads this in a folder on their own desktop. A backup taken
-    // at nine in the evening that is named for a UTC hour is a file they
-    // will not recognise.
+    // Named for local time, as the user sees it.
     const local = new Date(2026, 10, 14, 21, 0, 0);
     expect(minuteStamp(local)).toBe('2026-11-14-2100');
     expect(local.getHours()).toBe(21);
@@ -65,8 +56,7 @@ describe('asideFileName — the undo button', () => {
 
   it('sorts next to the collection it came from', () => {
     const aside = asideFileName('coin-inventory.db', when);
-    // Same prefix, so a user listing the folder alphabetically finds it
-    // immediately below the file they were looking for.
+    // Same prefix, so it sorts next to the original.
     expect(aside.startsWith('coin-inventory')).toBe(true);
   });
 
@@ -111,8 +101,7 @@ describe('uniqueFileName — a backup never overwrites a backup', () => {
   });
 
   it('gives up loudly rather than silently overwriting', () => {
-    // A thousand same-named files in one folder means something is badly
-    // wrong, and a random suffix would paper over it.
+    // This many collisions means something is wrong; don't hide it.
     expect(() => uniqueFileName('backup.db', () => true, 5)).toThrow(/free name/i);
   });
 });
@@ -133,9 +122,7 @@ describe('describeBadDestination', () => {
   });
 
   it('refuses a RELATIVE path, which would land where the user cannot find it', () => {
-    // It would resolve against the server's working directory — somewhere
-    // inside the install folder — and the user would be told their backup
-    // succeeded and never see the file again.
+    // A relative path would resolve against the server's working directory.
     expect(describeBadDestination('backups', 'a.db')).toMatch(/full path/i);
     expect(describeBadDestination('.\\backups', 'a.db')).toMatch(/full path/i);
   });
@@ -167,8 +154,7 @@ describe('isAbsolutePath', () => {
   });
 
   it('rejects a bare drive letter with no separator', () => {
-    // `C:backups` means "the backups folder in the CURRENT directory on
-    // C:", which is not where anybody thinks it is.
+    // `C:backups` is relative to the current directory on C:.
     expect(isAbsolutePath('C:backups')).toBe(false);
   });
 

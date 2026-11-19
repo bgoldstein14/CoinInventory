@@ -1,30 +1,13 @@
 /*
- * scripts/bump-build.mjs — move the build digit, and only the build digit.
+ * Increments the build number (the fourth part of the displayed version).
  *
  *     npm run bump-build
  *
- * ---- WHY THE VERSION LIVES IN TWO PLACES ----
- * The app shows `1.0.0.0`, which is the Windows file-version convention
- * (Major.Minor.Build.Revision) and the right shape for something that ships
- * as a setup.exe. It is NOT valid semver — npm rejects a four-part version
- * outright — so `package.json` carries `version: "1.0.0"` and
- * `buildNumber: 0` as separate fields, and the four-part string is assembled
- * for display.
- *
- * A browser bundle cannot read `package.json` at runtime, so the number is
- * also compiled into `src/app/version.ts`. That is two copies, which is a
- * liability; `src/app/version.spec.ts` fails if they disagree, and this
- * script is the only thing that should ever write either of them.
- *
- * ---- WHAT THIS DELIBERATELY DOES NOT DO ----
- * It does not touch `version`. The owner's rule, 2026-11-14: the release
- * stays at 1.0.0 until there is a real release to version against. When that
- * day comes, edit `package.json`, `src/app/version.ts` and the "still
- * pre-release" test together, on purpose.
- *
- * It is not wired into `npm run build` either. A build digit that moves on
- * every local compile turns every diff into noise and tells you nothing
- * about which build a user is running. Run it when you cut something.
+ * The four-part version is not valid semver, so package.json keeps `version`
+ * (three-part) and `buildNumber` separately. The browser cannot read
+ * package.json, so the build number is also written to src/app/version.ts;
+ * src/app/version.spec.ts fails if the two disagree.
+ * `version` itself is never changed here.
  */
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -49,8 +32,7 @@ if (typeof pkg.buildNumber !== 'number' || !Number.isInteger(pkg.buildNumber)) {
 
 const next = pkg.buildNumber + 1;
 
-// Rewrite the one field by hand rather than re-serialising the whole object:
-// JSON.stringify would reformat a file people read and review.
+// Replace the field in place so the rest of package.json keeps its formatting.
 const updatedPkg = pkgText.replace(
   /("buildNumber"\s*:\s*)\d+/,
   (_match, prefix) => `${prefix}${next}`
@@ -70,9 +52,7 @@ if (updatedVersion === versionText) {
   process.exit(1);
 }
 
-// Both or neither: a half-applied bump is the one state the drift test exists
-// to catch, and leaving it behind would be this script causing the problem it
-// is meant to prevent.
+// Both files are validated above before either is written.
 writeFileSync(packagePath, updatedPkg, 'utf8');
 writeFileSync(versionPath, updatedVersion, 'utf8');
 

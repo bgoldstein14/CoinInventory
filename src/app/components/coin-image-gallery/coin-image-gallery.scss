@@ -2,19 +2,13 @@
 @use '../../styles/controls' as *;
 @use '../../styles/modal' as *;
 
-// Everything inside is position: fixed anyway — keep the host out of layout.
+// The overlay is position: fixed; keep the host out of layout.
 :host { display: contents; }
 
-// Angular scopes styles per component, so `styles/_modal.scss` MUST be
-// imported above even though the markup only uses its class names. Without it
-// there is no `.modal-backdrop` rule at all: no fixed positioning, no dimmed
-// overlay, no card chrome, and the gallery renders INLINE underneath the
-// inventory table — which, since that table has a Photo column of its own,
-// looks to a user like the dialog is showing every coin's images.
+// Component styles are scoped, so styles/_modal.scss must be imported here for
+// the .modal-backdrop rules to apply.
 
-// The screen for looking at one coin's photos properly, so it gets more room
-// than the shared 800px `.modal--wide`: wide enough for four of the tiles
-// below side by side, and still capped at the viewport.
+// Wider than the shared .modal--wide: room for four tiles.
 .image-gallery-modal {
   max-width: min(1100px, 94vw);
 }
@@ -39,8 +33,7 @@
   h3 { display: flex; align-items: center; gap: 8px; margin: 0; }
 }
 
-// The "how many photos" chip next to the heading. Part of answering "whose
-// photos am I looking at, and how many are there" at a glance.
+// Photo count chip next to the heading.
 .image-gallery__count {
   display: inline-block;
   min-width: 20px;
@@ -53,12 +46,8 @@
   text-align: center;
 }
 
-// THE TILES — a wrapping grid, with photos deliberately MUCH bigger than
-// anywhere else in the app (220px tile, 200px of photo, against 128px import
-// tiles and 88px near-match rows). The import screens are for SCANNING a
-// folder: many at once, only enough detail to say "yes, that's the coin".
-// This screen is the opposite — one coin, however many shots of it, and you
-// are here to actually look at them.
+// ---- Tiles ----
+// Larger photos than the import screens: this view is for inspecting one coin.
 .image-list {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
@@ -67,9 +56,7 @@
 
 .image-item {
   display: grid;
-  // photo / caption / buttons, with the caption allowed to stretch so every
-  // tile's button row lines up along the bottom no matter how long the
-  // original file's path is.
+  // The caption stretches so every tile's buttons line up at the bottom.
   grid-template-rows: auto 1fr auto;
   gap: 6px;
   padding: 8px;
@@ -79,18 +66,14 @@
   font-size: 0.8rem;
 }
 
-// The photo the main grid uses as this coin's thumbnail. Tinted and outlined
-// so you can tell which one it is without reading the buttons — the disabled
-// "★ Main photo" button says the same thing in words.
+// The main photo (grid thumbnail).
 .image-item--main {
   border-color: #c9a227;
   background: #fffaf0;
   box-shadow: inset 0 3px 0 #c9a227;
 }
 
-// The disabled "already the main photo" button. `opacity` alone looked broken
-// rather than intentional, so it keeps full-contrast text and just loses the
-// pointer affordance.
+// Disabled "Main photo" button keeps full-contrast text.
 .is-main-photo[disabled] {
   cursor: default;
   color: #8a6d1f;
@@ -98,10 +81,7 @@
   background: #fdf4dd;
 }
 
-// The caption block: the "Attached image" label stacked on top of the
-// original file's path. `min-width: 0` is what actually lets the label
-// ellipsise — without it a grid child refuses to shrink below its content
-// width and one long filename would stretch the whole column.
+// `min-width: 0` lets the label ellipsise inside the grid.
 .image-item__meta {
   min-width: 0;
   display: grid;
@@ -124,12 +104,7 @@
   button { flex: 1 1 auto; }
 }
 
-// The photo itself.
-//
-// `object-fit: contain`, NEVER `cover`. Coins are round and photographed
-// centred, so filling a fixed box by cropping shaves the rim off every one of
-// them — and the rim, the date and the mint mark are precisely what this
-// screen exists to show.
+// `contain`, not `cover`, so the coin's rim is never cropped.
 .coin-thumb {
   display: block;
   width: 100%;
@@ -142,10 +117,7 @@
 }
 
 // ---- Empty state ----
-//
-// Shown by @for's `@empty` branch when the coin has no photos. Dashed border
-// because the whole `.image-gallery` box is also a drop target, and dashed is
-// the convention for "you can drop things here".
+// Dashed border because the box is a drop target.
 .image-gallery__empty {
   grid-column: 1 / -1;
   display: grid;

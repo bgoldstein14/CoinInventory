@@ -1,35 +1,8 @@
 /**
- * backup/jobs.ts — THE REASON A MULTI-GIGABYTE BACKUP IS NOT A FROZEN
- * WINDOW.
- *
- * *** WHY THIS IS A JOB AND NOT JUST A POST THAT RETURNS WHEN IT IS DONE. ***
- * The owner's database is about 600 MB today, with the originals embedded
- * as base64, and design §4.9a makes multiple gigabytes the ordinary case
- * rather than the pathological one. A single request that copies that and
- * answers at the end is:
- *
- *   - a progress bar that cannot exist, because there is nothing to ask;
- *   - a Cancel button that cannot exist, because there is nothing to tell;
- *   - a request that will outlive somebody's proxy, browser or patience,
- *     and whose failure then looks identical to the backup having failed.
- *
- * §16 says it outright: "Backup cannot be a frozen window with no progress
- * and no cancel."
- *
- * So the POST starts the copy and returns an id immediately, the dialog
- * polls a status endpoint, and Cancel is its own call. POLLING RATHER THAN
- * SERVER-SENT EVENTS, deliberately: the client is one browser on localhost
- * asking a question every few hundred milliseconds, the state is a plain
- * object rather than a stream, and nothing in the app has an EventSource in
- * it today. A streaming transport would be a second thing to get wrong for
- * no behaviour the user can see.
- *
- * *** ONE BACKUP AT A TIME. *** Two concurrent copies of a 600 MB database
- * are not twice as useful; they are two jobs competing for the same disk,
- * and if the user typed the same destination twice they are two jobs
- * writing one file. A second start is refused while one is running, which
- * also means the dialog never has to decide which of several jobs it is
- * looking at.
+ * Backup job registry. A large backup takes minutes, so POST starts the copy
+ * and returns a job id immediately; the dialog polls the status endpoint and
+ * Cancel is a separate call. Polling (not SSE) keeps it simple for one local
+ * client. Only one backup may run at a time.
  */
 
 import { randomUUID } from 'crypto';
@@ -45,16 +18,8 @@ import {
 } from './run-backup';
 
 /**
- * Where a job is.
- *
- *   running    the copy is in flight
- *   done       the file is on disk and complete
- *   cancelled  the user stopped it; nothing was left behind
- *   failed     something went wrong; `error` says what
- *
- * 'cancelled' is distinct from 'failed' on purpose. They are the same
- * outcome on disk — no file — and completely different news: one is what
- * the user asked for, the other is something they need to act on.
+ * Where a job is: running, done, cancelled (user stopped it; nothing left on
+ * disk) or failed (`error` says why).
  */
 export type BackupJobState = 'running' | 'done' | 'cancelled' | 'failed';
 
@@ -81,14 +46,8 @@ interface BackupJob {
 }
 
 /**
- * Finished jobs kept in memory.
- *
- * Small, because the only consumer is a dialog that polls the job it just
- * started. More than one exists so that a page refresh during a backup does
- * not make the result unreachable, and so the log of what happened is still
- * there when somebody asks a minute later. Nothing is persisted: a server
- * restart loses the history, which costs nothing because the FILE — the
- * actual product — is on disk with its name in the log.
+ * Finished jobs kept in memory, so a page refresh can still see the result.
+ * Nothing is persisted.
  */
 const MAX_REMEMBERED_JOBS = 8;
 
@@ -98,13 +57,9 @@ const jobs = new Map<string, BackupJob>();
 let runningJobId: string | null = null;
 
 /**
- * Starts a backup and returns its initial status immediately.
- *
- * Throws BackupRequestError for anything the user can fix — a bad folder, a
- * name that is not a `.db`, a backup already running. Those are 400s, and
- * they are thrown SYNCHRONOUSLY from here rather than becoming a job that
- * instantly fails, so the dialog can show the message next to the box the
- * user typed in rather than in a progress panel.
+ * Starts a backup and returns its initial status immediately. Throws
+ * BackupRequestError synchronously (a 400) for problems the user can fix:
+ * bad folder, not a `.db` name, or a backup already running.
  */
 export function startBackupJob(
   request: Omit<BackupRequest, 'onProgress' | 'isCancelled'>
@@ -115,20 +70,9 @@ export function startBackupJob(
     );
   }
 
-  /* *** RESOLVED BEFORE THE JOB EXISTS, NOT INSIDE IT. ***
-   *
-   * "There is no folder called D:\Backpus" is a typo, and the user needs
-   * to see it next to the box they typed it into, straight away. If the
-   * destination were resolved inside performBackup() the request would
-   * return 202, the dialog would open a progress panel, and a moment later
-   * the typo would surface as a FAILED BACKUP — which reads as "the backup
-   * feature is broken", not "you misspelt Backups".
-   *
-   * This also throws before `runningJobId` is claimed, so a rejected
-   * request cannot leave the registry thinking a backup is in flight.
-   *
-   * It is resolved exactly ONCE and handed to performBackup(), because
-   * resolution picks a free name: computing it twice could pick two. */
+  // Resolved before the job exists, so a typo in the folder is a 400 next to
+  // the input rather than a failed job; and before runningJobId is claimed.
+  // Resolved once, since it picks a free name.
   const destinationPath = resolveBackupDestination(
     {
       directory: request.directory,
@@ -145,8 +89,7 @@ export function startBackupJob(
     status: {
       id,
       state: 'running',
-      // The real path, known from the first moment — including any " (2)"
-      // the name needed to avoid overwriting an earlier backup.
+      // The final path, including any " (2)" suffix.
       destination: destinationPath,
       percent: 0,
       totalPages: 0,
@@ -162,11 +105,8 @@ export function startBackupJob(
   runningJobId = id;
   forgetOldJobs();
 
-  /* FIRE AND FORGET, ON PURPOSE. The promise is never returned to a
-   * caller: this function's contract is "it has started", and the only way
-   * to learn anything else is the status endpoint. Every path through the
-   * chain below ends in a terminal state being recorded, so a job cannot
-   * be left reading 'running' for ever. */
+  // Not awaited: callers learn the outcome from the status endpoint. Every
+  // path below records a terminal state.
   void performBackup({
     ...request,
     destinationPath,
@@ -211,7 +151,7 @@ export function startBackupJob(
       logError(`Backup job ${id} failed`, message);
     })
     .finally(() => {
-      // Cleared whatever happened, or the next backup is refused for ever.
+      // Always cleared, or every later backup would be refused.
       if (runningJobId === id) runningJobId = null;
     });
 
@@ -224,18 +164,9 @@ export function getBackupJob(id: string): BackupJobStatus | undefined {
 }
 
 /**
- * Asks a running job to stop. Returns false for an unknown id.
- *
- * ASKS. The flag is read by the progress callback once per batch, so the
- * job does not become 'cancelled' on this call — it becomes cancelled a
- * fraction of a second later, when the copy notices. Returning true here
- * means "the request was accepted", and the dialog keeps polling until the
- * state actually changes. Pretending otherwise would let the dialog tell
- * the user it had stopped while pages were still being written.
- *
- * Cancelling a job that has already finished is a no-op and NOT an error:
- * the user pressed Cancel at the same moment the copy completed, and there
- * is nothing to apologise for.
+ * Asks a running job to stop; returns false for an unknown id. The job
+ * becomes 'cancelled' when the next batch notices, so the dialog keeps
+ * polling. Cancelling a finished job is a no-op.
  */
 export function cancelBackupJob(id: string): boolean {
   const job = jobs.get(id);
@@ -249,13 +180,7 @@ export function isBackupRunning(): boolean {
   return runningJobId !== null;
 }
 
-/**
- * Drops the oldest finished jobs once there are too many.
- *
- * A running job is never dropped, however old: losing the handle on a copy
- * that is still writing would leave the dialog polling an id that no longer
- * exists while the disk keeps filling.
- */
+/** Drops the oldest finished jobs once there are too many. Running jobs are never dropped. */
 function forgetOldJobs(): void {
   while (jobs.size > MAX_REMEMBERED_JOBS) {
     const oldest = [...jobs.entries()].find(([, job]) => job.status.state !== 'running');
@@ -264,10 +189,7 @@ function forgetOldJobs(): void {
   }
 }
 
-/**
- * Forgets everything. FOR TESTS ONLY — the registry is module state, and a
- * spec that started a job would otherwise leak it into the next one.
- */
+/** Clears the registry. For tests only. */
 export function resetBackupJobsForTesting(): void {
   jobs.clear();
   runningJobId = null;

@@ -1,6 +1,4 @@
-<!-- Every exit routes through close(), not closed.emit(), so that hand-typed
-     prices are saved exactly once however the user leaves: backdrop click,
-     the × button, or Done. See the class comment in spot-price-modal.ts. -->
+<!-- Every exit calls close(), so hand-typed prices are saved exactly once. -->
 <div class="modal-backdrop" (click)="close()">
   <div class="modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -8,11 +6,7 @@
       <button type="button" class="modal-close" (click)="close()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <!-- Melt is worked out from PM Weight (g) — the weight of the PURE
-           precious metal — NOT from the gross Weight (g) field, which
-           includes the alloy. Both are in grams, so they are easy to compare
-           and just as easy to mix up. A coin can have a gross weight
-           recorded and still show no melt value. -->
+      <!-- Melt uses PM Weight (pure metal), not gross Weight. -->
       <p class="hint-text">
         Fetch live COMEX spot prices or type them in. Any coin with a
         <strong>PM Weight (g)</strong> and a <strong>Metal Content</strong> of gold,
@@ -39,9 +33,7 @@
         }
       </div>
 
-      <!-- Tells the user WHICH problem they have. An empty price table and a
-           collection of base-metal coins both produce a grid full of "—", but
-           only one of them is fixed by pressing the button above. -->
+      <!-- Distinguishes "no prices loaded" from base-metal coins, which also show "—". -->
       @if (noPricesYet()) {
         <p class="spot-empty-note">
           No spot prices have been loaded yet, so every melt value currently reads

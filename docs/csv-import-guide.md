@@ -9,6 +9,11 @@ can read. You do not need to know anything about the application's code.
 Pick any comma-separated file that has a header row, and the app will show
 you a screen where you match each of your columns to a coin field.
 
+Excel workbooks (`.xlsx`) go through the same screen with the same rules, so
+everything here applies to them too. A workbook with several sheets lets you
+tick which sheets to import; the first row with at least two filled cells is
+taken as each sheet's header row, so title rows above it are fine.
+
 The fastest ways to get started, in order:
 
 1. **Starting from nothing?** Open **Import → CSV** and click
@@ -52,10 +57,18 @@ Mercury Dime,Dime,1916,D,VG8,$895.00
 If you use these names, the app matches them for you. Anything else is left for
 you to map manually — which is fine, just an extra click.
 
-Capitalisation does not matter and neither do spaces around the name, so
-`purchase price`, `Purchase Price` and ` PURCHASE PRICE ` all match. What does
-matter is the wording: `Purchase Cost` or `Price Paid` will not be recognised,
-and you map them yourself.
+Capitalisation, punctuation and spaces do not matter, so `purchase price`,
+`Purchase Price` and `PURCHASE_PRICE` all match. Many common alternative names
+are recognised as well, for example `Yr`, `Denom`, `MM`, `Grader`, `TPG`,
+`Cert #`, `Cost`, `Paid`, `FMV`, `Dealer` and `Buyer`. The app only fills in a
+match it is sure of:
+
+- Words that could mean several fields (`Price`, `Amount`, `Total`) are never
+  matched.
+- If two of your columns claim the same field equally (say `Cost` and `Paid`),
+  both are left for you to choose.
+- A column headed just `Date` is matched to Year only if it holds coin years;
+  if it holds calendar dates you choose what it is.
 
 | Column name | What it holds |
 | --- | --- |
@@ -70,31 +83,34 @@ and you map them yourself.
 | Variety | e.g. `VAM-1A`, `DDO` |
 | Mint Mark | e.g. `S`, `D`, `CC` |
 | Composition | e.g. `90% Silver` |
+| Catalog References | All of a coin's references in one cell, separated by `;`, e.g. `Sear 6819; RIC 123`. Each part starting with a known catalogue name gets that catalogue; anything else is kept as written with no catalogue. Columns headed `Catalogue`, `Catalog Number`, `Reference`, `KM` or `Sear` land here |
 | Purchase Date | |
 | Purchase Price | `$` signs and commas are fine |
+| Purchased From | Who you bought it from (`Dealer` and `Seller` columns land here) |
 | Current Value | `$` signs and commas are fine |
-| Notes | Free text |
+| Notes | Free text about the coin |
+| Status | `Owned`, `Wanted`, `Ordered`, `For Sale` or `Sold`. Anything else, or a blank, is read as Owned |
 | Set | Set membership |
+| Storage | Where the coin physically is |
 | Metal Content | `Gold`, `Silver`, `Platinum`, `Copper` |
 | Weight (g) | The coin's total weight in **grams** — see the note below |
 | Sold Price | |
 | Sold Date | |
+| Sold To | Who you sold it to (`Buyer` columns land here) |
+| Transaction Notes | Notes about the purchase or sale, kept apart from the coin's Notes |
 | Source | Where the coin's data came from. Only `Manual`, `Quicken`, `Import` or `CSV` are understood; anything else, or a blank, is read as `CSV`. You will normally only meet this column in a file the app exported |
 
 **Column order does not matter**, and you can leave any column out entirely.
 
-**A `Dealer` column is no longer recognised.** Coins used to carry a dealer name
-and older exports still have that column. The field was removed — who a coin
-came from is recorded in **Purchased from**, and who it went to in **Sold to** —
-so that column has nothing left to map onto. An old file still imports perfectly well; the Dealer column is
-simply ignored, along with the rest of the row importing as normal.
+**Importing only what you still own.** Tick **Import only coins I still own**
+to leave out rows that have a sold date, a sold price or a buyer. If none of
+those columns is mapped, the option has nothing to go on and the screen says so.
 
-### ⚠ The weight column changed from troy ounces to grams
+### ⚠ Old files with a `Weight (oz)` column
 
-**If you have a CSV you exported before this change, read this before importing
-it.** Weight used to be recorded in troy ounces and the column was headed
-`Weight (oz)`. It is now recorded in **grams** and the column is headed
-`Weight (g)`.
+**Files exported by older versions of the app head the weight column
+`Weight (oz)` and hold troy ounces.** The app now records weight in **grams**,
+under the heading `Weight (g)`.
 
 One troy ounce is 31.1 grams, so the same number means two very different
 coins depending on which unit it is in:
@@ -193,36 +209,30 @@ and type designations survive.
 
 These are real gaps, not warnings to work around:
 
-- **Four things cannot be imported by CSV at all.** There is no column for any
-  of them, and no way to map one:
+- **Four things have no column to import into:**
   - the **CAC sticker** flag
   - **photos**
   - the **precious-metal weight in grams**
   - the **precious-metal percentage** (the fineness, e.g. 90%)
 
-  The precious-metal pair matters more than it looks. **Melt value is worked
-  out from the precious-metal weight in grams together with the Metal Content** —
-  that gram figure is the weight of the *pure* metal in the coin, and it is the
-  one of the two that CSV cannot carry. So a coin brought in by CSV shows no
-  melt value at all until you type its precious-metal weight by hand in the
-  detail panel, even though its Metal Content imported fine. (The
-  precious-metal **percentage** is worth recording and is shown in the detail
-  panel, but it is not part of the melt sum — the gram weight already describes
-  pure metal only, so applying the percentage again would discount it twice.)
+  The precious-metal pair is usually filled in for you. After the import, the
+  app looks each coin up by country, denomination and year in its table of
+  coin compositions and fills any blank Metal Content, Composition,
+  precious-metal percentage, precious-metal weight and Weight (g). A Metal
+  Content value in your file helps it choose. Coins it cannot be sure about
+  (for example a 1942 nickel, which was struck in two alloys) are left blank
+  rather than guessed, and you can fill them in the detail panel.
 
-  Note the consequence for round-tripping: exporting your collection to CSV and
-  importing it back does **not** preserve the precious-metal weight or
-  percentage, your photos, or the CAC flag. Every column the export *writes*
-  comes back intact, but those four were never in it. A CSV export is a good
-  report and a good starting template; it is **not** a backup.
+  **Melt value needs the precious-metal weight**, the weight of the *pure*
+  metal in the coin. The general **Weight (g)** column is the coin's total
+  weight and is not used for melt value.
 
-  Also worth knowing: the general **Weight (g)** column *can* be imported, but
-  it is the coin's total gross weight, not its precious-metal content, and melt
-  value does not use it. Filling it in will not produce a melt value on its own.
-  Both columns are now in grams, which makes them easier to compare but no
-  harder to confuse — the one melt value needs is the *precious-metal* weight,
-  and that one still cannot come in by CSV.
+  Exporting to CSV and importing back does not carry photos, the CAC flag or
+  the precious-metal pair (the latter are worked out again where possible).
+  A CSV export is a good report and a good template; it is **not** a backup.
+  Use **Settings → Backup and restore** for that.
 - **Semicolon-separated files are not supported**, only commas.
+- **A number column with no number in it imports as 0**, without a warning.
 
 ## If an import goes wrong
 

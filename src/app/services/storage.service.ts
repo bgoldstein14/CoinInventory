@@ -1,16 +1,7 @@
 /**
- * IndexedDB-backed persistence for the coin inventory app.
- *
- * `localStorage` caps out around 5-10MB per origin, and this app stores
- * full base64 image data URLs alongside every coin record. A collector
- * with a few hundred photographed coins will blow past that ceiling
- * quickly, at which point `localStorage.setItem` throws and writes are
- * silently lost. IndexedDB has no such practical ceiling for this use
- * case, so all inventory + UI-preference persistence lives here instead.
- *
- * The service exposes a small async API (get/set per logical "store")
- * so the rest of the app never touches the IndexedDB transaction API
- * directly.
+ * IndexedDB-backed persistence for inventory and UI preferences.
+ * IndexedDB rather than localStorage because coin records carry base64 image
+ * data URLs, which quickly exceed localStorage's 5-10MB limit.
  */
 import { Injectable } from '@angular/core';
 
@@ -24,41 +15,25 @@ export const StorageKeys = {
   VisibleColumns: 'coin-inventory-column-visibility',
   CategoryOptions: 'coin-inventory-category-options',
   CoinSets: 'coin-inventory-sets',
-  // There was a `Transactions` key here, caching the rows of the dropped
-  // Transactions table. The buy and the sale are coin fields now, so they
-  // are already inside the `Inventory` blob above.
   SpotPrices: 'coin-inventory-spot-prices',
   AppSettings: 'coin-inventory-app-settings',
   /** Which grid column the inventory is sorted by, and which way. */
   SortState: 'coin-inventory-sort-state',
   /**
-   * Which column the grid is grouped by, and which groups are open.
-   *
-   * ONE KEY FOR BOTH, because expansion is meaningless without the column
-   * it folds: a set of open headings restored against a different grouping
-   * names groups that do not exist. Written and validated together — see
-   * `serializeGrouping` / `restoreGrouping` in features/inventory/grid-grouping.ts.
+   * Grouping column plus which groups are expanded, stored together because the
+   * expanded set is only valid for its column. See features/inventory/grid-grouping.ts.
    */
   GridGrouping: 'coin-inventory-grid-grouping',
   /**
-   * What the grid is filtered to: search text, category, and the advanced
-   * panel's grade / value / country / source / set / status controls.
-   *
-   * ITS OWN KEY, not a field of AppSettings, for the same reason
-   * IssuerLookupOnline has one: a filter hides rows, and a failure to read
-   * the settings blob must not be able to leave the grid narrowed with
-   * nothing on screen to explain it. Validated on the way back in by
-   * `restoreFilterState` in features/inventory/inventory-filter-persistence.ts.
+   * Grid filter state (search, category, advanced panel). Kept out of AppSettings
+   * so a failure to read settings can't leave the grid filtered without the UI
+   * showing it. Validated by `restoreFilterState`.
    */
   Filters: 'coin-inventory-filters',
   /**
-   * Whether the issuer form may ask an outside service what denominations
-   * an issuer struck.
-   *
-   * Remembered because it is the app's only unsolicited outbound request
-   * and a user who turns it off once means it. Its own key rather than a
-   * field of AppSettings so that a failure to read the settings blob
-   * cannot silently re-enable it.
+   * Whether the issuer form may query an outside service for an issuer's
+   * denominations. Kept out of AppSettings so a settings read failure can't
+   * silently re-enable this outbound request.
    */
   IssuerLookupOnline: 'coin-inventory-issuer-lookup-online'
 } as const;
@@ -70,10 +45,8 @@ export class StorageService {
   private dbPromise: Promise<IDBDatabase> | null = null;
 
   /**
-   * Reads a value previously saved under `key`. Returns `undefined` when
-   * the key has never been written or when IndexedDB is unavailable
-   * (e.g. running outside a browser), letting callers fall back to a
-   * sensible default.
+   * Reads the value saved under `key`; `undefined` if never written or if
+   * IndexedDB is unavailable.
    */
   async get<T>(key: StorageKey): Promise<T | undefined> {
     try {
@@ -100,8 +73,7 @@ export class StorageService {
         transaction.onerror = () => reject(transaction.error);
       });
     } catch {
-      // Persistence is best-effort: a save failure should never crash the
-      // app. The in-memory signal state remains correct for this session.
+      // Best-effort: a failed save must not crash the app; in-memory state stays correct.
     }
   }
 

@@ -1,14 +1,8 @@
 // Styles for the inventory grid.
-//
-// `controls` supplies the shared button / badge / checkbox look, plus the
-// `box-sizing: border-box` reset — Angular scopes styles per component, so each
-// component has to ask for the shared basics itself.
 @use '../../styles/controls' as *;
 @use '../../styles/panel' as *;
 
-// The host element is an artefact of making this a component; `display: contents`
-// removes it from layout so `<section class="panel">` remains a direct child of
-// the `.main-content` grid.
+// Keep <section class="panel"> a direct layout child of the .main-content grid.
 :host { display: contents; }
 
 // ---- Inventory panel header ----
@@ -21,9 +15,7 @@
   margin-bottom: 12px;
 }
 
-// Group by + expand/collapse + Columns, kept together at the right-hand end
-// so `justify-content: space-between` still puts the "Inventory" heading at
-// the left. They are one cluster because all three arrange the grid.
+// Right-hand cluster of grid arrangement controls.
 .inventory-header__controls {
   display: flex;
   align-items: center;
@@ -61,6 +53,14 @@
   color: #1d4ed8;
   margin-left: 8px;
   vertical-align: middle;
+}
+
+// ---- Tip above the grid ----
+
+.grid-tip {
+  margin: 0 0 4px;
+  font-size: 0.62rem;
+  color: #8a7a63;
 }
 
 // ---- Column picker ----
@@ -142,25 +142,8 @@
 }
 
 // ---- Per-column widths ----
-//
-// HOW WIDTH WORKS IN THIS GRID, because it is not obvious from reading the
-// template. The table is `width: 100%` with the DEFAULT (auto) layout
-// algorithm, so every column is sized from its contents and then the leftover
-// space is shared out in proportion to those contents -- which means a column
-// full of long text (Type, Variety, Source) quietly claims space from short
-// ones. (`.check-column` and `.thumb-column` are the two fixed, non-data
-// columns.)
-//
-// `width: 1%` is the idiom for opting out of that share-out. In an auto-layout
-// table a width smaller than the column's min-content is clamped UP to
-// min-content, so 1% does not mean "1% wide": it means "take only what you
-// need and give the surplus to the other columns". Deliberately not a pixel
-// value -- a hard px figure here would either be ignored (if below min-content)
-// or mislead the next reader into thinking the number was measured.
-
-// Contents are a short badge -- "MS65", "AU58", plus the optional CAC bean --
-// against a 5-character header, so this column would otherwise be handed far
-// more room than it can ever use.
+// In an auto-layout table, `width: 1%` is clamped up to min-content: the
+// column takes only what it needs and leaves the surplus to the others.
 .column-grade { width: 1%; }
 
 .check-column {
@@ -178,14 +161,8 @@
 
   &:hover { background: #fdf8f0; }
 
-  // A row that has not been saved to the database yet (see the `is-draft`
-  // comment in the template). Deliberately a faint warm tint only — the
-  // "Unsaved" chip is what actually carries the message; this just makes the
-  // row easy to pick out when several are on screen.
-  //
-  // Declared BEFORE `.selected` on purpose: the two rules have the same CSS
-  // specificity, so whichever comes last wins, and the selection highlight
-  // must always beat the draft tint.
+  // Unsaved row tint. Declared before .selected (same specificity) so the
+  // selection highlight wins.
   &.is-draft {
     background: #fffaf0;
 
@@ -204,21 +181,8 @@
     box-shadow: inset 3px 0 0 #4f6dba;
   }
 
-  // KEYBOARD FOCUS MUST BE VISIBLE.
-  //
-  // The rows are now the control — arrow keys move between them and
-  // Enter/Space opens the Details panel — and a focus ring is the only thing
-  // telling a keyboard user which row they are on. Without it the arrow keys
-  // move an invisible cursor.
-  //
-  // `:focus-visible` rather than `:focus`, so a mouse click does not leave a
-  // ring behind on a row the user has already finished with. A row focused
-  // by an arrow key still matches, because the browser counts that as
-  // keyboard interaction.
-  //
-  // `outline-offset: -2px` draws the ring INSIDE the row: an outline on a
-  // <tr> otherwise straddles the row borders and is clipped by the scrolling
-  // wrapper on the first and last rows.
+  // Keyboard focus ring. :focus-visible so mouse clicks leave no ring; the
+  // negative offset keeps it from being clipped by the scroll wrapper.
   &:focus-visible {
     outline: 2px solid #8e5b2d;
     outline-offset: -2px;
@@ -234,10 +198,6 @@
 }
 
 // ---- Group headings ----
-//
-// A heading row has to be unmistakably NOT a coin: it spans every column,
-// it is tinted, and it sticks to nothing. The weight difference is what
-// lets a dealer scan sixty of them.
 
 .group-row > .group-cell {
   padding: 0;
@@ -246,8 +206,7 @@
   cursor: default;
 }
 
-// The whole heading is one button, so the hit target is the full width of
-// the grid rather than a twisty the size of a full stop.
+// The whole heading is one full-width button.
 .group-toggle {
   display: flex;
   align-items: center;
@@ -279,8 +238,7 @@
 
 .group-label { flex: 1 1 auto; }
 
-// The count and the money. Lighter than the heading so the eye runs down
-// the labels first and only stops at the numbers it wants.
+// Count and value, lighter than the label.
 .group-summary {
   flex: 0 0 auto;
   font-weight: 500;
@@ -290,13 +248,7 @@
 }
 
 // ---- Re-ordering the groups ----
-//
-// The grip is the only thing on screen that says a heading can be picked up,
-// so it is drawn on every movable heading rather than appearing on hover: a
-// control that is invisible until the pointer is already on it is a control
-// nobody finds. It is `aria-hidden` — the heading states the gesture properly
-// through `aria-keyshortcuts` and its title, which is what a screen reader
-// should hear rather than a braille character read out as punctuation.
+// Drag grip, always visible on movable headings.
 .group-grip {
   flex: 0 0 auto;
   font-size: 0.85rem;
@@ -305,29 +257,21 @@
   cursor: grab;
 }
 
-// The heading being dragged fades, so the row the pointer is carrying is
-// distinguishable from the row it is hovering over.
 .group-row--dragging > .group-cell { opacity: 0.45; }
 
-// WHERE THE DROP LANDS, drawn as a hard edge on the side the group will end
-// up on rather than a glow around the whole row: "it goes here" is a position
-// between two headings, and a highlighted row only says "this one".
+// Drop position shown as an edge line.
 .group-row--drop-target > .group-cell {
   background: #e7d4b2;
   box-shadow: inset 0 2px 0 0 #8e5b2d;
 }
 
-// The discoverability line next to the Group by menu. Quiet — it is an
-// instruction the user needs once and then never reads again.
 .group-order-hint {
   font-size: 0.72rem;
   color: #8a7a63;
   white-space: nowrap;
 }
 
-// The reorder announcements. Present for a screen reader, absent from the
-// layout: the clip-rect form rather than `display: none`, which would stop
-// the live region being announced at all.
+// Screen-reader-only; not display:none, which would silence the live region.
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -341,18 +285,13 @@
   border: 0;
 }
 
-// THE "NO VALUE RECORDED" BUCKET IS NOT A VALUE, and must not read as one.
-// Its label is already parenthesised ("(No Country)"); italic and muted is
-// the second half of saying so, for a user skimming rather than reading.
+// The "(No Country)"-style bucket is muted so it does not read as a value.
 .group-row--empty-bucket .group-label {
   font-style: italic;
   font-weight: 500;
   opacity: 0.8;
 }
 
-// The second line of the empty row, used by the "could not be loaded" state
-// to point at the banner rather than restate the error.
-// See features/inventory/collection-zero-state.ts.
 .empty-row__hint {
   display: block;
   margin-top: 6px;
@@ -360,10 +299,7 @@
   opacity: 0.8;
 }
 
-// ---- "Unsaved" chip on draft rows ----
-// Only the colour modifier lives here; the pill shape, padding and font come
-// from the shared `.badge` primitive in styles/_controls.scss, which is
-// already pulled in at the top of this file.
+// ---- "Unsaved" chip on draft rows (base shape from .badge in _controls) ----
 
 .badge--draft {
   background: #fdf0d9;
@@ -375,13 +311,7 @@
   cursor: help;
 }
 
-// "Needs Denomination" — what the chip's tooltip used to keep to itself.
-//
-// Deliberately NOT styled as an error. A row the user is still typing is an
-// expected state; the same warm brown the "Unsaved" chip uses says "not
-// finished" without saying "you broke something". Only a save that was
-// attempted and REFUSED turns red, and even then this is a quiet label —
-// the loud channel for that is the toast CoinEditor already raises.
+// What the draft still needs. Not styled as an error; red only after a refused save.
 .draft-need {
   font-size: 0.65rem;
   color: #8a5a10;
@@ -435,7 +365,6 @@
 }
 
 // ---- Print ----
-// On paper the table should fill the page and lose its selection column.
 
 @media print {
   .inventory-panel { border: none; box-shadow: none; padding: 0; margin: 0; }

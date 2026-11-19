@@ -1,30 +1,11 @@
 /**
- * dist-path.spec.ts — the server must serve the directory the Angular build
- * actually writes.
+ * The server must serve the directory the Angular build actually writes. If
+ * they drift (as when the application builder added a `browser/` level), the
+ * build and route tests still pass but the app serves an empty page.
  *
- * This file exists because of a failure that no other test in either suite
- * can see. `server.ts` serves the built app with `express.static` and sends
- * `index.html` from the same folder for every non-API route. The server
- * specs drive that app with supertest against routes; they never look at the
- * built bundle, so if the two paths drift apart every one of them still
- * passes while the real app serves an empty page.
- *
- * The drift is not hypothetical: migrating from the deprecated webpack
- * builder (`@angular-devkit/build-angular:browser`) to
- * `@angular/build:application` moved the output from
- * `dist/coin-inventory-app/` to `dist/coin-inventory-app/browser/`. The build
- * succeeds either way.
- *
- * So the two tests below check the two halves of that contract:
- *
- *   1. the path the server computes is the path angular.json tells the
- *      builder to write — read from angular.json, not copied from it, so
- *      changing the builder's outputPath alone fails here; and
- *   2. the file the SPA fallback sends really is on disk after a build.
- *
- * (2) needs a build to have run, so it is skipped — loudly — when `dist/` is
- * absent entirely. It is NOT skipped when `dist/` exists but the file does
- * not: that is exactly the silent failure this file is here to catch.
+ *   1. the server's path matches what angular.json tells the builder;
+ *   2. the SPA fallback's index.html exists after a build (skipped when
+ *      `dist/` is absent, but not when dist exists without the file).
  */
 
 import { describe, it, expect } from 'vitest';
@@ -52,14 +33,9 @@ function readBuildTarget(): BuildTarget {
 }
 
 /**
- * The absolute directory angular.json makes the builder write the browser
- * bundle to.
- *
- * `@angular/build:application` adds a `browser/` level below `outputPath`
- * unless `outputPath.browser` overrides it (`""` restores the old flat
- * layout). The older `:browser` builder has no such level at all. Working
- * that out from the config — rather than hard-coding today's answer — is
- * what makes this test survive the next builder change.
+ * The directory angular.json makes the builder write the browser bundle to.
+ * `@angular/build:application` adds `browser/` below `outputPath` unless
+ * `outputPath.browser` overrides it; the older `:browser` builder doesn't.
  */
 function expectedBrowserOutputDir(target: BuildTarget): string {
   const { outputPath } = target.options;
@@ -117,8 +93,7 @@ describe('the directory the server serves the built app from', () => {
     const response = await request(app).get('/');
 
     expect(response.status).toBe(200);
-    // The one tag that is only in the built app shell, so a 200 carrying
-    // something else — a stale file, a directory listing — still fails.
+    // Only in the built app shell, so a stale file or listing still fails.
     expect(response.text).toContain('<app-root>');
   });
 });

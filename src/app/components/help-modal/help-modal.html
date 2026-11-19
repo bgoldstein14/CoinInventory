@@ -1,35 +1,4 @@
-<!--
-  The Help screen.
-
-  ORDER IS THE DESIGN HERE, AND IT IS NOT THE ORDER THIS FILE SHIPPED WITH.
-  "Report a problem" was first, on the argument that it is the most useful
-  control on the screen and that it is where the help icon used to go on its
-  own. The owner has decided otherwise: this screen should read as help
-  first and a bug form second, so the guide comes first, then a rule, then
-  the report section with real space above it. Do not restore the old order
-  on the old reasoning — it was considered and overruled.
-
-  The old route is still safe. Nobody lands here by accident: the only way
-  in is the help icon, and the reporter is one rule further down the same
-  short screen rather than behind a tab or another click.
-
-  Then, below everything functional, who wrote this, and last of all the
-  small print about it being free.
-
-  THE SUPPORT NOTE AT THE BOTTOM IS NOT A CALL TO ACTION and must not become
-  one. No button, no accent colour, no emoji, no exhortation — small muted
-  type, free stated first and unconditionally, and the handle as plain
-  selectable text so it can be copied. It lives on this screen only: it is
-  never shown as a prompt, never on a timer, and there is nothing to dismiss
-  because nothing ever appears uninvited. See the class comment in
-  help-modal.ts for why it is here rather than in the problem reporter.
-
-  THE CLOSING SENTENCE ENDS WARMLY, NOT WITH A SHRUG. It used to read "if
-  not, enjoy it anyway"; "anyway" carries a shrug, which is not the same
-  thing as being relaxed about the money. "Either way" lets the reader off
-  the hook without sounding grudging about it. Still one sentence, still no
-  exclamation mark, still nothing asked for.
--->
+<!-- Help screen: guide, separator, report section, author, support note. -->
 <div class="modal-backdrop" (click)="close()">
   <div class="modal" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -39,9 +8,7 @@
 
     <div class="modal-body help-modal-body">
 
-      <!-- Short on purpose, and first. This lists what the buttons along the
-           top do and nothing more; a help screen that explains the whole
-           application is a help screen that goes out of date. -->
+      <!-- What the toolbar buttons do; kept short so it does not go out of date. -->
       <section class="help-section">
         <h3>The buttons along the top</h3>
         <dl class="help-list">
@@ -66,13 +33,9 @@
         </dl>
       </section>
 
-      <!-- The rule the owner asked for. It is a real <hr>, not a styled
-           border on the section below it, because what it marks is the end
-           of the guide rather than the start of the form: the guide can grow
-           entries without the separator having to move with it. -->
       <hr class="help-separator" />
 
-      <!-- Below the rule, and deliberately. -->
+      <!-- Report a problem -->
       <section class="help-section help-report">
         <h3>Something not working?</h3>
         <p class="hint-text">
@@ -85,21 +48,13 @@
         </div>
       </section>
 
-      <!--
-        The author block. Plain and factual: a line of attribution, not a
-        byline. The ANA number is here because it is the one credential that
-        means anything to the people this is for.
-      -->
+      <!-- Author -->
       <section class="help-about">
         <p class="help-author">Author: Bruce Goldstein</p>
         <p class="help-author">ANA #: 3124621</p>
       </section>
 
-      <!--
-        The footnote. FREE IS SAID FIRST AND WITHOUT A CONDITION ATTACHED, so
-        that nobody leaves this screen wondering which parts they have to pay
-        for. The rest is one sentence and ends by letting the reader off.
-      -->
+      <!-- Support note: small print, free stated first, handle as plain text (not a link). -->
       <p class="help-support-note">
         This app is free for everyone — all of it, with nothing held back and nothing to
         buy. If you have got some use out of it and feel like sending a few dollars my

@@ -1,32 +1,15 @@
 /**
- * db/column-types.ts — the parameter type vocabulary, re-expressed for SQLite.
+ * Parameter type vocabulary (NVarChar, Char, Int, Bit, Decimal, MAX), named
+ * after the SQL Server types the columns came from.
  *
- * WHY THIS FILE EXISTS AT ALL, GIVEN THAT SQLITE IS DYNAMICALLY TYPED.
- *
- * It would have been easy to delete the type table when SQL Server went away:
- * SQLite stores whatever it is given, so `NVarChar(100)` buys nothing at the
- * storage layer. Deleting it would also have thrown away the only
- * machine-readable record this project has of what each column is FOR —
- * how wide `Variety` is, how many decimals a weight keeps, that `IsoCode` is
- * two characters and not three. That record is used in three places:
- *
- *   1. db/bind-values.ts enforces it on the way in, so a value SQL Server
- *      would have refused is still refused (see the error-number table
- *      there). Without this, SQLite silently stores a 4,000-character
- *      "grade" and the problem surfaces as a wrecked UI months later.
- *   2. db/coin-fields.spec.ts and friends compare it against db/schema.sql
- *      and fail the build when the two drift.
- *   3. Stage 2's one-time migration needs to know the declared scale of
- *      `Weight` and `PmWeightGrams` to verify that nothing was rounded away
- *      in transit (design §4.1).
- *
- * The constructor names deliberately match the `mssql` ones they replace
- * (`NVarChar`, `Char`, `Int`, `Bit`, `Decimal`, `MAX`), so db/bindings.ts and
- * db/coin-fields.ts — two long, heavily annotated tables — change by one
- * import line rather than being retyped.
+ * SQLite stores any value in any column, so these declared types are the only
+ * record of each column's width and scale. They are used by:
+ *   1. db/bind-values.ts, which enforces them on the way in;
+ *   2. the parity specs, which compare them with db/schema.sql;
+ *   3. the one-time SQL Server import, to check nothing was rounded away.
  */
 
-/** Marker for "no declared maximum" — the old `NVARCHAR(MAX)`. */
+/** Marker for "no declared maximum" (NVARCHAR(MAX)). */
 export const MAX = 'max' as const;
 export type MaxLength = typeof MAX;
 
@@ -35,7 +18,7 @@ export type MaxLength = typeof MAX;
  *
  *   text  -> TEXT
  *   int   -> INTEGER
- *   real  -> REAL        (see the numeric-storage note on Decimal() below)
+ *   real  -> REAL        (see Decimal() below)
  *   bit   -> INTEGER constrained to 0 / 1
  */
 export type DbStorageClass = 'text' | 'int' | 'real' | 'bit';
@@ -43,39 +26,25 @@ export type DbStorageClass = 'text' | 'int' | 'real' | 'bit';
 /** One column's declared type. */
 export interface DbType {
   readonly storage: DbStorageClass;
-  /**
-   * Declared character width for `text`. `undefined` means unbounded
-   * (the old NVARCHAR(MAX)).
-   */
+  /** Declared character width for `text`; `undefined` means unbounded. */
   readonly maxLength?: number;
-  /** True for the old fixed-width CHAR(n). See the note on Char() below. */
+  /** True for fixed-width CHAR(n). */
   readonly fixedWidth?: boolean;
   /** Total digits, for `real` columns that came from a DECIMAL(p,s). */
   readonly precision?: number;
   /** Digits after the point, for `real` columns that came from a DECIMAL(p,s). */
   readonly scale?: number;
   /**
-   * The SQL Server type this came from, verbatim: 'NVARCHAR(100)',
-   * 'DECIMAL(12,5)', 'CHAR(2)', 'INT', 'BIT'.
-   *
-   * KEPT ON PURPOSE AND NOT COSMETIC. It is what db/schema.sql's trailing
-   * `-- NVARCHAR(100)` comments are compared against, it is what the Stage 2
-   * migration reads to decide how to verify a column, and it is the only
-   * remaining description of the source schema once setup-database.sql is
-   * finally deleted.
+   * The SQL Server type, verbatim: 'NVARCHAR(100)', 'DECIMAL(12,5)', 'CHAR(2)',
+   * 'INT', 'BIT'. Compared against db/schema.sql's trailing type comments and
+   * used by the SQL Server import.
    */
   readonly declared: string;
 }
 
 /**
- * Variable-length text. `NVarChar(MAX)` is unbounded.
- *
- * The width is ENFORCED (db/bind-values.ts raises the 8152 equivalent, which
- * routes/db-error-response.ts turns into an HTTP 400). That is a deliberate
- * change of behaviour from `mssql`, which trimmed an over-long value to the
- * declared length before sending it and told nobody. Silently storing three
- * quarters of a user's note is worse than refusing it: the user can retype a
- * refused value, and cannot recover a truncated one.
+ * Variable-length text; `NVarChar(MAX)` is unbounded. The width is enforced:
+ * an over-long value is rejected (HTTP 400), not truncated.
  */
 export function NVarChar(length: number | MaxLength): DbType {
   if (length === MAX) {
@@ -85,17 +54,8 @@ export function NVarChar(length: number | MaxLength): DbType {
 }
 
 /**
- * Fixed-width text. Exactly one column in this schema is one: Issuers.IsoCode
- * CHAR(2).
- *
- * *** THE PADDING TRAP IS GONE, AND THAT IS AN IMPROVEMENT, NOT A REGRESSION. ***
- * SQL Server PADS a CHAR(2) — 'M' became 'M ' — and the padded value then
- * compared unequal to 'M' everywhere, so the issuer quietly stopped matching
- * anything. SQLite's TEXT stores exactly the characters it is given, so that
- * failure mode does not exist here and nothing pads. The width is still
- * declared and still enforced as a MAXIMUM, because the route's "exactly two
- * letters" rule deserves a second line of defence; what is NOT reproduced is
- * the padding, deliberately.
+ * Fixed-width text (only Issuers.IsoCode CHAR(2)). The width is enforced as a
+ * maximum; SQLite doesn't pad values the way SQL Server's CHAR did.
  */
 export function Char(length: number): DbType {
   return { storage: 'text', maxLength: length, fixedWidth: true, declared: `CHAR(${length})` };
@@ -108,25 +68,13 @@ export const Int: DbType = { storage: 'int', declared: 'INT' };
 export const Bit: DbType = { storage: 'bit', declared: 'BIT' };
 
 /**
- * A fixed-point column from SQL Server, stored in SQLite as REAL.
- *
- * *** THIS IS THE DECISION THE WHOLE MIGRATION TURNS ON. The argument is in
- * the header of db/schema.sql; read it before changing anything here. ***
- *
- * In short: SQLite has no decimal type, the application has only ever been
- * able to hold these values as JavaScript doubles anyway (`tedious` returns
- * DECIMAL columns as `number`), and REAL is the only storage class that
- * round-trips a double bit-for-bit. `precision` and `scale` are carried so
- * db/bind-values.ts can apply the SAME rounding and the SAME range check
- * SQL Server applied, which is what stops a value written through SQLite
- * differing from the value the identical request wrote through SQL Server.
+ * A SQL Server DECIMAL(p,s) column, stored in SQLite as REAL. `precision` and
+ * `scale` let db/bind-values.ts apply the same rounding and range check SQL
+ * Server did. See the db/schema.sql header for why REAL.
  */
 export function Decimal(precision: number, scale: number): DbType {
   return { storage: 'real', precision, scale, declared: `DECIMAL(${precision},${scale})` };
 }
 
-/**
- * The whole vocabulary under one name, so a module can write
- * `types.NVarChar(100)` where it used to write `sql.NVarChar(100)`.
- */
+/** The whole vocabulary under one name, e.g. `types.NVarChar(100)`. */
 export const types = { MAX, NVarChar, Char, Int, Bit, Decimal } as const;

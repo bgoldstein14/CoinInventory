@@ -1,43 +1,16 @@
  /*
- * sheet-header-comparison.ts — naming what differs between worksheets.
- * ---- WHY THIS FILE EXISTS ----
- * A dealer's workbook has a tab per metal, or per year, or per storage box.
- * They are usually the same shape and occasionally not: the Gold tab grew an
- * `AGW` column in 2015 and nothing else did. Importing all of them together
- * is still the right thing to do -- the user just has to know what differs
- * before they commit, because the odd column out is where their data gets
- * dropped if they are not paying attention.
- *
- * ---- THE WHOLE POINT IS THE WORDING ----
- * "Columns are inconsistent across sheets" is a warning that cannot be acted
- * on. It does not say which sheet, which column, or whether it matters, so
- * the only thing the user can do with it is go back to Excel and compare
- * thirty headings by eye -- or, far more likely, ignore it.
- *
- *   Sheet 'Gold' has a column 'AGW' that 'Silver' does not.
- *
- * can be acted on without leaving the dialog. That sentence is what this
- * module is for; the set arithmetic is incidental.
- *
- * ---- WHAT COUNTS AS A DIFFERENCE, AND WHAT DOES NOT ----
- * MATCHING IS NORMALISED, REPORTING IS VERBATIM. `Cost`, `cost ` and `COST`
- * are one column; reporting them as three would bury the real `AGW` in
- * noise. But the message quotes the heading exactly as the user typed it,
- * because that is the string they will search their workbook for.
- *
- * ORDER IS NOT A DIFFERENCE. The mapping is keyed by header text and applied
- * against each sheet's own header array, so a tab with its columns in a
- * different order imports perfectly. Flagging that would be a false alarm,
- * and false alarms are how real warnings get ignored.
- *
- * A SHEET WITH NO HEADINGS IS NOT A DIFFERENCE, it is an absence. Counting
- * the leftover empty Sheet3 would make almost every workbook look
- * inconsistent.
+  * Describes how worksheets' headings differ, in sentences the user can act on:
+  *   Sheet 'Gold' has a column 'AGW' that 'Silver' does not.
+  *
+  * - Matching is normalised (`Cost`, `cost `, `COST` are one column); messages
+  *   quote the heading as that sheet spells it.
+  * - Column order is not a difference (the mapping is keyed by header text).
+  * - Sheets with no headings are ignored.
   */
 
 import { normalizeHeader } from '../csv/header-synonyms';
 
-/** The minimum a sheet has to offer to take part in the comparison. */
+/** What a sheet needs to take part in the comparison. */
 export interface ComparableSheet {
   name: string;
   headers: string[];
@@ -45,7 +18,6 @@ export interface ComparableSheet {
 
 /** One sheet's headings that no other sheet has. */
 export interface SheetHeaderDifference {
-  /** The sheet that has the extra columns. */
   sheet: string;
   /** Those columns, spelled as that sheet spells them. */
   extra: string[];
@@ -58,7 +30,7 @@ export interface SheetHeaderComparison {
   consistent: boolean;
   /** Headings present on every compared sheet, in first-sheet order. */
   common: string[];
-  /** The raw differences, for anything that wants more than the sentences. */
+  /** The raw differences. */
   differences: SheetHeaderDifference[];
   /** Ready-to-show sentences, one per sheet that has extra columns. */
   messages: string[];
@@ -72,11 +44,8 @@ function quoteList(items: string[]): string {
 }
 
 /**
- * Compare the heading sets of several worksheets.
- *
- * Sheets with no headings are ignored entirely; fewer than two sheets left
- * after that means there is nothing to compare and the result is consistent
- * by definition.
+ * Compares the heading sets of several worksheets. Sheets without headings are
+ * ignored; fewer than two remaining means consistent.
  */
 export function compareSheetHeaders(sheets: ComparableSheet[]): SheetHeaderComparison {
   const comparable = sheets.filter(sheet => sheet.headers.length > 0);
@@ -90,9 +59,7 @@ export function compareSheetHeaders(sheets: ComparableSheet[]): SheetHeaderCompa
     };
   }
 
-  // Normalised key -> the heading as this sheet spells it. Last spelling on a
-  // sheet wins, which only matters if one sheet has two headings that
-  // normalise the same, and in that case either is as good as the other.
+  // Normalised key -> heading as this sheet spells it (last spelling wins).
   const spellings = comparable.map(sheet => {
     const byKey = new Map<string, string>();
     for (const header of sheet.headers) {

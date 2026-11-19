@@ -1,7 +1,4 @@
-<!--
-  Clicking the backdrop cancels (same as the Cancel button); the
-  $event.stopPropagation() keeps clicks inside the dialog from closing it.
--->
+<!-- Backdrop click closes; clicks inside the dialog are stopped. -->
 <div class="modal-backdrop" (click)="closed.emit()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -9,17 +6,7 @@
       <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body settings-modal-body">
-      <!-- ONE LINE: the sentence first, the box after it, because a checkbox
-           on its own row above its own sentence reads as two settings.
-
-           THE ORDER HERE WAS ALREADY RIGHT AND THE ROW STILL BROKE. The
-           element that holds both halves is the <label>, and the shared
-           dialog stylesheet (styles/_modal.scss) lays every bare <label> out
-           as a stacked form field — `flex-direction: column` plus an
-           uppercase caption <span>. Making the wrapping <div> a flex row
-           could never fix that: the div has one child. The fix is on
-           `.checkbox-label--inline` in settings-modal.scss; do not "tidy" it
-           away by deleting what looks like a redundant direction. -->
+      <!-- Label wraps both halves; the row layout override is on .checkbox-label--inline (_modal.scss stacks labels). -->
       <div class="settings-row settings-row--inline">
         <label class="checkbox-label checkbox-label--inline">
           <span>Show transactions section in details</span>
@@ -27,28 +14,7 @@
         </label>
       </div>
 
-      <!-- THE REFERENCE LISTS ARE NOT EDITED HERE, AND NOT LINKED FROM HERE.
-
-           Settings used to carry chip editors for categories, mint marks,
-           metal content and sets/albums. Those went to the Reference Data
-           screen, and a notice with an "Open Reference Data" button stood in
-           their place for a day. The owner removed it: there is already an
-           obvious button on screen, and a second route to the same place is
-           clutter, not help. DO NOT re-add it in a smaller form — a quiet
-           one-line link is the same signpost in a lighter font. -->
-
-      <!-- PHOTOGRAPHS
-
-           The mode is a DATA decision and is written as one. The downscaled
-           copy in the database is not a cache: with "reference" chosen, the
-           file on disk is the only copy of the picture there is, and moving
-           the folder loses it. Both bullets below say what is lost, not how
-           many megabytes are saved.
-
-           And the sentence under the radios is the most important line on
-           this screen: changing the mode does NOTHING to photographs that
-           are already imported. Nothing is converted, nothing is deleted,
-           nothing is re-read off the share. -->
+      <!-- Photographs -->
       <div class="settings-group">
         <h3>Photographs</h3>
 
@@ -95,14 +61,7 @@
           converted, moved or deleted by changing this.
         </p>
 
-        <!-- THE SIZE SETTING, LABELLED FOR WHAT IT ACTUALLY MEASURES.
-
-             The owner asked for a "maximum image size allowed". It is the
-             size of the copy THIS APP STORES, not a limit on the files he
-             may pick: his originals run to 46 MB and refusing them would
-             reject photos the app has always imported happily. The label,
-             the hint and the units all say "stored", and the hint says
-             outright that the originals are untouched. -->
+        <!-- Limits the stored copy only, not the user's original files. -->
         <div class="settings-field">
           <label for="max-stored-image-mb">
             Maximum size of each photo <strong>stored in the database</strong>
@@ -136,15 +95,7 @@
         </div>
       </div>
 
-      <!-- MAINTENANCE
-
-           Deliberately set apart by its own rule-off border, because it is
-           a different KIND of thing from everything above it: the reference
-           lists change what the dropdowns offer, this changes the coin
-           records themselves. The border was drawn when the chip editors
-           were above it and is kept now that a signpost is, for the same
-           reason — a several-hundred row rewrite must not read as one more
-           thing to click past. -->
+      <!-- Maintenance -->
       <div class="settings-group settings-maintenance">
         <h3>Maintenance</h3>
 
@@ -166,14 +117,14 @@
             produce a wrong melt value.
           </p>
 
-          <!-- STATE 1: idle. Nothing has been previewed or run. -->
+          <!-- Idle -->
           @if (!backfillPlan() && !backfillRunning() && !backfillOutcome()) {
             <button type="button" class="secondary small-button" (click)="previewPmBackfill()">
               Preview changes
             </button>
           }
 
-          <!-- STATE 2: previewed. Counts, then an explicit confirm. -->
+          <!-- Previewed: counts, then an explicit confirm -->
           @if (backfillPlan(); as plan) {
             <div class="maintenance-preview">
               <ul class="maintenance-counts">
@@ -231,8 +182,7 @@
             </div>
           }
 
-          <!-- Live progress. One coin is written at a time, so this is a real
-               count of completed writes, not an animation. -->
+          <!-- Progress -->
           @if (backfillProgress(); as progress) {
             <p class="maintenance-progress" role="status">
               Saving {{ progress.processed }} of {{ progress.total }}…
@@ -242,7 +192,7 @@
             </p>
           }
 
-          <!-- STATE 3: done. What actually changed. -->
+          <!-- Done -->
           @if (backfillOutcome(); as outcome) {
             <div class="maintenance-result" role="status">
               <p>
@@ -271,46 +221,11 @@
         </div>
       </div>
 
-      <!-- BACKUP AND RESTORE — §16
-
-           Same bordered block as Maintenance above, and for the same
-           reason: these act on the whole collection the moment they are
-           pressed, so they must not read as one more setting to click
-           past. They are DELIBERATELY the last thing in the dialog —
-           below the display preference, the photographs and the backfill
-           — because restore is the only control in this application that
-           can replace everything the user owns.
-
-           A PATH HAS TO GET INTO A BOX, AND THE BROWSER WILL NOT HELP.
-           A browser will not tell JavaScript where a file really is: a
-           directory picker gives only File.webkitRelativePath and a file
-           input gives a File with no path at all. The server has to write
-           and read these files — a multi-gigabyte database cannot
-           sensibly go through the browser — so it needs a real host path.
-
-           THREE WAYS TO PRODUCE ONE, in increasing order of how much
-           they can be trusted, and all three are on this screen:
-
-             TYPE OR PASTE  always available, and the only thing that
-                            works for a UNC path to a NAS. Never remove it.
-             PICK A FOLDER  narrows the guess. The browser reports the
-                            folder's NAME only, so the rest is assumed
-                            from what the box already held and the note
-                            under the box says so outright. Same pattern
-                            and same honesty as the batch image import.
-             ASK THE SERVER the server CAN read a directory. GET
-                            /api/backup/files lists the *.db files really
-                            in a named folder, so the restore is chosen
-                            from what is there — and a wrong guess above
-                            is exposed before anything is replaced.
-
-           THREE PANELS. Back up; check a file; restore it. The middle one
-           is the safety feature and nothing in the third is reachable
-           without it. -->
+      <!-- Backup and restore -->
       <div class="settings-group settings-maintenance">
         <h3>Backup and restore</h3>
 
-        <!-- ===== BACK UP ===== -->
+        <!-- Back up -->
         <div class="maintenance-action">
           <div class="maintenance-heading">Back up your collection to a file</div>
           <p class="maintenance-explainer">
@@ -326,20 +241,7 @@
             </p>
           }
 
-          <!-- THE FOLDER, WITH A PICKER THAT CAN ONLY NARROW THE GUESS.
-
-               The owner asked for "a directory search box, like how
-               Image imports work". It is here, and the honesty the
-               image import's header insists on is here with it: a
-               browser NEVER tells a page where a folder is. It reports
-               the files inside one and their path relative to it, so a
-               pick yields the folder's NAME and nothing else. The note
-               under the box names what was assumed and which half is
-               the user's to correct — see picked-folder.ts.
-
-               The box is a plain text input first and last. Pasting a
-               UNC path to a NAS must not be made harder by a
-               convenience that cannot reach it. -->
+          <!-- A folder pick yields only the folder name; the guess note explains what was assumed. -->
           <div class="backup-field">
             <label for="backup-directory">Folder</label>
             <input
@@ -405,10 +307,7 @@
             number added.
           </p>
 
-          <!-- *** A DISABLED BUTTON OWES THE USER A REASON. *** The
-               sentence sits beside the control, not in a tooltip and
-               not inferred from a greyed-out box, and the button points
-               at it with aria-describedby. See describeBackupBlock. -->
+          <!-- Disabled-button reason, linked via aria-describedby. -->
           @if (backupBlockReason(); as reason) {
             <p class="backup-blocked-reason" id="backup-folder-reason">{{ reason }}</p>
           }
@@ -423,10 +322,6 @@
             >
               Back up now
             </button>
-            <!-- CANCEL IS NOT OPTIONAL. The owner's database is ~600 MB
-                 today and §4.9a makes multiple gigabytes ordinary, so this
-                 is a job measured in minutes. A progress bar with no way
-                 to stop is a frozen window with a decoration on it. -->
             @if (backupCanCancel()) {
               <button type="button" class="secondary small-button" (click)="cancelBackup()">
                 Cancel backup
@@ -450,22 +345,17 @@
             <p class="maintenance-progress" role="status">{{ backupMessage() }}</p>
           }
 
-          <!-- THE PATH, IN FULL. A user who cannot find the file they just
-               made does not have a backup, whatever the app believes. -->
           @if (backupPath(); as path) {
             <p class="backup-result-path">Saved to <strong>{{ path }}</strong></p>
           }
         </div>
 
-        <!-- ===== RESTORE ===== -->
+        <!-- Restore -->
         <div class="maintenance-action restore-action">
           <div class="maintenance-heading">Restore from a backup file</div>
 
           @if (restoreOutcome()) {
-            <!-- DONE. The location of the old collection is the whole
-                 message: it is the undo button, and somebody who has just
-                 realised they picked the wrong file needs it on screen in
-                 full, not in a log file. -->
+            <!-- Done: includes where the previous collection was moved. -->
             <div class="maintenance-result" role="status">
               @for (line of restoreOutcomeLines(); track line) {
                 <p>{{ line }}</p>
@@ -490,21 +380,7 @@
               left in the same folder, and you will be told exactly where.
             </p>
 
-            <!-- ===== STEP 1: WHICH FOLDER TO LOOK IN =====
-
-                 *** THE SERVER CAN READ A DIRECTORY EVEN THOUGH THE
-                 BROWSER CANNOT. *** That one asymmetry is what removes
-                 the worst part of this feature. The user names or picks
-                 a folder, GET /api/backup/files reports the `*.db`
-                 files really in it with a size and a date, and they
-                 choose one — instead of typing an exact path for the
-                 single operation that replaces their collection.
-
-                 It is also what settles the folder picker's guess: the
-                 picker can only tell us the folder's NAME (no web page
-                 is allowed to know more), so the path below is an
-                 assumption until the server either lists it or says
-                 there is no such folder. -->
+            <!-- Step 1: folder to look in (the server lists the *.db files in it) -->
             <div class="backup-field">
               <label for="restore-directory">Folder to look in</label>
               <input
@@ -547,9 +423,6 @@
               <p class="maintenance-failed">{{ error }}</p>
             }
 
-            <!-- A FOLDER WITH NO BACKUPS IN IT IS A NORMAL OUTCOME and
-                 says so in a full sentence. Silence, or an empty list
-                 with no caption, reads as "your backups are gone". -->
             @if (restoreFolderSummary(); as summary) {
               <p class="hint-text">{{ summary }}</p>
             }
@@ -574,20 +447,7 @@
               </ul>
             }
 
-            <!-- ===== STEP 2: THE FILE ITSELF =====
-
-                 *** THE EMPTY STATE HAS TO LOOK EMPTY. *** This box used
-                 to carry a greyed example path as its placeholder, and
-                 the owner read it as a filled-in value, then could not
-                 work out why the buttons were dead. A path-shaped
-                 watermark is indistinguishable from a path. So the
-                 placeholder is now words that cannot be mistaken for a
-                 value, the empty box is drawn differently from a filled
-                 one (--empty), and the example path has moved into the
-                 hint below where nothing can read it as content.
-
-                 Still a text box: a pasted UNC path to a NAS the picker
-                 cannot reach has to keep working. -->
+            <!-- Step 2: the file. Placeholder is words, not an example path, so an empty box doesn't look filled. -->
             <div class="backup-field">
               <label for="restore-path">Backup file to restore</label>
               <input
@@ -607,10 +467,7 @@
               <code>C:\Users\You\Desktop\coin-inventory-backup-2026-11-14-1432.db</code>.
             </p>
 
-            <!-- *** A DISABLED BUTTON OWES THE USER A REASON. *** This
-                 is the one that actually stopped him: believing the box
-                 was filled in, there was nothing on screen that could
-                 correct the belief. See describeRestoreBlock. -->
+            <!-- Disabled-button reason, linked via aria-describedby. -->
             @if (restoreBlockReason(); as reason) {
               <p class="backup-blocked-reason" id="restore-blocked-reason">{{ reason }}</p>
             }
@@ -631,11 +488,7 @@
               <p class="maintenance-failed">{{ error }}</p>
             }
 
-            <!-- WHAT IS IN THE FILE, BEFORE ANYTHING IS REPLACED. Coin
-                 count and when it was taken, so the user can tell one
-                 backup from another — which is the question they are
-                 actually trying to answer when they are looking at four
-                 files with similar names. -->
+            <!-- Inspection result -->
             @if (inspection()) {
               @if (inspectionAcceptable()) {
                 <div class="restore-summary" role="status">
@@ -646,11 +499,7 @@
                     <p class="restore-consequence">{{ consequence }}</p>
                   }
 
-                  <!-- CONSEQUENCE OF PORTABILITY: photographs that are a
-                       link to a folder rather than a picture inside the
-                       file do not follow the database to another PC. Said
-                       HERE, before the restore, rather than discovered
-                       afterwards as a grid of empty frames. -->
+                  <!-- Referenced photos don't travel with the file; warn before restoring. -->
                   @if (photoWarning(); as warning) {
                     <p class="restore-warning">{{ warning }}</p>
                   }
@@ -667,8 +516,7 @@
                   </div>
                 </div>
               } @else {
-                <!-- REFUSED. One sentence, no jargon, and nothing has been
-                     touched. -->
+                <!-- Refused -->
                 <p class="maintenance-failed">{{ inspectionMessage() }}</p>
               }
             }

@@ -1,39 +1,19 @@
  /*
- * row-decisions.ts
- *
- * The per-file decisions ("accept this suggestion", "use that candidate",
+ * Per-file decisions ("accept this suggestion", "use that candidate",
  * "skip it") as pure `rows -> rows` transforms.
  *
- * Same reasoning as selection-rules.ts: the modal component should read as a
- * list of one-line signal updates, and the rules about what a decision does to
- * the tick-box and the confidence should be testable on their own.
- *
- * INVARIANT worth stating once: whenever a decision gives a row a coin, that
- * row also becomes ticked, and whenever a decision takes the coin away the
- * row becomes unticked. "Selected" can never mean "will be written to nowhere".
+ * Invariant: a decision that gives a row a coin also ticks it, and one that
+ * removes the coin unticks it.
   */
 
 import { BatchImageRow, CoinRecord, RankedImageMatch } from '../../types/coin.model';
+import { photoSetKey } from './photo-sets';
 
- /*
- * THE ONE ROW TIER 3 DOES NOT OFFER TO RESCUE
- *
- * Counterfeit photographs and multi-coin shots are held out of the AUTOMATED
- * import completely: never automatically attached, and NEVER OFFERED AS
- * ATTACHABLE. "Nor offered" is the part that lands here. Tier 3 is otherwise
- * read-only-plus-an-escape-hatch, and that escape hatch IS an offer, so these
- * rows must not have it. The modal hides the "Attach anyway..." link; the two
- * guards below are the same rule stated where it cannot be bypassed, so a
- * stale click or a future template change cannot attach one by accident.
- *
- * *** THIS DOES NOT MAKE THE FILE UNATTACHABLE, AND MUST NOT. *** No picture
- * file is ever off limits from being chosen by hand, however irrelevant its
- * descriptor -- it may be an article about the coin rather than a photograph
- * of it. The row is still LISTED, with its reason, so nothing vanishes, and
- * the per-coin image gallery's add-images path -- the manual route, which
- * never consults the matcher -- attaches any file to any coin exactly as
- * before. The rule here is about what the IMPORT SCREEN offers, nothing more.
-  */
+/*
+ * Rows excluded from automated import (multi-coin shots) are not offered
+ * "Attach anyway". The modal hides the link; the guards below enforce it. The
+ * file stays listed and can still be attached by hand from the coin's gallery.
+ */
 
 /** True when the automated importer must not even offer this row a coin. */
 function isExcludedFromAutoImport(row: BatchImageRow): boolean {
@@ -83,17 +63,9 @@ export function chooseCandidate(
 }
 
 /**
- * TIER 2's one-click answer: "yes, that is the coin."
- *
- * The suggestion is `result.nearMatch.candidates[0]` — the best-ranked
- * candidate that passed the four-attribute near-match test. Note that it is
- * read from `nearMatch` and NOT from `result.matchedRecordId`, which is null
- * for a near match and stays null: the only thing that ever puts a coin on a
- * near-match row is this function, and it only runs when the user presses the
- * button.
- *
- * A row that is not a near match is left completely alone, so this cannot be
- * used to attach something from the read-only tier.
+ * Tier 2's one-click answer: "yes, that is the coin." Uses
+ * `result.nearMatch.candidates[0]` (`matchedRecordId` stays null for near
+ * matches). Rows that aren't near matches are left alone.
  */
 export function acceptNearMatch(rows: readonly BatchImageRow[], fileName: string): BatchImageRow[] {
   const row = rows.find(r => r.fileName === fileName);
@@ -104,11 +76,8 @@ export function acceptNearMatch(rows: readonly BatchImageRow[], fileName: string
 }
 
 /**
- * TIER 2's other answer: "no, it is this OTHER one" — the dropdown.
- *
- * `coinId` must be one of the near candidates on this row. Anything else is
- * ignored, which is what stops a stale or hand-crafted value from attaching a
- * photo to a coin the near-match test already rejected.
+ * Tier 2's other answer: "no, it is this other one" (the dropdown). `coinId`
+ * must be one of this row's near candidates; anything else is ignored.
  */
 export function chooseNearCandidate(
   rows: readonly BatchImageRow[],
@@ -122,61 +91,23 @@ export function chooseNearCandidate(
   return chooseCandidate(rows, fileName, candidate);
 }
 
-/* ===========================================================================
- * TIER 3's ESCAPE HATCH: "Attach anyway"
- * ---------------------------------------------------------------------------
- * WHY THIS EXISTS AT ALL, WHEN TIER 3 IS SUPPOSED TO BE READ-ONLY
+/*
+ * Tier 3 "Attach anyway".
  *
- * The four-attribute near-match bar (year + coin type + denomination + grade,
- * all four present and all four agreeing) is STRICT ON PURPOSE, and nothing in
- * this file relaxes it. A census over the owner's real filenames showed what
- * that strictness costs: of 32 files in tier 3, 13 are genuine junk (group
- * shots, stamps, camera-default names) but 19 are real single-coin photos, and
- * only 2 of those 19 are genuinely WRONG matches. The other 17 failed because
- * a piece of information was ABSENT, not because anything contradicted. The
- * starkest case is
+ * The near-match bar (year, coin type, denomination and grade all present and
+ * agreeing) stays strict. Many tier-3 photos fail only because something is
+ * missing, e.g. "1881 Morgan Dollar NGC 2599001.jpg" scores 97% but has no
+ * grade. These two functions are the only way a tier-3 row gets a coin, and
+ * only when the user asks.
  *
- *     "1881 Morgan Dollar NGC 2599001.jpg"   ->  scores 97%
- *
- * which the matcher ranks first by a mile and which the bar refuses only
- * because the filename states no grade. Under a strictly button-less tier 3
- * that photo is UNREACHABLE: the right coin is sitting at the top of a ranked
- * list nobody can see.
- *
- * The decision was to keep the bar exactly where it is and give tier 3 a way
- * back in. So the two functions below are the ONLY way a tier-3 row can ever
- * acquire a coin, and like every other decision in this file they run only
- * when the user presses something. The standing rule is untouched: silently
- * filing an image under the wrong coin is much worse than asking.
- * WHY A UI ESCAPE HATCH AND NOT A LOOSER MATCHER
- * Lowering the bar would move those 17 files into tier 2, where they would
- * each cost a question -- and it would drag the 2 genuinely wrong ones along
- * with them, dressed up as plausible suggestions. Leaving the bar alone and
- * adding an OPT-IN control keeps tier 3 at zero interaction for anyone who
- * ignores it, while making nothing truly unreachable.
- *
- * Note what a rescue does NOT touch: `result.tier` stays 'not-imported'. The
- * classification is the matcher's statement about the file and it is not the
- * user's to rewrite; keeping it also means the row holds its place in the
- * read-only list (and therefore in that list's paging) instead of jumping
- * sections under the cursor. It simply reads as a decision from then on, and
- * Undo is the ordinary `resetRow`, which sends a tier-3 row back to skipped.
- * ========================================================================= */
+ * A rescue leaves `result.tier` as 'not-imported', so the row keeps its place
+ * in the read-only list; Undo is the ordinary `resetRow`.
+ */
 
 /**
- * Rescue a tier-3 row using one of the RANKED CANDIDATES the matcher already
- * produced.
- *
- * `result.candidates` is populated for every below-bar 'review' row that now
- * lands in tier 3, and often for 'none' rows too -- it is the same best-first
- * list the matcher built before the near-match test rejected it. Showing it
- * with its scores is what turns the 97% Morgan from a dead end into one click.
- *
- * Two guards, and they are the whole safety story of this function:
- *   1. the row must really be in tier 3, so this cannot be used as a back door
- *      around tier 2's own "only coins that passed the test" dropdown rule;
- *   2. `coinId` must be one of THIS row's candidates -- a stale or
- *      hand-crafted id attaches nothing at all.
+ * Rescue a tier-3 row using one of the matcher's ranked candidates.
+ * Guards: the row must be tier 3 (not a back door around tier 2), and `coinId`
+ * must be one of this row's candidates.
  */
 export function rescueWithCandidate(
   rows: readonly BatchImageRow[],
@@ -186,15 +117,13 @@ export function rescueWithCandidate(
   const row = rows.find(r => r.fileName === fileName);
   const candidate = row?.result.candidates.find(c => c.coinId === coinId);
   if (!row || row.result.tier !== 'not-imported' || !candidate) return [...rows];
-  // Third guard: a counterfeit or multi-coin photo is not offered here at all.
+  // Excluded photos (e.g. multi-coin shots) are never offered.
   if (isExcludedFromAutoImport(row)) return [...rows];
 
   return patch(rows, fileName, {
     decision: 'confirmed',
     selectedCoinId: candidate.coinId,
-    // The matcher's own score, kept as it is. The user has overridden the BAR,
-    // not the arithmetic, and pretending the confidence is 1 would throw away
-    // the most useful thing we know about this pairing.
+    // Keep the matcher's score: the user overrode the bar, not the score.
     confidence: candidate.score,
     selected: true,
     selectionReason:
@@ -203,29 +132,20 @@ export function rescueWithCandidate(
 }
 
 /**
- * Rescue a tier-3 row using a coin the user found with the FREE-TEXT SEARCH.
- *
- * For rows with no candidates at all -- an ancient with no year, a file the
- * parser could read nothing out of -- there is no ranked list to offer, so the
- * only honest option is to let the user name the coin himself. The search
- * behind it is `searchCoins` below, driven by the long-standing `CoinLookup`.
- *
- * Confidence is 1 here, which does not contradict the function above: the user
- * did not pick from a ranked list, he stated the answer outright, so the
- * matcher's opinion does not enter into it. Same convention as `assignCoin`.
+ * Rescue a tier-3 row with a coin the user found via free-text search, for rows
+ * with no candidates. Confidence is 1 because the user stated the answer, as
+ * in `assignCoin`.
  */
 export function rescueWithCoin(
   rows: readonly BatchImageRow[],
   fileName: string,
   coinId: string,
-  coinLabel: string
+  coinLabel: string,
+  reason = `Attached anyway, manually assigned to ${coinLabel}.`
 ): BatchImageRow[] {
   const row = rows.find(r => r.fileName === fileName);
-  // An empty coinId means "never mind". It must not clear anything here:
-  // `resetRow` is the single undo path, so there is only one way back.
+  // An empty coinId means "never mind"; `resetRow` is the only undo path.
   if (!row || row.result.tier !== 'not-imported' || !coinId) return [...rows];
-  // Same third guard as above: not offered in the automated import. The coin
-  // itself is still perfectly attachable to this photo from its own gallery.
   if (isExcludedFromAutoImport(row)) return [...rows];
 
   return patch(rows, fileName, {
@@ -233,8 +153,67 @@ export function rescueWithCoin(
     selectedCoinId: coinId,
     confidence: 1,
     selected: true,
-    selectionReason: `Attached anyway, manually assigned to ${coinLabel}.`
+    selectionReason: reason
   });
+}
+
+/*
+ * Photo sets: one decision for every shot of one coin (see photo-sets.ts).
+ * Built only from the single-row decisions above, so all their guards still
+ * apply per member.
+ */
+
+/**
+ * "Attach anyway" for a whole tier-3 set. Each member uses the coin as one of
+ * its own candidates when it can (keeping the score), otherwise as a manual
+ * assignment (label shots often have no candidates).
+ */
+export function rescueSet(
+  rows: readonly BatchImageRow[],
+  fileNames: readonly string[],
+  coinId: string,
+  coinLabel: string
+): BatchImageRow[] {
+  let next = [...rows];
+  for (const fileName of fileNames) {
+    next = rescueWithCandidate(next, fileName, coinId);
+    if (next.find(r => r.fileName === fileName)?.selectedCoinId !== coinId) {
+      next = rescueWithCoin(next, fileName, coinId, coinLabel,
+        `Attached anyway with the rest of its photo set, to ${coinLabel}.`);
+    }
+  }
+  return next;
+}
+
+/**
+ * Carry one photo's coin to the untouched members of its set, after the user
+ * attached `sourceFileName`:
+ *   - a waiting tier-2 member takes the coin if it is one of its near candidates;
+ *   - a skipped tier-3 member is attached as "Attach anyway" would (e.g. the
+ *     slab-label shot).
+ * Already-decided rows and tier 1 are left alone.
+ */
+export function followPhotoSet(
+  rows: readonly BatchImageRow[],
+  sourceFileName: string,
+  coinLabel: string
+): BatchImageRow[] {
+  const source = rows.find(r => r.fileName === sourceFileName);
+  const coinId = source?.selectedCoinId;
+  if (!source || !coinId) return [...rows];
+
+  const key = photoSetKey(source);
+  let next = [...rows];
+  for (const row of rows) {
+    if (row.fileName === sourceFileName || photoSetKey(row) !== key) continue;
+    if (row.result.tier === 'near' && row.decision === 'review') {
+      next = chooseNearCandidate(next, row.fileName, coinId);
+    } else if (row.result.tier === 'not-imported' && row.decision === 'skipped' && !row.selectedCoinId) {
+      next = rescueWithCoin(next, row.fileName, coinId, coinLabel,
+        `Same photo set as "${sourceFileName}", which you attached to ${coinLabel}.`);
+    }
+  }
+  return next;
 }
 
 /**
@@ -258,7 +237,7 @@ export function assignCoin(
   return patch(rows, fileName, {
     decision: 'confirmed',
     selectedCoinId: coinId,
-    // The user said so by hand, so confidence is by definition 1.
+    // Assigned by hand, so confidence is 1.
     confidence: 1,
     selected: true,
     selectionReason: `Manually assigned to ${coinLabel}.`
@@ -277,12 +256,8 @@ export function skipRow(rows: readonly BatchImageRow[], fileName: string): Batch
 }
 
 /**
- * Undo a skip / choice: back to whatever the IMPORT TIER originally said.
- *
- * Note this keys off the tier and not off `status`. A tier-3 row was skipped
- * by the importer itself rather than by the user, so "undo" has to put it back
- * to skipped — sending it to 'review' would quietly add it to the queue the
- * whole redesign exists to empty.
+ * Undo a skip or choice: back to what the import tier originally said. Keys off
+ * the tier, so a tier-3 row goes back to skipped rather than into the review queue.
  */
 export function resetRow(rows: readonly BatchImageRow[], fileName: string): BatchImageRow[] {
   const row = rows.find(r => r.fileName === fileName);
@@ -312,12 +287,8 @@ export function resetRow(rows: readonly BatchImageRow[], fileName: string): Batc
 }
 
 /**
- * Free-text coin search for the "none of these is right" case.
- *
- * Every word typed must appear somewhere in the coin's label, which makes
- * "morgan 1881" work regardless of the order the words are in. Capped at 8
- * results because it renders inside a card and runs on every keystroke over
- * the whole inventory.
+ * Free-text coin search. Every typed word must appear in the coin's label, in
+ * any order. Capped at 8 results since it runs on every keystroke.
  */
 export function searchCoins(
   inventory: readonly CoinRecord[],
@@ -339,12 +310,9 @@ export function searchCoins(
 }
 
 /**
- * "What we read from the file name", as chips the user can sanity-check.
- *
- * Showing the parse back is the cheapest safety net in the whole feature: if
- * the matcher read "Year 1925" out of a cert number, the wrong chip is obvious
- * at a glance, whereas a wrong match buried in a list of 200 coins is not.
- * An empty list means the file name told us nothing usable.
+ * What was parsed from the filename, as chips the user can sanity-check (a
+ * year misread from a cert number is obvious at a glance). Empty when nothing
+ * usable was found.
  */
 export function parsedChips(row: BatchImageRow): string[] {
   const parsed = row.result.parsed;

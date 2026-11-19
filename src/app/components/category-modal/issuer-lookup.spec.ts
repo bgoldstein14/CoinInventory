@@ -1,12 +1,6 @@
 /*
- * issuer-lookup.spec.ts — the proposal list, and every sentence the user
- * can be shown about a lookup.
- *
- * The wordings are tested, not just the branching, because the WHOLE
- * point of this feature is that the user is told what happened. "Added
- * Burma" with no mention of denominations is the bug it replaced, so a
- * message that quietly stopped naming a count would be a regression that
- * nothing else in the suite could see.
+ * Proposal handling and the user-facing lookup messages. The wordings are
+ * tested because each outcome must state what happened, including counts.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -31,9 +25,7 @@ function result(over: Partial<DenominationLookupResult> = {}): DenominationLooku
 
 describe('toProposals', () => {
   it('offers every candidate, ticked', () => {
-    // TICKED, and the confirmation is a button carrying the count.
-    // Starting unticked would make the careless path "add nothing", which
-    // is the old bug with extra clicks.
+    // Proposals start ticked; the Add button carries the count.
     expect(toProposals(['kyat', 'pya'])).toEqual([
       { label: 'kyat', chosen: true },
       { label: 'pya', chosen: true },
@@ -41,9 +33,7 @@ describe('toProposals', () => {
   });
 
   it('does not offer a label the issuer already has', () => {
-    // Two rows with one label under one issuer make every coin carrying
-    // that text resolve as AMBIGUOUS, and ambiguous resolves to NULL. The
-    // duplicate would delete a denomination rather than add one.
+    // Duplicate labels under one issuer would make coin matching ambiguous.
     expect(toProposals(['kyat', 'pya'], ['Kyat'])).toEqual([{ label: 'pya', chosen: true }]);
   });
 
@@ -84,7 +74,6 @@ describe('toggleProposal and setAllProposals', () => {
       { label: 'kyat', chosen: false },
       { label: 'pya', chosen: true },
     ]);
-    // A new array: the caller holds a signal and mutation would not notify.
     expect(after).not.toBe(before);
     expect(before[0].chosen).toBe(true);
   });
@@ -103,8 +92,7 @@ describe('toggleProposal and setAllProposals', () => {
 
 describe('describeLookupConsent', () => {
   it('says the request leaves the machine, in those words', () => {
-    // NOT "look up denominations", which would describe the benefit and
-    // hide the cost. This is the app's only unsolicited outbound request.
+    // Says the request leaves the machine, not just what it does.
     const label = describeLookupConsent(LOOKUP_SOURCE);
     expect(label).toContain('Wikidata');
     expect(label.toLowerCase()).toContain('over the internet');
@@ -138,9 +126,7 @@ describe('describeLookupOutcome', () => {
   });
 
   it('treats an empty answer as normal and points at the manual route', () => {
-    // *** THE COMMONEST OUTCOME FOR AN ANCIENT ISSUER. *** Measured
-    // against the live endpoint, Athens returned nothing at all. This
-    // message must not read like a failure.
+    // No results is common for ancient issuers and must not read like a failure.
     const message = describeLookupOutcome('Athens', result({ outcome: 'none' }));
     expect(message).toContain('had nothing for Athens');
     expect(message).toContain('That is normal');
@@ -167,8 +153,7 @@ describe('describeLookupOutcome', () => {
   });
 
   it('treats "results" with an empty list as the no-results wording', () => {
-    // Defensive: a server that said 'results' and sent none would
-    // otherwise produce "suggests 0 denominations".
+    // 'results' with no proposals must not say "suggests 0 denominations".
     expect(describeLookupOutcome('Athens', result({ outcome: 'results', proposals: [] }))).toContain(
       'had nothing for Athens'
     );
@@ -183,7 +168,6 @@ describe('describeLookupOutcome', () => {
 
 describe('describeLookupDeclined', () => {
   it('states that NOTHING was sent, which is the promise the checkbox made', () => {
-    // The user cannot verify this any other way, so the app has to say it.
     const message = describeLookupDeclined('Burma');
     expect(message).toContain('nothing left this machine');
     expect(message).toContain('switched off');
@@ -217,9 +201,7 @@ describe('describeDenominationsAdded', () => {
   });
 
   it('asks the user to check them, because the source is not authoritative', () => {
-    // Wikidata's answer for Japan included 'Coin (reproduction)' and
-    // 'leprosy colony money'. Ticking a box is a lower bar than a
-    // numismatist's judgement and the wording should not pretend otherwise.
+    // Lookup results can include junk (e.g. 'Coin (reproduction)'), so the wording asks the user to check.
     expect(describeDenominationsAdded('Japan', 9, 'Wikidata')).toContain('Check them');
   });
 });

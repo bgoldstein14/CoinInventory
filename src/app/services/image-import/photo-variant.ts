@@ -1,48 +1,30 @@
  /*
  * photo-variant.ts
  *
- * Works out, from a filename alone, WHICH SHOT of a coin a file is:
- *   - which face:      Obverse / Reverse / slab Label / unknown
- *   - which variant:   "Small", "Orig", "Photo", "Sharpened"
- *   - which take:      the trailing counter in "1874 $3 - NGC AU 58-2.jpg"
- *
- * Why the review screen needs this
- *
- * A single coin routinely has 8-10 files on the share:
+ * Works out from a filename which shot of a coin a file is:
+ *   - face:     Obverse / Reverse / slab Label / unknown
+ *   - variant:  "Small", "Orig", "Photo", "Sharpened"
+ *   - take:     the trailing counter in "1874 $3 - NGC AU 58-2.jpg"
  *
  *   1880-S $1 - MS64 - Obverse - Photo.jpg
- *   1880-S $1 - MS64 - Reverse - Photo.jpg
  *   1880-S $1 - MS64 - Obverse - Small.jpg      <- derivative
- *   1880-S $1 - MS64 - Obverse - Orig.jpg       <- derivative
  *   1880-S $1 - MS64-2.jpg                      <- retake
- *   1870 1-cent NGC PF65RB - Label.jpg          <- slab label, not the coin
+ *   1870 1-cent NGC PF65RB - Label.jpg          <- slab label
  *
- * Everything starts ticked (the user asked for that), so without side/variant
- * knowledge "untick the ones I don't want" means 8 individual clicks per coin
- * times ~200 coins. With it we can offer one-click bulk rules: keep only
- * Obverse + Reverse, drop retakes, drop Label shots.
+ * Rows start ticked, so this powers the review screen's bulk rules (keep only
+ * Obverse + Reverse, drop retakes, drop labels).
  *
- * DEFENSIVE READ OF THE MATCHER'S OWN FIELDS
- *
- * The matcher also parses the side, the take and the variant, and it sees
- * more context than this file does, so its answer is preferred when there is
- * one. But the fields are optional on the public shape, so they are never
- * referenced by a hard-typed property: the parsed object is read as an
- * index-signature bag, a handful of plausible names are probed, the value is
- * accepted only if it is a shape we understand, and otherwise this file falls
- * back to its own regex read of the filename. A field name we guess wrong
- * about cannot break anything -- it just falls through to the fallback.
+ * The matcher's own side/take/variant fields are preferred when present, but
+ * they are optional, so they are probed by several possible names and
+ * validated; anything unrecognised falls back to this file's regex read.
   */
 
 import { ParsedImageAttributes, PhotoSide, PhotoVariantInfo } from '../../types/coin.model';
 
 /**
- * Processing-variant words that appear after the side in the share's naming
- * convention. Order matters only for display; all are treated the same way.
- *
- * "Photo" is the ORIGINAL full-size camera shot, so it is NOT a derivative.
- * "Small", "Orig" and "Sharpened" are alternate renderings of a shot we
- * already have, which is what "deselect retakes" is meant to clear out.
+ * Processing-variant words that follow the side in filenames. "Photo" is the
+ * original camera shot, not a derivative; "Small", "Orig", "Sharpened" etc.
+ * are alternate renderings, cleared by "deselect retakes".
  */
 const VARIANT_WORDS: Record<string, { label: string; derivative: boolean }> = {
   small: { label: 'Small', derivative: true },
@@ -58,19 +40,18 @@ const VARIANT_WORDS: Record<string, { label: string; derivative: boolean }> = {
   scan: { label: 'Scan', derivative: false }
 };
 
-/** Property names the upgraded matcher might use for the photo side. */
+/** Property names the matcher might use for the photo side. */
 const SIDE_FIELD_CANDIDATES = ['photoSide', 'side', 'imageSide', 'coinSide', 'face'];
 
-/** Property names the upgraded matcher might use for the take counter. */
+/** Property names the matcher might use for the take counter. */
 const TAKE_FIELD_CANDIDATES = ['takeNumber', 'take', 'shotNumber', 'sequence', 'takeIndex'];
 
-/** Property names the upgraded matcher might use for the processing variant. */
+/** Property names the matcher might use for the processing variant. */
 const VARIANT_FIELD_CANDIDATES = ['variant', 'photoVariant', 'rendering'];
 
 /**
- * Containers the new fields might be nested inside instead of sitting flat on
- * the parsed object, e.g. `parsed.photoMarkers.side` rather than `parsed.side`.
- * We look flat first, then inside each of these.
+ * Containers the fields might be nested in (e.g. `parsed.photoMarkers.side`).
+ * Flat fields are checked first.
  */
 const NESTED_CONTAINERS = ['photo', 'markers', 'photoMarkers', 'photoInfo'];
 
@@ -96,11 +77,8 @@ function coerceTake(value: unknown): number | null {
 }
 
 /**
- * Probe an optional field on the parsed attributes without depending on it
- * existing in the type. `parsed as unknown as Record<string, unknown>` is the
- * whole trick: it turns a typed object into a bag we can safely ask questions
- * of. Bracket access is required because tsconfig sets
- * noPropertyAccessFromIndexSignature.
+ * Probe an optional field on the parsed attributes without depending on its
+ * type. Bracket access is required by noPropertyAccessFromIndexSignature.
  */
 function probe(parsed: ParsedImageAttributes | undefined, names: readonly string[]): unknown {
   if (!parsed) return undefined;
@@ -127,16 +105,12 @@ function probe(parsed: ParsedImageAttributes | undefined, names: readonly string
 }
 
 /**
- * Read the side straight out of the filename.
- *
- * Word-boundary matching only. A substring search would classify
- * "Reverse Proof" fine but would also see "obverse" inside made-up words and,
- * worse, would match the "rev" in "Revolt" ("67-68 CE 1st Revolt - Obverse").
+ * Read the side from the filename, matching whole words only (so "rev" in
+ * "Revolt" doesn't count).
  */
 function sideFromFileName(fileName: string): PhotoSide {
   const text = fileName.toLowerCase();
-  // \b would not fire against "obverse-2" on some engines, so we bracket with
-  // an explicit "start, or a non-letter" on each side.
+  // Explicit non-letter boundaries rather than \b.
   if (/(^|[^a-z])(obverse|obv)([^a-z]|$)/.test(text)) return 'obverse';
   if (/(^|[^a-z])(reverse|rev)([^a-z]|$)/.test(text)) return 'reverse';
   if (/(^|[^a-z])(label|slab)([^a-z]|$)/.test(text)) return 'label';
@@ -146,17 +120,13 @@ function sideFromFileName(fileName: string): PhotoSide {
 /** Find a processing-variant word ("Small", "Orig", ...) in the filename. */
 function variantFromFileName(fileName: string): { label: string; derivative: boolean } | null {
   const withoutExtension = fileName.replace(/\.[a-z0-9]+$/i, '');
-  // The share separates parts with " - ", but also plain "-" and "_", so we
-  // split on all of them and look at whole segments. Matching whole segments
-  // (not substrings) stops "Photograph" or a coin named "Small Eagle" from
-  // being read as the "- Small" derivative marker... which is a real design:
-  // "1795 $5 Small Eagle". Hence: only a trailing-ish standalone segment counts.
+  // Split on " - ", "-", "_" and spaces and compare whole segments, so
+  // "Photograph" isn't read as "Photo".
   const segments = withoutExtension.split(/\s*[-_]\s*|\s+/).map(s => s.trim().toLowerCase());
   for (let i = segments.length - 1; i >= 0; i--) {
     const hit = VARIANT_WORDS[segments[i]];
-    // Only the last two segments are treated as variant markers. "Small Eagle"
-    // puts "small" in the middle of the name, where it is part of the coin
-    // type, not a file variant.
+    // Only the last two segments count, so "1795 $5 Small Eagle" (a design
+    // name) isn't read as a Small variant.
     if (hit && i >= segments.length - 2) return hit;
   }
   return null;
@@ -165,24 +135,20 @@ function variantFromFileName(fileName: string): { label: string; derivative: boo
 /**
  * Pull the trailing take counter out of a filename.
  *
- * Real examples and what we want:
- *   "1874 $3 - NGC AU 58-2.jpg"                -> 2   (second shot)
- *   "2008 Hawaii Quarter - Dropped D - 2.JPG"  -> 2
+ *   "1874 $3 - NGC AU 58-2.jpg"                -> 2
  *   "1849-O $1 ANACS XF45 - Reverse - 3-2.jpg" -> 2   (last counter wins)
  *   "1880-S $1 - MS64 - Obverse.jpg"           -> null
- *   "1906-S $5 - XF-AU.jpg"                    -> null (AU is not a counter)
+ *   "1906-S $5 - XF-AU.jpg"                    -> null
  *
- * The rule: the name must END with a separator followed by 1-2 digits. We cap
- * the digits at two so a trailing year ("1881") or a cert number is never
- * mistaken for a take, and we require a separator so "MS63" is untouched.
+ * The name must end with a separator and 1-2 digits: two digits so a year or
+ * cert number is never a take, a separator so "MS63" is untouched.
  */
 export function takeNumberFromFileName(fileName: string): number | null {
   const withoutExtension = fileName.replace(/\.[a-z0-9]+$/i, '');
   const match = /[-_\s]+(\d{1,2})$/.exec(withoutExtension);
   if (!match) return null;
   const value = Number(match[1]);
-  // "-0" is not a take. "-1" is the first take, which we keep but do not
-  // consider a retake (see isRetake below).
+  // "-0" is not a take; "-1" is the first take (not a retake).
   return value >= 1 ? value : null;
 }
 
@@ -197,9 +163,7 @@ export function describePhoto(
   fileName: string,
   parsed?: ParsedImageAttributes
 ): PhotoVariantInfo {
-  // 1. Side: prefer the matcher's opinion, fall back to our own regex.
-  //    A matcher value of 'unknown' is treated as "no opinion" so our own
-  //    read still gets a chance.
+  // 1. Side: prefer the matcher's value; its 'unknown' counts as no opinion.
   const matcherSide = coerceSide(probe(parsed, SIDE_FIELD_CANDIDATES));
   const side: PhotoSide =
     matcherSide && matcherSide !== 'unknown' ? matcherSide : sideFromFileName(fileName);
@@ -208,9 +172,8 @@ export function describePhoto(
   const matcherTake = coerceTake(probe(parsed, TAKE_FIELD_CANDIDATES));
   const takeNumber = matcherTake ?? takeNumberFromFileName(fileName);
 
-  // 3. Variant: prefer the matcher's word, but look the label and the
-  //    "is this a derivative?" flag up in our own table so the bulk rules
-  //    behave identically either way.
+  // 3. Variant: prefer the matcher's word, but take the label and derivative
+  //    flag from our own table.
   const matcherVariant = probe(parsed, VARIANT_FIELD_CANDIDATES);
   const variant =
     (typeof matcherVariant === 'string'
@@ -221,8 +184,7 @@ export function describePhoto(
     side,
     variant: variant?.label ?? null,
     takeNumber,
-    // A retake is "not the first/only shot": take 2 or higher, or a derivative
-    // rendering (Small / Orig / Sharpened) of a shot we already have.
+    // A retake is take 2+ or a derivative rendering (Small / Orig / ...).
     isRetake: (takeNumber !== null && takeNumber >= 2) || (variant?.derivative ?? false)
   };
 }

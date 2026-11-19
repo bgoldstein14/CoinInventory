@@ -1,16 +1,10 @@
 /**
- * routes/health.ts — GET /api/health
- *
- * Used by setup/start-coin-inventory.ps1 to decide when the API is *truly*
- * ready. Serving HTTP is not enough: the launcher needs to know the database
- * is reachable too, otherwise it opens the browser to an app that immediately
- * errors out.
+ * GET /api/health: the launcher (start-coin-inventory.ps1 in the project root)
+ * polls this to know the API and database are ready before opening the
+ * browser. It checks the body, so the response shape must not change.
  *
  * 200 => { status: 'ok',    database: 'connected' }
  * 503 => { status: 'error', database: 'disconnected', message: '...' }
- *
- * Mounted at /api and registered BEFORE the other API routers. The launcher
- * polls this URL in a loop, so the response shape must not change.
  */
 
 import { Router, Request, Response } from 'express';

@@ -71,7 +71,6 @@
 }
 
 // ---- First-run guidance ----
-// Shown only before a file has been selected.
 
 .csv-help {
   margin-bottom: 14px;
@@ -114,7 +113,6 @@
 }
 
 .csv-help-columns {
-  // A plain multi-column list keeps 21 field names compact.
   columns: 3;
   margin: 8px 0;
   padding-left: 18px;
@@ -130,10 +128,7 @@
 }
 
 // ---- Rows refused by the completeness rule ----
-// Styled as a warning block rather than an error: nothing went wrong, some
-// rows simply could not be identified as coins. The amber border is what
-// makes it read as "needs your attention" without implying failure, and it
-// deliberately stands out from the neutral mapping and preview sections above.
+// Amber attention block, not an error style.
 .csv-exceptions {
   margin-top: 16px;
   padding: 12px 14px;
@@ -156,8 +151,7 @@
 }
 
 .csv-exception-list {
-  // Capped so a badly mapped file of hundreds of rows cannot push the action
-  // buttons off the bottom of the dialog.
+  // Capped so a long list cannot push the action buttons off the dialog.
   max-height: 220px;
   overflow-y: auto;
   margin: 0;
@@ -190,7 +184,6 @@
 .csv-exception-missing { color: #8a2c22; }
 
 // ---- Excel: the worksheet step ----
-// Only ever on screen for a workbook with more than one worksheet.
 
 .csv-file-error {
   margin: 12px 0 0;
@@ -219,8 +212,7 @@
   margin: 0;
   padding: 0;
   list-style: none;
-  // Capped so a workbook of thirty tabs cannot push the buttons off the
-  // bottom of the dialog -- the same reasoning as .csv-exception-list.
+  // Capped so many tabs cannot push the action buttons off the dialog.
   max-height: 260px;
   overflow-y: auto;
 }
@@ -240,9 +232,7 @@
   }
 }
 
-// A sheet that cannot be imported is still SHOWN -- one that vanished from
-// the list would read as a bug rather than as a decision -- but it is
-// visibly inert.
+// Unimportable sheets stay listed but are visibly inert.
 .sheet-row--unusable {
   opacity: 0.62;
   label { cursor: default; }
@@ -254,9 +244,7 @@
 
 .sheet-warn { font-size: 0.78rem; color: #8a5a22; }
 
-/* A FACT, NOT A WARNING. Deliberately the same muted colour as
-   .sheet-meta rather than the amber of .sheet-warn: a row that links to no
-   denomination still imports, keeps its text and reads "Other (...)". */
+/* Informational, so muted like .sheet-meta rather than amber. */
 .sheet-note { font-size: 0.78rem; color: #6a5a47; }
 
 .sheet-picker-actions {
@@ -296,9 +284,7 @@
   cursor: pointer;
 }
 
-// A column that is not on every selected sheet. Importing it is perfectly
-// valid -- rows without the column just leave that field blank -- but it
-// looks like a bug if nobody says so.
+// A column missing from some selected sheets.
 .csv-header-scope {
   display: block;
   font-weight: 400;
@@ -324,7 +310,6 @@
   color: #6a5a47;
 }
 
-/* The link count sits under the summary and reads as part of it. */
 .import-plan-links { margin-top: 4px; }
 
 .import-plan-sheets {
@@ -348,9 +333,7 @@
   summary { cursor: pointer; color: #8a5a22; }
 }
 
-// "Import only coins I still own" -- the same control, and the same look,
-// as the one on the Quicken dialog. Two dialogs offering one option should
-// not make it look like two different options.
+// Matches the same option on the Quicken dialog.
 .csv-sold-toggle {
   display: flex;
   align-items: center;

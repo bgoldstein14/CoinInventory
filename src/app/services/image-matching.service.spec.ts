@@ -3,10 +3,7 @@ import { ImageMatchingService } from './image-matching.service';
 import { CoinRecord } from '../types/coin.model';
 import { denominationsAgree } from './image-matching/reference-tables';
 
-/**
- * Builds a CoinRecord with sensible blanks, so each test only has to state the
- * handful of fields it actually cares about.
- */
+/** CoinRecord with blank defaults; tests state only the fields they need. */
 function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
   return {
     denomination: '',
@@ -32,7 +29,6 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
 
 const service = () => new ImageMatchingService();
 
-/* ---- PARSING ---- */
 describe('ImageMatchingService - filename parsing', () => {
   it('parses year, mint mark, denomination and coin type from a canonical name', () => {
     const parsed = service().parseFilename('1881-S Morgan Dollar obverse.jpg');
@@ -51,7 +47,7 @@ describe('ImageMatchingService - filename parsing', () => {
     expect(parsed.denomination).toBe('dollar');
     expect(parsed.coinTypeTokens).toEqual(['peace']);
     expect(parsed.grade).toBe('ms63');
-    // "1921_Peace" must NOT be read as mint mark "P".
+    // "1921_Peace" must not be read as mint mark "P".
     expect(parsed.mintMark).toBeNull();
   });
 
@@ -106,7 +102,6 @@ describe('ImageMatchingService - filename parsing', () => {
   });
 });
 
-/* ---- DEFECT #3 -- BARE-DIGIT DENOMINATION COLLISIONS ---- */
 describe('ImageMatchingService - denomination parsing safety', () => {
   it('does not read "25" inside a cert number or a price as a quarter', () => {
     const parsed = service().parseFilename('1925-S Peace Dollar NGC 2599001 $25.00.jpg');
@@ -123,7 +118,7 @@ describe('ImageMatchingService - denomination parsing safety', () => {
   });
 
   it('does not read "cent" out of the middle of another word', () => {
-    // "center" contains "cent"; the old substring matcher called this a penny.
+    // "center" contains "cent" but is not a denomination.
     expect(service().parseFilename('coin_center_closeup.jpg').denomination).toBeNull();
   });
 
@@ -134,11 +129,8 @@ describe('ImageMatchingService - denomination parsing safety', () => {
   it('still accepts unambiguous collector shorthand', () => {
     expect(service().parseFilename('1964 Kennedy 50c.jpg').denomination).toBe('half dollar');
     expect(service().parseFilename('1943 steel 1c.jpg').denomination).toBe('cent');
-    /* "5c" is a FACE VALUE, not a coin: both the silver Half Dime and the
-     * copper-nickel Nickel are five cents, so the shorthand reads as the
-     * generic 'five cent'. It still agrees with a record that says "Nickel"
-     * -- the equivalence table in reference-tables.ts sees to that -- which
-     * is asserted on the next line so this does not look like a regression. */
+    // "5c" is a face value shared by the Half Dime and the Nickel, so it reads as
+    // the generic 'five cent', which still agrees with "Nickel" (reference-tables.ts).
     expect(service().parseFilename('1938 Jefferson 5c.jpg').denomination).toBe('five cent');
     expect(denominationsAgree('five cent', 'nickel')).toBe(true);
   });
@@ -159,16 +151,13 @@ describe('ImageMatchingService - denomination parsing safety', () => {
     const s = service();
     expect(s.parseFilename('1937 Walking Liberty Half Dollar.jpg').denomination).toBe('half dollar');
     expect(s.parseFilename('1878 Trade Dollar.jpg').denomination).toBe('trade dollar');
-    /* "Silver Dollar" is now one of the three SPECIFIC dollar coins (gold,
-     * silver, trade) that the generic "$1" stands over, so the words win over
-     * the bare ['dollar'] rule -- which is what this test is named for. A
-     * record filed under "$1" still matches it. */
+    // "Silver Dollar" is one of the specific dollar coins under the generic "$1";
+    // a record filed under "$1" still matches it.
     expect(s.parseFilename('1881 Morgan Silver Dollar.jpg').denomination).toBe('silver dollar');
     expect(denominationsAgree('dollar', 'silver dollar')).toBe(true);
   });
 });
 
-/* ---- AUTO-MATCH (the happy path) ---- */
 describe('ImageMatchingService - confident auto matches', () => {
   it('auto-assigns when year, denomination, coin type and mint mark all agree', () => {
     const inventory = [
@@ -231,7 +220,6 @@ describe('ImageMatchingService - confident auto matches', () => {
   });
 });
 
-/* ---- DEFECT #2 -- RUNNER-UP / AMBIGUITY ---- */
 describe('ImageMatchingService - ambiguity goes to review', () => {
   it('sends near-identical coins to review instead of silently picking one', () => {
     const inventory = [
@@ -245,7 +233,7 @@ describe('ImageMatchingService - ambiguity goes to review', () => {
     expect(result.matchedRecordId).toBeNull();
     expect(result.runnerUpGap).toBeLessThan(0.15);
 
-    // The S coin should still be ranked first, with the O coin right behind it.
+    // The S coin ranks first, with the O coin right behind it.
     expect(result.candidates[0].coinId).toBe('morgan-1881-s');
     expect(result.candidates[1].coinId).toBe('morgan-1881-o');
     expect(result.reason).toContain('too close to call');
@@ -272,7 +260,7 @@ describe('ImageMatchingService - ambiguity goes to review', () => {
 
     const [result] = service().matchImages(['1881-S Morgan Dollar.jpg'], inventory);
 
-    // The blank record might BE the S coin - we cannot know, so ask.
+    // The blank record might be the S coin, so ask.
     expect(result.status).toBe('review');
     expect(result.candidates).toHaveLength(2);
   });
@@ -291,7 +279,6 @@ describe('ImageMatchingService - ambiguity goes to review', () => {
   });
 });
 
-/* ---- DEFECT #1 -- SINGLE-ATTRIBUTE COINCIDENCES ---- */
 describe('ImageMatchingService - corroboration is required', () => {
   it('never auto-assigns on a bare year alone', () => {
     const inventory = [
@@ -324,8 +311,7 @@ describe('ImageMatchingService - corroboration is required', () => {
   });
 
   it('does not auto-assign denomination + coin type when neither side pins the year', () => {
-    // Without a year there is no way to tell one Liberty Head Double Eagle
-    // from another, so this stays a suggestion.
+    // Without a year one Liberty Head Double Eagle can't be told from another.
     const inventory = [
       coin({ id: 'de-1907', denomination: '20 Dollar', coinType: 'Liberty Head', year: '1907' })
     ];
@@ -351,7 +337,6 @@ describe('ImageMatchingService - corroboration is required', () => {
   });
 });
 
-/* ---- NO MATCH ---- */
 describe('ImageMatchingService - no usable match', () => {
   it('reports "none" for a camera filename with no coin attributes', () => {
     const inventory = [
@@ -401,7 +386,6 @@ describe('ImageMatchingService - no usable match', () => {
   });
 });
 
-/* ---- EDGE CASES ---- */
 describe('ImageMatchingService - edge cases', () => {
   it('returns an empty array for an empty image list', () => {
     const inventory = [coin({ id: 'a', denomination: 'Dollar', coinType: 'Morgan', year: '1881' })];
@@ -497,14 +481,8 @@ describe('ImageMatchingService - edge cases', () => {
     expect(label).toBe('Morgan Dollar 1881-S');
   });
 
-  // --- The label is what the image importer's review header shows ---
-  //
-  // Without the grade, two records of the same issue read identically: an
-  // 1876 20c in XF45 and another in MS63 both came out as "Twenty Cent 1876",
-  // which is not enough to answer "is this photo this coin?" when reviewing
-  // a folder of 20c photos. The grading company is shown with it because
-  // "PCGS XF45" and "NGC XF45" are different slabs, and because the
-  // filenames themselves usually carry the company.
+  // The label shown in the image importer's review header includes grading
+  // company and grade so two records of the same issue can be told apart.
 
   it('includes the grading company and grade when the coin has them', () => {
     const label = service().describeCoin(

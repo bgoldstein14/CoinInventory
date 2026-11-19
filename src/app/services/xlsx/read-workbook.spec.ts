@@ -1,26 +1,12 @@
 /**
- * End-to-end: real `.xlsx` bytes in, header-and-row arrays out.
+ * End-to-end: real `.xlsx` bytes in, header and row arrays out. Fixtures come
+ * from src/app/testing/xlsx-fixture.ts (hand-written SpreadsheetML, no shared code).
  *
- * The fixtures here are built by src/app/testing/xlsx-fixture.ts, which emits
- * SpreadsheetML by hand and shares no code with the reader. So a passing test
- * says the reader understands the file format rather than that two halves of
- * one library agree with each other -- and the fixture is readable in a diff,
- * which a committed `.xlsx` would not be.
- *
- * WHAT IS BEING PROVEN
- *
- * The four cell shapes that would each corrupt data silently if mishandled:
- *
- *   SERIAL DATE   a purchase date is stored as the number 45678. Read as a
- *                 number it becomes the string "45678" in the date field --
- *                 not obviously wrong in a grid, and unrecoverable later.
- *   CURRENCY      `$1,250.00` is a FORMAT over the value 1250. Taking the
- *                 formatted text and feeding it to parseNumericCell happens
- *                 to work, but taking the raw number is exact.
- *   FORMULA       the cell holds `=D2*2` and a cached result. Reading the
- *                 formula text would put "D2*2" into Purchase Price.
- *   BLANKS        separator rows, merged headers and formatted-but-empty
- *                 trailing columns, none of which should reach the mapper.
+ * Cell shapes covered:
+ *   serial date  45678 must become a date, not the text "45678"
+ *   currency     `$1,250.00` is a format over 1250; the raw number is used
+ *   formula      the cached result is used, never the formula text
+ *   blanks       separator rows, merged headers, empty trailing columns
  */
 import { describe, expect, it } from 'vitest';
 import { buildXlsxWorkbook, buildSimpleXlsx } from '../../testing/xlsx-fixture';
@@ -52,7 +38,7 @@ describe('readWorkbook', () => {
   });
 
   it('reads an Excel serial date as a real date, not as the number 45678', async () => {
-    // THE headline case. Serial 45678 is 21 January 2025.
+    // Serial 45678 is 21 January 2025.
     const sheets = await readWorkbook(asArrayBuffer(buildSimpleXlsx(
       'Silver',
       ['Coin Type', 'Purchase Date'],
@@ -89,9 +75,7 @@ describe('readWorkbook', () => {
   });
 
   it('survives a formula with no cached result rather than losing the file', async () => {
-    // Files written by tools other than Excel sometimes omit the cached
-    // `<v/>`. There is no calculation engine here and there should not be
-    // one; the cell is simply blank, and the rest of the row imports.
+    // Some non-Excel tools omit the cached `<v/>`; the cell is blank and the row still imports.
     const sheets = await readWorkbook(asArrayBuffer(buildSimpleXlsx(
       'Silver',
       ['Coin Type', 'Computed'],
@@ -165,8 +149,7 @@ describe('readWorkbook with several worksheets', () => {
   });
 
   it('reads sheets whose columns do not match without complaint', async () => {
-    // Detecting the mismatch is sheet-header-comparison.ts's job; the reader
-    // must not refuse the file over it.
+    // Header mismatches are reported by sheet-header-comparison.ts, not refused here.
     const sheets = await readWorkbook(asArrayBuffer(buildXlsxWorkbook([
       { name: 'Silver', rows: [['Coin Type', 'Year'], ['Morgan Dollar', 1881]] },
       { name: 'Gold', rows: [['Coin Type', 'Year', 'AGW'], ['Gold Eagle', 1996, 0.1]] }
@@ -190,9 +173,7 @@ describe('readWorkbook with several worksheets', () => {
 
 describe('readWorkbook on a file that is not a workbook', () => {
   it('reports something a non-technical user can act on', async () => {
-    // A `.csv` renamed to `.xlsx`, or an old `.xls`, both land here. The
-    // underlying error is about zip central directories, which is useless to
-    // the person holding the file.
+    // A renamed `.csv` or an old `.xls` must get a readable error, not a zip error.
     const notAWorkbook = new TextEncoder().encode('Coin Type,Year\nMorgan Dollar,1881\n');
 
     await expect(readWorkbook(asArrayBuffer(notAWorkbook))).rejects.toThrow(

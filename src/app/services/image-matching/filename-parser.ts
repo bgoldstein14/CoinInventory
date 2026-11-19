@@ -1,14 +1,6 @@
  /*
- * filename-parser.ts
- *
- * WHAT THIS FILE OWNS
- *   STAGE 1 for the image side: turning "1881-S Morgan Dollar obverse.jpg"
- *   into typed attributes. Public entry point is `parseFilename`, plus
- *   `toSignature` which re-wraps the result for the scorer.
- *
- *   Since the real-filename survey this file is an ORCHESTRATOR. Each awkward
- *   part of a real name got its own module, and this one calls them in the
- *   right order and assembles the answer:
+ * Parses an image filename ("1881-S Morgan Dollar obverse.jpg") into typed
+ * attributes. Delegates each part to its own module:
  *
  *     year + mint mark   -> year-mint-parser.ts     ("1875CC", "1906-S")
  *     unit-bound values  -> denomination-units.ts   ("$20", "50c", "20-cent")
@@ -18,28 +10,8 @@
  *     ancients           -> catalog-refs.ts         ("Sear 6819", "67-68 CE")
  *     not-a-single-coin  -> non-coin-detector.ts    ("Gold Coins", "Stamp")
  *
- * WHY IT IS ITS OWN FILE
- *   This is the paranoid half of the matcher, and it is where most of the
- *   historical bugs lived. A filename is a free-text guess written by a human
- *   with a camera, so nearly every rule here exists to REFUSE something:
- *   "IMG_2024" is not a 2024 coin, the "s" in "reverse side" is not a mint
- *   mark, the "25" in a cert number is not a quarter, and "Stamp - 11 - 3
- *   cent" is not a three-cent coin. Concentrating all that suspicion in one
- *   place makes it obvious where to add the next refusal -- and keeps it from
- *   contaminating coin-signature.ts, which is allowed to trust its input.
- *
- *   `parseFilename` is re-exported by ImageMatchingService unchanged: the UI
- *   and the tests both call it to show exactly what we understood.
- *
- *   ORDER OF OPERATIONS MATTERS. Two places in particular:
- *     - the word table is CONSULTED first but the unit-bound number still
- *       WINS: "$20" is better evidence than any word, yet the dollar rule
- *       needs to know what the words said before it can tell a face value
- *       from a price ("Morgan Dollar $50" is a purchase, not a $50 coin).
- *       See the denomination block below, and the long explanation in
- *       denomination-units.ts;
- *     - catalogue references are folded BEFORE bare digits are discarded,
- *       or the "6819" of "Sear 6819" would be gone before it could be joined.
+ * Filenames are free text, so most rules here exist to reject false readings:
+ * "IMG_2024" is not a 2024 coin, the "s" in "reverse side" is not a mint mark.
   */
 
 import { ParsedImageAttributes } from '../../types/coin.model';
@@ -47,7 +19,7 @@ import { findCatalogRefs, findEraDate, foldCatalogRefs } from './catalog-refs';
 import { Signature } from './coin-signature';
 import { findUnitBoundDenomination } from './denomination-units';
 import { findCertCompanies, parseGrade } from './grade-parser';
-import { detectAutoImportExclusion, detectNonCoin } from './non-coin-detector';
+import { detectAutoImportExclusion, detectCounterfeit, detectNonCoin } from './non-coin-detector';
 import { parsePhotoMarkers } from './photo-markers';
 import { detectStrike } from './proof-strike';
 import { MINT_NAMES, isSpecificFormOf, resolveEagleSeries } from './reference-tables';
@@ -61,10 +33,7 @@ import {
 } from './text-tokens';
 import { extractMintMark, extractYear, gluedYearTokens } from './year-mint-parser';
 
-/**
- * Parse a single filename into typed attributes.
- * Exposed so the UI (and tests) can show exactly what we understood.
- */
+/** Parse a single filename into typed attributes. */
 export function parseFilename(imagePath: string): ParsedImageAttributes {
   const fileName = baseName(imagePath);
   const rawText = stripExtension(fileName);
@@ -78,179 +47,73 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
 
   const tokens = tokenize(separated);
 
-  /* -- IS THIS A PHOTOGRAPH OF ONE COIN AT ALL? --------------------------
-   * It has to run at the TOP of the function, because the denomination block
-   * below depends on its answer.
-   *
-   * WHY. Face values are written with a space -- "2 cent", "3 cent",
-   * "20 cent" -- and reading those means the hyphen in "20-cent" can no
-   * longer be the whole of the matcher's defence against this real filename:
-   *
-   *     Stamp - 11 - 3 cent.jpg
-   *
-   * The defence is here instead: the detector reads the words that say what
-   * the thing IS ("stamp", "paper", "fractional", "bond", "note"), which is
-   * better evidence than punctuation ever was. A filename it has NOT cleared
-   * never gets the spaced reading. See the SPACED_CENT comment in
-   * denomination-units.ts for the full argument. */
+  // Must run before the denomination block: only a filename cleared as a
+  // single coin may read spaced face values like "3 cent" (so
+  // "Stamp - 11 - 3 cent.jpg" is not a three-cent coin).
   const nonCoin = detectNonCoin(rawText);
 
-  /* -- IS THIS PHOTOGRAPH ONE THE AUTOMATED IMPORT SHOULD TOUCH AT ALL? --
-   * Counterfeits ("FAKE - 1860 3CS - VF - Obverse") and shots of several
-   * coins at once ("20¢ Collage", "1875 and 1876 3CN mini-hoard") are held
-   * back from the automated run entirely -- not auto-attached, and not
-   * offered in tier 3's "Attach anyway..." list either.
-   *
-   * REPORTED HERE, ENFORCED IN match-decider.ts. This is deliberately only a
-   * READING of the name. It changes nothing about how the file is parsed,
-   * scored or listed, and in particular it does NOT feed `allowSpacedCent`
-   * below the way `isNonCoin` does. The rule governs what the AUTOMATED
-   * DECISION may do with a photograph, never what the user may do: no
-   * picture file is ever off limits from being attached by hand.
-   *
-   * `rawText` is the BASENAME, which is what makes folder names irrelevant:
-   * "Proofs/1870 Proof Set/Archive/IM000037.JPG" is judged on "IM000037"
-   * alone. See non-coin-detector.ts for the marker lists and for the three
-   * words (`copy`, `set`, `cleaned`) that are deliberately NOT markers. */
+  // Multi-coin shots ("20¢ Collage") are flagged here and kept out of the
+  // automated import by match-decider.ts; they can still be attached by hand.
   const exclusion = detectAutoImportExclusion(rawText);
 
-  // -- year and mint mark (both need the separator-preserving string) ------
+  // Year and mint mark need the separator-preserving string.
   const year = extractYear(tokens, true);
   const mintMark = extractMintMark(separated, tokens);
 
-  /* -- denomination -------------------------------------------------------
-   * TWO READERS, AND A UNIT-BOUND NUMBER STILL WINS.
-   *
-   *   findDenomination            scans the TOKENS for a known spelling:
-   *                               "Peace Dollar", "Half Dollar", "3CN".
-   *   findUnitBoundDenomination   reads a number with a unit out of the RAW
-   *                               text -- "$20", "50<cent>", "20-cent" --
-   *                               raw, because tokenizing deletes the very
-   *                               sign that gives the number its meaning.
-   *
-   * The words are read FIRST and handed to the unit-bound reader. That is
-   * not a change of authority: a stated face value is still the better
-   * evidence and still wins whenever it survives. It is CONTEXT. "$20" in a
-   * name that says nothing else is a Double Eagle; "$50" in a name that
-   * already says "Morgan Dollar" is what the coin COST, because a coin has
-   * exactly one face value and that name has already given it. Only the words
-   * can reveal that, so the dollar rule has to see them before it decides.
-   * The whole rule is in the DOLLAR_FACE_VALUES header in
-   * denomination-units.ts.
-   *
-   * `wordBased` stays null whenever the unit-bound reader answered: it is
-   * also what tells `extractCoinTypeTokens` below WHICH words to strike out
-   * as the denomination, and only the reader that actually supplied the
-   * answer may do that. */
+  /* Denomination: two readers.
+   *   findDenomination            known spellings in the tokens ("Half Dollar", "3CN")
+   *   findUnitBoundDenomination   a number with a unit in the raw text ("$20",
+   *                               "50c", "20-cent"); raw because tokenizing
+   *                               drops the sign that gives the number meaning.
+   * A stated face value wins, but the unit-bound reader is given the word key
+   * as context so it can tell a price from a face value ("Morgan Dollar $50"
+   * is what the coin cost). `wordBased` stays null when the unit-bound reader
+   * answered, so only the winning reader's words are stripped from the type. */
   const wordMatch = findDenomination(tokens);
 
-  /* The face-value reader is told what the WORDS said, so it can tell a face
-   * value from a price. "50 cent" has to count as the words naming a coin for
-   * that purpose even though `findDenomination` now (rightly) refuses to call
-   * it a ONE CENT piece -- otherwise the "$20" in
-   * "1913 50-Cent Canadian $20 - Obverse.jpg" stops looking like a price and
-   * starts looking like a Double Eagle. Hence the second, context-only read;
-   * see FindDenominationOptions.allowCountedCent in text-tokens.ts. */
+  // Context-only read: "50 cent" still counts as naming a coin here, so the
+  // "$20" in "1913 50-Cent Canadian $20" reads as a price, not a Double Eagle.
   const wordContext = wordMatch ?? findDenomination(tokens, { allowCountedCent: true });
 
-  /* `allowSpacedCent` is what turns "1866 2 cent - PCGS PF64RB - Obverse.jpg"
-   * into a TWO CENT piece instead of nothing at all. It is granted only to a
-   * filename the non-coin detector has cleared, which is how the three
-   * traps in the corpus stay out:
-   *
-   *     Stamp - 11 - 3 cent.jpg          "stamp"      -> never asked
-   *     3-cent paper - Large.jpg         "paper"      -> never asked
-   *     3-cent Fractional - FR1227.jpg   "fractional" -> never asked
-   *
-   * (The second and third are hyphenated, so the face-value reader would
-   * have answered for them either way; the non-coin veto in
-   * match-decider.ts is what has always kept them out of the import, and
-   * still does. The first is the one the hyphen rule was protecting, and it
-   * is the one this flag now protects instead.) */
+  // Spaced face values ("1866 2 cent") are only read for filenames the
+  // non-coin detector has cleared.
   const unitBoundRead = findUnitBoundDenomination(
     rawText,
     wordContext?.key ?? null,
     { allowSpacedCent: !nonCoin.isNonCoin }
   );
 
-  /* ...WITH ONE EXCEPTION: THE WORDS MAY BE SHARPER THAN THE FACE VALUE.
-   *
-   * A face value can only say HOW MANY CENTS. For most denominations that
-   * settles it -- fifty cents is a Half Dollar and nothing else. For three
-   * cents and five cents it does not:
-   *
-   *     1864 3-cent silver - PF64 - Obverse.jpg
-   *
-   * The face-value reader sees "3-cent" and answers the vague 'three cent';
-   * the word table sees "3 cent silver" and answers 'three cent silver'. The
-   * two AGREE -- one is the general form of the other -- but only the second
-   * names the coin, and the vague key is compatible with a Three Cent NICKEL
-   * record too, so the denomination veto never fires and a 3CN record is
-   * offered photographs of a 3CS proof.
-   *
-   * So when the words give a SPECIFIC form of what the face value gave, the
-   * words win. This is not the face value losing its authority -- the two
-   * answers do not contradict each other, one is simply more precise, and
-   * precision is what the veto needs. Every other case is untouched: a
-   * disagreement (words say "Morgan Dollar", digits say "$50") is still the
-   * face value's business and is still resolved inside
-   * findUnitBoundDenomination, which is why the word key is passed to it. */
+  // When the words name a more specific form of the face value ("3-cent
+  // silver" vs plain 'three cent'), the words win; the vague key would also
+  // be compatible with a Three Cent Nickel record and defeat the veto.
   const wordsAreSharper = !!unitBoundRead && isSpecificFormOf(wordMatch?.key, unitBoundRead.key);
   const unitBound = wordsAreSharper ? null : unitBoundRead;
   const wordBased = unitBound ? null : wordMatch;
 
-  /* WHICH EAGLE? The word "Eagle" (or "Gold Eagle") is the one denomination
-   * whose meaning depends on WHEN the coin was struck: the classic $10 gold
-   * piece ran 1795-1933 and the modern bullion series started in 1986, with
-   * nothing in between. The tables above see only words, so they hand back
-   * the deliberately vague key 'gold eagle'; this is where the year it just
-   * read turns that into a real face value.
-   *
-   * It is a no-op for every other denomination, and a no-op for an Eagle with
-   * no year -- an undated "Eagle" stays vague on purpose rather than guessing
-   * a series. The whole rule, with both date ranges, is in
-   * reference-tables.ts beside `resolveEagleSeries`.
-   *
-   * `rawText` is passed so a weight word ("1 oz", "1/4 oz") can name the
-   * exact bullion size; that is a refinement, and it is only consulted once
-   * the year has already established that the coin is modern. */
+  // "Eagle" depends on the year (classic $10 gold vs modern bullion); the
+  // vague 'gold eagle' key is resolved here. See resolveEagleSeries.
   const resolved = resolveEagleSeries(unitBound ?? wordBased, year, rawText);
 
   const denomination = resolved?.key ?? null;
   const denominationLabel = resolved?.label ?? null;
 
-  // -- grade, cert company, cert number -----------------------------------
+  // Grade, cert company, cert number
   const { grade, consumedTokens: gradeTokens } = parseGrade(rawText);
   const certCompanies = findCertCompanies(rawText);
   const certNumbers = tokens.filter(t => /^\d{5,12}$/.test(t) && Number(t) !== year);
 
-  // -- photo markers and ancients -----------------------------------------
+  // Photo markers and ancients
   const photo = parsePhotoMarkers(rawText);
   const catalogRefs = findCatalogRefs(rawText);
   const eraDate = findEraDate(rawText);
-  // `nonCoin` is read at the top of the function now -- the denomination
-  // block needs its answer. See the comment there.
 
-  /* -- proof, specimen, or (if the name stays quiet) BUSINESS STRIKE -------
-   * Read from the RAW filename, because the only reliable written forms are
-   * destroyed by tokenizing: "proof-like" loses its hyphen and "PF65RB" is
-   * only meaningful as the whole grade.
-   *
-   * A NAME THAT SAYS NOTHING ABOUT THE STRIKE ANSWERS 'business', NOT
-   * 'unknown'. This is the image half of the silence-is-a-statement rule in
-   * proof-strike.ts. Since every real filename has SOME text, essentially
-   * every photograph makes a positive statement about its strike -- and a
-   * quiet filename is therefore disqualified from a proof record by
-   * match-vetoes.ts. That is deliberate; see the carve-out note in that file.
-   *
-   * NOTE FOR ANYONE WORRIED ABOUT THE "Early Proofs" FOLDER: directory names
-   * never reach here. `baseName(imagePath)` at the top of this function keeps
-   * every path component except the final filename out of the parser, so a
-   * folder called "Early Proofs" cannot make its contents look like proofs.
-   * There is a test for it. */
+  // Strike is read from the raw name ("proof-like", "PF65RB" don't survive
+  // tokenizing). A name silent on strike reads as 'business' (see
+  // proof-strike.ts). Only the basename is parsed, so folder names like
+  // "Early Proofs" have no effect.
   const strike = detectStrike(rawText, grade);
 
-  // -- coin type = whatever meaningful words are left ---------------------
+  // Coin type = whatever meaningful words are left
   const coinTypeTokens = extractCoinTypeTokens({
     tokens,
     wordBased,
@@ -280,7 +143,6 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
     certCompanies,
     tokens,
     isEmpty,
-    // --- fields added for the real-filename conventions -------------------
     side: photo.side,
     take: photo.take,
     photoVariant: photo.variant,
@@ -290,6 +152,7 @@ export function parseFilename(imagePath: string): ParsedImageAttributes {
     nonCoinReason: nonCoin.reason,
     excludedFromAutoImport: exclusion.excluded,
     autoImportExclusionReason: exclusion.reason,
+    counterfeit: detectCounterfeit(rawText),
     strike
   };
 }
@@ -307,28 +170,18 @@ export function toSignature(parsed: ParsedImageAttributes): Signature {
     certNumbers: parsed.certNumbers,
     certCompanies: parsed.certCompanies,
     tokens: parsed.tokens,
-    /* `strike` is optional on the public ParsedImageAttributes (every field
-     * added after the original shape is, so old callers keep compiling), but
-     * `parseFilename` always fills it in -- and since a quiet filename is a
-     * BUSINESS strike, what it fills in is essentially never 'unknown'.
-     *
-     * The default stays 'unknown' all the same, and that is the one place it
-     * is still the right answer. A hand-built attributes object that omits
-     * the field has not stayed QUIET about the strike; it has no filename
-     * behind it at all. 'unknown' disagrees with nothing, so such an object
-     * can never cause a veto. */
-    strike: parsed.strike ?? 'unknown'
+    // parseFilename always sets `strike`; a hand-built object without it
+    // defaults to 'unknown', which never triggers a veto.
+    strike: parsed.strike ?? 'unknown',
+    counterfeit: parsed.counterfeit ?? false
   };
 }
 
 /**
- * Whatever is left after every recognised attribute has been taken out is the
- * coin's DESIGN name: "morgan", "mercury", "hawaii", "caracalla".
- *
- * Each removal below corresponds to something we have already scored on its
- * own. Leaving any of them in would be double-counting at best, and at worst
- * would make unrelated coins look alike (every PCGS coin sharing the token
- * "pcgs", every photo sharing "obverse").
+ * What remains after removing every recognised attribute is the coin's design
+ * name ("morgan", "mercury", "caracalla"). Removed attributes are scored
+ * separately; leaving them in would double-count and make unrelated coins
+ * look alike (every photo sharing "obverse").
  */
 function extractCoinTypeTokens(input: {
   tokens: string[];
@@ -347,9 +200,8 @@ function extractCoinTypeTokens(input: {
     ? removeRange(tokens, wordBased.start, wordBased.length)
     : [...tokens];
 
-  // Join "sear" + "6819" into "sear6819" BEFORE the bare-digit filter below
-  // discards the number. Both sides of a comparison do this -- see
-  // catalog-refs.ts.
+  // Join "sear" + "6819" into "sear6819" before the bare-digit filter below
+  // discards the number.
   remainder = foldCatalogRefs(remainder);
 
   const consumed = new Set([
@@ -375,7 +227,6 @@ function extractCoinTypeTokens(input: {
     }
   }
 
-  // `meaningfulTokens` drops the stop words, which now include every side,
-  // photo-variant, grade and era word (see reference-tables.ts).
+  // Stop words include side, photo-variant, grade and era words.
   return meaningfulTokens(remainder);
 }

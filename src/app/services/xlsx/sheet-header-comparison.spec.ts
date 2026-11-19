@@ -1,24 +1,7 @@
 /**
- * Telling the user exactly how two worksheets disagree.
- *
- * WHY A MESSAGE THAT NAMES THINGS
- *
- * A dealer's workbook has a tab per metal, or per year, or per box. They are
- * usually the same shape, and occasionally not -- the Gold tab grew an `AGW`
- * column in 2015 and nothing else did. Importing them together is still the
- * right thing to do; the user just needs to know what is different before
- * they commit.
- *
- * "Columns are inconsistent across sheets" tells them nothing and sends them
- * back to Excel to find out. "Sheet 'Gold' has a column 'AGW' that 'Silver'
- * does not" tells them whether they care, without leaving the dialog. The
- * assertions below are mostly about the wording for that reason.
- *
- * MATCHING IGNORES CASE AND PUNCTUATION, REPORTING DOES NOT
- *
- * `Cost` and `cost ` are the same column and must not be reported as a
- * difference. But the message quotes the heading as the user actually typed
- * it, because that is what they will be looking for when they go and check.
+ * Tests that header differences between worksheets are reported by name
+ * ("Sheet 'Gold' has a column 'AGW' that 'Silver' does not"). Matching ignores
+ * case and punctuation; messages quote headings as written.
  */
 import { describe, expect, it } from 'vitest';
 import { compareSheetHeaders } from './sheet-header-comparison';
@@ -48,9 +31,7 @@ describe('compareSheetHeaders', () => {
   });
 
   it('ignores the ORDER of the columns', () => {
-    // Order genuinely does not matter: the mapping is keyed by header text
-    // and applied against each sheet's own header array, so a reordered
-    // sheet imports correctly. Flagging it would be a false alarm.
+    // Order doesn't matter: the mapping is keyed by header text per sheet.
     const comparison = compareSheetHeaders([
       { name: 'Silver', headers: ['Coin Type', 'Year'] },
       { name: 'Gold', headers: ['Year', 'Coin Type'] }
@@ -115,8 +96,7 @@ describe('compareSheetHeaders', () => {
   });
 
   it('ignores sheets with no headers at all', () => {
-    // An empty tab is not a disagreement, it is an absence. Counting it
-    // would make every workbook with a spare Sheet3 look inconsistent.
+    // An empty tab is ignored, not reported as a difference.
     const comparison = compareSheetHeaders([
       { name: 'Silver', headers: ['Coin Type'] },
       { name: 'Sheet3', headers: [] }

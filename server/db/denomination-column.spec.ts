@@ -1,66 +1,26 @@
 /**
- * db/denomination-column.spec.ts — Coins.DenominationId on its way in and out.
+ * Coins.DenominationId on its way in and out. PUT builds its UPDATE from
+ * COIN_FIELDS, so a missing binding would silently drop the value. Checks:
  *
- * WHY THIS COLUMN NEEDS A SPEC OF ITS OWN
- * `PUT /api/coins/:id` builds its UPDATE from COIN_FIELDS, so a column with
- * no COIN_FIELDS entry is never written: the editor picks a denomination, the
- * PUT returns 200, and the next reload shows the old value. That is the worst
- * shape a bug can take in this application, and nothing about it is visible
- * from a status code — hence a spec that proves the round trip.
+ *   1. the binding exists and is an INT;
+ *   2. values normalize to an integer or NULL (shared with catalogId, since CSV
+ *      imports deliver "3" or a mis-mapped "8 Reales");
+ *   3. it comes back out through rowToCoin().
  *
- * Three things are asserted, and each one is a different failure:
- *
- *   1. THE BINDING EXISTS AND IS AN INT. Without it the UPDATE never names
- *      the column. With the wrong type the driver rejects the value.
- *   2. THE VALUE IS NORMALISED TO AN INTEGER OR NULL. Exactly the problem
- *      `catalogId` has, for exactly the same reasons — see the long note on
- *      that binding in db/coin-fields.ts. A CSV round trip turns 3 into "3";
- *      a user mapping a denomination-LABEL column onto this field on the
- *      import screen sends "8 Reales". Bound straight through, the first may
- *      or may not coerce depending on the driver and the second certainly
- *      fails with SQL Server 8114, at SAVE time, aborting the transaction
- *      and losing the whole coin rather than merely its link.
- *   3. IT COMES BACK OUT AGAIN. A field the API accepts but does not return
- *      is a field that silently empties itself on the next reload.
- *
- * ON THE SHARED NORMALISER: `catalogId` and `denominationId` are the only
- * two INT foreign keys on this table and they have identical requirements,
- * so they share one function rather than carrying two copies that can drift.
- * The catalogue tests in db/catalog-columns.spec.ts still pass unchanged,
- * which is what proves the sharing did not change either one's behaviour.
- *
- * *** WHAT THE MOVE TO SQLITE CHANGED HERE. ***
- *
- *   - The DDL is read out of db/schema.sql through
- *     test-support/schema-columns.ts instead of being regexed out of
- *     setup-database.sql by hand. SQLite cannot be told `NVARCHAR(100)`, so
- *     the declared type lives in the trailing `-- NVARCHAR(100)` comment that
- *     module parses.
- *
- *   - *** THE maxLength ON `denomination` IS NOW THE ONLY THING ENFORCING
- *     THAT WIDTH. *** SQLite enforces none; db/bind-values.ts enforces this
- *     one, reading it out of COIN_FIELDS. Drift between the binding and the
- *     schema is no longer a disagreement the engine settles — it is a hole.
- *
- *   - The last block is new: it reads a row that really went through SQLite
- *     rather than a hand-built object, which is the only way to know that
- *     what the mapper receives is what the database hands over. The full
- *     end-to-end HTTP proof lives in routes/coins/denomination-id.spec.ts.
+ * The end-to-end HTTP test is in routes/coins/denomination-id.spec.ts.
  */
 
 import { describe, it, expect } from 'vitest';
 
 import { insertCoin, queryRows } from '../test-support/sqlite-test-db';
 import { parseTable } from '../test-support/schema-columns';
-import { COIN_FIELDS, normalizeCoinValue, rowToCoin } from './index';
+import { COIN_FIELDS, normalizeCoinValue, normalizeForeignKeyId, rowToCoin } from './index';
 
 const schemaColumns = parseTable('Coins');
 
 describe('COIN_FIELDS binds Coins.DenominationId', () => {
   it('parsed the Coins DDL, so the assertions below are not vacuous', () => {
     expect(schemaColumns.has('CoinId')).toBe(true);
-    // INTEGER is what SQLite stores; `-- INT` is the declared type the
-    // bindings are compared against.
     expect(schemaColumns.get('DenominationId')).toMatchObject({
       storage: 'INTEGER',
       declared: 'INT',
@@ -69,16 +29,13 @@ describe('COIN_FIELDS binds Coins.DenominationId', () => {
   });
 
   it('has an entry at all — without one the UPDATE never names the column', () => {
-    // This is the whole bug. `PUT /api/coins/:id` filters COIN_FIELDS by the
-    // keys present in the request body, so a key with no binding is dropped
-    // on the floor and the save reports success.
+    // PUT filters COIN_FIELDS by body keys, so an unbound key would be silently dropped.
     expect(COIN_FIELDS['denominationId']).toBeDefined();
   });
 
   it('points at the DenominationId column as an INT', () => {
     expect(COIN_FIELDS['denominationId'].column).toBe('DenominationId');
-    // INT, so no maxLength — db/coin-fields.spec.ts only length-checks
-    // NVARCHAR bindings and declaring one here would be meaningless.
+    // INT, so no maxLength.
     expect(COIN_FIELDS['denominationId'].maxLength).toBeUndefined();
     expect(COIN_FIELDS['denominationId'].sqlType).toMatchObject({
       storage: 'int',
@@ -87,14 +44,10 @@ describe('COIN_FIELDS binds Coins.DenominationId', () => {
   });
 
   it('keeps Denomination bound as text beside it, unchanged', () => {
-    // *** BOTH COLUMNS, DELIBERATELY. *** The id is the
-    // canonical link; the text is what the source said. Replacing one with
-    // the other is what the design calls a failure even if it works.
+    // Both columns: the id is the canonical link, the text is what the source said.
     expect(COIN_FIELDS['denomination'].column).toBe('Denomination');
     expect(COIN_FIELDS['denomination'].maxLength).toBe(100);
-    // ...and that 100 is no longer a second opinion. SQLite would store any
-    // length; db/bind-values.ts refuses the 101st character using exactly
-    // this number, so it had better be the number db/schema.sql declares.
+    // db/bind-values.ts enforces this width, so it must match db/schema.sql.
     expect(COIN_FIELDS['denomination'].sqlType).toMatchObject({
       storage: 'text',
       maxLength: 100,
@@ -108,9 +61,7 @@ describe('COIN_FIELDS binds Coins.DenominationId', () => {
   });
 
   it('gives it no insert default', () => {
-    // A default would link every coin created by a client that has never
-    // heard of this feature to a denomination nobody chose. NULL means
-    // "never established", which is the normal state of an imported coin.
+    // No default: NULL ("never linked") is the normal state of an imported coin.
     expect(COIN_FIELDS['denominationId'].insertDefault).toBeUndefined();
   });
 });
@@ -126,31 +77,24 @@ describe('normalizing denominationId on the way in', () => {
   });
 
   it('turns "no denomination link" into SQL NULL, in all of its spellings', () => {
-    // NULL is the ORDINARY state here, not an error: every coin that arrived
-    // by import before its issuer was seeded has one, and deleting a
-    // back into it when a denomination is deleted.
+    // NULL is the normal state (unseeded issuer, deleted denomination).
     for (const empty of [null, undefined, '', '   ']) {
       expect(normalizeCoinValue('denominationId', empty)).toBeNull();
     }
   });
 
   it('refuses a label where an id belongs, rather than letting the driver fail', () => {
-    // "8 Reales" gets here when a user maps a denomination-NAME column onto
-    // this field on the import screen. NULL loses the link, which the user
-    // can see (the coin reads as unresolved) and fix in one click; a failed
-    // INSERT loses the whole coin.
+    // A mis-mapped label column. NULL keeps the save working; the user can relink.
     expect(normalizeCoinValue('denominationId', '8 Reales')).toBeNull();
     expect(normalizeCoinValue('denominationId', 'Crown')).toBeNull();
     expect(normalizeCoinValue('denominationId', Number.NaN)).toBeNull();
     expect(normalizeCoinValue('denominationId', '3 sheep')).toBeNull();
   });
 
-  it('did not change how catalogId normalises, now that they share a function', () => {
-    // The two INT foreign keys on Coins share one normaliser. If sharing it
-    // had altered either, this is where it would show.
-    expect(normalizeCoinValue('catalogId', '3')).toBe(3);
-    expect(normalizeCoinValue('catalogId', 'Sear')).toBeNull();
-    expect(normalizeCoinValue('catalogId', '')).toBeNull();
+  it('uses the shared foreign-key normalizer that catalogue references also use', () => {
+    expect(normalizeForeignKeyId('3')).toBe(3);
+    expect(normalizeForeignKeyId('Sear')).toBeNull();
+    expect(normalizeForeignKeyId('')).toBeNull();
   });
 });
 
@@ -162,44 +106,30 @@ describe('reading DenominationId back out', () => {
   });
 
   it('returns NULL as null, NOT as undefined', () => {
-    // *** DELIBERATELY UNLIKE catalogId AND coinSet BESIDE IT. ***
-    // `undefined` is dropped by JSON.stringify, and the editor needs to be
-    // able to say "this coin has text and no link" — which is the state that
-    // renders as unresolved and opens the custom box. A missing key and a
-    // null would both have to mean that, so the client would need two checks
-    // where it should need one, and the first consumer to forget the second
-    // check would show an imported coin as though it were resolved.
+    // null (not undefined, unlike catalogId): the key is always present so
+    // the client has one check for "text but no link".
     const coin = rowToCoin({ CoinId: 'abc', Denomination: '8 Reales', DenominationId: null });
     expect(coin['denominationId']).toBeNull();
   });
 
   it('survives a row from a database migration 011 has not reached', () => {
-    // Until 011 has been run the column does not exist, so the row has no
-    // such key at all. That must read as "no link", not as a crash.
+    // Before migration 011 the column doesn't exist; that must read as "no link".
     const coin = rowToCoin({ CoinId: 'abc' });
     expect(coin['denominationId']).toBeNull();
   });
 
   it('keeps the recorded text even when the link is set and disagrees', () => {
-    // The NORMAL state after migration 014 resolves a coin: the text still
-    // says what the QIF said and the id says what it turned out to be.
-    // Neither overwrites the other, here or anywhere.
+    // Both text and id are kept; neither overwrites the other.
     const coin = rowToCoin({ CoinId: 'abc', Denomination: 'Pillar Dollar', DenominationId: 7 });
     expect(coin['denomination']).toBe('Pillar Dollar');
     expect(coin['denominationId']).toBe(7);
   });
 });
 
-/**
- * The four tests above hand rowToCoin() an object written by hand, which
- * proves the mapping rule and nothing about whether a real row looks like
- * that. These two close the gap: the row comes out of SQLite.
- */
+/** The same mapping, using rows that actually came out of SQLite. */
 describe('reading DenominationId back out of a real row', () => {
   it('hands the mapper a number, so the link survives the database', async () => {
-    // SQLite is dynamically typed: a value stored as text in an INTEGER
-    // column comes back as a string, and `denominationId === 7` on the
-    // client would then be false for a coin that is perfectly well linked.
+    // A value stored as text would come back as a string and fail `=== 7` on the client.
     await insertCoin({ CoinId: 'abc', Denomination: 'Pillar Dollar', DenominationId: 7 });
 
     const [row] = await queryRows("SELECT * FROM Coins WHERE CoinId = 'abc'");
@@ -211,9 +141,7 @@ describe('reading DenominationId back out of a real row', () => {
   });
 
   it('hands the mapper SQL NULL for an unresolved coin, which maps to null', async () => {
-    // The ordinary state of an imported coin, straight out of the table
-    // rather than out of a literal: `?? null` has to see a real null here,
-    // not an empty string or a 0.
+    // `?? null` must see a real null, not '' or 0.
     await insertCoin({ CoinId: 'abc', Denomination: '100 Soles', DenominationId: null });
 
     const [row] = await queryRows("SELECT * FROM Coins WHERE CoinId = 'abc'");

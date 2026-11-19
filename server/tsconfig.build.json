@@ -1,33 +1,12 @@
 {
-  // Build-only TypeScript config, used by "npm run build".
-  //
-  // WHY THIS EXISTS (separate from tsconfig.json):
-  // tsconfig.json intentionally includes "**/*.ts" so that `tsc --noEmit`
-  // type-checks the test files too. But test files must NOT be emitted into
-  // dist/ -- when they were, `npm run build` produced dist/*.spec.js, and
-  // Vitest then discovered those stale compiled copies and tried to run
-  // them, failing with "Vitest cannot be imported in a CommonJS module
-  // using require()".
-  //
-  // Worse, a stale dist/ is genuinely dangerous here: "npm start" runs
-  // `node dist/server.js`. A dist/ built before the connection-pool fix
-  // would silently run the OLD code -- the version with no
-  // pool.on('error') listener, whose missing error handler was killing the
-  // whole Node process. Keeping build output limited to production sources
-  // makes that far less likely to go unnoticed.
-  //
-  // migrate-sqlserver/ is excluded for a third reason: it is a SCRIPT, not
-  // part of the application. Nothing in the server imports it, it is the
-  // only code left that talks to SQL Server, and it is deleted once the
-  // owner's collection has moved. Compiling it into dist/ would ship an
-  // mssql dependency inside the installer for a program that no longer has
-  // a SQL Server to talk to.
+  // Build-only config for "npm run build". tsconfig.json includes specs so
+  // `tsc --noEmit` type-checks them; they must not be emitted into dist/, where
+  // Vitest would find and fail to run the compiled copies.
   "extends": "./tsconfig.json",
   "exclude": [
     "node_modules",
     "dist",
     "**/*.spec.ts",
-    "test-support",
-    "migrate-sqlserver"
+    "test-support"
   ]
 }

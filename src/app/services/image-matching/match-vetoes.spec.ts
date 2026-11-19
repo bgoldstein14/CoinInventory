@@ -1,32 +1,10 @@
- /*
- * match-vetoes.spec.ts
- *
- * WHAT THIS FILE PROVES
- *   The three HARD VETOES, each in both directions, and -- just as important
- *   -- every case that must NOT veto:
- *
- *     1. a stated year conflict disqualifies a coin;
- *     2. a stated denomination conflict disqualifies a coin, EXCEPT where
- *        the "3¢ is equivalent to 3CS or 3CN" rule applies;
- *     3. a proof never matches a business strike, in either direction;
- *     4. SILENCE ON EITHER SIDE NEVER VETOES -- the absence cases;
- *     5. THE PROOFLIKE TRAP: a PL / DMPL / "prooflike" coin is a BUSINESS
- *        strike and must still match a non-proof record.
- *
- *   And at three levels, because a veto is only worth having if it reaches
- *   all of them:
- *     - `findVetoes`, the rule itself;
- *     - `matchImages`, the auto-assign decision and the candidate list;
- *     - `assessNearMatch` / the import tier, so tier 2 cannot offer a coin
- *       the decision has already thrown out.
- *
- * WHY SO MANY "MUST NOT VETO" TESTS
- *   A veto is harsher than a low score: it removes the coin from the ranked
- *   list entirely, so the user cannot even pick it by hand. An over-eager
- *   veto therefore HIDES a correct coin, which is worse than an over-generous
- *   score that merely asks a question. Half of this file exists to pin the
- *   veto's upper bound.
-  */
+/*
+ * Hard-veto tests (year, denomination, strike, authenticity), each in both
+ * directions, plus the cases that must NOT veto: a veto removes a coin from
+ * the candidate list entirely, so an over-eager one hides the correct coin.
+ * Checked at the rule (`findVetoes`), the decision (`matchImages`) and the
+ * near-match tier.
+ */
 
 import { describe, expect, it } from 'vitest';
 import { CoinRecord } from '../../types/coin.model';
@@ -57,11 +35,7 @@ const veto = (file: string, record: Partial<CoinRecord>) =>
     parseCoin(coin({ id: 'x', ...record }))
   );
 
- /*
- * 1. THE YEAR VETO
- *
- * It is not a close match if the years do not match.
- */
+// 1. Year veto.
 describe('veto 1 - a stated year conflict disqualifies the coin', () => {
   it('vetoes when the filename year is later than the record year', () => {
     const verdict = veto('1881 Morgan Dollar PCGS MS63 - Obverse.jpg', {
@@ -73,8 +47,6 @@ describe('veto 1 - a stated year conflict disqualifies the coin', () => {
   });
 
   it('vetoes when the filename year is earlier than the record year', () => {
-    // The same conflict the other way round. A veto is symmetric; nothing
-    // about which side is bigger matters.
     const verdict = veto('1880 Morgan Dollar PCGS MS63 - Obverse.jpg', {
       year: '1881', denomination: 'Dollar', coinType: 'Morgan', grade: 'MS63', certCompany: 'PCGS'
     });
@@ -83,7 +55,6 @@ describe('veto 1 - a stated year conflict disqualifies the coin', () => {
   });
 
   it('does NOT veto a year inside a type-set record\'s RANGE', () => {
-    // A type-set entry is written "1916-1945". Any year inside it is the coin.
     expect(veto('1921 Mercury Dime - Obverse.jpg', {
       year: '1916-1945', denomination: 'Dime', coinType: 'Mercury'
     }).vetoed).toBe(false);
@@ -96,8 +67,6 @@ describe('veto 1 - a stated year conflict disqualifies the coin', () => {
   });
 
   it('does NOT veto when the FILENAME gives no year', () => {
-    // Absence is not disagreement. "Caracalla Denarius - Sear 6819" has no
-    // year at all and must stay on the shortlist for a dated record.
     expect(veto('Caracalla Denarius - Sear 6819 - Obverse.jpg', {
       year: '1881', coinType: 'Caracalla Denarius'
     }).vetoed).toBe(false);
@@ -110,11 +79,7 @@ describe('veto 1 - a stated year conflict disqualifies the coin', () => {
   });
 });
 
- /*
- * 2. THE DENOMINATION VETO
- *
- * It is not a close match if the denomination does not match.
- */
+// 2. Denomination veto.
 describe('veto 2 - a stated denomination conflict disqualifies the coin', () => {
   it('vetoes a Half Dollar filename against a Double Eagle record', () => {
     const verdict = veto('1812 50¢ VG - Obverse - Small.jpg', {
@@ -132,8 +97,7 @@ describe('veto 2 - a stated denomination conflict disqualifies the coin', () => 
   });
 
   it('does NOT veto when the FILENAME gives no denomination', () => {
-    // "1881-S Morgan - 20 - Obverse.jpg" is verbatim from the share and names
-    // no denomination at all.
+    // Real filename; the "20" is a shot number, not a denomination.
     expect(veto('1881-S Morgan - 20 - Obverse.jpg', {
       year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'S'
     }).vetoed).toBe(false);
@@ -146,16 +110,10 @@ describe('veto 2 - a stated denomination conflict disqualifies the coin', () => 
   });
 });
 
- /*
- * 2b. "3¢ CAN BE EQUIVALENT TO 3CS OR 3CN"
- *
- * The rule covers pulling in coin inventory, grabbing coin details and image
- * matching alike.
- *
- * The asymmetry is the whole point, so every relation is tested in both
- * directions:
- *     generic  <-> specific    equivalent
- *     specific <-> specific    a genuine conflict
+/*
+ * 2b. Three-cent equivalence:
+ *     generic  <-> specific    agree
+ *     specific <-> specific    conflict (3CS vs 3CN)
  */
 describe('veto 2b - the three-cent equivalence, generic to specific only', () => {
   it('agrees on the keys themselves, in both directions', () => {
@@ -174,8 +132,6 @@ describe('veto 2b - the three-cent equivalence, generic to specific only', () =>
   });
 
   it('does NOT veto a generic 3-cent filename against a 3CS record', () => {
-    // Verbatim from the share. Without the equivalence this correct match
-    // would be thrown out, which is the failure the rule pre-empts.
     expect(veto('1851 3-cent - VF - Obverse.jpg', {
       year: '1851', denomination: '3CS'
     }).vetoed).toBe(false);
@@ -188,7 +144,7 @@ describe('veto 2b - the three-cent equivalence, generic to specific only', () =>
   });
 
   it('does NOT veto a 3CS filename against a generic Three Cent record', () => {
-    // The other direction: the RECORD is the vague one this time.
+    // Here the record is the generic side.
     expect(veto('1851 3CS - Obverse.jpg', {
       year: '1851', denomination: 'Three Cent'
     }).vetoed).toBe(false);
@@ -216,11 +172,8 @@ describe('veto 2b - the three-cent equivalence, generic to specific only', () =>
   });
 
   it('reads "Three Cent Nickel" in a record as a THREE cent, not a FIVE cent', () => {
-    /* A regression guard with teeth. If the generic ['nickel'] rule is
-     * listed above ['three','cent','nickel'] in DENOMINATION_RULES, a record
-     * spelling the denomination out in full is filed as a five-cent piece --
-     * and every 3CN photograph then "conflicts" with its own record. The
-     * veto turns that quiet mis-parse into a visible lost match. */
+    // Rule order in DENOMINATION_RULES: ['nickel'] must not win over
+    // ['three','cent','nickel'], or every 3CN photo conflicts with its record.
     expect(parseCoin(coin({ id: 'n', denomination: 'Three Cent Nickel' })).denomination)
       .toBe('three cent nickel');
     expect(parseCoin(coin({ id: 's', denomination: 'Three Cent Silver' })).denomination)
@@ -230,65 +183,45 @@ describe('veto 2b - the three-cent equivalence, generic to specific only', () =>
   });
 
   it('reads the cent-sign denominations the database actually stores', () => {
-    /* server/setup-database.sql seeds '1¢', '5¢', '20¢', '50¢' and friends.
-     * `tokenize` deletes the sign, so without the cent-sign reader these
-     * contribute NO denomination at all -- which also means the denomination
-     * veto can never fire for a real record. */
+    // server/setup-database.sql seeds '1¢', '5¢', etc.; `tokenize` drops the
+    // sign, so these rely on the cent-sign reader.
     const key = (denomination: string) =>
       parseCoin(coin({ id: 'd', denomination })).denomination;
 
     expect(key('1¢')).toBe('cent');
-    /* '5¢' reads as the GENERIC five-cent face value, not straight to
-     * 'nickel'. It is the only five-cent row the seed offers, and a Half Dime
-     * may well be filed under it, so it must stay compatible with both coins.
-     * See the five-cent group in reference-tables.ts. */
+    // '5¢' is generic: half dimes may be filed under it too.
     expect(key('5¢')).toBe('five cent');
     expect(key('10¢')).toBe('dime');
     expect(key('20¢')).toBe('twenty cent');
     expect(key('25¢')).toBe('quarter');
     expect(key('50¢')).toBe('half dollar');
     expect(key('½¢')).toBe('half cent');
-    // The abbreviations and dollar forms were already understood.
     expect(key('3CS')).toBe('three cent silver');
     expect(key('$20')).toBe('double eagle');
   });
 });
 
- /*
- * 2c. THE REST OF THE EQUIVALENCE RULES
- *
- * Large Cent is also 1¢. Half Dime can be ½10¢ or 5¢. Trade Dollar can be $1
- * but usually says so in the descriptor. Silver Eagle only refers to $1,
- * where a (Gold) Eagle is $10, a Double Eagle $20, a Half Eagle $5 and a
- * Quarter Eagle $2.50. Gold $1 coins carry the word Gold, or G$1.
- *
- * There are TWO DIFFERENT SHAPES of rule in there and the tests are grouped
- * by shape, because the thing that distinguishes them is what must NOT
- * happen:
- *
- *   A. ALIASES          two names for one face value. Nothing conflicts.
- *   B. GENERIC/SPECIFIC the generic matches either; THE SPECIFICS CONFLICT.
- *
- * Mixing the two up is the expensive mistake: treat a generic group as an
- * alias and a silver trime starts matching a copper-nickel one.
+/*
+ * 2c. Other equivalences, in two shapes:
+ *   A. Aliases: two names for one face value ($20 = Double Eagle).
+ *   B. Generic/specific: the generic matches either, the specifics conflict
+ *      (1¢ over large/small cent, 5¢ over half dime/nickel, $1 over
+ *      gold/silver/trade dollar).
  */
 describe('equivalence A - straight aliases, two names for one face value', () => {
   /** The denomination key a RECORD's denomination field produces. */
   const key = (denomination: string) =>
     parseCoin(coin({ id: 'd', denomination })).denomination;
 
-  /** The same, for a record that also states a year -- which the Eagle needs. */
+  /** The same, with a year (needed to resolve "Eagle"). */
   const keyWithYear = (denomination: string, year: string) =>
     parseCoin(coin({ id: 'd', denomination, year })).denomination;
 
   /** The denomination key a FILENAME produces. */
   const fileKey = (name: string) => parseFilename(name).denomination;
 
-  /* Four of the six aliases need no equivalence row at all, because both
-   * spellings already produce THE SAME KEY -- a stronger guarantee than a
-   * lookup, since plain `===` agrees. These assertions pin that down, and
-   * they are written through the PARSERS rather than against the table so
-   * they would fail if either spelling stopped being understood. */
+  // These aliases produce the same key from both spellings; checked through
+  // the parsers so a spelling that stops parsing fails the test.
   it.each([
     ['Double Eagle',  '$20',    'twenty dollars of gold'],
     ['Half Eagle',    '$5',     'five dollars of gold'],
@@ -296,10 +229,9 @@ describe('equivalence A - straight aliases, two names for one face value', () =>
   ])('"%s" and "%s" are one key -- %s', (words, signs) => {
     expect(key(words)).toBe(key(signs));
     expect(key(words)).toBeTruthy();
-    // Both directions, through the shared comparison the matcher actually uses.
     expect(denominationsAgree(key(words), key(signs))).toBe(true);
     expect(denominationsAgree(key(signs), key(words))).toBe(true);
-    // And the same through a filename, which is read by different code.
+    // Filenames are read by different code.
     expect(fileKey(`1907 ${words} - Obverse.jpg`)).toBe(key(signs));
   });
 
@@ -313,15 +245,12 @@ describe('equivalence A - straight aliases, two names for one face value', () =>
   });
 
   it('does NOT read "½10¢" as a dime -- the trap in that notation', () => {
-    /* "½10¢" ends in "10¢". A cent-sign reader that does not look for the
-     * fraction first reports a DIME: twice the face value and the wrong
-     * coin. Both the record path and the filename path are checked. */
+    // "½10¢" ends in "10¢"; the fraction must be read first.
     expect(key('½10¢')).not.toBe('dime');
     expect(fileKey('1853 ½10¢ - Obverse.jpg')).toBe('half dime');
   });
 
   it('"Silver Eagle" and "$1" are equivalent -- the one alias that needs a row', () => {
-    // Silver Eagle only ever refers to $1.
     expect(denominationsAgree('silver eagle', 'dollar')).toBe(true);
     expect(denominationsAgree('dollar', 'silver eagle')).toBe(true);
     expect(key('$1')).toBe('dollar');
@@ -329,14 +258,11 @@ describe('equivalence A - straight aliases, two names for one face value', () =>
   });
 
   it('!! SILVER EAGLE IS NOT THE EAGLE !!', () => {
-    /* THE trap. "Eagle" alone is the $10 gold piece, 1795-1933. "Silver
-     * Eagle" is the one-dollar bullion coin, 1986-. They share a word and
-     * nothing else, and collapsing them would file a $35 bullion photo under
-     * a five-figure gold coin. */
+    // "Eagle" is the $10 gold piece (1795-1933); "Silver Eagle" is the $1
+    // bullion coin (1986-).
     expect(denominationsAgree('silver eagle', 'eagle')).toBe(false);
     expect(denominationsAgree('eagle', 'silver eagle')).toBe(false);
 
-    // ...nor any of the other eagles.
     for (const other of ['double eagle', 'half eagle', 'quarter eagle', 'gold eagle']) {
       expect(denominationsAgree('silver eagle', other), other).toBe(false);
       expect(denominationsAgree(other, 'silver eagle'), other).toBe(false);
@@ -344,11 +270,8 @@ describe('equivalence A - straight aliases, two names for one face value', () =>
   });
 
   it('"Eagle" and "$10" are still one key ONCE A YEAR SAYS WHICH SERIES', () => {
-    /* This cannot be a plain alias in the it.each above: since 1986 the bare
-     * word "Eagle" may also mean a modern bullion coin (see the year suite at
-     * the bottom of this file). What is still true is that a CLASSIC-DATED
-     * Eagle is the $10 gold piece -- so with a year present the two spellings
-     * land on the identical key. */
+    // Not a plain alias: an undated "Eagle" may be modern bullion (see the
+    // year suite below). A classic date makes it the $10 piece.
     expect(key('$10')).toBe('eagle');
     expect(keyWithYear('Eagle', '1907')).toBe('eagle');
     expect(keyWithYear('Eagle', '1907')).toBe(key('$10'));
@@ -358,25 +281,14 @@ describe('equivalence A - straight aliases, two names for one face value', () =>
   });
 });
 
-/* =========================================================================
- * 2d. WHICH EAGLE? THE YEAR DECIDES
- * =======================================================================
- * A modern Gold Eagle is the $50 bullion coin, and the modern year gives it
- * away: the series only began in 1986.
- *
- * The two series and the gap between them:
- *
- *     CLASSIC   Eagle $10, Double Eagle $20, Half Eagle $5, Quarter Eagle
- *               $2.50 -- all finished by 1933 (the gold recall).
- *     MODERN    American Gold Eagle bullion, 1986 to date, in four sizes:
- *               1/10 oz $5, 1/4 oz $10, 1/2 oz $25, 1 oz $50.
- *     BETWEEN   1934-1985: nothing at all.
- *
- * Because they never overlap, one four-digit year settles it with no
- * guessing. These tests pin down all three answers -- classic, modern, and
- * "we do not know" -- and the fourth thing that matters most: that not
- * knowing never disqualifies anything.
- * ======================================================================= */
+/*
+ * 2d. Which eagle? The year decides.
+ *     classic   Eagle $10, Double $20, Half $5, Quarter $2.50; ended 1933
+ *     modern    American Gold Eagle bullion from 1986: 1/10 oz $5,
+ *               1/4 oz $10, 1/2 oz $25, 1 oz $50
+ *     1934-1985 neither series; resolves to the vague 'gold eagle'
+ * An undated or unresolved eagle stays vague and vetoes nothing.
+ */
 describe('which eagle - the year separates the classic $10 from the bullion $50', () => {
   const key = (denomination: string) =>
     parseCoin(coin({ id: 'd', denomination })).denomination;
@@ -385,7 +297,6 @@ describe('which eagle - the year separates the classic $10 from the bullion $50'
   const fileKey = (name: string) => parseFilename(name).denomination;
 
   it('a MODERN-dated Gold Eagle is the $50 one-ounce bullion coin', () => {
-    // Through both parsers.
     expect(fileKey('2015 Gold Eagle - Obverse.jpg')).toBe('fifty dollar');
     expect(fileKey('1986 Gold Eagle - MS69 - Obverse.jpg')).toBe('fifty dollar');
     expect(keyWithYear('Gold Eagle', '2015')).toBe('fifty dollar');
@@ -403,56 +314,39 @@ describe('which eagle - the year separates the classic $10 from the bullion $50'
   });
 
   it('1986 is the boundary: one year earlier is still not a bullion coin', () => {
-    /* 1986 is the first year of the series, so it must resolve modern. 1985
-     * is inside the 1934-1985 dead zone where NEITHER series was struck, so
-     * the honest answer there is "we do not know", not "classic". */
     expect(fileKey('1986 Gold Eagle.jpg')).toBe('fifty dollar');
     expect(fileKey('1985 Gold Eagle.jpg')).toBe('gold eagle');
-    // And 1933, the last classic year, is still classic.
+    // 1933 is the last classic year.
     expect(fileKey('1933 Eagle.jpg')).toBe('eagle');
   });
 
   it('THE TWO SERIES DO NOT AGREE WITH EACH OTHER', () => {
-    /* The point of the whole exercise. A 2015 one-ounce bullion coin and a
-     * 1907 $10 gold piece are different coins worth different money, and the
-     * denomination veto must be able to tell them apart. */
     expect(denominationsAgree('fifty dollar', 'eagle')).toBe(false);
     expect(denominationsAgree('eagle', 'fifty dollar')).toBe(false);
     expect(denominationsAgree('fifty dollar', 'twenty five dollar')).toBe(false);
     expect(denominationsAgree('fifty dollar', 'double eagle')).toBe(false);
-    // ...and a modern Gold Eagle is not a Silver Eagle either.
     expect(denominationsAgree('fifty dollar', 'silver eagle')).toBe(false);
   });
 
   it('an UNDATED Eagle picks neither series, and vetoes nothing', () => {
-    /* "Where there is no year, do not guess." The key stays vague, and the
-     * equivalence table makes it compatible with every face value such a coin
-     * could carry -- so a silent filename can never disqualify a correct
-     * record. This is the "absence is not disagreement" rule, applied to a
-     * question the filename simply did not answer. */
     expect(fileKey('Gold Eagle - Obverse.jpg')).toBe('gold eagle');
     expect(fileKey('Eagle - Reverse.jpg')).toBe('gold eagle');
     expect(key('Gold Eagle')).toBe('gold eagle');
 
-    // It is neither of the two real answers...
     expect(fileKey('Gold Eagle - Obverse.jpg')).not.toBe('eagle');
     expect(fileKey('Gold Eagle - Obverse.jpg')).not.toBe('fifty dollar');
 
-    // ...but it conflicts with neither of them, nor with the other two
-    // bullion face values, in either direction.
+    // The vague key agrees with every face value an eagle could be.
     for (const other of ['eagle', 'half eagle', 'twenty five dollar', 'fifty dollar']) {
       expect(denominationsAgree('gold eagle', other), other).toBe(true);
       expect(denominationsAgree(other, 'gold eagle'), other).toBe(true);
     }
 
-    // And no veto reaches the real decision, in either direction.
     expect(veto('Gold Eagle - Obverse.jpg', { denomination: '$10', year: '1907' }).vetoed).toBe(false);
     expect(veto('Gold Eagle - Obverse.jpg', { denomination: '$50', year: '2015' }).vetoed).toBe(false);
   });
 
   it('the vague key still conflicts with coins that are not eagles at all', () => {
-    // Being undecided between the eagles is not the same as being undecided
-    // about everything. A Morgan dollar is still a different coin.
     expect(denominationsAgree('gold eagle', 'dollar')).toBe(false);
     expect(denominationsAgree('gold eagle', 'double eagle')).toBe(false);
     expect(denominationsAgree('gold eagle', 'quarter eagle')).toBe(false);
@@ -460,19 +354,14 @@ describe('which eagle - the year separates the classic $10 from the bullion $50'
   });
 
   it('a stated year conflict still disqualifies across the two series', () => {
-    /* Belt and braces: even if the denominations somehow agreed, a 2015 photo
-     * can never be a 1907 record. This is the year veto doing the job the
-     * 52-year gap makes possible. */
     expect(veto('2015 Gold Eagle.jpg', { denomination: '$10', year: '1907' }).vetoed).toBe(true);
-    // And the denomination veto fires on its own account too.
+    // Same year: the denomination veto fires on its own.
     const verdict = veto('2015 Gold Eagle.jpg', { denomination: '$10', year: '2015' });
     expect(verdict.vetoed).toBe(true);
     expect(verdict.reasons.join(' ')).toContain('denomination');
   });
 
   it('reads $25 and $50 as denominations, from a filename and from a record', () => {
-    /* Neither value existed on a US coin before 1986, so neither was in the
-     * tables at all until the bullion series needed them. */
     expect(key('$25')).toBe('twenty five dollar');
     expect(key('$50')).toBe('fifty dollar');
     expect(key('50 Dollars')).toBe('fifty dollar');
@@ -481,64 +370,40 @@ describe('which eagle - the year separates the classic $10 from the bullion $50'
   });
 
   it('!! "$50.00" IS STILL A PRICE, NOT A DENOMINATION !!', () => {
-    /* The hazard created by the row above. The distinction is a CLOSED SET:
-     * an amount is a face value only if it is written exactly as one of the
-     * amounts a US coin is actually worth, and only if the filename has not
-     * already named a different one in words. So "$50.00" is not in the
-     * table (no coin is denominated "fifty dollars and no cents"), "$2.50"
-     * is in the table and needs no exception, and a thousands comma is
-     * refused before the lookup is reached.
-     *
-     * The full rule lives in the DOLLAR_FACE_VALUES header in
-     * denomination-units.ts and is tested in denomination-units.spec.ts;
-     * these lines are the end-to-end guard on the hazard itself.
-     *
-     * The first line is the real filename this rule was written for, and it
-     * must go on reading as an ordinary Peace dollar. */
+    // A dollar amount is a face value only if written exactly as one and no
+    // other face value is named in words (rule in denomination-units.ts).
+    // The first filename is a real one.
     expect(fileKey('1925-S Peace Dollar NGC 2599001 $25.00.jpg')).toBe('dollar');
     expect(fileKey('1925-S Peace Dollar $25.00.jpg')).toBe('dollar');
     expect(fileKey('1881-S Morgan Dollar $50.00.jpg')).toBe('dollar');
-    // With no coin word at all, a price yields no denomination whatsoever
-    // rather than inventing one.
+    // With no coin word, a price yields no denomination.
     expect(fileKey('1881-S Morgan $50.00 - Obverse.jpg')).toBeNull();
     expect(fileKey('1881-S Morgan $1,250.00 - Obverse.jpg')).toBeNull();
-    // A round price is caught too, now, whenever the words name a different
-    // coin: a Morgan is a ONE dollar coin, so "$50" beside it is money.
+    // A round price beside a named one-dollar coin is money.
     expect(fileKey('1881-S Morgan Dollar $50.jpg')).toBe('dollar');
-    // A record's denomination column behaves the same way.
     expect(key('$50.00')).not.toBe('fifty dollar');
   });
 
   it('a weight word names the exact bullion size -- but only once the year is modern', () => {
-    /* A refinement, not a requirement. The four American Gold Eagle sizes
-     * are 1/10 oz ($5), 1/4 oz ($10), 1/2 oz ($25) and 1 oz ($50);
-     * unqualified, "Gold Eagle" means the one-ounce $50 coin. */
     expect(fileKey('2015 1 oz Gold Eagle - MS70.jpg')).toBe('fifty dollar');
 
-    /* A FILENAME CANNOT CONTAIN A SLASH -- it is the path separator, and
-     * baseName() would throw away everything before it, year included. So the
-     * fraction forms a filename can actually carry are the hyphen, the
-     * underscore and the single glyph. */
+    // Filenames cannot contain "/", so fractions use "-", "_" or a glyph.
     expect(fileKey('2015 1-2 oz Gold Eagle - MS70.jpg')).toBe('twenty five dollar');
     expect(fileKey('2015 1_4 oz Gold Eagle - MS70.jpg')).toBe('eagle');
     expect(fileKey('2015 1-10 oz Gold Eagle - MS70.jpg')).toBe('half eagle');
     expect(fileKey('2015 ½ oz Gold Eagle - MS70.jpg')).toBe('twenty five dollar');
 
-    // A RECORD's text keeps its slashes, so the written fraction works there.
+    // Record text can use "/".
     expect(
       parseCoin(coin({ id: 'd', coinType: 'Gold Eagle 1/2 oz', year: '2015' })).denomination
     ).toBe('twenty five dollar');
 
-    /* With NO year the weight is not enough on its own: the year is the rule
-     * and the weight only refines it. Deliberately conservative -- an
-     * unresolved key vetoes nothing, a wrong one does. */
+    // Without a year the weight alone does not resolve the series.
     expect(fileKey('1 oz Gold Eagle.jpg')).toBe('gold eagle');
   });
 
   it('does not re-read a denomination that was never ambiguous', () => {
-    /* `resolveEagleSeries` must touch ONLY the vague key. A stated face value
-     * means what it says whatever the year beside it, and the named multiples
-     * of the Eagle name their own size. */
+    // `resolveEagleSeries` only touches the vague key.
     expect(fileKey('2015 $10 Gold Eagle.jpg')).toBe('eagle');
     expect(fileKey('2015 Double Eagle.jpg')).toBe('double eagle');
     expect(fileKey('2015 Half Eagle.jpg')).toBe('half eagle');
@@ -552,8 +417,7 @@ describe('equivalence B - a generic face value over the coins it might be', () =
   const key = (denomination: string) =>
     parseCoin(coin({ id: 'd', denomination })).denomination;
 
-  /* Every generic/specific pair, in both directions. None of these conflict:
-   * the generic has not chosen, so it cannot disagree. */
+  // Generic/specific pairs agree in both directions.
   it.each([
     ['three cent', 'three cent silver'],
     ['three cent', 'three cent nickel'],
@@ -569,9 +433,7 @@ describe('equivalence B - a generic face value over the coins it might be', () =
     expect(denominationsAgree(specific, generic)).toBe(true);
   });
 
-  /* Every specific/specific pair, in both directions. ALL of these conflict:
-   * two different coins have been named. This is the half of the rule that a
-   * careless "just make them all equivalent" would destroy. */
+  // Specific/specific pairs always conflict.
   it.each([
     ['three cent silver', 'three cent nickel', 'silver trime vs copper-nickel, overlapping 1865-1873'],
     ['large cent',        'small cent',        '28mm copper vs the modern cent, overlapping 1856-1857'],
@@ -585,22 +447,20 @@ describe('equivalence B - a generic face value over the coins it might be', () =
   });
 
   it('does not chain one group into the next', () => {
-    /* 'silver eagle' == 'dollar' and 'dollar' ~ 'trade dollar', but a 1986
-     * bullion coin is not an 1878 China-trade dollar. The table is checked
-     * row by row and never transitively; this test is what stops someone
-     * "simplifying" it into a union-find. */
+    // 'silver eagle' = 'dollar' ~ 'trade dollar', but equivalence is not
+    // transitive.
     expect(denominationsAgree('silver eagle', 'trade dollar')).toBe(false);
     expect(denominationsAgree('silver eagle', 'gold dollar')).toBe(false);
     expect(denominationsAgree('silver eagle', 'silver dollar')).toBe(false);
   });
 
   it('reads every spelling the owner named into the right key', () => {
-    expect(key('5¢')).toBe('five cent');          // generic, and the only seeded row
+    expect(key('5¢')).toBe('five cent');          // generic
     expect(key('1¢')).toBe('cent');               // generic
     expect(key('Large Cent')).toBe('large cent'); // specific
     expect(key('Small Cent')).toBe('small cent'); // specific
     expect(key('$1')).toBe('dollar');             // generic
-    expect(key('G$1')).toBe('gold dollar');       // "or possibly G$1"
+    expect(key('G$1')).toBe('gold dollar');
     expect(key('Gold Dollar')).toBe('gold dollar');
     expect(key('Silver Dollar')).toBe('silver dollar');
     expect(key('Trade Dollar')).toBe('trade dollar');
@@ -611,19 +471,16 @@ describe('equivalence B - a generic face value over the coins it might be', () =
     expect(parseFilename('1854 G$1 Type 2 - Obverse.jpg').denomination).toBe('gold dollar');
   });
 
-  /* ---- and the same rules where they actually matter: the veto ---------- */
+  // The same rules through the veto.
 
   it('does NOT veto a Half Dime filename against a record filed under 5¢', () => {
-    /* End to end. The seed has no Half Dime row at all -- '5¢' is the
-     * nearest thing -- so without the generic group every half dime
-     * photograph would be disqualified from its own record. */
+    // The seed has no Half Dime row, so half dimes are filed under '5¢'.
     expect(veto('1853 Half Dime - VF - Obverse.jpg', {
       year: '1853', denomination: '5¢'
     }).vetoed).toBe(false);
   });
 
   it('DOES veto a Half Dime filename against a record that says Nickel', () => {
-    // Both sides have named a coin, and they named different ones.
     const verdict = veto('1870 Half Dime - Obverse.jpg', {
       year: '1870', denomination: 'Nickel'
     });
@@ -650,12 +507,7 @@ describe('equivalence B - a generic face value over the coins it might be', () =
   });
 });
 
-/* =========================================================================
- * 3. THE PROOF VETO
- * =======================================================================
- * A Proof/PF coin never matches a non-Proof/PF coin, because the designation
- * is always in the file and image descriptors.
- */
+// 3. Strike veto: proof, business and specimen never match each other.
 describe('veto 3 - a proof is never a business strike', () => {
   it('vetoes a PF filename against an MS record', () => {
     const verdict = veto('1870 1-cent NGC PF65RB - Obverse 2.jpg', {
@@ -673,14 +525,14 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 
   it('treats PR and PF as the same thing, so neither vetoes the other', () => {
-    // PCGS prints PR, NGC prints PF. Same striking.
+    // PCGS prints PR, NGC prints PF.
     expect(veto('1870 $1 PR62 - Obverse.jpg', {
       year: '1870', denomination: '$1', grade: 'PF62'
     }).vetoed).toBe(false);
   });
 
   it('reads the word "proof" in a record with no grade', () => {
-    // "Proof Gold" is verbatim from the coin types in real-filenames.spec.ts.
+    // "Proof Gold" is a real coin type.
     const verdict = veto('1957 Sovereign MS63 - Obverse.jpg', {
       year: '1957', coinType: 'Proof Gold'
     });
@@ -689,33 +541,17 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 
   it('does NOT veto when NEITHER side says how the coin was struck', () => {
-    // The commonest case by far, and the one an over-eager veto would ruin.
     expect(veto('1881-S Morgan Dollar.jpg', {
       year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'S'
     }).vetoed).toBe(false);
   });
 
   it('DOES veto when only the RECORD says proof -- a quiet filename says "business"', () => {
-    /* THE SINGLE MOST IMPORTANT CONSEQUENCE OF THE SILENCE RULE.
-     *
-     * The proof descriptor is always part of both the image file name and
-     * the inventory description; otherwise the coin is assumed to be a
-     * business strike. A filename that does not say "proof" is not a
-     * filename that forgot to say it -- it is a filename about a coin that
-     * has nothing to say. So it makes the positive claim "business strike",
-     * and that claim contradicts a proof record exactly as "MS65" would.
-     *
-     * The worked example, verbatim from the share, is two photographs of one
-     * proof coin:
-     *
-     *   1870 10-cent - NGC PF64Cameo - Reverse 5.jpg   says PF
-     *   1870 10-cent - Obverse.jpg                     says nothing
-     *
-     * The second one does not match the record, and that is accepted under
-     * the standing tie-breaker that the automated process should be very
-     * discriminatory. A photograph refused here is still listed, still given
-     * a reason, and still attachable in one click. A photograph wrongly
-     * attached is silent and may never be noticed. */
+    // Proof is always written when true, so a silent filename means
+    // "business strike". Real pair of photos of one proof coin:
+    //   1870 10-cent - NGC PF64Cameo - Reverse 5.jpg   says PF
+    //   1870 10-cent - Obverse.jpg                     says nothing -> vetoed
+    // (accepted; it can still be attached by hand).
     const verdict = veto('1870 10-cent - Obverse.jpg', {
       year: '1870', denomination: '10 Cents', grade: 'PF64 CAMEO', certCompany: 'NGC'
     });
@@ -725,16 +561,8 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 
   it('DOES veto when only the FILENAME says proof -- a quiet RECORD says "business" too', () => {
-    /* The same rule from the other end, because it covers BOTH sides: part
-     * of the image file name AS WELL AS part of the inventory description. A
-     * record carrying a coin type, a variety, notes or a grade -- anything at
-     * all -- and not mentioning proof is claiming to be a business strike.
-     *
-     * Note the record below has to SAY SOMETHING for this to be silence
-     * rather than absence: 'Dime' in the coin type is what makes it a record
-     * that could have carried the word and did not. A record with no text and
-     * no grade whatsoever is 'unknown' and still vetoes nothing -- see "the
-     * limit of the rule" below. */
+    // The record needs some descriptive text ('Dime') for this to be silence
+    // rather than absence; a fully empty record is 'unknown' (see below).
     const verdict = veto('1870 10-cent - NGC PF64Cameo - Reverse 5.jpg', {
       year: '1870', denomination: '10 Cents', coinType: 'Dime'
     });
@@ -743,15 +571,7 @@ describe('veto 3 - a proof is never a business strike', () => {
     expect(verdict.reasons.join(' ')).toContain('proof');
   });
 
-  /* -----------------------------------------------------------------------
-   * SPECIMEN
-   * ---------------------------------------------------------------------
-   * SP or "Specimen" always exists in the descriptor of such a coin. Same
-   * argument as for proof: the word is reliably present when true, so its
-   * absence is a statement and not a gap. SP vetoes both of the others.
-   * There are no specimens in the collection today, which is exactly why it
-   * is a safe rule to have added now rather than later.
-   * ------------------------------------------------------------------- */
+  // Specimen: like proof, SP is always written when true.
   it('DOES veto a SPECIMEN filename against a PROOF record', () => {
     const verdict = veto('1964 Kennedy 50C SP67 - Obverse.jpg', {
       year: '1964', denomination: '50 Cents', coinType: 'Kennedy', grade: 'PF67'
@@ -780,10 +600,6 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 
   it('DOES veto a SPECIMEN against a side that merely STAYS QUIET', () => {
-    /* SP or "Specimen" SHOULD ALWAYS exist in the descriptor of a specimen
-     * coin, which is what makes its absence informative. A record that says
-     * "Kennedy" and nothing else is not being vague about specimen-ness; it
-     * is saying this is not a specimen. */
     expect(veto('1964 Kennedy 50C SP67 - Obverse.jpg', {
       year: '1964', denomination: '50 Cents', coinType: 'Kennedy'
     }).vetoed).toBe(true);
@@ -794,25 +610,9 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 
   it('does NOT veto against a side that is ENTIRELY EMPTY -- the limit of the rule', () => {
-    /* THE LIMIT OF THE RULE, and the one that must never be relaxed.
-     *
-     * SILENCE and ABSENCE are different things, and only silence is
-     * evidence:
-     *
-     *   SILENCE  a filename, or a record with some text or a grade, that
-     *            simply does not mention proof. The designation is written
-     *            whenever it is true, so not writing it is a statement.
-     *            -> 'business', and it can conflict.
-     *
-     *   ABSENCE  nothing was given at all: no coin type, no variety, no
-     *            notes, no grade. There was no descriptor that COULD have
-     *            carried the word, so there is no statement to read.
-     *            -> 'unknown', which contradicts nothing in either
-     *            direction.
-     *
-     * The record below is the almost-empty row: a year and a denomination
-     * are structured fields, not descriptive text, so `detectStrike` is
-     * handed nothing and answers 'unknown'. */
+    // Silence (some text, no strike word) -> 'business', can conflict.
+    // Absence (no descriptive text or grade at all) -> 'unknown', never
+    // conflicts. Year and denomination are not descriptive text.
     expect(veto('1964 Kennedy 50C SP67 - Obverse.jpg', {
       year: '1964', denomination: '50 Cents'
     }).vetoed).toBe(false);
@@ -823,16 +623,10 @@ describe('veto 3 - a proof is never a business strike', () => {
   });
 });
 
-/* =========================================================================
- * 3b. !!! THE PROOFLIKE TRAP !!!
- * =======================================================================
- * PL, DMPL, DPL and "prooflike" describe a BUSINESS STRIKE with mirrored
- * fields. They are NOT proofs. A substring test for "proof" would classify
- * every PL Morgan as a proof and then veto it against its own business-strike
- * record -- destroying exactly the matches this feature exists to protect.
- *
- * These tests are the tripwire. If one of them ever fails, read the warning
- * at the top of proof-strike.ts before changing anything.
+/*
+ * 3b. PL, DMPL, DPL and "prooflike" are business strikes with mirrored
+ * fields, not proofs. A substring test for "proof" would veto every PL Morgan
+ * against its own record. See proof-strike.ts.
  */
 describe('veto 3b - PROOFLIKE is a business strike, not a proof', () => {
   const PROOFLIKE_SPELLINGS = [
@@ -859,8 +653,6 @@ describe('veto 3b - PROOFLIKE is a business strike, not a proof', () => {
   }
 
   it('a PL Morgan still reaches tier 2 against its MS63 PL record', () => {
-    // End to end, not just the rule: the veto must not quietly remove the
-    // coin from the candidate list either.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS MS63PL - Obverse.jpg'],
       [
@@ -880,52 +672,36 @@ describe('veto 3b - PROOFLIKE is a business strike, not a proof', () => {
   });
 
   it('reads a record whose GRADE FIELD is nothing but "PROOFLIKE" as business', () => {
-    // No base letters to read, so the bare-word test would otherwise call it
-    // a proof. This is the narrowest form of the trap.
+    // No grade letters, so only the word itself decides.
     expect(detectStrike('', 'PROOFLIKE')).toBe('business');
     expect(detectStrike('', 'DMPL')).toBe('business');
     expect(detectStrike('', 'Deep Mirror Prooflike')).toBe('business');
   });
 
   it('still reads a genuine proof as a proof', () => {
-    // The trap guard must not have gone too far the other way.
     expect(detectStrike('1870 $1 - PCGS PF62CAM- Obverse', 'pf62cam')).toBe('proof');
     expect(detectStrike('1957 Sovereign Proof', null)).toBe('proof');
     expect(detectStrike('', 'PR69 DCAM')).toBe('proof');
   });
 
   it('reads the circulation grade ladder as business, and silence as business too', () => {
-    /* The ladder, unchanged: any of these letters is a positive statement
-     * that the coin is not a proof. */
     for (const grade of ['MS63', 'AU58', 'XF40', 'VF30', 'VG8', 'Choice VF', 'Gem BU', 'XF-AU']) {
       expect(detectStrike('', grade), grade).toBe('business');
     }
     expect(detectStrike('', 'SP67')).toBe('specimen');
 
-    /* AND THE ONE THING LEFT THAT ANSWERS 'unknown'. The proof descriptor is
-     * always part of both the image file name and the inventory description;
-     * otherwise the coin is assumed to be a business strike.
-     * NOTHING AT ALL was given below -- no text, no grade -- so there was no
-     * descriptor that could have carried the word. That is ABSENCE, and it
-     * is the only thing left that answers 'unknown'. */
+    // Nothing given at all: the only 'unknown' case.
     expect(detectStrike('', '')).toBe('unknown');
     expect(detectStrike(null, undefined)).toBe('unknown');
     expect(detectStrike('   ', '  ')).toBe('unknown');
 
-    /* TEXT WAS GIVEN and it did not say proof. That is SILENCE, and under
-     * his rule silence is the claim "business strike". */
+    // Text without a strike word: business.
     expect(detectStrike('1881 Morgan Dollar', null)).toBe('business');
     expect(detectStrike('1870 10-cent - Obverse', '')).toBe('business');
   });
 });
 
-/* =========================================================================
- * 4. THE VETO REACHES ALL THREE TIERS
- * =======================================================================
- * The rule is only worth having if the auto decision, the candidate list and
- * the near-match assessment all obey it. A coin that tier 2 has refused must
- * not still be sitting in the dropdown.
- */
+// 4. A vetoed coin is excluded from the auto decision, candidates and tier 2.
 describe('a vetoed coin is gone from every tier', () => {
   /** One record. The filename below agrees with it on everything but the year. */
   const WRONG_YEAR: CoinRecord[] = [
@@ -936,11 +712,8 @@ describe('a vetoed coin is gone from every tier', () => {
   ];
 
   it('is not auto-matched, even though it would otherwise clear every gate', () => {
-    /* THE OWNER'S ACTUAL BUG. Everything except the year agrees -- the
-     * denomination, the coin type, the grading company, the grade -- and with
-     * no other coin in the inventory there is nothing to trip the runner-up
-     * gate either. Before the veto this scored its way past the 0.85 bar and
-     * attached itself silently. */
+    // Everything but the year agrees and there is no runner-up, so without
+    // the veto this would clear the 0.85 bar.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS MS63 - Obverse.jpg'],
       WRONG_YEAR
@@ -962,7 +735,6 @@ describe('a vetoed coin is gone from every tier', () => {
   });
 
   it('still says WHY it was skipped, naming the coin and the conflict', () => {
-    // Nothing is silently dropped: the read-only list has to be readable.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS MS63 - Obverse.jpg'],
       WRONG_YEAR
@@ -974,9 +746,6 @@ describe('a vetoed coin is gone from every tier', () => {
   });
 
   it('fails the near-match test on the same ground, not a different one', () => {
-    /* The point of having ONE veto module: `assessNearMatch` adopts the
-     * veto's answer instead of forming its own, so the two can never disagree
-     * about what counts as a conflict. */
     const verdict = assessNearMatch(
       toSignature(parseFilename('1881 Morgan Dollar PCGS MS63 - Obverse.jpg')),
       parseCoin(WRONG_YEAR[0])
@@ -1001,8 +770,6 @@ describe('a vetoed coin is gone from every tier', () => {
   });
 
   it('leaves the RIGHT coin to be matched when a vetoed one sits beside it', () => {
-    /* The useful half: disqualifying the 1880 record does not disqualify the
-     * 1881 one, and the correct coin is still found. */
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS MS63 - Obverse.jpg'],
       [
@@ -1019,18 +786,11 @@ describe('a vetoed coin is gone from every tier', () => {
   });
 });
 
-/* =========================================================================
- * 5. A VETO MUST NEVER MAKE THE MATCHER BRAVER
- * ======================================================================= */
+// 5. Vetoes never loosen the other gates.
 describe('vetoes are an extra constraint, never a loosening', () => {
   it('a disqualified runner-up still counts for the runner-up margin', () => {
-    /* The tempting mistake: measure the margin against the eligible coins
-     * only. That can only ever WIDEN the gap, turning rows that go to review
-     * today into silent automatic attachments.
-     *
-     * Here the 1881-O record is vetoed (wrong denomination) but still scores
-     * close to the 1881-S one, so the margin gate keeps the file in review
-     * exactly as it did before the vetoes existed. */
+    // Two non-vetoed coins differing only by mint mark: the margin gate
+    // still keeps the file in review.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar MS63 - Obverse.jpg'],
       [
@@ -1039,7 +799,6 @@ describe('vetoes are an extra constraint, never a loosening', () => {
       ]
     );
 
-    // Two coins fit equally well, so nothing is attached -- unchanged.
     expect(result.status).not.toBe('auto');
     expect(result.matchedRecordId).toBeNull();
   });
@@ -1057,13 +816,7 @@ describe('vetoes are an extra constraint, never a loosening', () => {
   });
 });
 
-/* =========================================================================
- * 5b. THE THREE-CENT EQUIVALENCE, END TO END
- * =======================================================================
- * The rule-level tests above prove `findVetoes` behaves. These prove the
- * consequence a user actually sees: the generic form still ATTACHES,
- * and the two specific forms still refuse each other.
- */
+// 5b. Three-cent equivalence end to end.
 describe('the three-cent equivalence survives the whole pipeline', () => {
   it('attaches a generic 3-cent photo to a 3CS record', () => {
     const [result] = service().matchImages(
@@ -1072,8 +825,6 @@ describe('the three-cent equivalence survives the whole pipeline', () => {
     );
 
     expect(result.matchedRecordId).toBe('trime');
-    // And the explanation says WHICH kind of agreement it was, so the user
-    // can see the filename was the vaguer of the two.
     expect(result.reason).toContain('general form of');
   });
 
@@ -1096,8 +847,7 @@ describe('the three-cent equivalence survives the whole pipeline', () => {
   });
 
   it('refuses a 3CN photo against a 3CS record even in the overlap years', () => {
-    /* 1865-1873 is the only decade where both coins were being struck, so the
-     * year cannot separate them and the denomination has to. */
+    // Both were struck 1865-1873, so only the denomination separates them.
     const [result] = service().matchImages(
       ['1870 3CN - VF - Obverse.jpg'],
       [coin({ id: 'trime-1870', year: '1870', denomination: '3CS', grade: 'VF' })]
@@ -1117,20 +867,12 @@ describe('the three-cent equivalence survives the whole pipeline', () => {
       ]
     );
 
-    // The silver one is disqualified outright, so it is not even offered.
     expect(result.candidates.map(c => c.coinId)).toEqual(['nickel-1870']);
     expect(result.matchedRecordId).toBe('nickel-1870');
   });
 });
 
-/* =========================================================================
- * 6. DIRECTORY NAMES STILL DO NOT LEAK IN
- * =======================================================================
- * Coin images live in folders such as "Early Proofs". If a directory
- * name reached the parser, every file under it would be classified as a proof
- * and the new veto would disqualify them all from their business-strike
- * records. `baseName` prevents that; this is the guard.
- */
+// 6. Folder names (e.g. "Early Proofs") must never reach the parser.
 describe('the folder a photo lives in never affects the match', () => {
   it('ignores an "Early Proofs" directory on the path', () => {
     const bare = parseFilename('1881 Morgan Dollar PCGS MS63 - Obverse.jpg');
@@ -1148,5 +890,33 @@ describe('the folder a photo lives in never affects the match', () => {
   it('a proof in the folder is still matched from its own name, not the folder', () => {
     const nested = parseFilename('C:/Coin Pictures/Early Proofs/1870 1-cent NGC PF65RB - Obverse 2.jpg');
     expect(nested.strike).toBe('proof');
+  });
+});
+
+// 7. Authenticity veto: fake and genuine never match. Silence means genuine.
+describe('veto 4 - fake never matches genuine, in either direction', () => {
+  const record = { year: '1861', denomination: '3CS', coinType: 'Three Cent Silver', grade: 'XF45' };
+
+  it('vetoes a fake photo against a genuine record', () => {
+    const verdict = veto('1861 3CS - XF45 - Obverse - FAKE.jpg', record);
+    expect(verdict.vetoed).toBe(true);
+    expect(verdict.reasons.join(' ')).toMatch(/counterfeit/);
+  });
+
+  it('vetoes a genuine photo against a fake record (word in Variety)', () => {
+    expect(veto('1861 3CS - XF45 - Obverse.jpg', { ...record, variety: 'FAKE' }).vetoed).toBe(true);
+  });
+
+  it('does not veto fake against fake, whichever marker word each side uses', () => {
+    expect(veto('1861 Counterfeit 3CS - XF45 - Obverse.jpg', { ...record, variety: 'FAKE' }).vetoed).toBe(false);
+    expect(veto('1861 3CS - XF45 - Replica.jpg', { ...record, variety: 'Counterfeit' }).vetoed).toBe(false);
+  });
+
+  it('does not veto genuine against genuine', () => {
+    expect(veto('1861 3CS - XF45 - Obverse.jpg', record).vetoed).toBe(false);
+  });
+
+  it('ignores the word inside a longer word', () => {
+    expect(veto('1861 3CS - XF45 - Fakeout.jpg', record).vetoed).toBe(false);
   });
 });

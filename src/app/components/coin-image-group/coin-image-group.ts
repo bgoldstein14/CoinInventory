@@ -8,30 +8,10 @@ import {
 import { sideLabel } from '../../services/image-import/photo-variant';
 
 /**
- * CoinImageGroup — one row of the batch-import review screen: a single coin
- * and every photo we think belongs to it.
- *
- * WHY THIS FILE EXISTS
- * The review screen has to answer one question per coin: "are these the right
- * photos for this coin?" A flat list of 1,700 filenames cannot answer it. So
- * the unit of review is the coin, and this component is that unit.
- *
- * TWO THINGS TO NOTICE
- *
- * 1. COLLAPSED BY DEFAULT.
- *    Thumbnails are real <img> tags pointing at real multi-megabyte JPEGs on a
- *    network share. Rendering all of them at once would decode gigabytes of
- *    pixel data and lock the tab. So a group shows only its counts until the
- *    user opens it, and the parent creates object URLs for just that group
- *    (see `expandRequested`). `loading="lazy"` then defers even those until
- *    they scroll into view.
- *
- * 2. THE PHOTOS ARE SORTED, NOT JUST LISTED.
- *    A coin often has 8-10 files: both faces, numbered retakes, "- Small" /
- *    "- Orig" / "- Sharpened" derivatives and a slab "- Label" shot. They are
- *    grouped Obverse / Reverse / Label / Other so the two that matter are
- *    always first, and the bulk buttons let the user clear the rest in one
- *    click instead of ten.
+ * One coin in the batch image import review: the coin and the photos proposed
+ * for it, grouped Obverse / Reverse / Label / Other with per-coin bulk buttons.
+ * Collapsed by default, because thumbnails load full-size files from the share;
+ * the parent creates object URLs only for expanded groups.
  */
 @Component({
   selector: 'app-coin-image-group',
@@ -46,11 +26,7 @@ export class CoinImageGroupRow {
   /** True when the thumbnails should be rendered. */
   readonly expanded = input(false);
 
-  /**
-   * Lazily-created object URLs, keyed by filename. Owned by the parent so the
-   * URLs can be revoked when the modal closes — a blob URL that is never
-   * revoked keeps the whole file alive in memory for the life of the tab.
-   */
+  /** Object URLs by filename. Owned by the parent so it can revoke them on close. */
   readonly thumbnailUrls = input<Record<string, string>>({});
 
   /** The user clicked the header; the parent should create thumbnails. */
@@ -60,12 +36,8 @@ export class CoinImageGroupRow {
   readonly rowToggled = output<string>();
 
   /**
-   * "Skip this coin" — every photo in the group is marked skipped and the
-   * group leaves the list. Emits the coin id.
-   *
-   * Distinct from the "None" bulk button, which only unticks: an untouched
-   * coin with nothing ticked stays on screen reading "0 of 8 selected", which
-   * is what you want while you are still deciding. Skip is the decision.
+   * "Skip this coin": marks every photo skipped and removes the group from the
+   * list. Emits the coin id. Unlike "None", which only unticks.
    */
   readonly skipped = output<string>();
 
@@ -98,11 +70,7 @@ export class CoinImageGroupRow {
     return this.thumbnailUrls()[row.fileName] ?? '';
   }
 
-  /**
-   * The short caption under each thumbnail: "Obverse", "Obverse · Small",
-   * "Reverse · take 2". Enough to tell near-identical shots apart without
-   * showing the whole filename, which is often 60 characters long.
-   */
+  /** Short caption such as "Obverse · Small" or "Reverse · take 2". */
   protected caption(row: BatchImageRow): string {
     const parts = [sideLabel(row.photo.side)];
     if (row.photo.variant) parts.push(row.photo.variant);
@@ -112,7 +80,7 @@ export class CoinImageGroupRow {
     return parts.join(' · ');
   }
 
-  /** Original file size, e.g. "2.4 MB" — makes the 46 MB monsters obvious. */
+  /** Original file size, e.g. "2.4 MB". */
   protected fileSize(row: BatchImageRow): string {
     if (!row.sizeBytes) return '';
     const mb = row.sizeBytes / (1024 * 1024);

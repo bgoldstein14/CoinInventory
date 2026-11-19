@@ -1,20 +1,7 @@
 /**
- * support.service.spec.ts — what actually goes on the wire.
- *
- * WHY THIS FILE EXISTS
- * The dialog has tests proving it passes the user's "Include recent log"
- * choice to this service. Nothing proved the service then put it in the
- * request. That is a one-line gap with a silent failure mode: the checkbox
- * would appear to work, the summary would change, and the server would use
- * its default — which is TICKED — so a user who turned the log off would get
- * a log file anyway and the dialog would be the last to know.
- *
- * It also pins the shape of what is NOT sent. There is no attachment array,
- * no base64, and no log lines from the browser: the server reads the log
- * itself, so the unredacted one never passes through here.
- *
- * HttpClient is a stub rather than a real backend — the suite runs under Node
- * with no jsdom, and what is being checked is the body, not the transport.
+ * Tests the request bodies SupportService sends. The "Include recent log"
+ * choice must be sent explicitly (the server defaults to including it), and
+ * no attachments or log lines are sent from the browser. HttpClient is stubbed.
  */
 
 import { describe, it, expect, vi } from 'vitest';
@@ -51,10 +38,7 @@ describe('preview', () => {
     expect(posts[0].body['includeLog']).toBe(true);
   });
 
-  /**
-   * THE ONE THAT MATTERS. Omitting the field here would leave the server on
-   * its default — ticked — and silently overrule the user.
-   */
+  /** Omitting the field would leave the server on its default (ticked). */
   it('puts the log choice in the request, unticked', async () => {
     const { service, posts } = createService();
 
@@ -92,7 +76,7 @@ describe('saveReport', () => {
     expect(posts[0].body['includeLog']).toBe(false);
   });
 
-  /** No attachments, no base64, no archive. All three were removed on purpose. */
+  /** No attachments, base64 or archive. */
   it('sends nothing else at all', async () => {
     const { service, posts } = createService();
 

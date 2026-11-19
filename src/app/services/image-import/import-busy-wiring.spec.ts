@@ -1,33 +1,14 @@
 /**
- * Tests for WHEN the busy indicator exists, as opposed to what it says
- * (import-progress.spec.ts covers the wording).
+ * Tests for when the busy indicator exists (import-progress.spec.ts covers
+ * the wording). Two requirements:
  *
- * WHY THESE TESTS LOOK LIKE THEY ARE TESTING setTimeout
+ *   1. `progress` is set synchronously when work starts, so `busy()` disables
+ *      Save before the first (possibly slow) file read.
+ *   2. The session yields to the event loop so the indicator can paint.
  *
- * The reported bug was "the screen was basically frozen with no indication
- * that anything was going on". There were two separate causes, and only one of
- * them is a missing indicator:
- *
- *   1. NOTHING WAS SET. `applyConfirmedMatches` left `progress` at null until
- *      the FIRST file had been read, decoded and downscaled. On a 46 MB JPEG
- *      over SMB that is several seconds with no bar and — worse — with
- *      `busy()` still false, so the Save button was live and a second click
- *      re-ran the whole import.
- *
- *   2. IT WAS SET BUT COULD NOT PAINT. A signal write does not draw anything.
- *      The browser only repaints when the task that is running gives the event
- *      loop back. The old code set the matching progress and then ran the
- *      first 200-filename chunk in the SAME task — measured at ~1.1 s against
- *      a 2,000-coin inventory — so the bar's first appearance was already a
- *      second late, and the review-screen render at the end happened after
- *      `progress` had been cleared.
- *
- * A unit test cannot see a repaint. What it CAN see is the yield that makes a
- * repaint possible, by observing the state from a `setTimeout(0)` that is
- * queued before the work starts: if the session yields, our observer runs
- * while the import is still in flight and sees the indicator. If the session
- * does not yield, our observer only runs after everything is over and sees
- * nothing. That is exactly the difference the user experienced.
+ * A unit test can't see a repaint, but it can see the yield: an observer
+ * queued with `setTimeout(0)` before the work starts only runs mid-import if
+ * the session gives the event loop back.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -81,11 +62,8 @@ function selectFiles(session: BatchImportSession, files: File[]): Promise<void> 
 }
 
 /**
- * Queue an observer on the macrotask queue BEFORE kicking off `work`.
- *
- * It can only run if `work` hands the event loop back at least once — which is
- * the same condition the browser needs in order to paint. Every snapshot it
- * takes is therefore a moment the user would really have seen something.
+ * Queue an observer on the macrotask queue before starting `work`. Each
+ * snapshot is a moment the browser could have painted.
  */
 async function snapshotWhileRunning<T>(
   read: () => T,
@@ -107,9 +85,6 @@ async function snapshotWhileRunning<T>(
   return seen;
 }
 
-/* =========================================================================
- * THE RUNNER
- * ======================================================================= */
 describe('attach-runner — the indicator exists before the first file is read', () => {
   const morgan = { id: 'morgan', imagePaths: [] } as unknown as CoinRecord;
 
@@ -126,11 +101,7 @@ describe('attach-runner — the indicator exists before the first file is read',
     sizeBytes: 100
   });
 
-  /**
-   * The headline regression. The first `onProgress` call has to land BEFORE
-   * the first `encode`, because `encode` is the slow part: it is where the
-   * bytes come off the share.
-   */
+  // The first `onProgress` must come before the first (slow) `encode`.
   it('reports 0-of-n before encoding anything', async () => {
     const order: string[] = [];
     const rows = [row('a.jpg'), row('b.jpg')];
@@ -183,9 +154,6 @@ describe('attach-runner — the indicator exists before the first file is read',
   });
 });
 
-/* =========================================================================
- * THE SESSION
- * ======================================================================= */
 describe('BatchImportSession — the screen is never silently busy', () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
@@ -195,8 +163,7 @@ describe('BatchImportSession — the screen is never silently busy', () => {
   it('is busy from the instant the picker fires, not from the first chunk', () => {
     const { session } = createSession();
 
-    // Deliberately NOT awaited: this is the synchronous half of the handler,
-    // i.e. everything the browser does before it is next able to paint.
+    // Not awaited: checks the synchronous half of the handler.
     void selectFiles(session, [jpg('1881-S Morgan Dollar - Obverse.jpg')]);
 
     expect(session.busy()).toBe(true);
@@ -215,12 +182,11 @@ describe('BatchImportSession — the screen is never silently busy', () => {
       () => selectFiles(session, files)
     );
 
-    // Every paintable moment had SOMETHING on screen...
+    // Every paintable moment showed a stage.
     expect(phases.length).toBeGreaterThan(0);
     expect(phases).not.toContain(null);
-    // ...and the stages the user sees are the honest ones.
     expect(new Set(phases)).toEqual(new Set(['scanning', 'matching', 'building']));
-    // The indicator is only taken down once everything has settled.
+    // Cleared only once everything has settled.
     expect(session.progress()).toBeNull();
     expect(session.busy()).toBe(false);
   });
@@ -234,9 +200,7 @@ describe('BatchImportSession — the screen is never silently busy', () => {
       () => selectFiles(session, files)
     );
 
-    // There must be at least one paintable moment where the rows are already
-    // in place AND the indicator is still showing — that is the moment Angular
-    // spends building several hundred DOM nodes.
+    // The indicator must still show while Angular renders the rows.
     expect(snapshots.some(s => s.rows === 2 && s.phase !== null)).toBe(true);
   });
 
@@ -254,7 +218,7 @@ describe('BatchImportSession — the screen is never silently busy', () => {
     const { session } = createSession();
     const first = selectFiles(session, [jpg('a.jpg'), jpg('b.jpg')]);
 
-    // The user, seeing nothing happen, clicks the picker again.
+    // A second picker selection while the first runs.
     await selectFiles(session, [jpg('c.jpg')]);
     await first;
 
@@ -297,9 +261,6 @@ describe('BatchImportSession — the screen is never silently busy', () => {
   });
 });
 
-/* =========================================================================
- * THE MODAL SHELL
- * ======================================================================= */
 describe('ImageImportModal — cannot be closed out from under a running import', () => {
   function createModal() {
     const { inv } = createTestInventoryService();
@@ -323,12 +284,9 @@ describe('ImageImportModal — cannot be closed out from under a running import'
   });
 
   /**
-   * The Cancel button is disabled while busy, but the backdrop and the ×
-   * are not buttons and have no disabled state. `close()` calls
-   * `session.reset()`, which clears the ThumbnailCache — i.e. the File
-   * handles the attach runner is in the middle of reading. A stray backdrop
-   * click used to turn the rest of the run into "File handle was lost"
-   * failures.
+   * The backdrop and × have no disabled state, and `close()` resets the
+   * session, clearing the File handles the attach runner is still reading.
+   * So close() must be ignored while busy.
    */
   it('ignores close() while a stage is running', async () => {
     const { modal, session, inv } = createModal();

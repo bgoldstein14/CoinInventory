@@ -1,50 +1,18 @@
 /**
- * issue-url.ts — building the pre-filled GitHub issue link.
+ * Builds the pre-filled GitHub new-issue link. The app never calls GitHub
+ * itself (no token is shipped); the user's browser opens the link and the
+ * user submits. GitHub has no official attachment API, so files are added by
+ * dragging them into the issue.
  *
- * ---- NO TOKEN. EVER. ----
- * The app does not talk to GitHub. It opens the user's own browser at a
- * new-issue URL with the title and body already filled in, and the user
- * presses Submit themselves.
- *
- * The alternative — POST to the GitHub API from inside the app — requires
- * shipping a credential in a public desktop application. Any token that can
- * file an issue can be extracted from the binary and abused. That is not a
- * problem that gets solved by obfuscation, a proxy, or hoping; the only
- * honest answer is not to have one. The deep link costs one click, and it
- * has the side benefit that the user sees the whole submission in GitHub's
- * own editor before anything is published.
- *
- * GitHub also has no official API for issue ATTACHMENTS — only undocumented
- * routes that disagree about whether a token even works — so even a token
- * would not get a file up there. Dragging it in is the only route that
- * exists, which is why the dialog hands the user this link rather than a
- * file picker it could not honour.
- *
- * ---- THE CLIPBOARD FALLBACK IS LOAD-BEARING ----
- * URLs have a practical ceiling — browsers and servers both start refusing
- * somewhere around 8 KB. A report carrying 150 log lines sails past it
- * routinely. The failure mode if we ignore this is the worst one available:
- * the browser silently truncates, GitHub opens with half a report in it, and
- * the user submits something that LOOKS complete.
- *
- * So the length is checked before opening anything. Over the limit, the body
- * goes on the clipboard and the URL carries a short instruction instead —
- * which is exactly what VS Code's issue reporter does, in nearly these
- * words: "We have written the needed data into your clipboard because it was
- * too large to send."
+ * URLs over about 8 KB are refused or truncated, so the encoded length is
+ * checked first. If it is too long, the body goes on the clipboard and the URL
+ * carries a short "paste it here" instruction (as VS Code's issue reporter does).
  */
 
-/**
- * The longest URL we are willing to hand to a browser.
- *
- * 8 KB is the conventional ceiling (it is the default request-line limit in
- * most servers and roughly where browsers stop honouring long URLs). 8000
- * leaves a little room rather than sitting on the boundary, because being
- * wrong here is silent.
- */
+/** Longest URL handed to a browser; just under the conventional 8 KB limit. */
 export const ISSUE_URL_MAX_CHARS = 8000;
 
-/** GitHub truncates issue titles; keep ours comfortably inside. */
+/** GitHub truncates long titles. */
 const MAX_TITLE_CHARS = 200;
 
 /** What the fallback URL says when the real body went to the clipboard. */
@@ -69,7 +37,7 @@ export type IssueSubmissionMode = 'url' | 'clipboard';
 
 export interface IssuePlan {
   mode: IssueSubmissionMode;
-  /** Always safe to open. Under the length limit in both modes. */
+  /** Always under the length limit. */
   url: string;
   /** The full body, when the caller must put it on the clipboard first. */
   clipboardText: string | null;
@@ -78,18 +46,13 @@ export interface IssuePlan {
 }
 
 /**
- * Tidy whatever was configured as "the repository".
- *
- * People paste three different things when asked for a repo URL: the browser
- * address (…/coin-inventory), the clone command's URL (…/coin-inventory.git)
- * and the issues page (…/coin-inventory/issues). All three mean the same
- * repository and all three produce a broken link if pasted straight into
- * `${repo}/issues/new`.
+ * Normalises a configured repository URL: accepts the browser address, the
+ * `.git` clone URL or the issues page.
  */
 export function normaliseRepositoryUrl(repoUrl: string): string {
   let url = repoUrl.trim();
 
-  // Repeated because the forms combine: '…/issues/' and '….git/' both occur.
+  // Repeated because the suffixes can combine ('.../issues/', '....git/').
   for (let pass = 0; pass < 3; pass++) {
     url = url.replace(/\/+$/, '');
     url = url.replace(/\/issues$/i, '');
@@ -100,26 +63,16 @@ export function normaliseRepositoryUrl(repoUrl: string): string {
 }
 
 /**
- * The plain new-issue page, with nothing filled in.
- *
- * WHY THIS IS SEPARATE FROM buildIssueUrl. The dialog shows the user a
- * CLICKABLE LINK on the describe step, before any report exists — that is
- * the owner's explicit requirement, because attaching files is a GitHub-side
- * action and telling someone to go to GitHub without giving them the address
- * is telling them to go and find it. There is no title or body to encode at
- * that point, and a link with `?title=&body=` in it looks broken.
+ * The plain new-issue page with nothing filled in, shown as a link before a
+ * report exists so the user can attach files on GitHub.
  */
 export function issuePageUrl(repoUrl: string): string {
   return `${normaliseRepositoryUrl(repoUrl)}/issues/new`;
 }
 
 /**
- * The pre-filled link.
- *
- * Encoded with `encodeURIComponent` rather than `URLSearchParams`, which
- * would encode spaces as `+`. GitHub accepts both, but `%20` is what shows
- * up if the user ever looks at the link, and a body full of `+` where the
- * spaces should be is alarming to read.
+ * The pre-filled link. Uses `encodeURIComponent` so spaces show as `%20`
+ * rather than `+`.
  */
 export function buildIssueUrl(repoUrl: string, fields: IssueFields): string {
   const base = `${normaliseRepositoryUrl(repoUrl)}/issues/new`;
@@ -140,11 +93,8 @@ export function buildIssueUrl(repoUrl: string, fields: IssueFields): string {
 }
 
 /**
- * Decide how this report gets to GitHub.
- *
- * NOTE THE LENGTH IS MEASURED ON THE FINISHED, ENCODED URL. Checking the raw
- * body would be wrong by a factor of three for text full of newlines — each
- * `\n` becomes `%0A` — and newline-heavy is exactly what a log tail is.
+ * Decides between a direct link and the clipboard fallback. Measured on the
+ * encoded URL: each newline becomes `%0A`, and log tails are newline-heavy.
  */
 export function planIssueSubmission(
   repoUrl: string,

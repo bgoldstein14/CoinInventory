@@ -1,25 +1,4 @@
-<!--
-  Help > Report a problem.
-
-  TWO STEPS, AND THE FIRST ONE IS THE CONSENT MODEL: describe -> write the
-  file. Nothing is written before the button is pressed; what the file will
-  contain is listed in plain words on this step, and the exact text is one
-  click away in the disclosure for anyone who wants it.
-
-  THE ONE CHOICE ON THIS SCREEN is "Include recent log". Ticked writes a
-  second, redacted log file beside the report; unticked sends no log lines at
-  all, the body tail included. The summary changes with it so the state is
-  never ambiguous.
-
-  THERE IS NO FILE PICKER. The app cannot upload to GitHub and no longer
-  builds a zip, so a staged file would have had nowhere to go. Attaching is a
-  GitHub-side action and this dialog says so with a real clickable link, on
-  both steps. The component header has the full argument.
-
-  The blunt warning about public issues survived the picker: the reason for it
-  - a QIF or spreadsheet carries far more than coins, and the issue is public
-  - is unchanged by who does the attaching.
--->
+<!-- Help > Report a problem: describe, then save the report and open GitHub. -->
 <div class="modal-backdrop" (click)="close()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -33,7 +12,7 @@
         <p class="support-error" role="alert">{{ errorMessage() }}</p>
       }
 
-      <!-- STEP 1 - describe, and see what will be sent -->
+      <!-- Step 1: describe, and see what will be sent -->
       @if (step() === 'describe') {
         <p class="support-intro">
           This builds a report you can attach to a GitHub issue. Nothing is uploaded and
@@ -49,16 +28,7 @@
             (ngModelChange)="description.set($event)"></textarea>
         </label>
 
-        <!--
-          "Include recent log". Ticked by default - this dialog is reached
-          from "Report a problem" and a log is the most useful thing in a bug
-          report - but one click to turn off, because a feature request does
-          not need one.
-
-          Unticking means NO log content at all: no second file, and no log
-          tail inside the report either. The summary below changes with it, so
-          the state is never ambiguous.
-        -->
+        <!-- Unticking means no log content at all, including the tail in the report body. -->
         <label class="support-check">
           <input
             type="checkbox"
@@ -74,8 +44,7 @@
           </span>
         </label>
 
-        <!-- What goes in, in sentences. This is the consent disclosure; the
-             markdown below it is for people who want to check it. -->
+        <!-- What will be sent, in plain words -->
         <section class="support-summary">
           <h3>What will be sent</h3>
           <ul class="support-summary-list">
@@ -88,19 +57,13 @@
             looks like a password, key or connection string are replaced with placeholders
             before the file is written.
           </p>
-          <!--
-            Plain text, not a link: the documentation lives in the repository
-            and the repository URL is not known at build time, so a hard-coded
-            href would be a dead link in the shipped app.
-          -->
+          <!-- Plain text: the repository URL isn't known at build time, so a link could be dead. -->
           <p class="support-note">
             The full list is in <code>docs/what-support-collects.md</code>.
           </p>
         </section>
 
-        <!-- Optional, not a step. The text is built on demand and shown as
-             it will be sent; it is not editable, because a box whose
-             contents might not be what gets sent would be worse than none. -->
+        <!-- Exact report text, view-only so it always matches what is sent. -->
         <details
           class="support-receipt"
           [open]="showReportText()"
@@ -140,7 +103,7 @@
           }
         </details>
 
-        <!-- Attaching your own files: a GitHub-side action, with the link. -->
+        <!-- Attaching files is done by the user on GitHub -->
         <section class="support-attach">
           <h3>Want to send a file as well?</h3>
 
@@ -165,9 +128,7 @@
               file will still be saved and you can send it on however you like.
             </p>
           } @else {
-            <!-- NEVER a link to the shipped placeholder: it is a 404, and
-                 sending the user there while saying their report has been
-                 filed leaves them believing they have been heard. -->
+            <!-- No link to the unconfigured placeholder repository (it would 404). -->
             <p class="support-note">
               No GitHub repository has been configured for this copy of the app, so there is
               no link to show. The report file will still be saved and you can send it on
@@ -194,13 +155,10 @@
         </div>
       }
 
-      <!-- STEP 2 - where the file is, and what to do with it -->
+      <!-- Step 2: where the file is, and what to do with it -->
       @if (step() === 'done') {
         <h3>Your report is saved</h3>
 
-        <!-- Said plainly and said first. The user just pressed a button
-             labelled "open GitHub" and is entitled to know that no part of
-             this sent anything anywhere. -->
         <p class="support-note"><strong>Nothing was uploaded.</strong></p>
         <p class="support-note">{{ submissionNote() }}</p>
 
@@ -208,11 +166,7 @@
           <p class="support-path"><code>{{ report.path }}</code></p>
         }
 
-        <!--
-          The log file, named exactly as plainly as the report is. This is
-          driven by what the server says it wrote, not by the checkbox: the
-          path on screen has to be a file that is really there.
-        -->
+        <!-- Driven by what the server wrote, not by the checkbox. -->
         @if (savedLog(); as logFile) {
           <p class="support-note">
             Your recent log was saved beside it, redacted the same way:
@@ -221,9 +175,7 @@
         }
 
         @if (doneLink()) {
-          <!-- Singular when only the report was written: "those files" with
-               one file on screen reads as an instruction the user cannot
-               follow, and makes them look for a second file. -->
+          <!-- Singular wording when only the report was written. -->
           @if (savedLog()) {
             <p class="support-note">
               Drag those files into the issue to include them, along with any screenshots or

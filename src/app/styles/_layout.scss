@@ -1,25 +1,9 @@
-// The outer page layout owned by the App shell: the flex column, the header,
-// and the one/two column main content grid.
-//
-// Styles for things that now live in child components have moved out:
-//  - the search/filter toolbar -> components/inventory-filter-bar
-//  - the header action buttons -> components/app-toolbar
-//  - the white `.panel` card    -> styles/_panel.scss (shared by two components)
+// Outer page layout owned by the App shell: header and main content grid.
 
 // ---- Layout shell ----
 
-// The shell fills whatever vertical space the root flex column gives it,
-// rather than computing its own height.
-//
-// It used to be `height: calc(100vh - 24px)`, a hand-tuned guess meant to
-// leave room for the body margin and the fixed status bar. That guess never
-// quite matched reality, which is where the leftover vertical "wiggle room"
-// came from. `flex: 1` measures it exactly instead.
-//
-// `min-height: 0` is required: a flex item defaults to `min-height: auto`,
-// which refuses to shrink below its content. Without it the inner table
-// would push the shell taller than the viewport and the page would scroll
-// again.
+// Fills the space the root flex column gives it. `min-height: 0` lets it
+// shrink below its content, or the table would push the page into scrolling.
 .app-shell {
   max-width: 1440px;
   width: 100%;
@@ -49,24 +33,14 @@ h1 {
   letter-spacing: -0.03em;
   color: #2c1c0e;
 
-  // Flex so the coin and the words share a centre line. An inline <img>
-  // would sit on the text baseline and hang below it, which on a round
-  // image reads as a mistake rather than as a choice.
+  // Flex so the coin image is vertically centred with the text, not on the baseline.
   display: flex;
   align-items: center;
   gap: 0.3em;
 }
 
-// The coin beside the title.
-//
-// `height: 1em` is the whole point: the h1's font-size is a clamp() that
-// moves between roughly 29px and 45px with the window, and a fixed pixel
-// height would be right at exactly one width. 1em makes the coin a
-// property of the type size rather than a number someone has to maintain.
-//
-// The file is 90px square -- double the 45px maximum -- so it stays sharp
-// on a high-DPI screen. `width: auto` keeps it proportional if the source
-// is ever replaced with something that is not square.
+// Coin beside the title; `1em` tracks the h1's fluid clamp() font-size.
+// The source image is 90px (2x the max) for high-DPI screens.
 .title-coin {
   height: 1em;
   width: auto;
@@ -118,16 +92,12 @@ h1 {
   flex: 1;
   min-height: 0;
 
-  // The detail sidebar was widened from 360px to 420px so that the coin
-  // editor's first line can hold Year, Coin Type, Denomination and Mint mark
-  // together (see coin-editor-form.scss, `.detail-editor__row--top`). The
-  // inventory table takes whatever is left, so nothing else needed changing.
+  // 420px fits the coin editor's top row (see `.detail-editor__row--top`).
   &.has-detail { grid-template-columns: minmax(0, 1fr) 420px; }
 }
 
 // ---- Responsive ----
-// Below 900px the detail sidebar drops underneath the table instead of sitting
-// beside it. (Moved here from the old `_overlays.scss`.)
+// Below 900px the detail sidebar drops underneath the table.
 
 @media (max-width: 900px) {
   .topbar { display: block; }
@@ -144,10 +114,7 @@ h1 {
 
   .main-content.has-detail { grid-template-columns: 1fr; }
 
-  // On screen the app is deliberately locked to exactly one viewport with
-  // internal scrolling. For print that would clip everything past the first
-  // page, so release the height constraints and let content flow naturally
-  // across pages.
+  // Release the one-viewport lock so content flows across printed pages.
   :host {
     display: block;
     height: auto;
@@ -165,12 +132,7 @@ h1 {
   .status-bar { display: none !important; }
 }
 
-// The build number under the title.
-//
-// Deliberately tiny and low-contrast: it is there so a bug report can name
-// the build it came from, not because anyone reading the screen cares. It
-// sits in the title block rather than the toolbar so it travels with the
-// name of the thing it versions.
+// Build number under the title, deliberately small and low-contrast.
 .app-version {
   margin: 2px 0 0;
   font-size: 0.68rem;

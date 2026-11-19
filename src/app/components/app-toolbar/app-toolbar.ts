@@ -1,33 +1,10 @@
 import { Component, input, output, signal } from '@angular/core';
 
 /**
- * What the Import menu can bring in.
- *
- * DECLARED IN MENU ORDER, commonest first, and `excel` is first because it is
- * also the split button's default action. Nothing reads this order — the
- * menu is written out longhand in the template — so it is kept in step
- * purely so that the two cannot tell different stories to the next reader.
- *
- * 'excel' AND 'csv' ARE TWO DOORS INTO ONE ROOM, AND THAT IS THE POINT.
- * They were a single "Excel or CSV" entry, on the reasoning that the modal
- * behind it reads either and so the user should not have to classify his own
- * file. The reasoning is sound about the MODAL and wrong about the MENU: a
- * user holding a spreadsheet looks down the list for the word "Excel", and a
- * compound label is something to decode before he can find out whether his
- * case is covered. The mapping machinery stays shared — see
- * csv-import-modal.ts, which still takes both — and the only thing that
- * differs is which format the dialog opens expecting.
- *
- * JSON IS DELIBERATELY ABSENT. It used to sit between CSV and QIF, and it
- * was the only entry that read a file this application had written. Export →
- * JSON remains: a backup you cannot take is a different complaint from a
- * backup you cannot restore from a menu.
- *
- * 'images' is the odd one out and deliberately so: the other three read a FILE
- * of coin records, while this one reads a FOLDER of photographs and matches
- * them to coins that already exist. It belongs on the same menu anyway,
- * because from the user's point of view "bring my photos in" is an import like
- * any other.
+ * What the Import menu can bring in, in menu order. 'excel' and 'csv' open the
+ * same import dialog in different formats; 'images' imports a folder of photos
+ * and matches them to existing coins. There is deliberately no JSON import
+ * (JSON export remains).
  */
 export type ImportKind = 'excel' | 'csv' | 'qif' | 'images';
 
@@ -35,23 +12,9 @@ export type ImportKind = 'excel' | 'csv' | 'qif' | 'images';
 export type ExportKind = 'csv' | 'json' | 'insurance';
 
 /**
- * AppToolbar — the action buttons in the top-right of the page header:
- * "Add Coin", the Import split-button, the Export split-button and "Settings".
- *
- * The only state here is "is one of the dropdown menus open". Everything the
- * buttons actually *do* (open a modal, write a file) belongs to the App
- * shell, so this component just reports what the user picked.
- *
- * A "split button" is the main button plus a little ▾ that opens a menu of
- * alternatives; clicking the main button performs the default action.
- *
- * EACH SPLIT BUTTON'S DEFAULT IS ITS FIRST MENU ENTRY. Import defaults to
- * 'excel' and Export to 'csv', both matching the top of their own menus. The
- * Import default used to be 'qif', which meant the plain Import button ran
- * the least-wanted importer — the one case where pressing the obvious
- * button was the wrong answer. It then became 'csv'; splitting that entry in
- * two moved the top of the list to Excel, and the face of the button moved
- * with it rather than staying behind on the second entry.
+ * Header action buttons: Add Coin, the Import and Export split buttons,
+ * Settings and Help. Only tracks which dropdown is open; the App shell acts on
+ * the emitted choices. Each split button's main face runs its first menu entry.
  */
 @Component({
   selector: 'app-toolbar',
@@ -68,19 +31,7 @@ export class AppToolbar {
   readonly exportSelected = output<ExportKind>();
   readonly settingsRequested = output<void>();
 
-  /**
-   * The help icon — opens the Help screen (components/help-modal).
-   *
-   * It used to open the problem reporter directly, which made the control a
-   * small lie: a button called Help that could only do one thing. The
-   * reporter is now the first item on the screen this opens, so the old
-   * route costs one extra click and nothing else.
-   *
-   * On the toolbar rather than buried in Settings because the moment help is
-   * wanted is usually the moment something has just gone wrong, and a user
-   * who cannot find it will close the app instead — at which point the
-   * recent errors a report would have carried are gone.
-   */
+  /** Opens the Help screen (components/help-modal). */
   readonly helpRequested = output<void>();
 
   protected readonly importMenuOpen = signal(false);

@@ -1,75 +1,28 @@
 /**
- * db/seed.ts — the reference data a fresh database is born with.
+ * Reference data a fresh database is born with (issuers, denominations,
+ * catalogues, metal contents, mint marks, categories), built from
+ * db/seed-data/issuers-denominations.json.
  *
- * *** SEEDED ROWS ARE RE-GENERATED, NOT MIGRATED. *** Design §4.10b is
- * explicit about this and it is the single thing that makes the SQL Server
- * import (Stage 2) a small job instead of a large one: of the owner's data,
- * 70 issuers, 1,207 denominations, 15 catalogues, 15 metal contents and 9
- * mint marks are things the APPLICATION put there, not things he typed. They
- * are rebuilt here from the same reviewed source the SQL Server migration
- * used — server/migrations/seed-data/issuers-denominations.json — and only
- * his own additions and his coins' links have to travel.
+ * Runs on every open, so it only inserts rows that are missing, matched by
+ * natural key (Issuers by Name, Denominations by (IssuerId, Label), lookups by
+ * their text column, all COLLATE NOCASE). It never updates or deletes, so user
+ * edits, soft-deletes (IsActive = 0) and additions survive.
  *
- * *** A CONSEQUENCE STAGE 2 MUST HANDLE, WRITTEN DOWN HERE SO IT IS NOT
- * DISCOVERED. *** Re-seeding means DenominationId values on this side are
- * NOT the same numbers as on the owner's SQL Server. His Coins.DenominationId
- * must be re-resolved by (issuer name, label) during the import; copying the
- * integer across would attach his Morgan dollars to whatever happens to
- * occupy that id here. The same applies to CatalogId. Nothing in this file
- * can enforce that — it is recorded so the Stage 2 author reads it.
- *
- * IDEMPOTENCE. This runs on EVERY open, so it must be safe to run a thousand
- * times. Every insert is guarded on the row not already being there, and
- * nothing is ever UPDATED or DELETED:
- *
- *   - a row the user edited keeps his edit, it is not reset to the seed;
- *   - a row the user soft-deleted (IsActive = 0) stays deleted, it is not
- *     resurrected on next launch — which is the bug a naive
- *     "INSERT OR REPLACE" would introduce;
- *   - a row the user added himself is never touched.
- *
- * Matching is by the same natural key the SQL Server seed used: Issuers by
- * Name, Denominations by (IssuerId, Label), and the small lookups by their
- * one text column. Those columns are COLLATE NOCASE (see db/schema.sql), so
- * 'sear' does not become a sixteenth catalogue alongside 'Sear'.
- *
- * NOTHING HERE EMITS SQL TEXT, so the NCHAR(n) convention that
- * migrations/seed-sql.ts uses does not apply and is not needed. That
- * convention exists because a generated .sql file has to survive sqlcmd
- * choosing a code page; this seeder binds the strings as parameters straight
- * out of a UTF-8 JSON file, so the cent sign and the vulgar half never
- * become text in a file at all. migrations/seed-sql.ts and migration 013 are
- * untouched and keep emitting NCHAR(n) for the SQL Server path, which the
- * owner still needs until Stage 2 has run.
  */
 
 import fs from 'fs';
 import path from 'path';
 
 import type { SqliteDatabase } from './driver';
-import { validateSeed, type SeedFile } from '../migrations/seed-sql';
+import { validateSeed, type SeedFile } from './seed-file';
 
-/** The authored, reviewable source. The SAME file migration 013 is generated from. */
-export const SEED_DATA_PATH = path.join(
-  __dirname,
-  '..',
-  'migrations',
-  'seed-data',
-  'issuers-denominations.json'
-);
+/** The seed source. */
+export const SEED_DATA_PATH = path.join(__dirname, 'seed-data', 'issuers-denominations.json');
 
 /**
- * The fifteen reference catalogues, in picker order.
- *
- * *** A FOURTH COPY OF A LIST THAT ALREADY EXISTS IN THREE PLACES, AND THE
- * TRIPWIRE THAT MAKES THAT SURVIVABLE. *** The others are CATALOG_SEED in
- * src/app/types/catalog-reference.ts, server/setup-database.sql and
- * server/migrations/012-add-catalog-references.sql.
- * src/app/types/catalog-seed-parity.spec.ts reads all four off disk and
- * fails the build if any of them disagrees. SQL cannot import a TypeScript
- * module and the server package cannot import from src/, which is why there
- * are four rather than one. Keep the array literal below on one line per
- * entry, in quotes: that spec parses it as text.
+ * The fifteen reference catalogues, in picker order. Also listed in
+ * src/app/types/catalog-reference.ts; src/app/types/catalog-seed-parity.spec.ts
+ * checks the two agree. That spec parses this literal as text: keep one quoted entry per line.
  */
 export const CATALOG_SEED: readonly string[] = [
   'Sear',
@@ -112,11 +65,9 @@ export const METAL_CONTENT_SEED: readonly string[] = [
 ];
 
 /**
- * Major US mints plus a blank and a catch-all.
- *
- * The blank label is deliberate and must not be "tidied" into a NULL: it is
- * what a Philadelphia coin struck before 1980 carries, and Coins.MintMark
- * stores the LABEL rather than an id.
+ * Major US mints plus a blank and a catch-all. The blank label is intentional
+ * (e.g. pre-1980 Philadelphia), and Coins.MintMark stores the label, so it
+ * must not become NULL.
  */
 export const MINT_MARK_SEED: ReadonlyArray<{ label: string; description: string }> = [
   { label: '', description: 'No mintmark / Philadelphia pre-1980' },
@@ -146,12 +97,8 @@ export function readSeedFile(filePath: string = SEED_DATA_PATH): SeedFile {
 }
 
 /**
- * Inserts every reference row that is not already present.
- *
- * Runs inside ONE transaction. 1,269 guarded inserts outside a transaction
- * are 1,269 fsyncs and take seconds on a spinning disk; inside one they are
- * a single commit and are imperceptible. It also means a crash half way
- * through leaves no half-seeded database.
+ * Inserts every reference row that is not already present, in one
+ * transaction (one commit instead of ~1,300, and no half-seeded database).
  */
 export function seedReferenceData(
   database: SqliteDatabase,
@@ -207,9 +154,7 @@ function seedIssuers(database: SqliteDatabase, seed: SeedFile): number {
 }
 
 function seedDenominations(database: SqliteDatabase, seed: SeedFile): number {
-  // The issuer ids as they ended up in THIS database. They are not the
-  // numbers in the JSON (there are none) and not the numbers on the owner's
-  // SQL Server; they are whatever AUTOINCREMENT assigned.
+  // Issuer ids as assigned by AUTOINCREMENT in this database.
   const issuerIdByKey = new Map<string, number>();
   const findIssuer = database.prepare('SELECT IssuerId FROM Issuers WHERE Name = @name');
 
@@ -225,10 +170,8 @@ function seedDenominations(database: SqliteDatabase, seed: SeedFile): number {
       '(SELECT 1 FROM Denominations WHERE IssuerId = @issuerId AND Label = @label)'
   );
 
-  // Country is filled with the issuer's IsoCode where it has one and its Name
-  // otherwise, exactly as migration 013 does. The column is flagged debt
-  // (design §4.2) but the editor dropdown still reads it, so leaving it blank
-  // would make every seeded row invisible there.
+  // Country is the issuer's IsoCode, else its Name (as migration 013 does);
+  // the editor dropdown still reads this column.
   const countryByKey = new Map<string, string>();
   for (const issuer of seed.issuers) {
     countryByKey.set(issuer.key, issuer.isoCode ?? issuer.name);
@@ -237,9 +180,7 @@ function seedDenominations(database: SqliteDatabase, seed: SeedFile): number {
   let inserted = 0;
   for (const denomination of seed.denominations) {
     const issuerId = issuerIdByKey.get(denomination.issuer);
-    // validateSeed() already refuses an unknown issuer key, so this cannot
-    // normally happen; skipping rather than crashing keeps a hand-edited
-    // file from making the application unopenable.
+    // validateSeed() rejects unknown issuer keys; skip rather than crash on a hand-edited file.
     if (issuerId === undefined) continue;
 
     inserted += Number(

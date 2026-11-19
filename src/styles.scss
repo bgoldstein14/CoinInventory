@@ -1,15 +1,6 @@
-/* Global styles.
- *
- * This file was previously empty, which was the root cause of the page-level
- * scrollbar: with no reset, the browser's default `body { margin: 8px }` is
- * still in effect. Combined with the app root asking for a full `100vh`, the
- * document became 100vh + 16px tall, so the whole window scrolled by a
- * sliver no matter what the app did internally.
- *
- * The app is a fixed-height, single-screen application: it manages its own
- * scrolling inside the inventory table and the detail panel, and the page
- * itself should never scroll.
- */
+/* Global styles. The app is a single fixed-height screen that scrolls
+ * internally; the reset removes the default body margin so the page never
+ * scrolls. */
 
 html,
 body {
@@ -19,8 +10,6 @@ body {
 }
 
 body {
-  /* The application shell is exactly viewport-height and handles scrolling
-   * internally. Anything that overflows the window is a layout bug, so make
-   * it visible as clipping rather than hiding it behind a page scrollbar. */
+  /* Overflow here is a layout bug; clip it rather than show a page scrollbar. */
   overflow: hidden;
 }

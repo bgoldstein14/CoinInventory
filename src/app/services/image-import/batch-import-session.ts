@@ -7,6 +7,7 @@ import { BatchImageImportService } from '../batch-image-import.service';
 import { filterImageFiles } from './image-file-filter';
 import { applyBulkAction, toggleRow } from './selection-rules';
 import * as decisions from './row-decisions';
+import { groupPhotoSets } from './photo-sets';
 import { CoinLookup } from './coin-lookup';
 import { ThumbnailCache } from './thumbnail-cache';
 import { EncodedImage, yieldToBrowser } from './attach-runner';
@@ -53,52 +54,25 @@ import {
 } from '../../types/coin.model';
 
 /**
- * "This row will be written when Save is pressed."
- *
- * Exactly the filter `attach-runner.runAttach` applies, stated once here so
- * the counters on the screen and the run itself can never disagree. Note it
- * keys off the DECISION and not off the tier: that is what lets a rescued
- * tier-3 row travel the identical attach path as an accepted tier-2 row,
- * without the runner needing to know tiers exist at all.
+ * "This row will be written when Save is pressed." The same filter
+ * `attach-runner.runAttach` applies, so on-screen counts match the run. Keys
+ * off the decision, not the tier, so rescued tier-3 rows attach the same way.
  */
 const willAttach = (row: BatchImageRow): boolean =>
   row.selected && !!row.selectedCoinId && row.decision !== 'skipped';
 
 /**
- * BatchImportSession — all the state for one run of the batch image import.
+ * All state for one run of the batch image import, kept out of the component
+ * so the logic is unit-testable. Background: docs/rationale/image-and-denominations.md.
  *
- * The background to the import's harder rules -- the base folder, the
- * re-import skip, the progress plumbing -- is in
- * docs/rationale/image-and-denominations.md.
+ * Flow:
+ *  1. Filter  - drop files a browser can't draw and report them.
+ *  2. Match   - on filenames only, in chunks, with progress. No file bytes are read.
+ *  3. Review  - grouped by coin, with bulk selection rules.
+ *  4. Confirm - only now are ticked files read, downscaled and saved one at a
+ *               time; a failure on one file doesn't stop the batch.
  *
- * BatchImportSession — all the state for one run of the batch image import.
- *
- * WHY THIS FILE EXISTS
- * The import is a four-step flow with a fair amount of state: the filter
- * report, the review rows, per-row search boxes, which coin groups are open,
- * the lazily-created thumbnail URLs, live progress and the final summary.
- * Keeping it out of the component follows the same pattern as
- * `features/inventory/*.store.ts`: the component becomes markup plus a couple
- * of event handlers, and the interesting logic is unit-testable without a
- * browser.
- *
- * THE FLOW (and why it is in this order)
- *  1. FILTER   - drop everything a browser cannot draw (.dng, .CR2, .psd,
- *                Thumbs.db ...) and report the count with a reason, so the
- *                user can see nothing was quietly thrown away.
- *  2. MATCH    - on FILENAMES ONLY, in chunks, with a progress line. Not a
- *                single byte is read: the share is 4.2 GB and reading it all
- *                would hang the tab, while the matcher needs only the name.
- *  3. REVIEW   - grouped BY COIN, not as a flat 1,700-row list. Every matched
- *                photo starts ticked; the user unticks what he does not want,
- *                helped by bulk rules (keep only Obverse+Reverse, deselect
- *                retakes, deselect Label shots).
- *  4. CONFIRM  - and only now are the ticked files read, downscaled to
- *                1600px / quality 0.85 and saved, one at a time, with
- *                progress. A failure on one file is recorded and the rest of
- *                the batch carries on.
- *
- * Nothing whatsoever is written to the inventory before step 4.
+ * Nothing is written to the inventory before step 4.
  */
 export class BatchImportSession {
   /** One row per accepted image file. */
@@ -108,26 +82,15 @@ export class BatchImportSession {
   readonly filterResult = signal<ImageFileFilterResult | null>(null);
 
   /**
-   * Why the last import attempt was refused, or null if it was not. The one
-   * thing that can set this today is the base-folder guard in
-   * `applyConfirmedMatches`.
-   *
-   * Cleared at the START of every attempt rather than when the user dismisses
-   * it, so a stale message can never make a successful import look failed.
+   * Why the last import attempt was refused (the base-folder guard), or null.
+   * Cleared at the start of every attempt.
    */
   readonly blockedReason = signal<string | null>(null);
 
   /**
-   * What should happen to matched coins that ALREADY have photos.
-   *
-   * Three answers, because the program cannot guess which one is meant, and
-   * two of them are irreversible in opposite directions. 'leave' is the
-   * default and the only one that can neither delete nor duplicate; the full
-   * reasoning, including why this is a mode flag rather than a rewrite of the
-   * tick boxes, is in existing-photo-mode.ts.
-   *
-   * The screen only shows the question when `existingPhotoChoiceVisible()`
-   * says at least one matched coin actually has photos.
+   * What happens to matched coins that already have photos. Defaults to
+   * 'leave', the only option that neither deletes nor duplicates. See
+   * existing-photo-mode.ts.
    */
   readonly existingPhotoMode = signal<ExistingPhotoMode>(DEFAULT_EXISTING_PHOTO_MODE);
 
@@ -138,15 +101,8 @@ export class BatchImportSession {
   readonly nearPhotoGroups = signal<Set<string>>(new Set());
 
   /**
-   * TIER 3's escape hatch, and the reason it costs the user nothing: the
-   * filenames whose "Attach anyway" panel has been OPENED.
-   *
-   * Empty by default and empty forever unless the user clicks. That emptiness
-   * IS the design -- tier 3 has to stay a read-only report you can scroll past
-   * without answering anything, so the candidate list and the search box do
-   * not exist in the DOM, do not prompt and do not ask until the row is opened
-   * by hand. See row-decisions.ts for why the hatch exists at all, given the
-   * near-match bar stays exactly where it is.
+   * Tier 3 rows whose "Attach anyway" panel is open. Empty unless the user
+   * clicks, so tier 3 stays a read-only list.
    */
   readonly rescueOpen = signal<Set<string>>(new Set());
 
@@ -160,41 +116,22 @@ export class BatchImportSession {
   private readonly thumbnails = new ThumbnailCache();
 
   /**
-   * How the photos this import attaches will be stored, from Settings.
-   *
-   * Held as a signal so the review screen can SAY which mode it is about to
-   * use — the difference between "the database will hold these pictures" and
-   * "the database will hold only their locations" is not something to
-   * discover afterwards. Restored in the constructor and read again at
-   * confirm time, because Settings can be changed while this screen is open.
-   *
-   * Defaults to 'stored' at the default budget, which is what the import did
-   * before the setting existed. See image-storage-settings.ts.
+   * Photo storage settings from Settings, shown on the review screen so the
+   * user knows whether pictures or only paths will be stored. Re-read at
+   * confirm time. See image-storage-settings.ts.
    */
   readonly storageSettings = signal<ImageStorageSettings>({
     ...DEFAULT_IMAGE_STORAGE_SETTINGS
   });
 
   /**
-   * The folder the picked photos actually live in, on the machine hosting the
-   * app -- the one thing a browser refuses to tell us, so the user confirms it
-   * once and it is remembered. See base-folder-state.ts and source-path.ts.
-   *
-   * On a fresh install there is nothing remembered and the box starts EMPTY.
-   * DO NOT seed it with the app's own install directory: that is never the
-   * right answer, and because it looks like a real path it is worse than
-   * blank. See the header of import-base-folder.ts.
-   *
-   * Set up in the constructor because it needs the StorageService and a signal
-   * for the first selected file.
+   * The folder the picked photos live in on the host machine, which a browser
+   * won't reveal; the user confirms it once and it is remembered. Starts empty
+   * on a fresh install. See base-folder-state.ts and source-path.ts.
    */
   readonly folder: BaseFolderState;
 
-  /**
-   * Test seam. Left undefined in the app, in which case the batch service uses
-   * the real <canvas> downscaler. There is no canvas in the unit-test
-   * environment, so the specs install a stub here.
-   */
+  /** Test seam: a stub encoder for specs (no <canvas> in tests). Undefined in the app. */
   encoder: ((file: File) => Promise<EncodedImage>) | undefined = undefined;
 
   /**
@@ -207,25 +144,11 @@ export class BatchImportSession {
     private readonly inv: InventoryService,
     matching: ImageMatchingService,
     private readonly batch: BatchImageImportService,
-    /**
-     * Where the base folder is remembered between sessions. Optional so the
-     * session can still be constructed in an injection context that does not
-     * provide StorageService (which is how some unit tests build it); without
-     * it the folder simply resets each time.
-     *
-     * Also where the two photo-storage settings are read from — the same
-     * object, the same best-effort contract. See image-storage-settings.ts.
-     */
+    /** Remembers the base folder and photo-storage settings. Optional (some tests omit it). */
     private readonly storage?: StorageService,
     /**
-     * Used for two things: asking the backend where the app is installed, so a
-     * first-time user's base-folder box can start from a real path; and
-     * checking, before anything is written, that the paths this import would
-     * record actually resolve on disk (see `applyConfirmedMatches` and
-     * base-folder-check.ts). Optional for the same reason as `storage` -- the
-     * unit tests build this from a bare Injector -- and degrading to "just do
-     * the import" when absent, because the check is a safety net, never a
-     * dependency.
+     * Used to check that recorded paths resolve on disk before writing (see
+     * base-folder-check.ts). Optional; without it the import proceeds unchecked.
      */
     private readonly api?: ApiService
   ) {
@@ -233,37 +156,24 @@ export class BatchImportSession {
     this.folder = new BaseFolderState(
       // The live example is built from the first file of the current selection.
       computed(() => this.filterResult()?.accepted?.[0]),
-      storage
+      storage,
+      api ? async () => firstValueFrom(api.getDocumentsFolder()) : undefined
     );
-    // Fire-and-forget: the box starts empty and is filled in a moment later
-    // with the saved folder, if there is one. Nothing can be imported in that
-    // window, so there is no race to worry about — and if the restore fails
-    // outright, an empty box is a state the screen already handles with a
-    // visible warning.
+    // Fire-and-forget restores. Nothing can be imported before they finish,
+    // and the defaults are safe if they fail. Settings are re-read at confirm.
     void this.folder.restore();
-
-    // Same fire-and-forget treatment, and safe for the same reason: the
-    // defaults ARE the app's previous behaviour, so a slow or failed read
-    // leaves the screen describing exactly what would have happened before
-    // this setting existed. The value is read again at confirm time.
     void loadImageStorageSettings(storage).then(settings =>
       this.storageSettings.set(settings)
     );
   }
 
-   /*
-   * THE THREE REVIEW TIERS
-   *
-   * These come straight off `result.tier`, which is decided once by
-   * image-matching/near-match.ts. The screen does no classifying of its own —
-   * which is what makes the rule testable without a browser, and what stops
-   * a presentation tweak from changing what gets attached.
-   *
-   *   TIER 1 matchedImages  attached automatically; the user may untick/skip.
-   *   TIER 2 nearMatches    one yes/no each (and often one per COIN, see
-   *                         nearMatchGroups).
-   *   TIER 3 notImported    skipped automatically, listed read-only.
-    */
+  /*
+   * Review tiers, taken from `result.tier` (decided in near-match.ts); the
+   * screen does no classifying of its own.
+   *   Tier 1 matchedImages  attached automatically; the user may untick/skip.
+   *   Tier 2 nearMatches    one yes/no each, usually grouped per coin.
+   *   Tier 3 notImported    skipped automatically, listed read-only.
+   */
 
   /** TIER 1. Matcher cleared all three auto gates. */
   readonly matchedImages = computed(() =>
@@ -271,11 +181,8 @@ export class BatchImportSession {
   );
 
   /**
-   * TIER 1, by `status` rather than by tier.
-   *
-   * Identical to `matchedImages` today — tier 'matched' is defined as status
-   * 'auto' — and kept as a separate name so a test can assert the two really
-   * do agree, i.e. that the tier layer has not started attaching things.
+   * Tier 1 by `status` rather than tier. Identical to `matchedImages`; kept so a
+   * test can assert the two agree.
    */
   readonly autoMatches = computed(() =>
     this.imageReviews().filter(r => r.result.status === 'auto')
@@ -286,10 +193,7 @@ export class BatchImportSession {
     this.imageReviews().filter(r => r.result.tier === 'near')
   );
 
-  /**
-   * TIER 2, grouped by the coin being suggested, which is the unit the screen
-   * actually asks about — five photos of one coin is one question.
-   */
+  /** Tier 2 grouped by suggested coin, so five photos of one coin are one question. */
   readonly nearMatchGroups = computed(() =>
     this.batch.groupNearMatches(this.imageReviews())
   );
@@ -299,56 +203,32 @@ export class BatchImportSession {
     this.imageReviews().filter(r => r.result.tier === 'not-imported')
   );
 
+  /** Tier 3 grouped by photo set (see photo-sets.ts); one action covers a set. */
+  readonly notImportedSets = computed(() => groupPhotoSets(this.notImported()));
+
   /**
-   * TIER 3 rows the user has rescued with "Attach anyway".
-   *
-   * They keep `tier === 'not-imported'` on purpose -- the matcher's
-   * classification is not the user's to rewrite, and keeping it means the row
-   * stays exactly where it was in the read-only list, so that list's
-   * 25-at-a-time paging is unaffected by a rescue. What changes is the
-   * DECISION on the row, which is the only thing the attach run looks at.
+   * Tier 3 rows rescued with "Attach anyway". They keep tier 'not-imported'
+   * so they stay in place in the read-only list; only their decision changes.
    */
   readonly rescuedFromSkipped = computed(() =>
     this.notImported().filter(willAttach)
   );
 
-  /**
-   * Rows still waiting on the user. With the tiers in place this is exactly
-   * the unanswered tier-2 rows: tier 1 is decided and tier 3 is skipped.
-   * It is THE number the screen leads with.
-   */
+  /** Rows still waiting on the user (the unanswered tier-2 rows). */
   readonly outstandingCount = computed(() =>
     this.imageReviews().filter(r => r.decision === 'review').length
   );
 
-  /**
-   * The one-line answer to "how much work is this?", shown at the top of the
-   * screen before anything else.
-   *
-   * With 2,140 files, "47 need your attention, 1,890 attached, 203 skipped"
-   * is the single most valuable thing on the page: it tells the user the SHAPE
-   * of the job before they scroll into it.
-   */
+  /** Counts for the one-line summary at the top of the review screen. */
   readonly tierSummary = computed(() => {
     const rows = this.imageReviews();
     const notImported = this.notImported();
-    /* A tier-3 row the user rescued with "Attach anyway" is still tier 3 by
-     * CLASSIFICATION, but it is no longer skipped by OUTCOME -- so it has to
-     * be counted in "will be attached" and taken out of "skipped", or the
-     * sentence at the top of the screen would go on reporting a photo as
-     * thrown away while the Save button is about to write it. */
+    // Rescued tier-3 rows count as "will be attached", not "skipped".
     const rescued = notImported.filter(willAttach);
     const stillSkipped = notImported.filter(r => !willAttach(r));
     return {
       total: rows.length,
-      /**
-       * Tier 1, plus tier-2 rows accepted, plus tier-3 rows rescued, MINUS
-       * whatever the existing-photo answer is holding back.
-       *
-       * It has to agree with the Save button. This sentence is the only place
-       * that reports the shape of the run, and "1,890 will be attached" above
-       * a button reading "Save 1,604 photos" reads as a bug in one of them.
-       */
+      /** Tier 1 + accepted tier 2 + rescued tier 3, minus rows held back by the existing-photo answer. Matches the Save button. */
       willAttach: this.readyToAttach().length,
       /**
        * Ticked photos the existing-photo answer is holding back — i.e. what
@@ -378,25 +258,15 @@ export class BatchImportSession {
   );
 
   /**
-   * Rows the user has TICKED for import, before the existing-photo answer is
-   * applied.
-   *
-   * Kept separate from `readyToAttach` because every number in the three-way
-   * question has to be computed from this set, not from the mode-filtered
-   * one. If picking "Leave them alone" removed those rows from the set the
-   * counts are built from, the sentence offering the choice would instantly
-   * rewrite itself from "38 of these 112 coins already have photos" to "0 of
-   * 74" and the user could never get back to the other two options. See
-   * reason 3 in the header of existing-photo-mode.ts.
+   * Rows ticked for import, before the existing-photo answer is applied. The
+   * existing-photo counts are built from this set so choosing "Leave them
+   * alone" doesn't change the numbers in the question itself.
    */
   private readonly ticketedRows = computed(() => this.imageReviews().filter(willAttach));
 
   /**
-   * Rows that will actually be written on confirm — ticked AND permitted by
-   * the existing-photo answer.
-   *
-   * This is what the Save button counts, so the button cannot promise to
-   * import 300 photos and import 10.
+   * Rows that will actually be written on confirm: ticked and permitted by the
+   * existing-photo answer. This is what the Save button counts.
    */
   readonly readyToAttach = computed(() =>
     rowsWrittenUnderMode(this.imageReviews(), this.inv.inventory(), this.existingPhotoMode())
@@ -405,58 +275,32 @@ export class BatchImportSession {
   readonly attachCount = computed(() => this.readyToAttach().length);
 
   /**
-   * Every number in the three-way question: how many coins this import
-   * touches, how many of them already have photos, how many do not, and how
-   * many photos those coins currently hold.
-   *
-   * All four are live — they follow the tick boxes and the tier-2 answers —
-   * and none of them is approximated. The third one ("Their 94 current photos
-   * are deleted first") is the only thing standing between the user and
-   * deleting photos he may have no other copy of.
+   * Counts for the existing-photo question: coins touched, with and without
+   * photos, and how many photos they hold. Live and exact.
    */
   readonly existingPhotoCounts = computed(() =>
     countExistingPhotos(this.ticketedRows(), this.inv.inventory())
   );
 
-  /**
-   * Whether to show the question at all.
-   *
-   * Only when at least one matched coin really does have photos. Asking what
-   * to do about existing photos when there are none is a question with no
-   * meaning, and a screen that asks those trains people to stop reading the
-   * ones that do have meaning.
-   */
+  /** Show the existing-photo question only when a matched coin has photos. */
   readonly existingPhotoChoiceVisible = computed(() =>
     this.existingPhotoCounts().coinsWithPhotos > 0
   );
 
   /**
-   * Photos that are ticked but will NOT be written because of the current
-   * answer — i.e. everything "Leave them alone" is holding back.
-   *
-   * Reported on screen so the gap between "1,890 ticked" and a Save button
-   * saying 1,604 is explained rather than looking like a bug.
+   * Ticked photos the current existing-photo answer will not write, shown so
+   * the gap between the ticked count and the Save count is explained.
    */
   readonly heldBackByMode = computed(() =>
     this.ticketedRows().length - this.readyToAttach().length
   );
 
-  /**
-   * True while a long stage is running, so the buttons can be disabled.
-   *
-   * The rule itself lives in import-progress.ts, next to the factories that
-   * produce the phases, so "a new stage" and "a stage the buttons know about"
-   * cannot drift apart.
-   */
+  /** True while a long stage is running, so buttons can be disabled. */
   readonly busy = computed(() => isBusy(this.progress()));
 
   /**
-   * The line of text and the bar width, as computeds rather than template
-   * method calls.
-   *
-   * Same reason `nearChips` is a computed: a `{{ progressLabel(...) }}` in the
-   * template re-runs on every change-detection pass, and during an import
-   * there is a change-detection pass after every single file.
+   * Progress text and bar width as computeds, not template method calls, which
+   * would re-run on every change-detection pass (one per file during import).
    */
   readonly progressLabel = computed(() => progressLabel(this.progress()));
   readonly progressDetail = computed(() => progressDetail(this.progress()));
@@ -464,12 +308,8 @@ export class BatchImportSession {
   readonly progressIndeterminate = computed(() => isIndeterminate(this.progress()));
 
   /**
-   * The Save button's own text, which changes to a live count while saving.
-   *
-   * The progress bar is at the top of a dialog whose review list runs to
-   * hundreds of rows and the Save button is at the bottom of it, so from where
-   * the user is scrolled the bar may not be on screen at all. The button needs
-   * its own indicator. See saveButtonLabel() in import-progress.ts.
+   * The Save button's text, with a live count while saving. The button needs
+   * its own indicator because the progress bar may be scrolled out of view.
    */
   readonly saveButtonLabel = computed(() =>
     saveButtonLabel(this.progress(), this.attachCount())
@@ -478,48 +318,31 @@ export class BatchImportSession {
   /** Thumbnail URLs, passed straight down to the child components. */
   readonly thumbnailUrls = computed(() => this.thumbnails.urls());
 
-   /*
-   * 1 + 2. File selection, filtering and filename matching
-    */
+  /* --- 1 + 2. File selection, filtering and filename matching --- */
 
-   /*
-   * EVERY `yieldToBrowser` IN THE TWO LONG METHODS BELOW IS LOAD-BEARING
-   *
-   * Both follow the same three-beat pattern for each stage:
-   *
-   *     this.progress.set(<stage>Progress(...));   // say what is happening
-   *     await yieldToBrowser();                    // let the browser DRAW it
-   *     <the slow thing>;                          // only now do the work
-   *
-   * The middle line is easy to delete and fatal to delete. JavaScript is
-   * single threaded: writing a signal SCHEDULES a render, it does not perform
-   * one, and nothing reaches the screen until the current task hands the event
-   * loop back. Without the yield the indicator is written but never painted,
-   * and the screen looks frozen for the whole of a multi-second stage.
-   *
-   * See import-progress.ts for the stages themselves.
-    */
+  /*
+   * Each stage follows: set progress, `await yieldToBrowser()`, then do the
+   * slow work. The yield is required: setting a signal only schedules a
+   * render, so without it the indicator never paints and the screen looks
+   * frozen. See import-progress.ts.
+   */
 
   async handleDirectorySelection(event: Event): Promise<void> {
-    // The impatient-click guard. A folder select is seconds long, so the user
-    // WILL click the picker again; without this the second run interleaves
-    // with the first and the review list ends up a mixture of both.
+    // Ignore a second folder pick while one is still being processed.
     if (this.busy()) return;
 
     const input = event.target as HTMLInputElement;
     const files = Array.from(input.files ?? []);
     input.value = '';
 
-    // Up BEFORE the filter, not after it: classifying 2,140 File handles is
-    // the first thing that keeps the main thread.
+    // Show progress before filtering, which is itself slow for thousands of files.
     this.progress.set(scanningProgress(files.length));
     await yieldToBrowser();
 
-    // FILTER FIRST. Everything downstream can then assume "this is an image
-    // the browser can draw", and the user gets an honest skipped-file report.
+    // Filter first, so everything downstream can assume a drawable image.
     const filtered = filterImageFiles(files);
     if (filtered.accepted.length === 0) {
-      // Still surface the report - "0 of 43 files were usable" is information.
+      // Still show the report ("0 of 43 files were usable").
       this.progress.set(null);
       this.filterResult.set(filtered.totalSelected > 0 ? filtered : null);
       return;
@@ -529,37 +352,22 @@ export class BatchImportSession {
     this.filterResult.set(filtered);
     this.thumbnails.register(filtered.accepted);
 
-    // `reset()` just cleared `progress`, so put the indicator straight back up
-    // with no `await` in between — otherwise the screen blinks empty here.
-    // Matching is chunked so the progress line can repaint between chunks.
+    // `reset()` cleared progress; restore it with no await in between to avoid
+    // a blink. Matching is chunked so progress can repaint.
     this.setMatchProgress(0, filtered.accepted.length);
     await yieldToBrowser();
     const rows = await this.batch.buildRows(
       filtered.accepted,
       this.inv.inventory(),
       (done, total) => this.setMatchProgress(done, total),
-      /* The denominations lookup, so a coin is matched on the denomination
-       * its `DenominationId` names rather than on the text the source wrote
-       * (design §6). Read ONCE here; `buildRows` freezes it before its first
-       * chunk so a late response cannot split one import across two
-       * behaviours. An empty list -- the lookup failed in connection phase 2
-       * -- is the pre-change matcher, not an error. */
+      // Denominations lookup, so coins match on their linked denomination.
+      // `buildRows` snapshots it once; an empty list means text-only matching.
       this.inv.denominations()
     );
 
-     /*
-     * THE LONGEST WAIT IN THE WHOLE FLOW.
-     *
-     * `imageReviews.set(rows)` invalidates every computed on this class --
-     * coinGroups, nearMatchGroups, notImported, the chip maps in the modal --
-     * and then Angular creates the review screen's DOM from the result. For
-     * the full share that is thousands of rows' worth of work, none of it ours
-     * and none of it interruptible.
-     *
-     * So the indicator must stay UP across it: set progress, yield so Angular
-     * can render while it is showing, and only the task AFTER that takes it
-     * down. Do not collapse these back into one task.
-      */
+    // Setting the rows triggers every computed and builds the review DOM, the
+    // longest wait in the flow. Keep the indicator up across it: set, yield,
+    // set rows, yield, then clear.
     this.progress.set(buildingProgress(rows.length));
     await yieldToBrowser();
     this.imageReviews.set(rows);
@@ -571,9 +379,7 @@ export class BatchImportSession {
     this.progress.set(matchingProgress(processed, total));
   }
 
-   /*
-   * 3. Review: tick boxes, bulk rules, per-file decisions
-    */
+  /* --- 3. Review: tick boxes, bulk rules, per-file decisions --- */
 
   /** Flip one photo's tick box. */
   toggleImage(fileName: string): void {
@@ -586,10 +392,8 @@ export class BatchImportSession {
   }
 
   /**
-   * Show or hide one coin's thumbnails, creating the object URLs on the way in.
-   *
-   * This is the other half of staying responsive: URLs (and therefore image
-   * decodes) only ever exist for groups the user has actually opened.
+   * Show or hide one coin's thumbnails. Object URLs (and image decodes) only
+   * exist for groups the user has opened.
    */
   toggleCoinGroup(coinId: string): void {
     const open = new Set(this.expandedCoins());
@@ -620,30 +424,33 @@ export class BatchImportSession {
     this.imageReviews.update(rows => decisions.chooseCandidate(rows, fileName, candidate));
   }
 
-   /*
-   * TIER 2 ANSWERS
-   *
-   * Three of them and nothing else: one action, not a form. Accept the
-   * suggestion, pick a different one from the dropdown of other near
-   * candidates, or skip.
-    */
+  /* --- Tier 2 answers: accept, choose another near candidate, or skip --- */
 
-  /** "Yes, that is the coin." */
+  /**
+   * "Yes, that is the coin." Waiting members of the same photo set follow
+   * (see `followPhotoSet`).
+   */
   acceptNearMatch(fileName: string): void {
-    this.imageReviews.update(rows => decisions.acceptNearMatch(rows, fileName));
+    this.imageReviews.update(rows => this.followSet(decisions.acceptNearMatch(rows, fileName), fileName));
   }
 
-  /** "No, it is this other one" — the dropdown of other near candidates. */
+  /** "No, it is this other one" — the dropdown. The set follows here too. */
   chooseNearCandidate(fileName: string, coinId: string): void {
-    this.imageReviews.update(rows => decisions.chooseNearCandidate(rows, fileName, coinId));
+    this.imageReviews.update(rows =>
+      this.followSet(decisions.chooseNearCandidate(rows, fileName, coinId), fileName)
+    );
+  }
+
+  /** Carry `fileName`'s coin to the untouched members of its photo set. */
+  private followSet(rows: BatchImageRow[], fileName: string): BatchImageRow[] {
+    const coinId = rows.find(r => r.fileName === fileName)?.selectedCoinId;
+    if (!coinId) return rows;
+    return decisions.followPhotoSet(rows, fileName, this.coins.nameById(coinId));
   }
 
   /**
-   * "Yes" for every unanswered photo in one coin's group.
-   *
-   * This is the control that makes a five-shot coin cost one click instead of
-   * five. It touches only rows that are still waiting, so pressing it twice is
-   * harmless and it never overrides a choice the user already made.
+   * "Yes" for every unanswered photo in one coin's group. Touches only rows
+   * still waiting, so it never overrides an earlier choice.
    */
   acceptNearMatchGroup(coinId: string): void {
     const pending = this.nearMatchGroups()
@@ -663,13 +470,8 @@ export class BatchImportSession {
   }
 
   /**
-   * Show or hide one near-match group's thumbnails.
-   *
-   * Opt-in for the same reason the matched coin groups are: an object URL is
-   * a real decode of a real multi-megabyte JPEG off the share. Tier 2 should
-   * be answerable from the filename and the parsed attributes alone — that is
-   * what the chips are for — so the photos are there when a question is
-   * genuinely close, not by default.
+   * Show or hide one near-match group's thumbnails. Opt-in because each URL
+   * decodes a large JPEG; tier 2 should usually be answerable from the chips.
    */
   toggleNearMatchPhotos(coinId: string): void {
     const open = new Set(this.nearPhotoGroups());
@@ -693,32 +495,17 @@ export class BatchImportSession {
     this.coins.setTerm(fileName, '');
   }
 
-   /*
-   * TIER 3's ESCAPE HATCH -- "Attach anyway"
-   *
-   * Tier 3 is a read-only report and it must stay one: a 2,140-file run
-   * cannot afford a list that demands attention. So this is strictly OPT-IN.
-   * Nothing below runs, nothing expands and nothing is asked until the user
-   * clicks "Attach anyway" on a specific row, and a row he never touches stays
-   * skipped and contributes nothing whatsoever to the attach run.
-   *
-   * What it is FOR: the near-match bar is strict by instruction and stays
-   * strict, but strictness with no exit means a photo the matcher itself
-   * scores at 97% can be unattachable merely because its filename omits a
-   * grade. The hatch is the exit. It never lowers the bar -- see the long note
-   * at the top of row-decisions.ts.
-    */
+  /*
+   * Tier 3 "Attach anyway". Strictly opt-in: nothing expands or asks until the
+   * user opens a row, so tier 3 stays a read-only report. It lets the user
+   * attach a photo the matcher couldn't place, without lowering the near-match
+   * bar (see row-decisions.ts).
+   */
 
   /**
-   * Is the "Attach anyway" hatch offered on this row at all?
-   *
-   * False for exactly one group: the photographs ruled out of the automated
-   * import entirely -- counterfeits and multi-coin shots. Those are never
-   * attached automatically and never OFFERED as attachable here. The row
-   * itself stays in the list with its reason -- it is the offer that is
-   * withdrawn, never the file -- and such a photo can still be attached by
-   * hand later from the per-coin image gallery, which has no idea this method
-   * exists.
+   * Whether "Attach anyway" is offered on this row. False for photos excluded
+   * from automated import (multi-coin shots); those stay listed
+   * and can still be attached manually from the coin's gallery.
    */
   canRescue(fileName: string): boolean {
     const row = this.imageReviews().find(r => r.fileName === fileName);
@@ -727,8 +514,7 @@ export class BatchImportSession {
 
   /** Open the "Attach anyway" panel on one tier-3 row. */
   openRescue(fileName: string): void {
-    // Belt and braces with the template, which does not render the link for
-    // these rows in the first place.
+    // The template also hides the link for these rows.
     if (!this.canRescue(fileName)) return;
     const open = new Set(this.rescueOpen());
     open.add(fileName);
@@ -748,28 +534,35 @@ export class BatchImportSession {
     return this.rescueOpen().has(fileName);
   }
 
-  /**
-   * SOURCE 1: one of the ranked candidates the matcher already produced.
-   *
-   * This is the 97% Morgan case -- the right coin is at the top of a list
-   * tier 3 simply never showed anybody.
-   */
+  /** Rescue using one of the matcher's ranked candidates. */
   rescueWithCandidate(fileName: string, coinId: string): void {
-    this.imageReviews.update(rows => decisions.rescueWithCandidate(rows, fileName, coinId));
+    // Checked once for the whole set so a multi-coin row can't be rescued via a sibling.
+    if (!this.canRescue(fileName)) return;
+    const row = this.imageReviews().find(r => r.fileName === fileName);
+    if (!row?.result.candidates.some(c => c.coinId === coinId)) return;
+    const label = this.coins.nameById(coinId);
+    this.imageReviews.update(rows => decisions.rescueSet(rows, this.setMembers(fileName), coinId, label));
     this.closeRescue(fileName);
   }
 
-  /**
-   * SOURCE 2: free-text search, for the rows with no candidates at all.
-   *
-   * The search is `CoinLookup` -- the same per-row search box (`setTerm` /
-   * `results`) the rest of the import uses. One search implementation means
-   * one set of rules about what matches, and one place to fix them.
-   */
+  /** Rescue using free-text search (`CoinLookup`), for rows with no candidates. */
   rescueWithSearch(fileName: string, coinId: string): void {
+    if (!this.canRescue(fileName)) return;
     const label = this.coins.nameById(coinId);
-    this.imageReviews.update(rows => decisions.rescueWithCoin(rows, fileName, coinId, label));
+    this.imageReviews.update(rows => decisions.rescueSet(rows, this.setMembers(fileName), coinId, label));
     this.closeRescue(fileName);
+  }
+
+  /** Undo for a whole tier-3 set: every member goes back to skipped. */
+  resetPhotoSet(fileName: string): void {
+    const members = this.setMembers(fileName);
+    this.imageReviews.update(rows => members.reduce((next, f) => decisions.resetRow(next, f), rows));
+  }
+
+  /** Every tier-3 file in the same photo set as `fileName` (itself included). */
+  private setMembers(fileName: string): string[] {
+    const set = this.notImportedSets().find(s => s.rows.some(r => r.fileName === fileName));
+    return set ? set.rows.map(r => r.fileName) : [fileName];
   }
 
   skipImage(fileName: string): void {
@@ -777,12 +570,8 @@ export class BatchImportSession {
   }
 
   /**
-   * TIER 1's Skip: "I am done with this coin, take it off my screen."
-   *
-   * Marks every one of the coin's photos skipped, which drops the whole group
-   * out of `coinGroups()` (grouping ignores skipped rows). Deliberately not
-   * the same as the "None" bulk button, which only unticks and leaves the
-   * group sitting there reading "0 of 8 selected".
+   * Tier 1's Skip: marks all the coin's photos skipped, which removes the group
+   * from `coinGroups()`. Unlike the "None" bulk button, which only unticks.
    */
   skipCoinGroup(coinId: string): void {
     const fileNames = this.imageReviews()
@@ -800,67 +589,25 @@ export class BatchImportSession {
     return this.thumbnails.urls()[fileName] ?? '';
   }
 
-   /*
-   * 4. Confirm - the only place files are read and the database is written
-    */
+  /* --- 4. Confirm: the only place files are read and the database is written --- */
 
   async applyConfirmedMatches(): Promise<void> {
-     /*
-     * BOTH LINES BELOW RUN SYNCHRONOUSLY, ON THE SAME TICK AS THE CLICK.
-     *
-     * That is the whole point of them. `busy()` is derived from `progress`,
-     * and reading plus downscaling the first file off the share takes seconds
-     * for a 46 MB JPEG over SMB. If nothing set `progress` until then, the
-     * Save button would still be enabled and the screen still silent for the
-     * whole of that window, and a second click would run the entire import
-     * twice and write every photo twice.
-     *
-     * The guard is the belt to that braces: a second run cannot start while
-     * one is in flight, even if some future caller reaches this method without
-     * going through a disabled button.
-      */
+    /* Set progress synchronously on the click's tick so `busy()` disables Save
+     * at once; otherwise a second click during the first slow file read would
+     * import everything twice. Keep this above any `await`. */
     if (this.busy()) return;
     this.progress.set(startingAttachProgress(this.attachCount()));
 
-     /*
-     * THE BASE-FOLDER GUARD -- refuse an import that would record dead paths.
-     *
-     * Without it an import can record every row pointing somewhere that does
-     * not exist, because the base-folder box holds one thing while the picker
-     * supplies only the relative half. The screen's live path preview is
-     * advisory and changes nothing. base-folder-check.ts has the full story.
-     *
-     * NOTE THE ORDER. `progress` is set above, synchronously, on the click's
-     * own tick -- that is the double-import fix and it must not be moved below
-     * an `await`. Running the check after it means `busy()` is already true
-     * while we wait, so a second click still cannot start a second run; when
-     * the check refuses, `progress` is cleared again here.
-     *
-     * With no ApiService there is nothing to ask, so the import proceeds
-     * exactly as it always did.
-      */
+    /* The base-folder guard refuses an import that would record paths that
+     * don't exist (see base-folder-check.ts). Skipped without an ApiService. */
     this.blockedReason.set(null);
 
-     /*
-     * THE STORAGE MODE, RE-READ. Settings is a different dialog and can have
-     * been changed since this screen opened; the mode decides whether the
-     * next few minutes read 4 GB off a share or no bytes at all, so it is
-     * read now rather than trusted from construction time.
-      */
+    // Re-read the storage mode: Settings may have changed since construction.
     const storageSettings = await loadImageStorageSettings(this.storage);
     this.storageSettings.set(storageSettings);
 
-     /*
-     * THE REFERENCED-MODE GUARD — a reference with nothing to point at is a
-     * photo thrown away.
-     *
-     * In 'referenced' storage the database gets the path and NOT the
-     * picture, and the path can only be built from the confirmed base folder
-     * (a browser never reveals where a picked file really lives — see
-     * source-path.ts). With no folder there is nothing to write on either
-     * side, so the whole run is refused here, before any coin is touched,
-     * rather than producing a summary full of per-file failures.
-      */
+    // Referenced mode stores only a path, which needs a base folder. Refuse the
+    // whole run up front rather than failing every file.
     if (storageSettings.mode === 'referenced' && !this.folder.value().trim()) {
       this.progress.set(null);
       this.blockedReason.set(NO_BASE_FOLDER_MESSAGE);
@@ -882,32 +629,10 @@ export class BatchImportSession {
       }
     }
 
-     /*
-     * THE DESTRUCTIVE ANSWER — confirm before deleting anything.
-     *
-     * "Replace what they have" deletes photos the user may have no other
-     * copy of: ImageData is a downscaled copy, and the original it came from
-     * can have been moved or deleted off the share years ago, which is
-     * exactly why SourcePath links go grey. A radio button at the top of a
-     * long review screen and a Save button at the bottom of it are far
-     * enough apart that an accidental click would otherwise be both silent
-     * and irreversible.
-     *
-     * WHY HERE AND NOT EARLIER. Asking before the base-folder guard would
-     * mean asking "delete 94 photos?" for an import that is about to be
-     * refused anyway — training the user to click through the one dialog in
-     * this flow that must not be clicked through. `busy()` is already true
-     * (set synchronously, above), so the await before this changes nothing
-     * about the double-click protection.
-     *
-     * WHY ONLY WHEN SOMETHING WOULD ACTUALLY GO. 'replace' with no existing
-     * photos deletes nothing, and a confirmation that fires when it need not
-     * is how people learn to dismiss the ones that matter.
-     *
-     * A declined confirmation writes NOTHING — not even to the coins with no
-     * photos, which would have been safe. A half-done import nobody asked
-     * for is its own surprise.
-      */
+    /* Confirm before 'replace' deletes existing photos (the originals may no
+     * longer exist). Asked only after the base-folder checks, so the user is
+     * never asked about an import that will be refused, and only when some
+     * photos would actually be deleted. Declining writes nothing at all. */
     const mode = this.existingPhotoMode();
     const counts = this.existingPhotoCounts();
     if (mode === 'replace' && counts.coinsWithPhotos > 0) {
@@ -920,57 +645,29 @@ export class BatchImportSession {
     const result = await this.batch.attachSelected(this.imageReviews(), {
       files: this.thumbnails.files,
       inventory: this.inv.inventory(),
-      // The front half of every absolute path. The runner pairs it with each
-      // file's webkitRelativePath — see source-path.ts.
+      // Front half of every absolute path; see source-path.ts.
       baseFolder: this.folder.value(),
-      // What happens to coins that already have photos, and which of their
-      // original files are already recorded — the two halves of the "wanted
-      // to try importing all the images again" fix. See attach-runner.ts.
+      // Existing-photo handling and already-recorded originals; see attach-runner.ts.
       existingPhotoMode: mode,
       existingSourcePaths: await this.fetchExistingSourcePaths(mode),
-       /*
-       * How the runner finds out what a coin ALREADY has, under 'add'.
-       *
-       * Do NOT read `coin.imagePaths` straight off the inventory:
-       * `GET /api/coins` no longer inlines every photograph (see
-       * server/routes/coins/list-query.ts), so on a normal import that array
-       * is absent for every coin the user has not opened.
-       *
-       * 'add' sends the COMPLETE array and the server replaces the whole set,
-       * so getting the existing half wrong does not mean "appended to the
-       * wrong place" -- it means DELETED. `loadCoinImages` fetches the real
-       * set for one coin (and caches it, and skips the request entirely when
-       * `imageCount` is 0); if it rejects, the runner skips that coin rather
-       * than writing a short array.
-        */
+      /* What a coin already has, under 'add'. Don't read `coin.imagePaths`
+       * from the inventory: the list endpoint no longer inlines photos. 'add'
+       * sends the complete array and the server replaces the set, so a short
+       * array would delete photos. If loading fails the runner skips the coin. */
       loadExistingImages: (coinId) => this.inv.loadCoinImages(coinId),
       attach: (coinId, imagePaths, newImages) => {
-        // Record where each new original lives BEFORE the write, because
-        // CoinEditor reads this registry on its way out and turns the plain
-        // `imagePaths` strings into the `{ imageData, sourcePath }` form the
-        // backend accepts. `imagePaths` itself stays strings, since that array
-        // is what every <img [src]> in the app binds to.
+        // Record each new original's source path before the write; CoinEditor
+        // reads this registry to build the `{ imageData, sourcePath }` payload.
         imageSourcePaths.recordAll(newImages);
         this.inv.updateCoin(coinId, { imagePaths });
       },
       onProgress: progress => this.progress.set(progress),
-       /*
-       * WHAT ONE PHOTO TURNS INTO — the only thing the two storage modes
-       * change about this import.
-       *
-       *   referenced : no file is read. The photo becomes a reference to
-       *                where it already lives, and the database is handed
-       *                the path with no picture (referenced-encoder.ts).
-       *   stored     : the file is read, decoded and downscaled to fit the
-       *                size budget, exactly as it always has been.
-       *
-       * `this.encoder` is the specs' stub and wins over both: there is no
-       * <canvas> in the unit-test environment.
-       *
-       * The URL builder is the API's own, so the reference is absolute. A
-       * relative one would 404 under `ng serve`, where the page is on :4200
-       * and the API on :3000.
-        */
+      /* What one photo turns into:
+       *   referenced : no file is read; the database gets the path only.
+       *   stored     : the file is read and downscaled to the size budget.
+       * `this.encoder` (the specs' stub) wins over both. The URL builder is
+       * the API's so the reference is absolute (the dev server and API are on
+       * different ports). */
       encode:
         this.encoder ??
         (storageSettings.mode === 'referenced'
@@ -986,33 +683,14 @@ export class BatchImportSession {
   }
 
   /**
-   * Which ORIGINAL files are already attached to the coins this import would
-   * append to.
+   * Which original files are already attached to the coins this import would
+   * append to. `imagePaths` holds only data URLs, so SourcePath must come from
+   * the server; without it "Keep both" would re-attach every file.
    *
-   * WHY THIS ROUND TRIP IS NEEDED AT ALL. `CoinRecord.imagePaths` holds the
-   * downscaled `data:` URLs and nothing else (see
-   * services/image-source-paths.ts for why it was not widened), so the only
-   * thing that identifies a SOURCE FILE -- `CoinImages.SourcePath` -- is not
-   * available in the browser. Without it "Keep both" would re-attach every
-   * file in a re-picked folder.
-   *
-   * WHEN IT IS SKIPPED, AND WHY EACH SKIP IS SAFE
-   *   'leave'   -- coins with photos are not written to at all, so there is
-   *                nothing to compare against. This is the DEFAULT, which
-   *                means the common case costs no extra request.
-   *   'replace' -- those photos are about to be deleted, so "already
-   *                attached" is about to stop being true. Skipping on it
-   *                would leave the coin with no copy of the photo at all.
-   *   no coins  -- nothing to ask about.
-   *   no api    -- the session is constructed without one in some tests; the
-   *                import has always worked without it.
-   *
-   * IT FAILS OPEN, deliberately and on every error path. Returning undefined
-   * means "nothing is known to be already attached", and the runner then
-   * imports everything. The alternative, treating a failed lookup as "skip
-   * it", would silently drop photos the user asked for on the strength of no
-   * evidence. Same rule as base-folder-check.ts: a safety net, never a
-   * dependency.
+   * Skipped (returns undefined) unless mode is 'add', there are coins with
+   * photos, and an ApiService exists. Fails open on error: undefined means
+   * "nothing known to be attached", so everything is imported rather than
+   * silently dropped.
    */
   private async fetchExistingSourcePaths(
     mode: ExistingPhotoMode
@@ -1026,16 +704,13 @@ export class BatchImportSession {
     const merged: Record<string, string[]> = {};
 
     try {
-      // Batched, because the full share matches well over the 500 coins the
-      // endpoint will answer about in one statement, and a 400 here would
-      // fail open into "import everything again" on the largest imports —
-      // precisely the ones this feature is for. See chunkCoinIds().
+      // Batched: the endpoint answers at most 500 coins per request.
       for (const chunk of chunkCoinIds(coinIds)) {
         const response = await firstValueFrom(api.getCoinImageSourcePaths(chunk));
         Object.assign(merged, response.results ?? {});
       }
     } catch {
-      // Intentionally swallowed. See "it fails open" above.
+      // Fail open: see above.
       return undefined;
     }
 
@@ -1053,13 +728,8 @@ export class BatchImportSession {
     this.filterResult.set(null);
     this.progress.set(null);
     this.summary.set(null);
-    // Back to the safe answer. Carrying "Replace what they have" silently
-    // into the next folder the user picks is the one way this feature could
-    // delete something nobody chose to delete.
+    // Back to the safe default so "Replace" never carries into the next folder.
     this.existingPhotoMode.set(DEFAULT_EXISTING_PHOTO_MODE);
-    // Otherwise a refusal from the previous selection would still be on screen
-    // after the user picks a different folder to start over with — which is
-    // exactly what they would do in response to reading it.
     this.blockedReason.set(null);
   }
 }

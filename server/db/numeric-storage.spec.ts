@@ -1,29 +1,14 @@
 /**
- * db/numeric-storage.spec.ts — THE DECISION THE WHOLE MIGRATION TURNS ON.
+ * How DECIMAL values are stored. SQLite has no decimal type, so the money and
+ * weight columns are REAL, with SQL Server's precision and scale reapplied by
+ * db/bind-values.ts (see the db/schema.sql header).
  *
- * SQLite has no decimal type. Six columns on Coins, plus the four SpotPrices
- * columns and Denominations.FaceValue, were DECIMAL under
- * SQL Server. They are REAL — IEEE-754 binary64 — here, and the precision and
- * scale SQL Server used to enforce are reapplied at the parameter boundary by
- * db/bind-values.ts. The full argument is in the header of db/schema.sql.
+ * A wrong weight looks as plausible as a right one, so these tests compare
+ * values out against values in:
  *
- * *** WHY THIS FILE EXISTS RATHER THAN A COMMENT. *** Design §4.1 says it
- * plainly: a wrong weight is indistinguishable from a right one. Both 0.7734
- * and 24.05582 are entirely plausible for a Morgan dollar, so nothing
- * downstream — not the UI, not the melt-value calculation, not the owner
- * looking at the screen — can detect that a number went through a lossy step.
- * There is no symptom. The only defence is a test that compares the number
- * out against the number in, which is also exactly what Stage 2's one-time
- * import has to do.
- *
- * The three properties below are the ones the storage choice was made for,
- * in the order they matter:
- *
- *   1. a value written is the identical double when read back (REAL);
- *   2. a value is rounded to the column's scale on the way in, as SQL Server
- *      did, so the same request stores the same number on both engines;
- *   3. a value too large for the column is REFUSED, as SQL Server refused it,
- *      rather than silently stored.
+ *   1. a value written reads back as the identical double;
+ *   2. values are rounded to the column's scale, as SQL Server did;
+ *   3. a value too large for the column is refused.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -36,7 +21,7 @@ import { roundToScale, decimalLimit, toBindValue, DbValueError } from './bind-va
 import { Decimal } from './column-types';
 import { COIN_FIELDS } from './index';
 
-/** The six columns design §4.1 names, and what they are declared as. */
+/** The money and weight columns on Coins, and their declared types. */
 const MONEY_AND_WEIGHT: ReadonlyArray<[string, string]> = [
   ['Weight', 'DECIMAL(12,5)'],
   ['PmWeightGrams', 'DECIMAL(12,5)'],
@@ -56,9 +41,7 @@ describe('the six columns §4.1 names are stored as REAL with their scale record
   });
 
   it('every one of them has a binding whose scale matches the schema', () => {
-    // If these drift, the rounding applied on the way in stops matching the
-    // rounding SQL Server applied, and Stage 2's before/after comparison
-    // starts reporting differences that are the migration's own fault.
+    // Drift here would make rounding differ from SQL Server's.
     for (const [column, declared] of MONEY_AND_WEIGHT) {
       const binding = Object.values(COIN_FIELDS).find((field) => field.column === column);
       expect(binding?.sqlType.declared, column).toBe(declared);
@@ -68,13 +51,9 @@ describe('the six columns §4.1 names are stored as REAL with their scale record
 
 describe('a value written is the identical double when read back', () => {
   /**
-   * These are not arbitrary. 26.73 g is a Morgan dollar; 24.05582 is its
-   * silver content and is the number migration 008 produced by multiplying
-   * 0.7734 troy ounces by 31.1034768 — i.e. a value with every one of the
-   * five decimals in use. 0.1 + 0.2 is the canonical float-inexactness
-   * example and is here to show what IS and IS NOT being claimed: the stored
-   * double is bit-identical to the one handed over, not to the decimal
-   * literal a human would write.
+   * 26.73 g is a Morgan dollar; 24.05582 is its silver content (0.7734 ozt x
+   * 31.1034768), using all five decimals. 0.1 + 0.2 shows the claim is
+   * bit-identical doubles, not decimal literals.
    */
   const weights = [26.73, 24.05582, 0.7734, 31.1034768 * 0.7734, 0.1 + 0.2, 99999.99999, 0];
 
@@ -89,12 +68,8 @@ describe('a value written is the identical double when read back', () => {
   });
 
   it('stores REAL, not the NUMERIC affinity that would silently become an INTEGER', async () => {
-    // A column declared `DECIMAL(12,5)` in SQLite gets NUMERIC affinity,
-    // under which 26.0 is stored as the INTEGER 26. That is harmless in
-    // JavaScript and misleading everywhere else — a column whose storage
-    // class depends on the value is a column nobody can reason about, and
-    // Stage 2's verification would be comparing types as well as values.
-    // Declaring REAL forces an 8-byte float every time.
+    // Declared as REAL (not DECIMAL, which gets NUMERIC affinity and would
+    // store 26.0 as INTEGER 26), so the storage class doesn't depend on the value.
     await insertCoin({ CoinId: 'whole', Denomination: '$1', Weight: 26 });
 
     const [row] = await queryRows(
@@ -104,7 +79,7 @@ describe('a value written is the identical double when read back', () => {
   });
 
   it('round-trips a price through the HTTP layer, which is where it actually travels', async () => {
-    // The claim that matters is end to end: JSON in, JSON out, unchanged.
+    // End to end: JSON in, JSON out, unchanged.
     await request(app)
       .post('/api/coins')
       .send({ id: 'priced', denomination: '$1', purchasePrice: 1234.56, weight: 24.05582 });
@@ -117,8 +92,7 @@ describe('a value written is the identical double when read back', () => {
 
 describe('a value is rounded to the column scale on the way in, as SQL Server did', () => {
   it('rounds a 7-decimal weight to the 5 decimals DECIMAL(12,5) held', async () => {
-    // Without this, the identical POST stores 1.234567 here and 1.23457 on
-    // SQL Server — and nothing anywhere reports the difference.
+    // SQL Server would have stored 1.23457; so must this.
     const res = await request(app)
       .post('/api/coins')
       .send({ id: 'rounded', denomination: '$1', weight: 1.2345678 });
@@ -141,18 +115,14 @@ describe('a value is rounded to the column scale on the way in, as SQL Server di
   });
 
   it('rounds half AWAY FROM ZERO, not half towards positive infinity', () => {
-    // Math.round(-0.5) is -0; SQL Server's conversion gives -1. Nothing in
-    // this schema is routinely negative, but a rule that is right only for
-    // the values we happen to see is not a rule.
+    // Half away from zero, as SQL Server does (Math.round(-0.5) is -0).
     expect(roundToScale(-0.005, 2)).toBe(-0.01);
     expect(roundToScale(0.005, 2)).toBe(0.01);
   });
 
   it('re-rounding an already-rounded value changes nothing', () => {
-    // The property Stage 2 depends on. The owner's SQL Server values are
-    // already at their column's scale, so the import must be able to push
-    // each one through this boundary and get the same double out — otherwise
-    // the value-by-value verification fails on the migration's own rounding.
+    // Values already at their column's scale must pass through unchanged,
+    // or the SQL Server import's verification would fail on its own rounding.
     for (const value of [26.73, 24.05582, 0.7734, 1234.56, 90.0, 0.00001]) {
       const once = roundToScale(value, 5);
       expect(roundToScale(once, 5)).toBe(once);
@@ -160,10 +130,7 @@ describe('a value is rounded to the column scale on the way in, as SQL Server di
   });
 
   it('leaves a value alone rather than mangling it when scaling would exceed 2^53', () => {
-    // DECIMAL(18,6) — Denominations.FaceValue — can in principle hold a
-    // number whose scaled form is larger than a double can represent as an
-    // integer. No coin has such a face value, but rounding it would produce
-    // noise rather than a rounded number, so the multiply is guarded.
+    // DECIMAL(18,6) values can exceed 2^53 when scaled; such values are left unrounded.
     const huge = 1e12;
     expect(roundToScale(huge, 6)).toBe(huge);
   });
@@ -177,10 +144,7 @@ describe('a value too large for its column is refused, not silently stored', () 
   });
 
   it('rejects a weight past DECIMAL(12,5) with a 400, leaving the row untouched', async () => {
-    // SQL Server raised an arithmetic overflow. SQLite would store it. The
-    // value is refused here, and routes/db-error-response.ts answers 400 so
-    // the user is told rather than shown a 500 or, worse, a saved coin whose
-    // weight is nonsense.
+    // SQL Server raised an overflow; here it is refused with a 400.
     await insertCoin({ CoinId: 'overflow', Denomination: '$1', Weight: 26.73 });
 
     const res = await request(app).put('/api/coins/overflow').send({ weight: 1e9 });
@@ -201,8 +165,7 @@ describe('a value too large for its column is refused, not silently stored', () 
   });
 
   it('accepts the largest value the column can hold', () => {
-    // The boundary from the other side, so "reject" is not implemented as
-    // "reject everything big".
+    // The boundary from the other side.
     expect(toBindValue('weight', Decimal(12, 5), 9999999.99999)).toBe(9999999.99999);
     expect(() => toBindValue('weight', Decimal(12, 5), 10000000)).toThrow(DbValueError);
   });
@@ -210,16 +173,12 @@ describe('a value too large for its column is refused, not silently stored', () 
   it('refuses a value that is not a number at all', () => {
     // A CSV round trip can put the string "" or "n/a" in a numeric field.
     expect(() => toBindValue('weight', Decimal(12, 5), 'n/a')).toThrow(DbValueError);
-    // ...but a numeric string is accepted and converted, because that is what
-    // Export -> CSV -> Import produces for a perfectly good weight.
+    // ...but a numeric string (from a CSV round trip) is converted.
     expect(toBindValue('weight', Decimal(12, 5), '26.73')).toBe(26.73);
   });
 
   it('never stores text in a REAL column, which SQLite would happily do', async () => {
-    // The failure mode unique to a dynamically-typed engine: a string that
-    // slipped past the binding layer would sit in Weight as TEXT, compare
-    // wrongly in every ORDER BY and SUM, and look completely normal in the
-    // UI. db/bind-values.ts is what prevents it.
+    // A string stored in Weight would sort and sum wrongly while looking normal.
     await request(app).post('/api/coins').send({
       id: 'typed',
       denomination: '$1',
@@ -235,9 +194,7 @@ describe('a value too large for its column is refused, not silently stored', () 
   });
 
   it('keeps SpotPrices.Copper at four decimals, not two', async () => {
-    // Copper trades in cents, so it is the one price column with
-    // DECIMAL(10,4). Rounding it like the others would lose the digits that
-    // carry the whole value.
+    // Copper is DECIMAL(10,4); rounding it to 2 places would lose its value.
     const res = await request(app)
       .post('/api/spot-prices')
       .send({ gold: 2650.55, silver: 31.25, platinum: 980.1, copper: 4.1234, source: 'manual' });
@@ -250,11 +207,6 @@ describe('a value too large for its column is refused, not silently stored', () 
 });
 
 describe('Denominations.FaceValue', () => {
-  // The case that used to live here posted 1234.567 to /api/transactions and
-  // checked Transactions.Amount came back 1234.57. The table is gone and the
-  // route with it; the SAME property is now carried by the coin's own money
-  // columns, in the DECIMAL(12,2) case above and in SoldPrice here, which
-  // became user-editable when the deal record moved onto the coin.
   it('rounds a sale price to the two decimals DECIMAL(12,2) holds', async () => {
     const res = await request(app)
       .post('/api/coins')
@@ -266,9 +218,7 @@ describe('Denominations.FaceValue', () => {
   });
 
   it('keeps the seeded sub-cent face values intact', async () => {
-    // The US half cent is seeded with faceValue 0.005, which a 2-decimal
-    // column would have rounded to 0.01 or 0.00. FaceValue is DECIMAL(18,6)
-    // precisely so it does not.
+    // The US half cent's 0.005 needs FaceValue's DECIMAL(18,6).
     const [row] = await queryRows(
       "SELECT FaceValue AS f FROM Denominations WHERE Label = '½¢' AND Country = 'US'"
     );

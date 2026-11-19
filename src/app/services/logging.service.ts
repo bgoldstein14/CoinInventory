@@ -1,59 +1,37 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { LogEntry } from '../types/coin.model';
-// Imported from './http-utils', NOT from './api.service'. Importing these
-// helpers from api.service would pull the ApiService class -- and through it
-// Angular's HttpClient/XHR backend -- into this module's graph, which breaks
-// unit tests that do not bootstrap the JIT compiler.
+// From http-utils, not api.service, to keep HttpClient out of this module's
+// import graph (breaks unit tests without the JIT compiler).
 import { describeHttpError, resolveApiBaseUrl } from './http-utils';
 
 /**
- * Centralised logging.
- *
- * Every log line goes to the browser console immediately, and is also sent
- * to the backend so it lands in server/logs/app.log alongside the server's
- * own entries. Having both halves of the story in one file is what makes
- * it possible to debug "the save failed" reports after the fact.
+ * Centralised logging: every entry goes to the browser console and is also
+ * posted to the backend, which writes it to server/logs/app.log.
  */
 @Injectable({ providedIn: 'root' })
 export class LoggingService {
-  // Constructor injection (deliberately NOT inject()) so that tests can
-  // create the service directly with `new LoggingService(mockHttpClient)`
-  // without standing up an Angular injection context -- doing so would
-  // resolve the real HttpClient and drag in the XHR backend.
+  // Constructor injection so tests can use `new LoggingService(mockHttp)`
+  // without an injection context.
   constructor(private http: HttpClient) {}
 
   /**
-   * ABSOLUTE base URL for the API, never a relative '/api/log'. In
-   * development the app is served by `ng serve` on port 4200, so a relative
-   * URL posts to the Angular dev server — which has no /api/log route — and
-   * frontend logs are silently dropped in exactly the setup most debugging
-   * happens in. `resolveApiBaseUrl()` is shared with ApiService so both
-   * agree on where the backend lives.
+   * Absolute API base URL: under `ng serve` a relative '/api/log' would hit the
+   * dev server on port 4200, which has no such route.
    */
   private readonly baseUrl = resolveApiBaseUrl();
 
   /**
-   * When the backend log endpoint fails we stop hammering it -- but only
-   * TEMPORARILY. This holds the timestamp (ms) before which we will not
-   * retry.
-   *
-   * Do not replace it with a latched `backendAvailable = false`: one
-   * transient hiccup would then disable backend logging for the rest of the
-   * session, and the moment something goes wrong is the moment the logs
-   * matter most.
+   * Timestamp (ms) before which backend posts are skipped after a failure.
+   * A temporary backoff rather than a permanent off switch, so one transient
+   * failure doesn't disable backend logging for the session.
    */
   private suppressBackendUntil = 0;
 
   /** How long to back off after a failed log POST. */
   private static readonly BACKOFF_MS = 30_000;
 
-  /**
-   * Guards against infinite recursion. If sending a log entry fails and the
-   * failure handler itself logs, we could loop forever. The handler below
-   * only writes to the console, but this flag makes the guarantee explicit
-   * and survives future edits.
-   */
+  /** Recursion guard: a failing send must never trigger another send. */
   private sending = false;
 
   info(message: string, details?: string): void {
@@ -69,8 +47,7 @@ export class LoggingService {
   }
 
   private log(level: 'INFO' | 'WARN' | 'ERROR', message: string, details?: string): void {
-    // Console first, unconditionally. This must never be skipped -- it is
-    // the fallback when the backend is unreachable.
+    // Console always, as the fallback when the backend is unreachable.
     const consoleMsg = details ? `[${level}] ${message} | ${details}` : `[${level}] ${message}`;
 
     if (level === 'ERROR') {
@@ -81,8 +58,6 @@ export class LoggingService {
       console.log(consoleMsg);
     }
 
-    // Skip the network call while we are backing off, or if we are already
-    // inside a send (recursion guard).
     if (this.sending || Date.now() < this.suppressBackendUntil) {
       return;
     }
@@ -97,15 +72,13 @@ export class LoggingService {
 
     this.sending = true;
     try {
-      // HTTP observables are cold -- without subscribe() nothing is sent.
+      // HTTP observables are cold; subscribe() triggers the request.
       this.http.post(`${this.baseUrl}/api/log`, logEntry).subscribe({
         next: () => {
-          // A success clears any outstanding backoff immediately.
           this.suppressBackendUntil = 0;
         },
         error: (err) => {
-          // Back off for a while, then allow retries again. Deliberately
-          // console-only: routing this through this.error() would recurse.
+          // Console-only here: calling this.error() would recurse.
           this.suppressBackendUntil = Date.now() + LoggingService.BACKOFF_MS;
           console.warn(
             `[LoggingService] Backend logging unavailable (${describeHttpError(err)}); ` +

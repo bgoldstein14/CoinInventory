@@ -1,22 +1,9 @@
  /*
  * base-folder-guard-wiring.spec.ts
  *
- * base-folder-check.spec.ts proves the DECISION is right. This file proves the
- * decision is actually WIRED to the import — that `applyConfirmedMatches`
- * consults it, and that a refusal really does stop the database write.
- *
- * The two are worth separating because the original bug was not a wrong
- * decision. The screen already computed and displayed the exact wrong path it
- * was about to store; the preview was simply advisory, and the import went
- * ahead anyway. A check nothing acts on is the bug, not the fix, so the
- * assertion that matters here is `updateCoin` NOT being called.
- *
- * The ordering assertion matters just as much. `progress` must still be set
- * synchronously on the click's own tick — that is the fix for the separate
- * double-import bug, where a dead-looking screen got clicked twice and wrote
- * every photo twice — so the guard had to be inserted AFTER that write rather
- * than before it. A test pins that, because the obvious refactor (check first,
- * then start) silently reopens the older bug.
+ * The base-folder check is wired into `applyConfirmedMatches`: a refusal
+ * stops the database write. The session must still go busy synchronously on
+ * the click (before the check answers), or a double click can import twice.
   */
 
 import 'fake-indexeddb/auto';
@@ -105,11 +92,6 @@ async function selectOneFile(session: BatchImportSession) {
 }
 
 describe('applyConfirmedMatches — the base-folder guard', () => {
-  /**
-   * THE HEADLINE REGRESSION, end to end: a base
-   * folder pointing at the app's own directory, a real selection, and an
-   * import that must not happen.
-   */
   it('writes nothing when every path it would record is unreadable', async () => {
     const { session, inv } = createSession(false);
     const updateCoin = vi.spyOn(inv, 'updateCoin');
@@ -135,11 +117,7 @@ describe('applyConfirmedMatches — the base-folder guard', () => {
     expect(session.busy()).toBe(false);
   });
 
-  /**
-   * The ordering guarantee. `busy()` has to go true on the click's own tick
-   * and STAY true across the existence check — otherwise the window the
-   * double-import fix closed is open again, just narrower and harder to find.
-   */
+  // busy() must be true on the click's own tick and stay true across the check.
   it('is busy synchronously, before the check has answered', async () => {
     const { session, inv } = createSession(false);
     seedMorgan(inv);
@@ -167,11 +145,6 @@ describe('applyConfirmedMatches — the base-folder guard', () => {
     expect(session.blockedReason()).toBeNull();
   });
 
-  /**
-   * Fails open. If the check cannot run, the import must still be possible —
-   * otherwise a flaky endpoint becomes a worse bug than the one being
-   * prevented, because the user has no way to proceed at all.
-   */
   it('imports anyway when the existence check itself fails', async () => {
     const { session, inv } = createSession('throw');
     const updateCoin = vi.spyOn(inv, 'updateCoin');
@@ -185,11 +158,7 @@ describe('applyConfirmedMatches — the base-folder guard', () => {
     expect(session.blockedReason()).toBeNull();
   });
 
-  /**
-   * No ApiService at all is a supported configuration (the component injects
-   * it optionally, and some tests build the session from a bare Injector).
-   * The guard must degrade to the previous behaviour rather than block.
-   */
+  // ApiService is optional; without it the guard is skipped.
   it('imports when there is no ApiService to ask', async () => {
     const { session, inv } = createSession(false, /* withApi */ false);
     const updateCoin = vi.spyOn(inv, 'updateCoin');
@@ -202,11 +171,6 @@ describe('applyConfirmedMatches — the base-folder guard', () => {
     expect(updateCoin).toHaveBeenCalled();
   });
 
-  /**
-   * Importing WITHOUT recording paths is a long-standing legitimate choice —
-   * the screen warns about it and `sourcePathForFile` returns null. The guard
-   * must not turn that into an error.
-   */
   it('does not block, or even ask, when no base folder is set', async () => {
     const { session, inv, checkImagesExist } = createSession(false);
     const updateCoin = vi.spyOn(inv, 'updateCoin');

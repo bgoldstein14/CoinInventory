@@ -1,36 +1,13 @@
  /*
  * image-file-filter.ts
  *
- * STEP 1 of the batch image import: throw away everything a browser cannot
- * draw, BEFORE we do any matching, reading or decoding.
+ * Step 1 of the batch image import: drop everything a browser can't draw
+ * (RAW .dng/.CR2, .psd, .tif, Thumbs.db, ...) before any matching or
+ * decoding, so they never reach the review screen and fail late.
  *
- * Why this has to be first
- *
- * Pointing the picker at the photo share hands us ~2,140 files across 8
- * subfolders. A big chunk of them are not web images at all:
- *
- *   .dng   343 files   RAW from the camera. An <img> tag renders nothing.
- *   .CR2    40 files   Canon RAW. Same story.
- *   .psd    11 files   Photoshop layered document.
- *   .tif     2 files   Not supported by Chrome/Edge.
- *   plus Thumbs.db, desktop.ini and stray .info text files.
- *
- * If those reached the review screen the user would tick them, we would try to
- * decode them, and they would silently fail at the very end of a long run.
- * Filtering here means the review screen only ever shows files we can actually
- * display and save.
- *
- * Why we do NOT trust File.type
- *
- * The old code used `file.type.startsWith('image/')`. On Windows that is
- * whatever the registry says: .dng often reports "image/x-adobe-dng" (passes
- * the test, still undecodable) and .webp sometimes reports "" (fails the test,
- * perfectly displayable). The extension is the only thing we can reason about
- * consistently, so we use an explicit allow-list of extensions and treat
- * File.type as a hint only.
- *
- * Nothing is dropped silently: every rejection is returned with a reason, and
- * the reasons are tallied for the summary line.
+ * Uses an extension allow-list rather than File.type, which on Windows comes
+ * from the registry (.dng may report "image/x-adobe-dng", .webp may report "").
+ * Every rejection carries a reason, tallied for the summary line.
   */
 
 import {
@@ -41,9 +18,8 @@ import {
 } from '../../types/coin.model';
 
 /**
- * The only extensions a browser will reliably render in an <img> AND re-encode
- * through a <canvas>. Deliberately conservative - if it is not on this list we
- * do not offer it.
+ * Extensions a browser reliably renders in an <img> and re-encodes through a
+ * <canvas>.
  */
 export const DISPLAYABLE_IMAGE_EXTENSIONS = [
   'jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp'
@@ -66,9 +42,7 @@ const SYSTEM_FILENAMES = ['thumbs.db', 'desktop.ini', '.ds_store', 'ehthumbs.db'
  * "1881-S $1 - Obverse.JPG" -> "jpg";  "notes" -> "".
  */
 export function fileExtension(fileName: string): string {
-  // Strip any directory part first. webkitdirectory gives us `webkitRelativePath`
-  // on the File, but `name` is already bare - this just makes the helper safe
-  // to call with a full relative path too.
+  // Strip any directory part, so a relative path works too.
   const bare = fileName.split(/[\\/]/).pop() ?? fileName;
   const dot = bare.lastIndexOf('.');
   // dot <= 0 covers both "no extension" and dotfiles like ".info".
@@ -83,10 +57,7 @@ export function isDisplayableImage(fileName: string): boolean {
   return (DISPLAYABLE_IMAGE_EXTENSIONS as readonly string[]).includes(fileExtension(fileName));
 }
 
-/**
- * Decide why a single file was rejected. Returns null when it is acceptable.
- * Split out from the loop so the reason text lives in exactly one place.
- */
+/** Why a single file was rejected, or null when it is acceptable. */
 function classifyRejection(fileName: string): { category: SkipCategory; reason: string } | null {
   const name = (fileName.split(/[\\/]/).pop() ?? fileName).toLowerCase();
   const ext = fileExtension(fileName);
@@ -116,10 +87,8 @@ function classifyRejection(fileName: string): { category: SkipCategory; reason: 
 }
 
 /**
- * Split a raw picker selection into "matchable images" and "skipped, here is why".
- *
- * Cheap on purpose: it only looks at `file.name`. No file is opened, so this
- * stays instant even for the full 4.2 GB share.
+ * Split a picker selection into matchable images and skipped files with
+ * reasons. Only looks at `file.name`; no file is opened.
  */
 export function filterImageFiles(files: readonly File[]): ImageFileFilterResult {
   const accepted: File[] = [];

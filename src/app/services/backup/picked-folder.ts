@@ -1,56 +1,25 @@
 /**
- * services/backup/picked-folder.ts — HOW FAR A FOLDER PICKER ACTUALLY
- * GETS, AND THE HONEST NAME FOR THE REST OF THE DISTANCE.
+ * Turns a directory-picker result into a guessed folder path for the backup boxes.
  *
- * *** READ THIS BEFORE "FIXING" THE PICKER TO RETURN A REAL PATH. IT
- * CANNOT. *** A browser never tells a page where a file is on disk. It is
- * a deliberate, non-negotiable security rule, not an oversight and not a
- * setting: `file.path` does not exist and `input.value` reads back
- * `C:\fakepath\whatever`. All a directory picker
- * (`<input type="file" webkitdirectory>`) hands over is
- * `File.webkitRelativePath` — the path of each file RELATIVE to the
- * folder that was chosen:
+ * Browsers never expose a file's location on disk. A directory picker
+ * (`<input type="file" webkitdirectory>`) only gives each file's path relative
+ * to the chosen folder:
+ *     "Backups/coin-inventory-backup-2026-11-14-1432.db"  -> folder name "Backups"
  *
- *     "Backups/coin-inventory-backup-2026-11-14-1432.db"
- *      ^^^^^^^ the only new thing we learn: the folder's NAME
- *
- * So a picker tells us what the folder is CALLED and nothing whatever
- * about where it is. The image import reached the same wall and answered
- * it the same way (services/image-import/source-path.ts, and the long
- * comment at the top of image-import-modal.html): the user confirms the
- * missing front half once, and a live example built from a real selected
- * file makes a wrong answer obvious BEFORE anything is written.
- *
- * THIS MODULE IS THAT ANSWER FOR THE BACKUP BOXES:
- *
- *   1. Take the folder NAME out of the picker's first file.
- *   2. GUESS the rest by assuming the picked folder sits inside whatever
- *      path is already in the box — which starts as the Desktop, a real
- *      folder on the real host (GET /api/backup/suggestion).
- *   3. SAY IT IS A GUESS, in the UI, naming both halves, so the user can
- *      see which part is theirs to correct.
- *
- * And then the backup half has something the image import did not: the
- * server can LIST the folder (server/backup/list-db-files.ts). A guess
- * that is wrong comes back as "there is no folder called ..." or as an
- * empty list, before a single byte is written or replaced. That listing,
- * not this guess, is what makes the picker safe to offer at all.
- *
- * Pure functions over plain data. No DOM, no Angular, no network — the
- * suite runs under Node with no jsdom, so a `File` is only ever read for
- * the two fields named below.
+ * So: take the folder name, guess the rest by assuming it sits inside the path
+ * already in the box (initially the Desktop, from GET /api/backup/suggestion),
+ * and tell the user it is a guess. The server listing
+ * (server/backup/list-db-files.ts) then confirms or refutes the guess before
+ * anything is written. See image-import/source-path.ts for the same problem
+ * in the image import.
  */
 
-/** The Windows separator. These paths are read by a Windows host. */
+/** Windows separator; these paths are used by a Windows host. */
 const SEPARATOR = '\\';
 
 /**
- * The minimum of `File` this module touches.
- *
- * Declared rather than using the DOM `File` type so the specs can pass a
- * two-field object literal: there is no jsdom under Node and constructing
- * a real `File` with a `webkitRelativePath` is not possible anyway — the
- * property is read-only and set by the browser.
+ * The part of `File` this module reads. Declared separately so specs can pass
+ * plain objects (`webkitRelativePath` can't be set on a real File).
  */
 export interface PickedFile {
   readonly name: string;
@@ -58,22 +27,12 @@ export interface PickedFile {
 }
 
 /**
- * The NAME of the folder the user picked, or null when the picker told us
- * nothing usable.
- *
- * *** NULL IS A REAL CASE AND THE UI MUST HANDLE IT. *** A directory
- * picker reports the FILES inside the folder, so an EMPTY folder arrives
- * as an empty list and the browser never names it. That is not an error
- * and not a bug to work around — it is the platform — and the only honest
- * response is to tell the user to type the path instead.
- *
- * Null also covers a plain multi-file pick, where `webkitRelativePath` is
- * empty on every file: we got files but no folder, so there is still no
- * folder name to report.
+ * Name of the picked folder, or null. Null for an empty folder (the picker
+ * reports files, so it never names an empty folder) and for a plain multi-file
+ * pick (no relative paths). The UI must handle null.
  */
 export function folderNameFromPicker(files: readonly PickedFile[] | null | undefined): string | null {
   for (const file of files ?? []) {
-    // Always forward slashes, whatever the platform.
     const relative = (file.webkitRelativePath ?? '').replace(/\\/g, '/');
     const first = relative.split('/').filter((segment) => segment.length > 0)[0];
     if (first) return first;
@@ -85,8 +44,7 @@ export function folderNameFromPicker(files: readonly PickedFile[] | null | undef
 function tidyFolder(value: string): string {
   const normalised = (value ?? '').trim().replace(/\//g, SEPARATOR);
   const stripped = normalised.replace(/[\\/]+$/, '');
-  // A value that is nothing BUT separators is left alone rather than
-  // reduced to an empty string, so a half-typed UNC prefix survives.
+  // A value of only separators is kept, so a half-typed UNC prefix survives.
   return stripped.length > 0 ? stripped : normalised;
 }
 
@@ -97,30 +55,14 @@ function lastSegment(folder: string): string {
 }
 
 /**
- * The best guess at the full path of a folder we know only the NAME of.
+ * Best guess at the full path of a folder known only by name:
+ *  1. No name: the box's current value.
+ *  2. Empty box: the bare name (the caller must say it isn't a path).
+ *  3. Box already ends in that name (case-insensitive): the box.
+ *  4. Otherwise: the picked folder inside the box's folder (the assumption).
  *
- * The rules, and each one is a guess, not a fact:
- *
- *  1. No name  -> whatever is already in the box, untouched.
- *  2. No box   -> the bare name. It is not a path and the caller must say
- *                 so; returning '' instead would silently throw away the
- *                 one thing the picker did tell us.
- *  3. The box already ENDS in that name -> the box is already right (the
- *     user picked the folder the box was pointing at, which is the
- *     commonest case when they are just confirming). Case-insensitive,
- *     because Windows is.
- *  4. Otherwise -> assume the picked folder sits INSIDE the box's folder.
- *
- * Rule 4 is the assumption, and it is right whenever the user drills down
- * from the folder already shown and wrong whenever they jump somewhere
- * else — which is why describeFolderGuess() below says it out loud and
- * why the server listing exists to settle it.
- *
- * It is deliberately NOT joinWindowsPath() from the image import: that
- * function's seam rule only collapses a duplicate when the relative half
- * has more than one segment, so a single folder name would double up
- * (`...\Backups\Backups`). Same idea, different arithmetic; see the note
- * in source-path.ts for the original.
+ * Not joinWindowsPath() from the image import: its seam rule would double a
+ * single segment (`...\Backups\Backups`).
  */
 export function guessFolderPath(currentFolder: string, pickedName: string | null): string {
   const current = tidyFolder(currentFolder);
@@ -134,19 +76,11 @@ export function guessFolderPath(currentFolder: string, pickedName: string | null
 }
 
 /**
- * *** THE SENTENCE THAT KEEPS THE PICKER HONEST. *** What the browser
- * told us, what we made up, and which half is the user's to fix.
+ * Sentence explaining what the browser reported, what was assumed, and which
+ * part the user may need to fix. Always returns text.
  *
- * Always returns something, because every outcome of a pick needs
- * explaining — including the two that look like nothing happening.
- * Whether a pick has happened at all is the caller's business; see
- * BackupFolderBrowser.guessNote.
- *
- * @param hadAnyFiles  did the picker hand over any files? It is how the
- *                     two "we learned nothing" cases are told apart: an
- *                     EMPTY folder (no files, so the browser never named
- *                     it) and a plain multi-file pick (files, but no
- *                     folder among them).
+ * @param hadAnyFiles distinguishes an empty folder (no files) from a plain
+ *                    multi-file pick (files but no folder)
  */
 export function describeFolderGuess(
   pickedName: string | null,

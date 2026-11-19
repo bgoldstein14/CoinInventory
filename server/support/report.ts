@@ -1,34 +1,12 @@
 /**
- * support/report.ts — turns a snapshot of "what is going on" into the text
- * the user can read, and will publish.
+ * Builds the support report markdown, which may be published in a public
+ * issue tracker:
  *
- * THE SHAPE OF THE PROMISE
- * This text is going to end up in a PUBLIC issue tracker. Everything in it
- * is therefore governed by two rules that are easy to state and easy to
- * break by accident:
- *
- *   COUNTS, NOT CONTENT   The collection is described by how many coins,
- *                         photos and sold coins there are. Not one coin,
- *                         price, note, grade or photo path. "How big" is a
- *                         useful debugging fact; "what is in it" is the
- *                         user's private financial position.
- *
- *   REDACT BEFORE WRITE   The markdown is redacted here, in the builder,
- *                         before it is returned — not on the way out to the
- *                         network. There is never an unredacted artefact
- *                         lying around for somebody to attach by mistake.
- *
- * EVERYTHING IS CAPPED
- * An uncapped report is the same failure as an uncapped log: too big to send
- * is indistinguishable from not sent. Every list here has a limit and says
- * out loud how much it dropped, because a silently truncated log is worse
- * than a short one — the reader does not know what they are missing.
- *
- * WHY THE RECEIPT IS GENERATED, NOT WRITTEN
- * The "what was removed" section is built from the redactor's own counters
- * after the pass has run. A hand-written list ("we remove usernames and
- * machine names") would be a claim; this is a report of what actually
- * happened to this particular text, and it cannot drift from the rules.
+ *   - Counts, not content: the collection is described by numbers only, never
+ *     coins, prices, notes or paths.
+ *   - Redacted here, before returning, so no unredacted copy exists.
+ *   - Every list is capped and says how much it dropped.
+ *   - The "what was removed" receipt is generated from the redactor's counters.
  */
 
 import {
@@ -67,24 +45,12 @@ export interface SupportSnapshot {
   countsError?: string;
   /** Oldest first, as the frontend's ring buffer stores them. */
   clientErrors: ClientError[];
-  /**
-   * Oldest first, as readRecentLogLines returns them. Ignored entirely when
-   * `includeLog` is false — see that field.
-   */
+  /** Oldest first, as readRecentLogLines returns them. Ignored when includeLog is false. */
   logLines: string[];
   logFiles: FileSummary[];
   /**
-   * Did the reporter tick "Include recent log"?
-   *
-   * FALSE MEANS NO LOG CONTENT ANYWHERE, not "no separate log file". The tail
-   * that used to be embedded in this body goes too. "Include the log" has to
-   * mean all of it: leaving 150 lines behind while the dialog says the log is
-   * not included would make the unticked state a half-truth, and a user who
-   * turned it off precisely because they did not want log lines published
-   * would have published 150 of them.
-   *
-   * Optional, defaulting to true, so every existing caller and the report's
-   * own unit tests keep their meaning.
+   * Did the reporter tick "Include recent log"? False means no log content
+   * anywhere in the report. Defaults to true.
    */
   includeLog?: boolean;
   /** The user's own description of the problem, if they typed one first. */
@@ -92,18 +58,9 @@ export interface SupportSnapshot {
 }
 
 /**
- * The caps.
- *
- * `maxLogLines` is the one worth arguing about. 150 lines is roughly the last
- * two or three minutes of a busy session, which is where the cause of a
- * just-reported bug almost always is. The report says out loud how many
- * earlier lines it dropped, and a reporter who ticks "Include recent log"
- * gets 2,000 redacted lines in a second file beside this one — so the body
- * stays readable in an issue without the longer tail being lost.
- *
- * `maxLineChars` exists because a single base64 image payload or a serialised
- * HttpErrorResponse can be tens of kilobytes on one line, which would blow
- * the whole budget on one entry.
+ * Size limits. 150 log lines covers the last few minutes, where a just-reported
+ * bug's cause usually is; the optional log file carries 2,000 more.
+ * `maxLineChars` stops one huge line (e.g. base64) using the whole budget.
  */
 export const REPORT_LIMITS = {
   maxLogLines: 150,
@@ -111,7 +68,7 @@ export const REPORT_LIMITS = {
   maxLogFilesListed: 30,
   maxLineChars: 500,
   maxUserDescriptionChars: 4000,
-  /** Final backstop. Nothing should reach it; if it does, the report says so. */
+  /** Final backstop; the report says if it was cut. */
   maxReportChars: 120_000
 } as const;
 
@@ -127,12 +84,7 @@ function clampLine(line: string, max: number = REPORT_LIMITS.maxLineChars): stri
   return line.length <= max ? line : `${line.slice(0, max)}… [${line.length - max} more characters]`;
 }
 
-/**
- * Render the un-redacted body.
- *
- * Kept as one function returning a string rather than a template-literal soup
- * so that the section order is visible at a glance.
- */
+/** Renders the unredacted body, one section after another. */
 function renderBody(snapshot: SupportSnapshot): string {
   const out: string[] = [];
 
@@ -181,8 +133,7 @@ function renderBody(snapshot: SupportSnapshot): string {
   if (snapshot.clientErrors.length === 0) {
     out.push('No errors were recorded during this session.');
   } else {
-    // Newest first: the one that made the user press the button is the one
-    // worth reading, and it is the last one recorded.
+    // Newest first: the last error is usually the one that prompted the report.
     const newestFirst = [...snapshot.clientErrors].reverse();
     const shown = newestFirst.slice(0, REPORT_LIMITS.maxClientErrors);
     const dropped = newestFirst.length - shown.length;
@@ -199,11 +150,7 @@ function renderBody(snapshot: SupportSnapshot): string {
   out.push('');
 
   // ---- Log tail ----------------------------------------------------------
-  //
-  // Unticked means NO LOG CONTENT, and the report says which it is. "No log
-  // lines were available" and "the reporter chose not to include them" are
-  // different facts: the first sends the owner looking for a logging bug that
-  // does not exist, the second tells them to go back and ask.
+  // Say whether log lines are absent or were deliberately excluded.
   const includeLog = snapshot.includeLog !== false;
 
   out.push('### Recent log lines');
@@ -245,11 +192,7 @@ function renderBody(snapshot: SupportSnapshot): string {
   out.push('');
 
   // ---- Attachments -------------------------------------------------------
-  //
-  // There is no list of them because the app cannot attach anything. It
-  // writes this report to the Desktop and nothing else; whatever else reaches
-  // the issue, the user dragged in there themselves, after this text was
-  // written. Listing files the app never saw would be a claim it cannot make.
+  // The app attaches nothing; anything else in the issue the user added.
   out.push('### Files attached to this issue');
   out.push('');
   out.push(
@@ -262,12 +205,8 @@ function renderBody(snapshot: SupportSnapshot): string {
 }
 
 /**
- * The "what was removed" block, rendered from the redactor's own counters.
- *
- * NOTE WHAT IS NOT HERE: the replaced values. `describePlaceholder` returns a
- * description, never a value, and there is a canary test asserting this
- * section cannot be made to echo a secret back into the document it was just
- * removed from.
+ * The "what was removed" block, from the redactor's counters. Contains
+ * descriptions only, never the replaced values.
  */
 function renderReceipt(receipt: readonly RedactionReceiptEntry[]): string {
   const out: string[] = [];
@@ -300,12 +239,8 @@ export interface SupportReport {
 }
 
 /**
- * Build the report: render, redact, then append the receipt.
- *
- * THE ORDER IS THE WHOLE DESIGN. The receipt can only be written after the
- * redaction pass, because it is a report OF that pass; and the redaction pass
- * must happen before anything is returned, because the caller writes what it
- * gets straight to a file on the Desktop.
+ * Builds the report: render, redact, then append the receipt (which
+ * describes the redaction pass, so it must come after).
  */
 export function buildSupportReport(
   snapshot: SupportSnapshot,
@@ -318,9 +253,7 @@ export function buildSupportReport(
 
   let markdown = `${redactedBody}\n${renderReceipt(receipt)}`;
 
-  // Final backstop. Nothing above should get near it — the per-section caps
-  // bound the total — but a report that silently exceeded every limit and
-  // still went out would be a worse failure than one that says it was cut.
+  // Final backstop; the per-section caps should keep it well under.
   if (markdown.length > REPORT_LIMITS.maxReportChars) {
     markdown =
       `${markdown.slice(0, REPORT_LIMITS.maxReportChars)}\n\n` +

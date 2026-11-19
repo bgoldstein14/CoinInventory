@@ -1,33 +1,14 @@
  /*
  * import-without-loaded-photos.spec.ts
  *
- * The batch photo import, run against coins EXACTLY AS THE LIST ENDPOINT
- * HANDS THEM OVER: an `imageCount` and no `imagePaths` key at all.
+ * The batch photo import against coins as `GET /api/coins` returns them: an
+ * `imageCount` and no `imagePaths` (the list endpoint doesn't inline photos;
+ * see server/routes/coins/list-query.ts). This is the usual state at startup.
  *
- * That is the normal case now, not an edge case. `GET /api/coins` stopped
- * inlining photographs when a 105-coin collection made its response
- * impossible to serialise (see server/routes/coins/list-query.ts), and a
- * user who opens the import screen has typically not opened a single coin —
- * so not one of the matched coins has its photographs in memory.
- *
- * Three things depended on `imagePaths.length` and would all have gone wrong
- * at once, silently:
- *
- *   1. THE QUESTION. "38 of these coins already have photos — what should I
- *      do?" is only asked when at least one matched coin has photos. Reading
- *      an absent array as "none" means the question is never asked, so the
- *      user never gets to choose and the default silently applies to nothing.
- *
- *   2. 'leave'. The default stops leaving anything alone, because no coin
- *      looks like it has photos to leave.
- *
- *   3. 'add'. The worst one. "Keep both" sends the coin's COMPLETE image
- *      array and the server replaces the whole set — so an empty "existing"
- *      half does not append, it DELETES every photograph on the coin.
- *
- * existing-photo-wiring.spec.ts covers the same wiring for coins whose
- * photographs ARE loaded. This file is its counterpart for the state the app
- * is actually in on startup.
+ * The existing-photo question and the 'leave' mode must work from
+ * `imageCount`, and 'add' must fetch the existing photos, because PUT replaces
+ * the whole image set and an empty "existing" half would delete them.
+ * existing-photo-wiring.spec.ts covers coins whose photos are loaded.
   */
 
 import 'fake-indexeddb/auto';
@@ -65,10 +46,8 @@ function pickedFile(name: string, relativePath: string): File {
 }
 
 /**
- * Two coins as `GET /api/coins` returns them: counts, and no imagePaths key.
- *
- * Built by deleting the key, so this stays a test about an ABSENT property
- * even if the literal gains one later.
+ * Two coins as `GET /api/coins` returns them: counts, and no imagePaths key
+ * (deleted explicitly so the property is truly absent).
  */
 function seedListLoadedCoins(inv: InventoryService, morganCount: number, peaceCount = 0) {
   const make = (fields: Record<string, unknown>, imageCount: number) => {
@@ -146,8 +125,7 @@ describe('the "already has photos" question, for coins straight off the list', (
     seedListLoadedCoins(inv, 2, 0);
     await selectFiles(session, [MORGAN_FILE, PEACE_FILE]);
 
-    // Nothing has been fetched at this point and nothing needs to be: the
-    // counts come from the list.
+    // The counts come from the list; nothing is fetched.
     expect(session.existingPhotoChoiceVisible()).toBe(true);
     expect(session.existingPhotoCounts().coinsWithPhotos).toBe(1);
     expect(session.existingPhotoCounts().coinsWithoutPhotos).toBe(1);
@@ -185,9 +163,7 @@ describe('"Keep both", for coins straight off the list', () => {
     expect(morganWrite).toBeDefined();
     const imagePaths = (morganWrite![1] as { imagePaths?: string[] }).imagePaths;
 
-    // THE ASSERTION THIS FILE EXISTS FOR. The old photograph is still in the
-    // array being saved. Without the fetch it would have been dropped, and
-    // because PUT replaces the whole set, dropped means DELETED.
+    // The old photo must be in the saved array, or PUT would delete it.
     expect(imagePaths).toContain(OLD_PHOTO);
     expect(imagePaths).toContain(`data:image/jpeg;base64,SHRUNK-${MORGAN_FILE}`);
   });
@@ -203,8 +179,7 @@ describe('"Keep both", for coins straight off the list', () => {
     await session.applyConfirmedMatches();
 
     expect(updateCoin).not.toHaveBeenCalled();
-    // And the user is told. A silent "nothing happened" would be almost as
-    // bad as the deletion: the import would look done.
+    // Reported to the user as a failure.
     expect(session.summary()?.failures.length ?? 0).toBeGreaterThan(0);
   });
 
@@ -225,8 +200,7 @@ describe('"Keep both", for coins straight off the list', () => {
 
 describe('"Replace", for coins straight off the list', () => {
   it('still confirms before deleting photographs it has never seen', async () => {
-    // The confirmation is driven by the same counts. If those read zero, the
-    // user would have photographs deleted without ever being asked.
+    // The confirmation is driven by the imageCount-based counts.
     const confirm = stubConfirm(false);
     const { session, inv, updateCoin } = createSession();
     seedListLoadedCoins(inv, 4, 0);
@@ -248,8 +222,7 @@ describe('"Replace", for coins straight off the list', () => {
 
     await session.applyConfirmedMatches();
 
-    // 'replace' MEANS delete, so reading the old photographs first would be
-    // megabytes fetched to be thrown away.
+    // 'replace' discards the old photos, so there is nothing to fetch.
     expect(getCoinImages).not.toHaveBeenCalled();
     const morganWrite = updateCoin.mock.calls.find(call => call[0] === 'morgan');
     expect((morganWrite![1] as { imagePaths?: string[] }).imagePaths)

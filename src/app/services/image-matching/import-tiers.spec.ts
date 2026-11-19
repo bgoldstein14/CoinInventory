@@ -1,31 +1,7 @@
  /*
- * import-tiers.spec.ts
- *
- * WHAT THIS FILE PROVES
- *   That the three review tiers actually divide THIS COLLECTION the way the
- *   redesign claims they do, measured across the whole verbatim filename
- *   corpus rather than one case at a time.
- *
- *   near-match.spec.ts covers the RULE (the four attributes, the grade
- *   tolerance, both directions). This file covers the CONSEQUENCE: how much
- *   manual work is actually left.
- *
- * THE MEASUREMENT, AND ITS HONEST LIMITS
- *
- *   There is no copy of the user's 200-odd coin records in the repository, so
- *   the inventory here is DERIVED from the filenames themselves: one coin per
- *   distinct (year, denomination, coin type) the parser reads out of the
- *   corpus, carrying the mint mark / grade / cert details of the first
- *   filename that produced it.
- *
- *   That is a fair stand-in and it reproduces both of the ambiguous
- *   situations that matter, because the corpus really does contain several
- *   shots of one coin and several coins that differ only in the details:
- *     - multiple images for one coin (six "1913 50-Cent Canadian" shots),
- *     - images whose extra attributes disagree with the record they match.
- *
- *   What it is NOT is a prediction of the exact split on all 2,140 files. Read
- *   the printed table as "this is the shape", not "this is the forecast".
+ * How the three import tiers divide the real filename corpus (the rule itself
+ * is tested in near-match.spec.ts). The inventory is derived from the
+ * filenames, so the printed split shows the shape, not an exact forecast.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -47,15 +23,9 @@ function coin(overrides: Partial<CoinRecord> & { id: string }): CoinRecord {
 }
 
 /**
- * Build a plausible inventory out of the corpus itself: one coin per distinct
- * (year, denomination, coin type) the parser can read, with the mint mark,
- * grade and certification details merged in from whichever of that coin's
- * photos happened to mention them.
- *
- * The merge matters. A real coin record is filled in once and completely,
- * while its eight photos each mention a different subset of its attributes --
- * so merging is what makes the synthetic records resemble real ones rather
- * than being perfect copies of a single filename.
+ * Build an inventory from the corpus: one coin per distinct (year,
+ * denomination, coin type), with mint mark, grade and cert details merged from
+ * whichever photos mention them, so records resemble complete real ones.
  */
 function inventoryFromFilenames(files: readonly string[]): CoinRecord[] {
   const matcher = service();
@@ -71,8 +41,7 @@ function inventoryFromFilenames(files: readonly string[]): CoinRecord[] {
       record = coin({
         id: `coin-${byKey.size + 1}`,
         year: parsed.year === null ? '' : String(parsed.year),
-        // The canonical KEY, not the display label, so parseCoin reads back
-        // the same denomination the filename parser produced.
+        // The canonical key, so parseCoin reads back the same denomination.
         denomination: parsed.denomination ?? '',
         coinType: parsed.coinTypeTokens.join(' ')
       });
@@ -87,14 +56,12 @@ function inventoryFromFilenames(files: readonly string[]): CoinRecord[] {
   return [...byKey.values()];
 }
 
-/** Tally the corpus by tier, and by the OLD two-bucket split, side by side. */
+/** Tally the corpus by tier, and by the auto/manual status split, side by side. */
 function measure(files: readonly string[], inventory: CoinRecord[]) {
   const results = service().matchImages([...files], inventory);
 
   const tiers: Record<ImportTier, string[]> = { matched: [], near: [], 'not-imported': [] };
-  /* The OLD screen had only two buckets and both of them cost the user a
-   * per-file decision: 'review' (ranked candidates, a search box) and 'none'
-   * (the same card, with nothing to rank). */
+  // Two-bucket comparison: 'auto' vs everything needing a per-file decision.
   const oldManual: string[] = [];
   const oldAuto: string[] = [];
 
@@ -116,9 +83,7 @@ describe('import tiers - how the real corpus divides', () => {
     const line = (label: string, n: number) =>
       `  ${label.padEnd(22)} ${String(n).padStart(4)}  (${((n / total) * 100).toFixed(1)}%)`;
 
-    // Deliberately a console table, not an assertion. The exact numbers are
-    // asserted loosely below; this is here so the split is visible whenever
-    // anyone runs the suite.
+    // Printed so the split is visible; numbers are asserted loosely below.
     // eslint-disable-next-line no-console
     console.log(
       [
@@ -140,13 +105,11 @@ describe('import tiers - how the real corpus divides', () => {
   });
 
   it('leaves strictly fewer files needing attention than the old two-bucket screen', () => {
-    // This is the point of the whole exercise: tier 2 is what the user has to
-    // look at, and it must be smaller than the old manual pile.
     expect(tiers.near.length).toBeLessThan(oldManual.length);
   });
 
   it('does not attach a single file more than the old gates did', () => {
-    // The tiers reorganise the ASKING. They must not make the matcher braver.
+    // Tiers change how the user is asked, not what is auto-attached.
     expect(tiers.matched.length).toBe(oldAuto.length);
     expect(tiers.matched).toEqual(oldAuto);
   });
@@ -157,14 +120,11 @@ describe('import tiers - how the real corpus divides', () => {
     for (const result of skipped) {
       expect(result.skipReason, result.parsed.fileName).toBeTruthy();
       expect(result.skipReason!.length, result.parsed.fileName).toBeGreaterThan(10);
-      // And no row in this tier may carry a coin to attach to.
       expect(result.matchedRecordId, result.parsed.fileName).toBeNull();
     }
   });
 
   it('puts every group shot, non-coin and camera name in the read-only tier', () => {
-    // These are the files that used to fill the manual list with nothing to
-    // decide. None of them may ever reach tier 1 or tier 2.
     for (const name of [
       'Gold Coins.JPG', '20th Century Type Set.JPG', 'Stamp - 11 - 3 cent.jpg',
       '3-cent paper - Large.jpg', 'CSA Bond Coupon.jpg', 'Sovereign Proof Boxes.jpg',
@@ -175,9 +135,8 @@ describe('import tiers - how the real corpus divides', () => {
   });
 
   it('puts the ancients in the read-only tier, not in the user\'s queue', () => {
-    // An ancient has no year, no denomination and no grade, so three of the
-    // four required attributes are simply absent. There is no yes/no question
-    // to ask about it, and under the old screen each one still cost a card.
+    // Ancients lack year, denomination and grade, so there is no yes/no
+    // question to ask.
     for (const name of [
       'Caracalla Denarius - Sear 6819 - Obverse.jpg',
       'Constantine - RIC 34 - Obverse.jpg',
@@ -189,25 +148,9 @@ describe('import tiers - how the real corpus divides', () => {
   });
 
   it('prints why each coin-like file was skipped, so the cost is visible', () => {
-    /* The useful operational number. Most tier-3 rows are group shots and
-     * stamps, which is as it should be -- but some are real single-coin photos
-     * that failed the four-attribute bar, and the count matters, because the
-     * fix for those is in the DATA (fill in the record's grade, or rename the
-     * file) and not in the matcher. */
-    /* THREE BUCKETS, NOT TWO, SINCE THE EXCLUSION RULE LANDED.
-     *
-     * A counterfeit or multi-coin photo is `excludedFromAutoImport` but is
-     * NOT `isNonCoin` -- the words are different verdicts on purpose (see
-     * non-coin-detector.ts). Without this line such a file would be counted
-     * below as "a single-coin photo that missed the near-match bar", which is
-     * untrue twice over: it is not necessarily one coin, and it did not miss
-     * anything -- it was held out deliberately.
-     *
-     * The count is ZERO today and the printed census is unmoved by that work,
-     * because real-filenames.fixture.ts contains none of the 30 marker files
-     * (they are tabled in real-filenames.spec.ts instead, with the reasoning).
-     * The bucket exists so that the day one is added, the table says the
-     * truth about it rather than quietly mis-filing it. */
+    // Tier 3 splits into non-coins, auto-import exclusions (a separate
+    // verdict from isNonCoin) and single-coin photos that missed the
+    // near-match bar; the last group is usually fixed in the data.
     const excluded = results.filter(
       r => r.tier === 'not-imported' && r.parsed.excludedFromAutoImport
     );
@@ -243,8 +186,7 @@ describe('import tiers - how the real corpus divides', () => {
       ].join('\n')
     );
 
-    // The three buckets must still partition tier 3 exactly -- nothing in
-    // the read-only list may go uncounted and nothing may be counted twice.
+    // The three buckets must partition tier 3 exactly.
     const nonCoin = results.filter(
       r => r.tier === 'not-imported' && !r.parsed.excludedFromAutoImport && r.parsed.isNonCoin
     );
@@ -253,8 +195,7 @@ describe('import tiers - how the real corpus divides', () => {
   });
 
   it('never lets a near match carry a coin id of its own', () => {
-    // The single most important invariant of tier 2: it is a QUESTION, not a
-    // decision. Nothing here is attached until the user presses a button.
+    // Tier 2 is a question: nothing is attached until the user confirms.
     for (const result of results.filter(r => r.tier === 'near')) {
       expect(result.matchedRecordId, result.parsed.fileName).toBeNull();
       expect(result.status, result.parsed.fileName).not.toBe('auto');
@@ -264,18 +205,10 @@ describe('import tiers - how the real corpus divides', () => {
   });
 });
 
-/* =========================================================================
- * THE AMBIGUOUS CASES
- * =======================================================================
- * The measurement above runs against an inventory with no duplicates in it,
- * which is why tier 2 barely fires there. Both ambiguous situations
- * actually described both need near-identical records to be PRESENT, in the
- * same way real-filenames.spec.ts stocks a "baited" inventory to prove the
- * non-coin veto is doing the work.
- *
- * The 1881 Morgan Dollar is the right coin for this: the collection holds
- * several, they differ only by mint mark, and the filenames routinely omit
- * the mint mark that would separate them.
+/*
+ * Ambiguous cases need near-identical records present, which the derived
+ * inventory above lacks. 1881 Morgans differing only by mint mark serve,
+ * since filenames often omit the mint mark.
  */
 describe('import tiers - the two ambiguous situations', () => {
   /** Two coins that differ ONLY by mint mark, both PCGS MS63. */
@@ -296,12 +229,6 @@ describe('import tiers - the two ambiguous situations', () => {
   });
 
   it('several sides of one coin all land on the same suggestion', () => {
-    /* The owner's second case. The "- Obverse" name is verbatim from the
-     * share; the other three follow the Obverse / Reverse / take-number
-     * convention the survey shows everywhere (see
-     * "1913 50-Cent Canadian - Obverse.jpg" / "- Reverse.jpg" /
-     * "- Obverse 2.jpg" in the fixture). Grouping them by the coin they
-     * point at is what turns four questions into one. */
     const sides = [
       '1881 Morgan Dollar PCGS MS63 - Obverse.jpg',
       '1881 Morgan Dollar PCGS MS63 - Reverse.jpg',
@@ -319,28 +246,15 @@ describe('import tiers - the two ambiguous situations', () => {
     expect(new Set(results.map(r => r.confidence)).size).toBe(1);
   });
 
-  /* ---------------------------------------------------------------------
-   * THE NOTATION MISMATCH, END TO END
-   * ---------------------------------------------------------------------
-   * A grade may slightly differ and still be correct -- 63CAM against
-   * 63 CAMEO, 63PL against 63 PL.
-   *
-   * WHY THIS IS NOT VISIBLE IN THE CENSUS ABOVE
-   *   The census builds its inventory OUT OF THE FILENAMES, so both sides of
-   *   every comparison are spelled by the same parser and a notation mismatch
-   *   is impossible by construction. Real records are typed by hand and
-   *   filenames are not, which is exactly where the two spellings
-   *   come apart. These cases supply the mismatch the census cannot.
-   * ------------------------------------------------------------------- */
-  /** Two coins differing only by mint mark, graded in the VERBOSE notation. */
+  // Grade notation mismatches (63CAM vs 63 CAMEO). The census above can't
+  // produce these because both sides there come from the same parser.
+  /** Two coins differing only by mint mark, graded in the verbose notation. */
   const notated = (grade: string): CoinRecord[] => [
     coin({ id: 'morgan-s', year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'S', grade, certCompany: 'PCGS' }),
     coin({ id: 'morgan-o', year: '1881', denomination: 'Dollar', coinType: 'Morgan', mintMark: 'O', grade, certCompany: 'PCGS' })
   ];
 
   it('a filename saying CAMEO reaches tier 2 against a record saying CAM', () => {
-    // Before the synonym table these were two unrelated tokens, each side held
-    // something the other lacked, and a correct match was refused outright.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS PF64Cameo - Obverse.jpg'],
       notated('PF64 CAM')
@@ -351,8 +265,6 @@ describe('import tiers - the two ambiguous situations', () => {
   });
 
   it('a filename saying PL reaches tier 2 against a record saying PROOFLIKE', () => {
-    // The harder half: "prooflike" was not in the grade vocabulary at all, so
-    // the record's grade failed to parse and the pair was refused.
     const [result] = service().matchImages(
       ['1881 Morgan Dollar PCGS MS63PL - Obverse.jpg'],
       notated('MS63 PROOFLIKE')
@@ -363,8 +275,7 @@ describe('import tiers - the two ambiguous situations', () => {
   });
 
   it('but a DEEPER designation still keeps the row out of the queue', () => {
-    // The hierarchy has to survive the end-to-end path too: deep cameo is a
-    // stronger claim than cameo, and deep mirror prooflike than prooflike.
+    // Deep cameo / DMPL are stronger claims than cameo / PL.
     for (const [file, grade] of [
       ['1881 Morgan Dollar PCGS PF64Cameo - Obverse.jpg', 'PF64 DCAM'],
       ['1881 Morgan Dollar PCGS MS63PL - Obverse.jpg', 'MS63 DEEP MIRROR PROOFLIKE']

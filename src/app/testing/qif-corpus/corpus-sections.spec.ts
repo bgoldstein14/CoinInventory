@@ -1,39 +1,15 @@
 /*
- * WHAT THIS FILE PROVES
- *   That `QuickenImportService.parse` reads a WHOLE Quicken export -- not a
- *   hand-built two-line `!Type:Invst` snippet -- and comes back with coins
- *   and nothing else.
+ * Parses whole Quicken exports from the corpus (the only spec that does; the
+ * others use one-block snippets) and checks that only coins come out.
  *
- *   Every other importer spec feeds it a QIF it built itself, one block long.
- *   `qif-accounts.fixture.ts` does too: it scans the corpus for `Y` lines
- *   with its own reader and re-wraps them, because what it wants is the
- *   SECURITY NAMES and not the net-quantity rule. So this is the only place
- *   the parser meets a whole file. A regression that made it choke on a
- *   `!Type:Cat` block, or worse, ingest a stock position as a coin, would
- *   otherwise reach the import button with every other test still green.
+ * Read: `!Account` (its `N` line names the account) and `!Type:Invst` blocks
+ * with a `Y` security line. Ignored, each by a different code path:
+ *   !Type:Prices                   skipped by name before field parsing
+ *   !Type:Security/Cat/Tag/Bank    have an `N` line but no `Y` line, so dropped
+ *   NXIn / NXOut                   explicit action skip-list
+ *   !Option: / !Clear:AutoSwitch   `parseInvestmentFields` returns null
  *
- * THE SECTIONS, AND WHICH CODE PATH DROPS EACH ONE
- *   READ
- *     !Account       its `N` line names the account the following
- *                    transactions belong to; also feeds the account picker.
- *     !Type:Invst    blocks with a `Y` security line.
- *
- *   IGNORED, each somewhere different -- which is why one assertion per
- *   section is not redundant:
- *     !Type:Prices   short-circuited by name, before any field parsing.
- *     !Type:Security }
- *     !Type:Cat      } all have an `N` line, so `parseInvestmentFields`
- *     !Type:Tag      } accepts them as transaction-shaped and the next test
- *     !Type:Bank     } -- "no `Y` line" -- is what drops them.
- *     NXIn / NXOut   an explicit action skip-list.
- *     !Option: / !Clear:AutoSwitch
- *                    neither `!Account` nor `!Type`, so they reach
- *                    `parseInvestmentFields` and come back null.
- *
- *   The corpus in this directory carries a synthetic version of every one of
- *   them. The securities are invented and their tickers all begin "ZQ",
- *   which is not a form any US exchange issues, so nothing in here can be
- *   looked up as a real holding. See `generate-corpus.mjs`.
+ * All corpus securities are invented; their tickers begin "ZQ".
  */
 
 import { describe, expect, it } from 'vitest';
@@ -41,16 +17,8 @@ import { QIF_ACCOUNTS, decodeQif } from '../qif-accounts.fixture';
 import { QuickenImportService } from '../../services/quicken-import.service';
 
 /**
- * Files that import NO coins at all, whatever the options.
- *
- * Ancients, and only Ancients. An ancient coin has no year, no denomination
- * and no grade, so every row in it fails the 2-of-3 main-detail rule and
- * lands in `rejectedRecords` -- visibly, as an exception, which is the
- * honest outcome until the catalogue-reference design in
- * `docs/ancients-matching-plan.md` is built. Its sold coins are still NAMED
- * (that is asserted for every file, this one included); what cannot be
- * asserted about it is any statement of the form "more coins import when
- * the sold ones are let in", because the answer is zero either way.
+ * Files that import no coins at all. Ancient coins have no year, denomination
+ * or grade, so every row fails the 2-of-3 main-detail rule and is rejected.
  */
 const IMPORTS_NOTHING = new Set(['Ancients.QIF']);
 
@@ -65,10 +33,7 @@ const parse = (text: string, account?: string) => new QuickenImportService().par
 /** The record's raw Quicken security name, which the interface does not declare. */
 const securityNameOf = (record: unknown) => (record as { securityName: string }).securityName;
 
-/**
- * Words that may never reach a coin record. Each is a thing a real export
- * carries in bulk and the corpus carries a synthetic stand-in for.
- */
+/** Words from non-coin sections that must never reach a coin record. */
 const NEVER_A_COIN = [
   'ZQ',              // every invented ticker, and every non-coin security name's symbol
   'Fund',            // mutual funds
@@ -82,18 +47,13 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   const text = decodeQif(file);
 
   it('decoded as WINDOWS-1252, not UTF-8', () => {
-    /* The tripwire for the silent corruption. 0xA2 is "¢" and 0xBD is "½";
-     * read as UTF-8 both become U+FFFD and every denomination in the file is
-     * destroyed without an error anywhere. */
+    // Read as UTF-8, 0xA2 ("¢") and 0xBD ("½") would silently become U+FFFD.
     expect(text, 'a replacement character means the decode is wrong').not.toContain('�');
     expect(text, 'the corpus should contain cent signs').toContain('¢');
   });
 
   it('still contains every section the parser has to IGNORE', () => {
-    /* Not a test of the parser -- a test of the CORPUS, and the reason it is
-     * here is that everything below it would pass vacuously on a file of
-     * nothing but coins. If a future regeneration "simplifies" the corpus,
-     * this is the test that says so. */
+    // Checks the corpus itself: the tests below would pass vacuously without these sections.
     for (const section of [
       '!Type:Tag', '!Type:Cat', '!Type:Security', '!Type:Prices', '!Type:Bank',
       '!Option:AutoSwitch', '!Clear:AutoSwitch', 'NXIn'
@@ -127,11 +87,8 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   });
 
   it('filters by account: the brokerage register in the same file is excluded', () => {
-    /* Every corpus file also holds `Driftwood Brokerage`, an investment
-     * account whose register is nothing but stock and fund trades. It is
-     * `!Type:Invst` with real `Y` lines, so the ONLY thing keeping it out is
-     * the account filter -- which makes it the one non-coin section that a
-     * "no `Y` line" test could never have caught. */
+    // `Driftwood Brokerage` is a stock/fund register with real `Y` lines, so
+    // only the account filter keeps it out.
     const result = parse(text, account);
     const names = [...result.importedRecords, ...result.skippedRecords].map(securityNameOf);
     expect(names).not.toContain('Aldbury Manufacturing');
@@ -140,15 +97,8 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   });
 
   it('imports the sold coins too, and names them', () => {
-    /* THE DEFAULT IS "EVERYTHING". The corpus reproduces a real held/sold
-     * split per account -- the 2-3-20-cent collection has held 112 coins
-     * and still owns 6 -- so a parser that dropped the sold ones would come
-     * back with a fraction of the file. It used to, and silently: nothing
-     * holds them out now, and nothing is reported as held out.
-     *
-     * `soldSecurityNames` is populated regardless, which is what lets the
-     * import mark those coins Sold instead of adding them to what the
-     * collection is worth. */
+    // Sold coins are imported by default; `soldSecurityNames` is always
+    // populated so the import can mark them Sold.
     const result = parse(text, account);
     expect(result.importedRecords.length + result.rejectedRecords.length).toBeGreaterThan(0);
     expect(result.skippedRecords, 'nothing was asked to be held out').toEqual([]);
@@ -163,10 +113,8 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   });
 
   it('holds the sold coins out, and lists them, when asked to', () => {
-    /* The tick box in the import modal. Same file, same account, one
-     * option: the coins named as sold move out of `importedRecords` and
-     * into `skippedRecords`, where the dialog lists them. Nothing is
-     * discarded in either direction. */
+    // The import modal's option: sold coins move from `importedRecords` to
+    // `skippedRecords`, where the dialog lists them.
     const everything = parse(text, account);
     const heldOnly = new QuickenImportService().parse(text, account, undefined, {
       excludeSold: true
@@ -181,8 +129,7 @@ describe.each(FILES)('%s — a whole export, parsed the way the import button do
   });
 
   it('raises no warnings on the sections it ignores', () => {
-    // A warning is the parser saying it saw something it could not place.
-    // Categories, tags, prices and bank rows are not that; they are expected.
+    // Categories, tags, prices and bank rows are expected, so they must not warn.
     expect(parse(text, account).warnings).toEqual([]);
   });
 });
@@ -191,9 +138,7 @@ describe('the ignored sections are ignored for the stated REASONS, not by luck',
   const text = decodeQif('GoldCoins.QIF');
 
   it('a !Type:Cat block is transaction-shaped and still produces nothing', () => {
-    /* Proven in isolation so the failure names the section. A category block
-     * is `N` + `D`, which `parseInvestmentFields` accepts (`/^[DNYIQTUMO]/`
-     * matches the `N`); it is the missing `Y` that drops it one step later. */
+    // `parseInvestmentFields` accepts the `N` line; the missing `Y` line drops it.
     const result = parse('!Type:Cat\nNPostage\nDShipping and insurance\nE\nR000\nE\n^\n');
     expect(result.importedRecords).toEqual([]);
     expect(result.skippedRecords).toEqual([]);
@@ -201,10 +146,8 @@ describe('the ignored sections are ignored for the stated REASONS, not by luck',
   });
 
   it('a !Type:Security block names a coin and is STILL not a coin record', () => {
-    /* The sharpest of these. The master list holds every coin's name on an
-     * `N` line, so a parser that read `N` as a security would import the
-     * whole collection twice over -- once as securities and once as
-     * transactions. */
+    // The master list names every coin on an `N` line; reading it as a
+    // security would import each coin twice.
     const result = parse('!Type:Security\nN1905 $20 - PCGS MS64\nTGold Coin\n^\n');
     expect(result.importedRecords).toEqual([]);
     expect(result.skippedRecords).toEqual([]);
@@ -227,8 +170,7 @@ describe('the ignored sections are ignored for the stated REASONS, not by luck',
   });
 
   it('the corpus master list is bigger than the account, on every file', () => {
-    /* If the two were the same size the "ignores the master list" tests above
-     * would be testing a file where there was nothing extra to ignore. */
+    // Guards the corpus: otherwise the master-list tests have nothing extra to ignore.
     for (const [file, account] of FILES) {
       const body = decodeQif(file);
       const securities = (body.match(/!Type:Security/g) ?? []).length;

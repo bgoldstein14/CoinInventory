@@ -1,10 +1,3 @@
-<!--
-  Written for somebody who does not know what a report designer is: each card
-  says in one sentence WHAT IS ON THE PAGE and WHO IT IS FOR, then lists the
-  facts that decide between them — how many coins, whether photographs are
-  included, whether the current filter applies. Keep that when editing; a bare
-  "Export" button leaves the user to find out by opening the file.
--->
 <div class="modal-backdrop" (click)="closed.emit()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -12,24 +5,7 @@
       <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">&times;</button>
     </div>
     <div class="modal-body">
-      <!--
-        NOTHING BELOW THIS POINT MAY BE SHOWN BEFORE THE COINS ARRIVE.
-
-        Every figure on this screen is computed over `inv.inventory()`,
-        which is an empty array until hydration finishes. Rendered then,
-        the summary states with complete confidence that the collection
-        holds 0 coins worth $0.00 — something the app does not know.
-
-        The print buttons are inside the guard too, and that is the
-        sharper half. Pressing one before the coins land produces an
-        Insurance &amp; Appraisal Schedule listing nothing — a document
-        that goes to an insurer.
-
-        `notReadyNotice()` is non-null exactly while that is the case.
-
-        The modal-actions row stays OUTSIDE this guard: the close button
-        has to work whatever the connection is doing.
-      -->
+      <!-- Figures and print buttons are hidden until the coins have loaded, so an empty schedule cannot be printed. -->
       @if (notReadyNotice(); as notice) {
         <p class="empty-state">{{ notice }}</p>
       } @else {

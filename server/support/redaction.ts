@@ -1,68 +1,28 @@
 /**
- * support/redaction.ts — scrub a support report before it is written.
+ * Scrubs a support report before it is written, so no unredacted copy ever
+ * exists on disk (the zip, the preview and the GitHub URL all use redacted text).
  *
- * THIS RUNS BEFORE THE FILE IS WRITTEN, NOT BEFORE IT IS SENT. Building the
- * bundle and redacting on the way out is the wrong order: once an unredacted
- * copy exists on disk, somebody will attach THAT one. The zip on the user's
- * Desktop, the text in the preview box and the body of the GitHub URL are all
- * produced from already-redacted text, so there is never an unredacted
- * artefact to pick up by mistake.
- *
- * WHAT IT REPLACES
- *   <USER>      the Windows account name, wherever it appears
- *   <USER2>…    any OTHER account name found in a C:\Users\… path
+ * Replaces:
+ *   <USER>      the Windows account name
+ *   <USER2>…    other account names found in C:\Users\… paths
  *   <MACHINE>   this computer's name
- *   <MACHINE2>… any other host named in a UNC path or SQL instance
+ *   <MACHINE2>… other hosts in UNC paths, connection strings or SQL instances
  *   <REDACTED>  passwords, tokens, API keys, connection-string credentials
  *   <EMAIL>     email addresses
  *
- * Real log lines from this application look like:
+ * Placeholders are stable (the same value always gets the same one) and
+ * distinct (different values never share one), so the report stays useful
+ * for reproducing bugs. The receipt shown to the user describes what was
+ * replaced and how often, never the value itself.
  *
- *   Connecting to SQL Server at MYSERVER\SQLEXPRESS/CoinInventory
- *     at formatDate (C:/Users/devuser/source/dev/server/server.ts:130:12)
- *
- * — so both the machine name and the username are present in ordinary,
- * uninteresting lines. There is no "only redact the scary ones" option.
- *
- * WHY THE PLACEHOLDERS ARE STABLE AND DISTINCT
- * These reports are read in order to REPRODUCE bugs. Two requirements follow,
- * and they pull in opposite directions:
- *
- *   stable     the same folder must read as the same folder every time it
- *              appears, or "the file is in A, we looked in B" becomes
- *              unreadable. So a fixed placeholder per value, allocated once
- *              and reused for the whole bundle.
- *
- *   distinct   two different accounts must NOT collapse onto one placeholder,
- *              or the report invents an equality that is not there. So the
- *              second account seen becomes <USER2>, not <USER>.
- *
- * A hash-based placeholder would satisfy both but is unreadable;
- * sequential numbering satisfies both and a human can hold it in their head.
- *
- * THE RECEIPT NEVER CONTAINS THE SECRET
- * "Tell the user what was replaced" is a requirement, and the obvious
- * implementation — "replaced 'devuser' 4 times" — hands back the exact thing
- * that was just removed, into the same document. The receipt therefore
- * carries a PLAIN-WORDS DESCRIPTION and a count, never a value. There is a
- * canary test for precisely this.
- *
- * ORDER MATTERS
- * The rules below run in the order they are written and the order is load
- * bearing, not incidental:
- *
- *  1. `Authorization: …` is consumed to end of line FIRST. If the generic
- *     key=value rule ran first it would stop at the first whitespace and
- *     produce `Authorization: <REDACTED> eyJhbGciOi…` — redacting the word
- *     "Bearer" and publishing the token. That is a genuine bug this ordering
- *     prevents, not a hypothetical one.
+ * Rule order matters:
+ *  1. `Authorization: …` is consumed to end of line first; the key=value rule
+ *     would stop at "Bearer" and leave the token.
  *  2. URL credentials before anything else touches the URL.
- *  3. Secrets before identity, so a password that happens to contain the
- *     machine name is blanked whole rather than partly substituted.
- *  4. Email before the username rule, so `devuser@example.com` becomes
- *     <EMAIL> rather than <USER>@example.com (which still leaks the domain).
- *  5. Path-shaped rules before bare-token rules, so the common case produces
- *     a path that still looks like a path.
+ *  3. Secrets before identity, so a password containing the machine name is
+ *     blanked whole.
+ *  4. Email before username, so the domain isn't left behind.
+ *  5. Path-shaped rules before bare tokens, so paths still read as paths.
  */
 
 /** What we know about the machine the report is being produced on. */
@@ -75,7 +35,7 @@ export interface RedactionIdentity {
 /** One line of the "here is what we took out" summary shown to the user. */
 export interface RedactionReceiptEntry {
   placeholder: string;
-  /** Plain words. NEVER the replaced value — see the module header. */
+  /** Plain words, never the replaced value. */
   what: string;
   occurrences: number;
 }
@@ -91,22 +51,12 @@ export interface Redactor {
   receipt(): RedactionReceiptEntry[];
 }
 
-/**
- * Host names that are never aliased.
- *
- * These identify nobody, and replacing them actively destroys information:
- * "could not reach <MACHINE2>" hides the one useful fact in the line, which
- * is that the app was talking to itself.
- */
+/** Host names never aliased: they identify nobody and show the app was talking to itself. */
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '::1', '.', '(local)']);
 
 /**
- * Minimum length for the bare-token username rule.
- *
- * A one or two character account name ('jd', 'a') occurs inside ordinary
- * English and inside half the identifiers in a stack trace. Matching it would
- * shred the report. The path rule still covers the dangerous case —
- * `C:\Users\a\…` — so stepping aside here costs nothing real.
+ * Minimum length for the bare-token username rule. Very short names would
+ * match inside ordinary words; the C:\Users\… path rule still covers them.
  */
 const MIN_BARE_TOKEN_LENGTH = 3;
 
@@ -129,15 +79,9 @@ function lastSegment(dir: string | undefined): string | undefined {
 }
 
 /**
- * Work out who and what this machine is.
- *
- * `env`, `hostname` and `homedir` are parameters rather than direct calls to
- * `process.env` / `os` so the canary tests can plant a marker in each of them
- * without touching the real process.
- *
- * The USERNAME fallback chain ends at the last segment of the home directory
- * because a wrong guess there can only OVER-redact, and over-redaction is the
- * safe direction of failure for this module.
+ * Works out who and what this machine is. Inputs are parameters so tests can
+ * plant markers. The username falls back to the home directory's last
+ * segment; a wrong guess can only over-redact.
  */
 export function identityFromEnvironment(
   env: Record<string, string | undefined>,
@@ -173,16 +117,9 @@ export function describePlaceholder(placeholder: string): string {
 }
 
 /**
- * Hands out stable placeholders.
- *
- * The current user and the current machine are reserved up front, so they get
- * the unnumbered `<USER>` / `<MACHINE>` even if some other account happens to
- * be mentioned earlier in the text. Everything else is numbered from 2 in
- * first-seen order.
- *
- * Keyed case-insensitively: Windows paths are case-insensitive, so
- * `C:\USERS\DevUser` and `c:\users\devuser` are the same person and must not
- * be handed two different placeholders.
+ * Hands out stable placeholders. The current user and machine are reserved
+ * as <USER> / <MACHINE>; others are numbered from 2 in first-seen order.
+ * Case-insensitive, like Windows paths.
  */
 class AliasTable {
   private readonly assigned = new Map<string, string>();
@@ -225,20 +162,15 @@ class RedactorImpl implements Redactor {
     let out = text;
 
     // ---- 1. Authorization header, consumed to end of line -----------------
-    // MUST be first. See the module header: the generic key=value rule would
-    // stop at the space after "Bearer" and publish the token.
+    // Must be first (see the module header).
     out = out.replace(
       /\b(authorization)(\s*[:=]\s*).+/gi,
       (_m, key: string, sep: string) => `${key}${sep}${this.hit('<REDACTED>')}`
     );
 
     // ---- 2. Credentials embedded in a URL ---------------------------------
-    //
-    // The leading lookbehind is a PERFORMANCE guard, not a correctness one.
-    // Without it the engine starts a scheme match at every character of a
-    // long run of letters and abandons it on the missing `://`, which is
-    // quadratic — a 200 KB log line took over 30 seconds. The lookbehind
-    // means only genuine token starts are attempted.
+    // The lookbehind avoids quadratic rescanning on long runs of letters
+    // (a 200 KB line took over 30 s without it).
     out = out.replace(
       /(?<![A-Za-z0-9+.-])([a-zA-Z][a-zA-Z0-9+.-]*:\/\/)([^\s/@:]+):([^\s/@]+)@/g,
       (_m, scheme: string) => `${scheme}${this.hit('<REDACTED>')}@`
@@ -251,38 +183,29 @@ class RedactorImpl implements Redactor {
     );
 
     // ---- 4. key = value secrets -------------------------------------------
-    // Longer alternatives are listed before the shorter ones they contain so
-    // the alternation cannot match a prefix and leave the rest in the value.
+    // Longer alternatives first, so a prefix match can't leave part of the key in the value.
     out = out.replace(
       /\b(client[_-]?secret|access[_-]?token|refresh[_-]?token|api[_-]?key|apikey|password|passwd|pwd|pass|secret|token|user\s?id|uid)(\s*[:=]\s*)(["']?)([^;,&\s"']+)\3/gi,
       (_m, key: string, sep: string) => `${key}${sep}${this.hit('<REDACTED>')}`
     );
 
     // ---- 5. Email addresses ------------------------------------------------
-    // Before the username rules: `devuser@example.com` should become <EMAIL>,
-    // not `<USER>@example.com`, which still publishes the domain.
-    // Same quadratic-scan guard as the URL rule above: without the
-    // lookbehind, a long run of word characters with no `@` in it is
-    // re-scanned from every offset.
+    // Before the username rules, so the domain isn't left. Same lookbehind
+    // guard against quadratic scanning as rule 2.
     out = out.replace(
       /(?<![A-Za-z0-9._%+-])[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+/g,
       () => this.hit('<EMAIL>')
     );
 
     // ---- 6. The account segment of a C:\Users\… path -----------------------
-    // Keeps the path SHAPE, which is what makes the report debuggable:
-    // `C:/Users/<USER>/source/dev/...` still reads as a path.
+    // Keeps the path shape: `C:/Users/<USER>/source/...`.
     out = out.replace(
       /([A-Za-z]:[\\/]Users[\\/])([^\\/\s:;"'<>|]+)/g,
       (_m, head: string, account: string) => `${head}${this.hit(this.users.aliasFor(account))}`
     );
 
     // ---- 6a. The host in a connection string -------------------------------
-    //
-    // Rule 8 below catches `HOMEPC\SQLEXPRESS`, but a bare `Server=HOMEPC;`
-    // — the form with no named instance — goes through untouched, publishing
-    // a machine name that is not THIS machine and so is not covered by rule
-    // 10 either. Loopback is exempt for the same reason as below.
+    // A bare `Server=HOMEPC;` (no named instance) isn't caught by rule 8 or 10.
     out = out.replace(
       /\b(Server|Data Source|Address|Addr|Network Address)(\s*=\s*)((?:tcp:)?)([A-Za-z0-9][A-Za-z0-9._-]*)/gi,
       (whole, key: string, sep: string, scheme: string, host: string) =>
@@ -301,7 +224,6 @@ class RedactorImpl implements Redactor {
     );
 
     // ---- 8. The host in a SQL Server instance name ------------------------
-    // `MYSERVER\SQLEXPRESS` is in every connection log line this app writes.
     out = out.replace(
       /\b([A-Za-z0-9][A-Za-z0-9._-]{0,62})\\(SQLEXPRESS|MSSQLSERVER|SQLSERVER)\b/gi,
       (whole, host: string, instance: string) =>
@@ -311,9 +233,7 @@ class RedactorImpl implements Redactor {
     );
 
     // ---- 9. The username as a bare token ----------------------------------
-    // Lookaround rather than \b so that `devuser2` is left alone: it is
-    // somebody else, and rewriting it to `<USER>2` would read as this user
-    // with a digit stuck on.
+    // Lookaround rather than \b so `devuser2` (someone else) is left alone.
     const username = this.identity.username;
     if (username && username.length >= MIN_BARE_TOKEN_LENGTH) {
       out = out.replace(
@@ -341,20 +261,14 @@ class RedactorImpl implements Redactor {
         what: describePlaceholder(placeholder),
         occurrences
       }))
-      // Most-replaced first: it is the most useful ordering for somebody
-      // skimming "what did it take out of my report".
+      // Most-replaced first.
       .sort((a, b) => b.occurrences - a.occurrences || a.placeholder.localeCompare(b.placeholder));
   }
 }
 
 /**
- * A redactor whose placeholder allocation is shared across every piece of one
- * bundle — the report body, the log tail, the file listing.
- *
- * Using a fresh redactor per piece would be a correctness bug, not an
- * inefficiency: `alice` could be <USER2> in the report and <USER3> in the log
- * tail, and the two halves of the bundle would then disagree about how many
- * people are involved.
+ * A redactor whose placeholders are shared across every piece of one bundle,
+ * so the report body and log tail agree on who <USER2> is.
  */
 export function createRedactor(identity: RedactionIdentity): Redactor {
   return new RedactorImpl(identity);

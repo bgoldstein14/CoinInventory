@@ -2,38 +2,18 @@
   <div class="toolbar-actions compact-actions">
     <button type="button" class="secondary small-button" (click)="addCoinRequested.emit()">Add Coin</button>
 
-    <!-- THE MAIN BUTTON'S DEFAULT IS THE FIRST MENU ENTRY, and that is the
-         whole reason it is 'excel'. It used to be 'qif', so pressing Import
-         without opening the menu ran the importer fewest users want —
-         Quicken files. The default and the top of the list are kept the
-         same thing deliberately: a split button whose face does something
-         other than its first entry is a trap you only spring once. -->
+    <!-- The main Import button runs the first menu entry (Excel). -->
     <div class="split-button" [class.open]="importMenuOpen()">
       <button type="button" class="small-button" (click)="handleImportSelection('excel')">Import</button>
       <button type="button" class="small-button split-button__toggle" (click)="toggleImportMenu()" aria-label="Choose import type">▾</button>
       @if (importMenuOpen()) {
         <div class="split-menu">
-          <!-- Two entries, one dialog. They were a single "Excel or CSV"
-               item; the modal still reads either format and still converges
-               them on one mapping screen, but a user holding a spreadsheet
-               should be able to find the word "Excel" in a list rather than
-               parse a compound label. See ImportKind in app-toolbar.ts.
-               Excel first: it is the commoner of the two, and it is the
-               split button's default. -->
+          <!-- Excel and CSV open the same import dialog. -->
           <button type="button" class="menu-item" (click)="handleImportSelection('excel')">Excel</button>
           <button type="button" class="menu-item" (click)="handleImportSelection('csv')">CSV</button>
-          <!-- There is no JSON entry and there must not be one. Export →
-               JSON stays; importing one was removed deliberately. -->
-          <!-- QIF is third because it is the least likely import for
-               anyone but the owner, who moved this collection off Quicken
-               once and will not do it again. Commonest first is the whole
-               ordering rule here. -->
+          <!-- No JSON import, by design; JSON export remains. -->
           <button type="button" class="menu-item" (click)="handleImportSelection('qif')">QIF</button>
-          <!-- Photos, not coin records. Listed last and separated, because
-               the three above read a file of coins while this one reads a
-               folder of images and matches them to coins already in the
-               inventory. It is on this menu because "bring my photos in" is an
-               import from the user's point of view. -->
+          <!-- Photos rather than coin records, so separated from the file formats. -->
           <button type="button" class="menu-item menu-item--separated" (click)="handleImportSelection('images')">Images from folder</button>
         </div>
       }
@@ -62,45 +42,11 @@
       ⚙ Settings
     </button>
 
-    <!-- Help. Last, next to Settings, because it is the other thing that is
-         about the application rather than about coins.
-
-         THE ONLY ICON-ONLY BUTTON IN THIS ROW. Everything else here is a
-         word, and that is not an inconsistency to be tidied away: a
-         question mark in a circle is the one glyph in this application that
-         a user already knows the meaning of, so it buys back the width that
-         "? Help" cost without costing comprehension. Nothing else on this
-         toolbar has a symbol anybody would recognise.
-
-         IT IS A FILLED DISC, NOT A DRAWN RING, AND THAT IS THE POINT. The
-         first version was a thin outline in `currentColor` at 16px, which
-         the owner read as too small and too drab. The recognisable help
-         affordance is the solid circle with a white question mark in it, so
-         that is what this is: one filled circle, a stroked hook and a dot,
-         three elements of hand-written SVG. NO ICON LIBRARY. The @defer work
-         just took 375 kB out of the bundle and this button lives in `main`,
-         which is exactly the chunk a dependency would land in.
-
-         The disc takes its colour from the stylesheet through
-         `fill="currentColor"`, so the one hex that decides what this looks
-         like lives next to the contrast reasoning that justifies it, in
-         app-toolbar.scss. The question mark is hard-coded #fff because it is
-         drawn ON the disc — it is not a second themeable colour, it is the
-         hole in the first one.
-
-         IT IS UNLABELLED ON SCREEN, SO THE NAME HAS TO COME FROM SOMEWHERE
-         ELSE AND BOTH ROUTES ARE WIRED:
-           aria-label="Help"  - what a screen reader announces. Without it
-                                the button announces as nothing at all,
-                                because its only child is an SVG.
-           title="Help"       - the hover tooltip, for the sighted user who
-                                cannot tell what the glyph does.
-         The SVG itself is aria-hidden and focusable="false": it is
-         decoration once the button has a name, and in IE-era Angular builds
-         an SVG without focusable="false" takes tab focus of its own.
-
-         The <button> is a real button, so it is tab-reachable and fires on
-         Enter and Space with no help from us. Do not swap it for a div. -->
+    <!--
+      Help: the only icon-only button, so it is named by aria-label (screen
+      readers) and title (tooltip). Hand-written SVG, no icon library; the disc
+      colour comes from the stylesheet via currentColor.
+    -->
     <button
       type="button"
       class="secondary small-button help-button"

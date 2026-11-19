@@ -1,14 +1,7 @@
 /*
- * The detail panel says what an unsaved coin still needs — calmly, in place.
- *
- * The owner typed a Year into a new coin and got a red error toast. The
- * doomed POST that produced it is already gone (`canCreateCoin`), but the
- * panel he was typing into said nothing at all about why his coin was not in
- * the database, and the grid's only signal was a `title` tooltip.
- *
- * No jsdom: the panel's decision is a computed over plain methods, and the
- * markup that renders it is asserted against the template text with the
- * comments stripped first.
+ * The detail panel's draft note for an unsaved coin. No jsdom: the decision is
+ * tested through the computed, and the markup against the comment-stripped
+ * template text.
  */
 import '@angular/compiler';
 import { readFileSync } from 'node:fs';
@@ -57,7 +50,6 @@ describe('what the panel says about a coin that is still being typed', () => {
   });
 
   it('asks for the denomination after only a Year has been typed', () => {
-    // The owner's exact sequence.
     const panel = createPanel({ coin: { id: 'a', year: '1921' }, draftIds: ['a'] });
     expect(panel.draftStatus()?.summary).toBe('Needs a Denomination before it can be saved.');
   });
@@ -105,8 +97,7 @@ describe('the panel renders the note', () => {
   });
 
   it('still offers a way out of the panel, now that the row has no toggle', () => {
-    // Clicking the row no longer closes the panel, so Close is the only way
-    // out and must not be removed.
+    // Close is the only way out of the panel, so it must stay.
     expect(TEMPLATE).toContain('closeRequested.emit()');
   });
 });

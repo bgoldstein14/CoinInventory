@@ -1,11 +1,6 @@
 /*
- * reference-sections.spec.ts — the maintenance screen's table of contents.
- *
- * The set of types is DATA, and these tests pin the properties the screen
- * depends on: ids are unique (two panes answering to one id means the sidebar
- * highlights one and shows the other), every pane has something to say about
- * itself, and an id that is not in the list resolves to one that is rather
- * than rendering a blank body.
+ * Reference sections: unique ids, a hint for every pane, A-Z order with the
+ * diagnostic pane last, and unknown ids resolving to a real pane.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -22,14 +17,7 @@ import {
 
 describe('REFERENCE_SECTIONS — the panes the screen offers', () => {
   it('has one entry per maintainable reference type, issuers included', () => {
-    // A denomination cannot be added without an issuer, so if issuers are
-    // not maintainable the user hits a wall the moment the reference data
-    // is missing their country.
-    //
-    // The order is the sidebar's: the seven lists A-Z by title, then the
-    // one diagnostic. It replaced a curated reading order (issuers before
-    // denominations, unlinked coins straight after) that was a teaching
-    // aid on the first visit and an obstacle on every one after.
+    // Sidebar order: the lists A-Z by title, then the diagnostic pane.
     const ids = REFERENCE_SECTIONS.map((section) => section.id);
     expect(ids).toEqual([
       'catalogues',
@@ -44,21 +32,13 @@ describe('REFERENCE_SECTIONS — the panes the screen offers', () => {
   });
 
   it('maintains metal content here, and not in Settings', () => {
-    /* The Settings dialog used to carry its own chip editor for metals.
-     * It was the ONE list with no pane here, so it could not simply be
-     * deleted with the duplicated ones — it had to be moved. A pane
-     * missing from this list is a list the user can no longer edit at
-     * all, which is why this is pinned by id rather than only by the
-     * order assertion above. */
+    // Metal content must have a pane; it is not edited anywhere else.
     const ids: string[] = REFERENCE_SECTIONS.map((section) => section.id);
     expect(ids).toContain('metal-content');
   });
 
   it('lists the reference lists A-Z by the title the sidebar shows', () => {
-    /* By TITLE and not by id: the sidebar renders titles, and 'coin-sets'
-     * sorts nowhere near 'Collection Sets'. An A-Z menu whose labels are
-     * not in A-Z order is worse than no sort at all, because the user
-     * stops scanning once they believe the order. */
+    // Sorted by title, since titles are what the sidebar shows.
     const titles = REFERENCE_SECTIONS.filter((section) => section.kind === 'list').map(
       (section) => section.title
     );
@@ -67,25 +47,14 @@ describe('REFERENCE_SECTIONS — the panes the screen offers', () => {
   });
 
   it('puts the diagnostic pane last, after every reference list', () => {
-    /* `Unlinked Coins` is not a list the user maintains: it lists COINS
-     * that need attention and it is EMPTY on a healthy database. A pane
-     * that is usually empty, sorted into the middle of seven that never
-     * are, is a dead end between two live lists.
-     *
-     * Its discoverability does not depend on this position — the inventory
-     * screen raises a banner whenever the count is non-zero, and that
-     * banner opens the pane directly. */
+    // Unlinked Coins is a diagnostic pane and goes after the lists.
     const kinds = REFERENCE_SECTIONS.map((section) => section.kind);
     expect(kinds.lastIndexOf('list')).toBeLessThan(kinds.indexOf('diagnostic'));
     expect(REFERENCE_SECTIONS[REFERENCE_SECTIONS.length - 1].id).toBe('unlinked');
   });
 
   it('keeps the diagnostic last by KIND, not by the letter it starts with', () => {
-    /* 'Unlinked Coins' sorts last under a pure A-Z today purely by the
-     * accident of its initial. Renaming it — 'Coins Needing Attention' has
-     * been suggested, because nobody knows what "unlinked" means — would
-     * drop it between Catalogues and Collection Sets under a pure sort.
-     * The rule is about what the pane IS. */
+    // Pinned by kind, not by its title happening to start with U.
     const renamed: ReferenceSection = {
       id: 'unlinked',
       title: 'Coins Needing Attention',
@@ -112,8 +81,6 @@ describe('REFERENCE_SECTIONS — the panes the screen offers', () => {
   });
 
   it('gives every section a title and a hint', () => {
-    // The hint is the only thing that says what each list is FOR. A pane
-    // without one is tidier and less useful.
     for (const section of REFERENCE_SECTIONS) {
       expect(section.title.trim().length).toBeGreaterThan(0);
       expect(section.hint.trim().length).toBeGreaterThan(10);
@@ -133,8 +100,7 @@ describe('resolveReferenceSection — never render an empty pane', () => {
   });
 
   it('falls back to the default for anything it does not recognise', () => {
-    // A stale id can arrive from a remembered preference or a typo in a
-    // caller. Rendering nothing at all would look like the dialog had broken.
+    // A stale or mistyped id falls back rather than rendering an empty pane.
     expect(resolveReferenceSection('metals')).toBe(DEFAULT_REFERENCE_SECTION);
     expect(resolveReferenceSection('')).toBe(DEFAULT_REFERENCE_SECTION);
     expect(resolveReferenceSection(null)).toBe(DEFAULT_REFERENCE_SECTION);

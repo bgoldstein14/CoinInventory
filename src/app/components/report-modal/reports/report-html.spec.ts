@@ -1,12 +1,4 @@
-/**
- * report-html.spec.ts
- *
- * renderReportHtml() is a pure string function on purpose. These specs run
- * under Node with no jsdom, so "open the report and look at it" is not
- * available; building the document as a string means the parts that MATTER —
- * the escaping, the page rules that control pagination, the totals block and
- * the honesty caveats — are all assertable without a browser.
- */
+/** Tests for the printable HTML: escaping, pagination rules, totals and caveats. */
 import { describe, expect, it } from 'vitest';
 import { ReportDocument } from './report-types';
 import { escapeHtml, renderReportHtml } from './report-html';
@@ -58,9 +50,6 @@ describe('escapeHtml', () => {
 
 describe('renderReportHtml', () => {
   it('produces a complete, self-contained document', () => {
-    // Self-contained because it is written into a brand-new window that has
-    // none of the app stylesheets. Nothing may be linked; everything is
-    // inline.
     const html = renderReportHtml(doc());
     expect(html).toMatch(/^<!DOCTYPE html>/);
     expect(html).toContain('</html>');
@@ -80,21 +69,12 @@ describe('renderReportHtml', () => {
     // Repeat the column headings at the top of every printed page.
     expect(html).toContain('thead { display: table-header-group; }');
 
-    // Never split a coin across two pages.
-    //
-    // MATCH THE DECLARATION TOGETHER WITH ITS SELECTOR. A bare
-    // toContain('break-inside: avoid') is vacuous here: the `.totals` block
-    // further down the same stylesheet carries the identical text, so the
-    // assertion stays green with the `tr` rule deleted.
+    // Never split a coin across two pages. Matched with its selector because
+    // `.totals` carries the same declaration.
     expect(html).toContain('tr { break-inside: avoid;');
 
-    // The totals block must not be split either — it is the part a reader
-    // goes looking for, and half of it on each side of a page break is the
-    // one place a number can be misread.
     expect(html).toMatch(/\.totals \{[^}]*break-inside: avoid/);
 
-    // A printable margin. Browsers default to a platform-dependent one, and a
-    // table set to 100% width will happily run into the unprintable edge.
     expect(html).toContain('@page { size: letter; margin:');
   });
 

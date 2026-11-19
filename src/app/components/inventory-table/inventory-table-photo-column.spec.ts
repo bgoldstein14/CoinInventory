@@ -1,26 +1,9 @@
 /**
- * The Photo column: what the grid decides per row, and what the template does
- * with those decisions.
+ * The Photo column: per-row decisions and the template that uses them.
  *
- * FOLDED IN FROM, and replacing, two files that are now deleted:
- *   - inventory-table-thumbnails.spec.ts       (the Photo column itself)
- *   - inventory-table-unsaved-thumbnail.spec.ts (revisions, and draft rows)
- *
- * Each of their headers is carried below verbatim, as a banner above the
- * helpers it came with. Nothing else about either file changed: every test
- * and every assertion is the original.
- *
- * TWO BUILDERS, DELIBERATELY. `createPhotoTable` monkey-patches the api mock
- * with a one-argument `coinThumbnailUrl` that IGNORES the revision and
- * returns an absolute URL; `createDraftTable` uses the real shared mock from
- * testing/test-helpers.ts, which HONOURS the revision. That is a real
- * behavioural difference two different tests depend on, not duplication.
- *
- * SHARED STATE. `coinThumbnailRevisions` is a module-level singleton. While
- * these were two files vitest's per-file isolation kept them apart; in one
- * file it does not, so the registry is cleared once, file-wide, in the
- * beforeEach below. The per-describe clear pairs the unsaved file carried are
- * now redundant and have been removed.
+ * Two builders: `createPhotoTable` patches the api mock with a URL builder
+ * that ignores the revision; `createDraftTable` uses the shared mock, which
+ * honours it.
  */
 import '@angular/compiler';
 import { readFileSync } from 'node:fs';
@@ -36,17 +19,7 @@ import { InventoryTable } from './inventory-table';
 import { CoinRecord } from '../../types/coin.model';
 import { createMockDependencies } from '../../testing/test-helpers';
 
-/**
- * The template with its HTML comments removed, shared by both halves of this
- * file. Carried over from both originals, which stripped comments the same
- * way and for the same reason:
- *
- * THIS MATTERS. The first version of the `loading="lazy"` test below read
- * the raw file, and the comment ABOVE the <img> explaining why lazy loading
- * is essential contains the string `loading="lazy"`. Deleting the attribute
- * from the actual tag left the test green. A test that its own documentation
- * satisfies is not a test.
- */
+/** The template with HTML comments removed, so comment text cannot satisfy an assertion. */
 const TEMPLATE = readFileSync(join(__dirname, 'inventory-table.html'), 'utf8')
   .replace(/<!--[\s\S]*?-->/g, '');
 
@@ -62,21 +35,7 @@ interface PhotoTable {
   thumbnailUrl(coin: CoinRecord): string;
 }
 
-/* ===== header carried verbatim from inventory-table-thumbnails.spec.ts ===== */
-/**
- * The Photo column. The grid must show a thumbnail per row without the list
- * endpoint carrying image bytes, and without turning N coins into N requests
- * on load. Each row renders `<img src="/api/coins/:id/thumbnail"
- * loading="lazy">`, and only for coins the list said have photographs.
- *
- * What this file can check, with no jsdom: the two decisions the component
- * makes per row — whether to render an image at all, and what URL to point
- * it at. The `loading="lazy"` attribute itself lives in the template and is
- * asserted against the template text below, because it is load-bearing
- * rather than cosmetic.
- */
-
-/** Was `createTable` in inventory-table-thumbnails.spec.ts. Revision-blind. */
+/** Table whose thumbnail URL ignores the revision. */
 function createPhotoTable() {
   const deps = createMockDependencies();
   const injector = Injector.create({
@@ -97,27 +56,7 @@ function createPhotoTable() {
   };
 }
 
-/* ===== header carried verbatim from inventory-table-unsaved-thumbnail.spec.ts ===== */
-/**
- * The Photo column, for the two bugs the owner hit.
- *
- *  1. The row's thumbnail URL now carries the coin's image revision, so a
- *     photograph the server has just accepted produces a URL the browser has
- *     not already failed on. Revision 0 — a coin whose photographs have not
- *     changed this session — must still produce the bare URL, or every scroll
- *     would re-download instead of revalidating with a 304.
- *
- *  2. A row the database does not have cannot have a thumbnail. Asking for
- *     one is a guaranteed 404 ("No thumbnail available for coin ..." in the
- *     owner's log), so the grid must not ask.
- *
- * No jsdom here: the component's decisions are plain methods, and the
- * template is asserted as text with its comments stripped — see the note on
- * TEMPLATE below.
- */
-
-/** Was `createTable` in inventory-table-unsaved-thumbnail.spec.ts.
- *  Uses the real shared api mock, which honours the thumbnail revision. */
+/** Table using the shared api mock (honours the revision); `draftIds` are unsaved coins. */
 function createDraftTable(draftIds: string[] = []): PhotoTable {
   const deps = createMockDependencies();
   const injector = Injector.create({
@@ -138,11 +77,9 @@ function createDraftTable(draftIds: string[] = []): PhotoTable {
   return runInInjectionContext(injector, () => new InventoryTable()) as unknown as PhotoTable;
 }
 
-/* The revision registry is a module-level singleton; one clear for the whole
- * file now that these two suites share a module graph. */
+/* The revision registry is a module-level singleton. */
 beforeEach(() => coinThumbnailRevisions.clear());
 
-/* --- from inventory-table-thumbnails.spec.ts --- */
 describe('the Photo column decides from imageCount, not from image data', () => {
   it('renders a thumbnail for a coin the list says has photographs', () => {
     const table = createPhotoTable();
@@ -178,7 +115,6 @@ describe('the Photo column decides from imageCount, not from image data', () => 
   });
 });
 
-/* --- from inventory-table-unsaved-thumbnail.spec.ts --- */
 describe('the thumbnail URL moves when the saved photographs move', () => {
   it('is the bare endpoint URL for a coin whose photographs have not changed', () => {
     const table = createDraftTable();
@@ -255,11 +191,9 @@ describe('the revision registry is shared, not per component', () => {
   });
 });
 
-/* --- template assertions from inventory-table-thumbnails.spec.ts --- */
+/* --- template assertions --- */
 describe('the template — the lazy thumbnail', () => {
   it('marks the row thumbnail ITSELF lazy, so off-screen rows cost nothing', () => {
-    // Asserted on the <img ...> TAG, with comments stripped; both halves are
-    // deliberate — see the note on TEMPLATE above.
     const thumbnailTag = /<img[^>]*class="row-thumb"[^>]*>/.exec(TEMPLATE)?.[0];
 
     expect(thumbnailTag).toBeDefined();
@@ -268,14 +202,12 @@ describe('the template — the lazy thumbnail', () => {
   });
 
   it('no longer binds a row thumbnail to inline image data', () => {
-    // `imagePaths[0]` in the grid is the shape that made the list endpoint
-    // have to carry every photograph in the collection.
+    // The list endpoint does not carry image data.
     expect(TEMPLATE).not.toContain('imagePaths[0]');
     expect(TEMPLATE).not.toContain('primaryImage');
   });
 });
 
-/* --- template assertions from inventory-table-unsaved-thumbnail.spec.ts --- */
 describe('the template — gating the <img>', () => {
   it('gates the <img> on the saved-thumbnail decision, not on hasPhoto alone', () => {
     expect(TEMPLATE).toContain('showsThumbnail(coin)');

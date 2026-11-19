@@ -1,12 +1,7 @@
 /**
- * Tests for the client half of the reference URL.
- *
- * It is duplicated on the server (server/routes/images/reference-url.ts)
- * because the browser and Node share no module here. The duplication is
- * five lines of string handling, and THE TWO HALVES MUST AGREE: the client
- * builds the reference during an import, the server parses it back into a
- * path when the coin is saved. These tests use the same cases as the server
- * spec for exactly that reason.
+ * Tests for the client half of the reference URL. The logic is duplicated in
+ * server/routes/images/reference-url.ts (no shared module) and both must
+ * agree, so these use the same cases as the server spec.
  */
 import { describe, expect, it } from 'vitest';
 import {
@@ -51,8 +46,6 @@ describe('sourcePathFromReferenceUrl', () => {
   });
 
   it('never throws on a malformed escape', () => {
-    // A mangled reference means "no path known", never an exception in the
-    // middle of a save.
     expect(sourcePathFromReferenceUrl(`${IMAGE_REFERENCE_ROUTE}%zz`)).toBeNull();
   });
 });

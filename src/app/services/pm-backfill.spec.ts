@@ -1,18 +1,7 @@
 /**
- * Tests for the one-time "backfill precious-metal data" maintenance action.
- *
- * WHAT IS BEING PROTECTED HERE
- *
- * This feature rewrites part of every row in the owner's collection in one
- * press of a button, so the tests are mostly about what it REFUSES to do:
- *
- *   * it never overwrites a value that is already there (it may have been
- *     typed in by hand, and a hand-entered figure outranks an inferred one);
- *   * it never guesses where pm-reference.ts deliberately declines to, because
- *     a wrong purity silently produces a wrong melt value;
- *   * it never sends a field it did not intend to — this project has a history
- *     of whole-record writes blanking out unrelated columns; and
- *   * what the preview promises is exactly what the run performs.
+ * Tests for the "backfill precious-metal data" maintenance action. It must not
+ * overwrite existing values, guess where pm-reference.ts declines, send fields
+ * other than the alloy fields, or do anything other than what the preview shows.
  */
 import { describe, expect, it, vi } from 'vitest';
 import { CoinRecord } from '../types/coin.model';
@@ -24,7 +13,7 @@ import {
 } from './pm-backfill';
 import { PM_FIELD_KEYS, composePmFields, pmFieldsToFill } from './pm-fill';
 
-/** A coin with everything filled in EXCEPT whatever the test overrides. */
+/** A coin with everything filled in except the overrides. */
 function coin(overrides: Partial<CoinRecord>): CoinRecord {
   return {
     id: 'c1',
@@ -50,17 +39,13 @@ function coin(overrides: Partial<CoinRecord>): CoinRecord {
 }
 
  /*
- * THE SHARED INFERENCE
- *
- * `composePmFields` is the single adapter the Quicken import AND this backfill
- * both call. If the two ever stopped sharing it, the first symptom would be an
- * imported coin and a backfilled coin disagreeing about the same object.
+  * `composePmFields` is the shared adapter used by both the Quicken import and
+  * this backfill, so imported and backfilled coins agree.
   */
 
 describe('composePmFields — the mapping both the import and the backfill use', () => {
   it('names its result with CoinRecord field names, not the reference table\'s', () => {
-    // pm-reference.ts calls it `metal`; a coin record calls it `metalContent`.
-    // Doing that rename in one place is the whole reason pm-fill.ts exists.
+    // pm-reference.ts says `metal`; a coin record says `metalContent`.
     const fields = composePmFields('$20', '1927', 'United States');
 
     expect(fields).toEqual({
@@ -68,32 +53,23 @@ describe('composePmFields — the mapping both the import and the backfill use',
       composition: '90% Gold, 10% Copper',
       pmPercent: 90,
       pmWeightGrams: 30.09,
-      // The reference table calls this `grossWeightGrams`, because it sits
-      // next to `pmWeightGrams` and the two must never be confused. A coin
-      // record calls it plainly `weight`. That rename is the fifth and last
-      // thing pm-fill.ts does.
+      // The table's `grossWeightGrams` becomes the record's `weight`.
       weight: 33.436
     });
   });
 
   it('distinguishes the coin\'s GROSS weight from the pure metal in it', () => {
-    // The single most important thing about these two numbers is that they
-    // are not the same number. A $20 double eagle weighs 33.436 g and
-    // contains 30.09 g of gold; confusing the two is the exact mistake behind
-    // the melt-value bug written up in the README.
+    // Gross (33.436 g) and pure gold (30.09 g) are different numbers.
     const fields = composePmFields('$20', '1927', 'United States');
 
     expect(fields?.weight).toBeCloseTo(33.436, 3);
     expect(fields?.pmWeightGrams).toBeCloseTo(30.09, 2);
-    // ...and they agree with the purity, which is what proves neither was
-    // transcribed wrong.
+    // ...and they agree with the purity.
     expect(fields!.weight! * (fields!.pmPercent! / 100)).toBeCloseTo(fields!.pmWeightGrams!, 2);
   });
 
   it('reports a GROSS weight for base metal, where there is no PM weight at all', () => {
-    // `weight` is the one of the five that is not about precious metal, so it
-    // is filled on coins the other four cannot describe. A 1983 cent has no
-    // melt value and a perfectly well-known weight.
+    // A 1983 cent has no melt value but a known weight.
     const fields = composePmFields('1¢', '1983', 'United States');
 
     expect(fields?.weight).toBeCloseTo(2.50, 2);
@@ -101,10 +77,8 @@ describe('composePmFields — the mapping both the import and the backfill use',
   });
 
   it('offers no weight when only the COARSE metal fallback could answer', () => {
-    // "A US $20 is gold" is a statement about the metal. It says nothing
-    // about the planchet, so no weight is invented to go with it. (1934 is
-    // outside the double eagle's 1849-1933 band, so the table has no row and
-    // metal-inference.ts answers on its own.)
+    // The coarse answer (1934 is outside the double eagle's band) names the metal
+    // only; no weight is invented.
     const fields = composePmFields('$20', '1934', 'United States');
 
     expect(fields?.metalContent).toBe('Gold');
@@ -113,9 +87,7 @@ describe('composePmFields — the mapping both the import and the backfill use',
   });
 
   it('answers for base metal too, with the two PM numbers left undefined', () => {
-    // A bronze cent HAS a metal and a composition but no precious metal, so
-    // writing 0 into the PM fields would be a lie that computeMeltValue would
-    // then have to interpret. They stay absent.
+    // A bronze cent has a metal and composition but no PM; the PM fields stay absent, not 0.
     const fields = composePmFields('1¢', '1909', 'United States');
 
     expect(fields?.metalContent).toBe('Bronze');
@@ -124,7 +96,7 @@ describe('composePmFields — the mapping both the import and the backfill use',
   });
 });
 
-/* ---- ONLY FILL BLANKS ---- */
+/* Only fill blanks */
 
 describe('pmFieldsToFill — which fields may be written for one coin', () => {
   it('fills all five on a coin that has none of them', () => {
@@ -140,15 +112,8 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('NEVER overwrites a value that is already there', () => {
-    // The user has typed a deliberately "wrong" purity and a deliberately
-    // "wrong" weight. The backfill is not entitled to an opinion about
-    // either: they may know something about this specific coin — a worn or
-    // damaged example really does weigh less — that a year-and-denomination
-    // table cannot.
-    //
-    // Note the weight in particular. It is the one of the five most likely to
-    // have been measured on an actual scale, so it is the LAST one an
-    // inferred catalogue figure should be allowed to replace.
+    // The user's own purity and weight win: a worn coin really weighs less, and a
+    // weight is the field most likely to have been measured.
     const updates = pmFieldsToFill(coin({
       denomination: '$20',
       year: '1927',
@@ -163,8 +128,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('leaves a hand-measured WEIGHT alone while still filling the rest', () => {
-    // The sharpest form of the rule: the one field the user supplied is the
-    // one the table also knows, and the table loses.
+    // The one field the user supplied is one the table also knows; the user's wins.
     const updates = pmFieldsToFill(coin({
       denomination: '$20',
       year: '1927',
@@ -181,7 +145,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('treats a weight of zero as a value, not as a blank', () => {
-    // Same rule as the PM numbers below: a 0 is something somebody put there.
+    // A 0 is a value someone entered.
     const updates = pmFieldsToFill(coin({ denomination: '$20', year: '1927', weight: 0 }));
 
     expect(updates).not.toHaveProperty('weight');
@@ -189,10 +153,8 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('completes the GAPS on a partly-filled coin rather than skipping it', () => {
-    /* This is the case the whole feature exists for. Melt value needs BOTH
-     * metalContent and pmWeightGrams. A coin where only the metal was ever
-     * typed in still shows a blank melt figure — so a "skip anything partly
-     * filled" rule would refuse to fix precisely the coins that are broken. */
+    /* Melt value needs both metalContent and pmWeightGrams, so coins with only the
+     * metal typed in must have their gaps completed, not skipped. */
     const updates = pmFieldsToFill(coin({
       denomination: '50¢',
       year: '1964',
@@ -209,9 +171,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('treats a zero as a value, not as a blank', () => {
-    // A 0 is a number somebody put there. The rule is "only fill blanks", and
-    // 0 is not a blank. (Contrast spot PRICES, where 0 does mean "unknown" —
-    // gold does not trade at zero, but a coin's PM weight genuinely can be.)
+    // 0 is not a blank here (unlike spot prices, a PM weight can really be 0).
     const updates = pmFieldsToFill(coin({
       denomination: '$20',
       year: '1927',
@@ -225,10 +185,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('never invents a value the reference table does not have', () => {
-    // A 1983 cent is copper-plated zinc. It has no precious metal, so the two
-    // PM numbers must stay blank — not be filled with zeros. Its WEIGHT, on
-    // the other hand, is perfectly well known (2.50 g) and is filled, which
-    // is the difference between "no precious metal" and "no information".
+    // Copper-plated zinc: PM fields stay blank, but the 2.50 g weight is filled.
     const updates = pmFieldsToFill(coin({ denomination: '1¢', year: '1983' }));
 
     expect(Object.keys(updates).sort()).toEqual(['composition', 'metalContent', 'weight']);
@@ -237,9 +194,7 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('withholds the weight too where the table genuinely does not have one', () => {
-    // The large cent spans two planchet standards (13.48 g then 10.89 g) in
-    // one reference row, so pm-reference.ts records no gross weight for it.
-    // Metal and composition are still filled; weight is not invented.
+    // The large cent row has no gross weight (two planchets), so weight isn't invented.
     const updates = pmFieldsToFill(coin({ denomination: '1¢', year: '1820' }));
 
     expect(updates).toHaveProperty('metalContent', 'Copper');
@@ -247,11 +202,8 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
   });
 
   it('uses the coin\'s own recorded metal to settle a tie the table refuses', () => {
-    /* An 1855 "$1" is either a 24 g silver dollar or a 1.5 g gold dollar, and
-     * pm-reference.ts answers null rather than choose. But if the owner has
-     * already written "Gold" in the Metal field, that is not a guess — it is
-     * their own statement, and it is the same kind of evidence the Quicken
-     * import gets from a security name reading "G$1". */
+    /* An 1855 "$1" is a silver or a gold dollar and the table returns null. A
+     * recorded "Gold" is the user's own statement, used as a hint. */
     const withoutHint = pmFieldsToFill(coin({ denomination: '$1', year: '1855' }));
     expect(withoutHint).toEqual({});
 
@@ -264,21 +216,17 @@ describe('pmFieldsToFill — which fields may be written for one coin', () => {
       composition: '90% Gold, 10% Copper',
       pmPercent: 90,
       pmWeightGrams: 1.50,
-      // 1.672 g gross — the gold dollar is the smallest coin the US ever
-      // struck, and getting this instead of the silver dollar's 26.73 g is
-      // the whole value of the hint.
+      // The gold dollar's 1.672 g rather than the silver dollar's 26.73 g.
       weight: 1.672
     });
   });
 });
 
-/* ---- THE DELIBERATE GAPS — coins the backfill must leave alone ---- */
+/* Deliberate gaps: coins the backfill must leave alone */
 
 describe('the deliberate gaps are inherited, not patched over', () => {
-  // Each of these is a year/denomination where TWO alloys were struck and
-  // nothing in the record says which. pm-reference.ts marks them
-  // "*** DELIBERATE GAP ***" and answers null. The backfill adds no new rules,
-  // so it must answer "nothing to do" for all of them.
+  // Each had two alloys struck that year; pm-reference.ts returns null, so the
+  // backfill does nothing.
   const ambiguous: { what: string; denomination: string; year: string }[] = [
     { what: 'the 1942 Jefferson nickel (cupronickel AND 35% silver)', denomination: '5¢', year: '1942' },
     { what: 'the 1982 Lincoln cent (bronze AND copper-plated zinc)', denomination: '1¢', year: '1982' },
@@ -298,8 +246,7 @@ describe('the deliberate gaps are inherited, not patched over', () => {
   }
 
   it('leaves a coin the reference table has never heard of alone', () => {
-    // Nothing in the table covers a Japanese 100 Yen. No entry means no guess:
-    // the coin is reported as undetermined and never written to.
+    // No table entry for a Japanese 100 Yen: undetermined, never written.
     const plan = planPmBackfill([
       coin({ id: 'yen', denomination: '100 Yen', year: '1964', country: 'Japan' })
     ]);
@@ -309,8 +256,7 @@ describe('the deliberate gaps are inherited, not patched over', () => {
   });
 
   it('leaves a coin with no year alone', () => {
-    // Almost every rule in the reference table is year-dependent, so a record
-    // with no year is unanswerable by construction.
+    // Most rules are year-dependent, so no year means no answer.
     const plan = planPmBackfill([coin({ id: 'noyear', denomination: '25¢', year: '' })]);
 
     expect(plan.fillableCount).toBe(0);
@@ -318,10 +264,10 @@ describe('the deliberate gaps are inherited, not patched over', () => {
   });
 });
 
-/* ---- THE PREVIEW ---- */
+/* The preview */
 
 describe('planPmBackfill — the preview the user confirms', () => {
-  /** One of each kind of coin, so every bucket gets exactly one member. */
+  /** One coin per bucket. */
   function mixedInventory(): CoinRecord[] {
     return [
       // fillable: nothing recorded, and the table knows it
@@ -339,10 +285,8 @@ describe('planPmBackfill — the preview the user confirms', () => {
         pmWeightGrams: 15.05,
         weight: 16.718
       }),
-      // already complete: base metal with everything the table knows
-      // recorded. For a base-metal coin that is three of the five — metal,
-      // composition and gross weight — because it genuinely has no precious
-      // metal content to record.
+      // already complete: base metal with everything the table knows (metal,
+      // composition, gross weight)
       coin({
         id: 'done-2',
         denomination: '1¢',
@@ -366,8 +310,7 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 
   it('partitions the inventory — the counts add up to the total', () => {
-    // A preview whose numbers do not add up is a preview nobody should trust
-    // enough to press Run on.
+    // The counts must add up.
     const plan = planPmBackfill(mixedInventory());
 
     expect(
@@ -377,10 +320,8 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 
   it('does not count a base-metal coin as "cannot be determined"', () => {
-    /* A 1983 cent that already says "Zinc" is missing PM % and PM weight only
-     * because it HAS no precious metal. Reporting it alongside the 1942 nickel
-     * would make the "cannot be determined" figure look alarming and would be
-     * untrue: the table answered perfectly well. */
+    /* A 1983 cent missing PM fields because it has none is "already complete",
+     * not "undetermined". */
     const plan = planPmBackfill([coin({
       id: 'zinc',
       denomination: '1¢',
@@ -395,12 +336,8 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 
   it('counts a base-metal coin that is only missing its WEIGHT as fillable', () => {
-    /* The same 1983 cent with its weight not yet recorded. It is not
-     * "already complete" any more, and it is certainly not "undetermined" —
-     * the table knows it weighs 2.50 g. It is a coin with something to gain,
-     * which is exactly what `fillable` means. This is the single commonest
-     * case in the owner's existing database, because nothing before now ever
-     * wrote the Weight column. */
+    /* The same cent without its weight is fillable (the table knows 2.50 g). The
+     * most common case in existing data, since Weight was never written before. */
     const plan = planPmBackfill([coin({
       id: 'zinc-no-weight',
       denomination: '1¢',
@@ -415,9 +352,7 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 
   it('skips rows that have never been saved to the database', () => {
-    // A draft has no server row, so a PUT would 404. It is excluded rather
-    // than counted as a failure — it will be picked up by a later run once the
-    // row saves itself.
+    // Drafts have no server row (a PUT would 404); excluded, not failed.
     const coins = [
       coin({ id: 'saved', denomination: '$20', year: '1927' }),
       coin({ id: 'draft', denomination: '$20', year: '1927' })
@@ -431,9 +366,7 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 
   it('writes nothing — the preview is pure', () => {
-    // There is no way to assert "no HTTP happened" on a pure function, so the
-    // guarantee is structural: planPmBackfill takes an array and returns an
-    // object, and the coins it was handed come back unmodified.
+    // A pure function: coins come back unmodified.
     const coins = mixedInventory();
     const before = JSON.stringify(coins);
 
@@ -443,14 +376,12 @@ describe('planPmBackfill — the preview the user confirms', () => {
   });
 });
 
-/* ---- THE PAYLOAD ---- */
+/* The payload */
 
 describe('the update payload carries ONLY precious-metal fields', () => {
   it('never includes a key outside the five alloy / weight fields', () => {
-    /* THE RULE THIS GUARDS: `PUT /api/coins/:id` applies whatever it is given,
-     * and this project has previously blanked out columns by sending whole
-     * records. Every candidate payload is checked against the allow-list by
-     * name, not just by count. */
+    /* `PUT /api/coins/:id` applies whatever it is given, so every payload is
+     * checked against the allow-list by name. */
     const plan = planPmBackfill([
       coin({ id: 'a', denomination: '$20', year: '1927', notes: 'do not touch me' }),
       coin({ id: 'b', denomination: '50¢', year: '1964', grade: 'MS65' }),
@@ -469,10 +400,7 @@ describe('the update payload carries ONLY precious-metal fields', () => {
     const cleaned = onlyPmFields({
       metalContent: 'Gold',
       pmWeightGrams: 30.09,
-      // `weight` is on the allow-list and must SURVIVE. It was the newest
-      // addition to PM_FIELD_KEYS, and an allow-list that silently dropped it
-      // would turn the whole gross-weight feature into a no-op on the
-      // backfill path without failing anything else.
+      // `weight` is on the allow-list and must survive.
       weight: 33.436,
       notes: 'should be dropped',
       imagePaths: ['definitely should be dropped']
@@ -482,7 +410,7 @@ describe('the update payload carries ONLY precious-metal fields', () => {
   });
 
   it('still drops a non-alloy numeric field that looks weight-ish', () => {
-    // `weight` is allowed; nothing else is, however plausible it looks.
+    // `weight` is allowed; nothing else is.
     const cleaned = onlyPmFields({
       weight: 33.436,
       purchasePrice: 1800,
@@ -493,7 +421,7 @@ describe('the update payload carries ONLY precious-metal fields', () => {
   });
 });
 
-/* ---- THE RUN ---- */
+/* The run */
 
 describe('runPmBackfill — the writes', () => {
   function planFor(coins: CoinRecord[]): PmBackfillPlan {
@@ -521,7 +449,7 @@ describe('runPmBackfill — the writes', () => {
 
     const outcome = await runPmBackfill(plan, write);
 
-    // The preview said 2 could be filled; exactly 2 writes went out.
+    // The preview said 2; exactly 2 writes went out.
     expect(plan.fillableCount).toBe(2);
     expect(write).toHaveBeenCalledTimes(2);
     expect(outcome.attempted).toBe(2);
@@ -529,12 +457,12 @@ describe('runPmBackfill — the writes', () => {
 
     const writtenIds = write.mock.calls.map(([id]) => id);
     expect(writtenIds.sort()).toEqual(['a', 'b']);
-    // No duplicates — "exactly once" means exactly once.
+    // No duplicates.
     expect(new Set(writtenIds).size).toBe(writtenIds.length);
   });
 
   it('what the preview promised is what the run performed', async () => {
-    // Not merely the same COUNT: the same coins and the same payload objects.
+    // The same coins and the same payload objects, not just the same count.
     const plan = planFor([
       coin({ id: 'a', denomination: '$20', year: '1927' }),
       coin({ id: 'b', denomination: '50¢', year: '1964', metalContent: 'Silver' })
@@ -549,11 +477,8 @@ describe('runPmBackfill — the writes', () => {
   });
 
   it('writes one coin at a time, never in parallel', async () => {
-    /* THE TRAP THIS GUARDS AGAINST. The ordinary edit path debounces saves by
-     * one second, keyed per coin — so a loop over several hundred coins would
-     * set several hundred independent timers in one tick and then fire every
-     * PUT simultaneously. This run awaits each write before starting the next,
-     * so there is never more than one request in flight. */
+    /* The normal edit path debounces per coin, which would fire every PUT at once;
+     * the run awaits each write, so at most one request is in flight. */
     let inFlight = 0;
     let maxInFlight = 0;
 
@@ -588,8 +513,7 @@ describe('runPmBackfill — the writes', () => {
   });
 
   it('keeps going after a failure and names the coins that failed', async () => {
-    // Giving up halfway because one row was locked would be worse than
-    // finishing and reporting "2 of 3, here is the one that failed".
+    // A failure doesn't stop the run: "2 of 3, here is the one that failed".
     const plan = planFor([
       coin({ id: 'a', denomination: '$20', year: '1927' }),
       coin({ id: 'b', denomination: '50¢', year: '1964' }),

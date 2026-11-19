@@ -143,7 +143,7 @@ These were asked and not yet answered; the work should not start without them.
 
 ## Related gap, same shape, also unbuilt
 
-The **British** denominations seeded in `server/setup-database.sql` —
+The **British** denominations in the reference seed (`issuers-denominations.json`) —
 `Farthing`, `½d`, `3d`, `1/-`, `2/6 (Half Crown)`, `£1`, `Sovereign`,
 `½ Sovereign` and the rest — are likewise absent from `DENOMINATION_RULES`, so
 denomination contributes nothing for any GB coin either. That is missing

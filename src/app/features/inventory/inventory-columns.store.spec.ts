@@ -1,17 +1,7 @@
 /**
- * Tests for inventory column ORDER and for the way a saved column preference
- * interacts with it.
- *
- * WHY THESE TESTS LOOK LIKE THIS
- * There is no jsdom in this project's vitest setup, so nothing here renders a
- * component or inspects a `<th>`. That is fine, because the grid's column
- * sequence is not decided by the template: `inventory-table.html` just loops
- * over `columns().visibleInventoryColumns()`. Testing the store therefore
- * tests the thing that actually decides the order.
- *
- * IndexedDB is provided by `fake-indexeddb`, the same way the batch-import
- * specs do it, so `restoreFromStorage()` can be exercised for real rather than
- * against a hand-written stub of StorageService.
+ * Column order and saved column preferences. The table template loops over
+ * visibleInventoryColumns(), so testing the store tests the grid's order.
+ * IndexedDB comes from fake-indexeddb.
  */
 import 'fake-indexeddb/auto';
 import { IDBFactory } from 'fake-indexeddb';
@@ -34,9 +24,6 @@ describe('inventoryColumnOrder — Cert sits immediately before Grade', () => {
   });
 
   it('places denomination directly after mintMark', () => {
-    // Year / Mint Mark / Denomination is how a coin is spoken about and
-    // written on a holder -- "1881-S Dollar" -- so the three read together
-    // at the left edge of the grid.
     expect(canonicalIndex('denomination') - canonicalIndex('mintMark')).toBe(1);
   });
 
@@ -46,17 +33,13 @@ describe('inventoryColumnOrder — Cert sits immediately before Grade', () => {
   });
 
   it('keeps the first four columns reading as a coin is described', () => {
-    // Guards the whole leading group rather than one gap, so a later insertion
-    // between any two of them fails here rather than quietly reordering the
-    // grid. This also mirrors the first row of the coin editor.
+    // Guards the whole leading group so an insertion between them fails here.
     expect(inventoryColumnOrder.slice(0, 4)).toEqual(
       ['year', 'mintMark', 'denomination', 'coinType']
     );
   });
 
   it('lists certNumber exactly once', () => {
-    // A duplicate would give the grid two Cert columns and the picker two
-    // tick boxes.
     expect(inventoryColumnOrder.filter(c => c === 'certNumber')).toHaveLength(1);
   });
 
@@ -70,17 +53,14 @@ describe('InventoryColumnsStore — ordering', () => {
   let store: InventoryColumnsStore;
 
   beforeEach(() => {
-    // A brand new in-memory IndexedDB per test, so one test's saved preference
-    // can never leak into the next.
+    // Fresh in-memory IndexedDB per test.
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
     storage = new StorageService();
     store = new InventoryColumnsStore(storage);
   });
 
   it('inserts a newly ticked Cert column before Grade, not at the far right', () => {
-    // Appending to the end of the visible list would put a newly ticked
-    // "Cert" after the last column, and the order would look broken until
-    // the page was reloaded.
+    // Appending would put it after the last column until a reload.
     expect(store.visibleInventoryColumns()).not.toContain('certNumber');
 
     store.toggleColumn('certNumber');
@@ -119,14 +99,8 @@ describe('InventoryColumnsStore — a PRE-EXISTING saved preference', () => {
   });
 
   it('ignores the ORDER of the stored array and re-derives it from the canonical list', async () => {
-    // Why changing the canonical order needs no migration. The preference is
-    // persisted as an ORDERED array under one fixed key
-    // (StorageKeys.VisibleColumns, no version stamp), so an existing user has
-    // the old order sitting in IndexedDB — here, cert near the end, after
-    // soldPrice. If restoreFromStorage() trusted that order, the saved value
-    // would pin the old layout forever for exactly the people who use the app
-    // most. It does not: normalizeVisibleColumns() reads the stored array as a
-    // SET and sorts it into inventoryColumnOrder.
+    // The stored array is read as a set and re-sorted, so a saved old
+    // order (cert after soldPrice) doesn't pin the old layout.
     const savedWithOldOrder: InventoryColumn[] = [
       'year', 'mintMark', 'coinType', 'grade', 'category', 'denomination',
       'country', 'purchasePrice', 'currentValue', 'soldPrice', 'certNumber'

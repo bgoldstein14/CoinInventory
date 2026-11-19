@@ -1,32 +1,11 @@
 /*
- * Building a real `.xlsx` file inside a test.
+ * Builds real `.xlsx` files inside tests from a readable table description,
+ * instead of committing opaque binaries. Writes SpreadsheetML by hand (sharing
+ * no code with the reader): shared strings, one part per sheet, general/date/
+ * currency formats, formula cells with cached values, and merged cells.
  *
- * WHY THIS EXISTS RATHER THAN A COMMITTED BINARY
- * The `.xlsx` importer has to survive the things real spreadsheets do: serial
- * dates, currency number formats, formulas with a cached result, blank rows,
- * trailing blank columns, merged header cells, several worksheets whose
- * columns do not agree. Proving that needs files that contain those things.
- *
- * A checked-in `.xlsx` would be a zip of XML nobody can read in a diff. When
- * one of these tests failed, the next person would have no way to see what
- * the fixture actually contained, let alone change one cell of it. So the
- * fixtures are BUILT HERE, from a description that reads like a table, and
- * the bytes are thrown away at the end of the test.
- *
- * The secondary benefit is honesty about the parser under test. This writer
- * shares no code with the reader -- it emits SpreadsheetML by hand -- so a
- * test that passes says the reader understands the file format, not that two
- * halves of the same library agree with each other.
- *
- * WHAT IS AND IS NOT IMPLEMENTED
- * Enough of SpreadsheetML to be opened by Excel and by `read-excel-file`:
- * shared strings, one worksheet part per sheet, three cell formats (general,
- * date, currency), formula cells with a cached `<v/>`, and `<mergeCells/>`.
- * No charts, no styling beyond number formats, no defined names, no pivot
- * tables -- none of which the importer looks at.
- *
- * This file lives under src/app/testing/, which tsconfig.app.json excludes,
- * so `fflate` stays a devDependency and never reaches the browser bundle.
+ * src/app/testing/ is excluded by tsconfig.app.json, so `fflate` stays a
+ * devDependency and never reaches the browser bundle.
  */
 
 import { strToU8, zipSync } from 'fflate';
@@ -34,23 +13,14 @@ import { strToU8, zipSync } from 'fflate';
 /**
  * One cell of a fixture sheet.
  *
- *   `string`                       a text cell (shared string)
- *   `number`                       a plain numeric cell, General format
- *   `null`                         no `<c/>` element at all -- a truly empty cell
- *   `{ currency }`                 numeric, with a `"$"#,##0.00` number format.
- *                                  This is how Excel stores money: the VALUE
- *                                  is 1250, the dollars and commas are
- *                                  presentation only.
- *   `{ dateSerial }`               numeric, with the built-in `m/d/yy` format
- *                                  (numFmtId 14). 45678 is 1 January 2025.
- *                                  Unformatted, this is the cell that turns a
- *                                  purchase date into the number 45678.
- *   `{ formula, cachedNumber }`    `<f/>` plus a cached numeric `<v/>`
- *   `{ formula, cachedText }`      `<f/>` plus a cached string result
- *                                  (`t="str"`, the way Excel writes it)
- *   `{ formula }`                  a formula with NO cached value, which is
- *                                  what a file written by a non-Excel tool
- *                                  can look like
+ *   `string`                     text cell (shared string)
+ *   `number`                     numeric cell, General format
+ *   `null`                       no `<c/>` element at all
+ *   `{ currency }`               numeric with a `"$"#,##0.00` format
+ *   `{ dateSerial }`             numeric with built-in `m/d/yy` (numFmtId 14)
+ *   `{ formula, cachedNumber }`  `<f/>` plus a cached numeric `<v/>`
+ *   `{ formula, cachedText }`    `<f/>` plus a cached string (`t="str"`)
+ *   `{ formula }`                formula with no cached value (non-Excel writers)
  */
 export type FixtureCell =
   | string
@@ -78,9 +48,7 @@ const STYLE_CURRENCY = 2;
 export function buildXlsxWorkbook(sheets: FixtureSheet[]): Uint8Array {
   if (sheets.length === 0) throw new Error('a workbook needs at least one sheet');
 
-  // Shared strings are collected across every sheet, exactly as Excel does,
-  // so the importer exercises the index-into-a-dictionary path rather than
-  // the much rarer inline-string one.
+  // Shared strings span all sheets, as Excel writes them.
   const sharedStrings: string[] = [];
   const sharedStringIndex = new Map<string, number>();
   const internString = (text: string): number => {
@@ -109,10 +77,7 @@ export function buildXlsxWorkbook(sheets: FixtureSheet[]): Uint8Array {
   return zipSync(files, { level: 0 });
 }
 
-/**
- * Convenience for the common case: one sheet described as a header row plus
- * data rows of plain text, which is what most of the mapping tests need.
- */
+/** One sheet built from a header row plus data rows. */
 export function buildSimpleXlsx(
   sheetName: string,
   headerRow: string[],
@@ -152,8 +117,7 @@ function renderCell(
   }
 
   if (typeof cell === 'string') {
-    // An empty string still gets a cell, so a deliberately blank header can
-    // be told apart from a column that does not exist.
+    // An empty string still gets a cell, distinguishing a blank header from a missing column.
     return `<c r="${reference}" s="${STYLE_GENERAL}" t="s"><v>${internString(cell)}</v></c>`;
   }
 
@@ -185,8 +149,7 @@ function renderSheet(sheet: FixtureSheet, internString: (text: string) => number
       .map((cell, columnIndex) =>
         renderCell(`${columnLetter(columnIndex)}${rowNumber}`, cell, internString))
       .join('');
-    // A row with no cells is written as a self-closing <row/>, which is
-    // exactly what Excel leaves behind when a row is typed into and cleared.
+    // An empty row is a self-closing <row/>, as Excel leaves a cleared row.
     return rendered ? `<row r="${rowNumber}">${rendered}</row>` : `<row r="${rowNumber}"/>`;
   }).join('');
 
@@ -258,10 +221,8 @@ function workbookRels(sheetCount: number): string {
 }
 
 function styles(): string {
-  // numFmtId 14 is the built-in `m/d/yy`; 164 is the first id available for a
-  // custom format, which is where the currency template goes. The importer
-  // decides a cell is a date by looking the style's numFmtId up, so these two
-  // entries are the whole reason this part exists.
+  // numFmtId 14 is the built-in `m/d/yy`; 164 is the first custom id (currency).
+  // The importer detects dates from the style's numFmtId.
   return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
     '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">' +
     '<numFmts count="1">' +

@@ -1,14 +1,4 @@
-<!--
-  The reference-data maintenance screen.
-
-  STRUCTURE: a sidebar of types on the left, one pane on the right. The
-  sidebar is a loop over REFERENCE_SECTIONS, so adding a seventh type is one
-  entry in reference-sections.ts plus one @case below — not another forty
-  lines of copied markup with the nouns changed.
-
-  NO INLINE STYLES ANYWHERE IN THIS FILE. That is a rule, not a preference:
-  spacing set per-element is spacing that can never be made consistent.
--->
+<!-- Reference-data maintenance: a sidebar of types (REFERENCE_SECTIONS) and one pane per type. -->
 <div class="modal-backdrop" (click)="closed.emit()">
   <div class="modal modal--wide" (click)="$event.stopPropagation()">
     <div class="modal-header">
@@ -17,9 +7,7 @@
     </div>
 
     <div class="reference-layout">
-      <!-- The sidebar. role="tablist" because that is what it behaves like,
-           whatever its orientation; aria-orientation tells a screen reader
-           which arrow keys to expect. -->
+      <!-- Sidebar tabs; aria-orientation tells screen readers to expect up/down arrows. -->
       <nav class="reference-nav" role="tablist" aria-orientation="vertical" aria-label="Reference data types">
         @for (section of sections; track section.id) {
           <button
@@ -46,22 +34,13 @@
           <p class="hint-text">{{ activeSectionHint() }}</p>
         </header>
 
-        <!-- WHAT HAPPENED TO THE NEW ISSUER'S DENOMINATIONS.
-             OUTSIDE the @switch on purpose: when the lookup finds nothing
-             the screen moves the user to the Denominations pane with the
-             issuer preselected, and the sentence explaining why has to
-             survive that move. Putting it inside the issuers @case would
-             hide the explanation at the exact moment it is needed. -->
+        <!-- Lookup result. Outside the @switch so the message survives the move to the Denominations pane. -->
         @if (lookupPhase() !== 'idle') {
           <section class="lookup-result" role="status" aria-live="polite">
             <p class="lookup-result__message">{{ lookupMessage() }}</p>
 
             @if (lookupPhase() === 'proposing') {
-              <!-- PROPOSALS. Nothing here is in the database. A
-                   denomination is reference data that coins link to BY ID,
-                   so a wrong row is a wrong foreign key that outlives the
-                   mistake; the user ticks, and the button carries the
-                   number they are agreeing to. -->
+              <!-- Proposals are not saved until the user ticks them and presses Add. -->
               <div class="lookup-result__actions">
                 <button type="button" class="link-button" (click)="setAllProposals(true)">Tick all</button>
                 <button type="button" class="link-button" (click)="setAllProposals(false)">Untick all</button>
@@ -98,15 +77,7 @@
           </section>
         }
 
-        <!-- THE ISSUER LIST DID NOT LOAD, AND IT STAYS SAID.
-             The two panes below are built out of that list: the Issuers
-             pane IS it, and every heading on the Denominations pane comes
-             from it. With an empty list the Denominations pane files all
-             1,207 rows under "No issuer yet", and one added issuer then
-             leaves exactly one heading on screen — which reads as the
-             screen having filtered itself down to the issuer just added.
-             The toast that announced the failure is long gone by then, so
-             the state says so itself, and offers the retry. -->
+        <!-- Issuer list failed to load: shown persistently, with a retry. -->
         @if (issuerListUnavailable()) {
           <p class="reference-error" role="alert">
             The issuer list could not be loaded{{ issuerLoadError() ? ': ' + issuerLoadError() : '' }}.
@@ -177,14 +148,8 @@
                 maxlength="2"
                 [ngModel]="issuerDraft().isoCode" (ngModelChange)="setIssuerField('isoCode', $event)"
                 aria-label="Two-letter ISO code, if there is one" />
-              <!-- NO KIND PICKER. It drives no behaviour and the year span
-                   already says it, so it is derived on save and merely
-                   SHOWN here. See issuer-kind.ts for the rule and for the
-                   one issuer (British Colonial, no dates at all) that the
-                   rule cannot reproduce. -->
-              <!-- Years are text inputs, not number inputs. A number input
-                   fights with a leading minus in several browsers, and -509
-                   (the Roman Republic) must be typeable. -->
+              <!-- No kind picker: the kind is derived from the years (issuer-kind.ts) and shown below.
+                   Years are text inputs so negative (BC) years can be typed. -->
               <input type="text" class="reference-input reference-input--year" placeholder="From"
                 [ngModel]="issuerDraft().validFrom" (ngModelChange)="setIssuerField('validFrom', $event)"
                 aria-label="First year, negative for BC" />
@@ -196,13 +161,7 @@
               <button type="button" class="secondary" (click)="addIssuerFromDraft()">Add issuer</button>
             </div>
 
-            <!-- THE CHECKBOX THAT REFUSES THE LOOKUP.
-                 On the form rather than in Settings, because it governs the
-                 only request this application ever makes off this machine
-                 and nobody should have to go looking for it. Its label says
-                 the request LEAVES THE MACHINE in those words; "look up
-                 denominations" would describe the benefit and hide the
-                 cost. Default ON, and the answer is remembered. -->
+            <!-- Consent for the online lookup, the only request that leaves the machine. Remembered. -->
             <label class="reference-consent">
               <input type="checkbox"
                 [checked]="issuerDraft().lookUpOnline"
@@ -218,12 +177,7 @@
               <ul class="reference-list">
                 @for (issuer of sortedIssuers(); track issuer.issuerId) {
                   @if (isEditingIssuer(issuer.issuerId)) {
-                    <!-- EDITING, IN PLACE.
-                         The row this replaces offered Remove and nothing
-                         else, so a name typed in the wrong case could only
-                         be deleted. PUT /issuers/:id had been on the server
-                         the whole time. Same fields and same order as the
-                         add form above, so the two read as one control. -->
+                    <!-- Inline edit row: same fields and order as the add form. -->
                     <li class="reference-row reference-row--editing">
                       <div class="reference-form reference-form--wrap">
                         <input type="text" class="reference-input"
@@ -244,11 +198,7 @@
                           [ngModel]="issuerEditDraft().validTo"
                           (ngModelChange)="setIssuerEditField('validTo', $event)"
                           aria-label="Last year, blank if it still issues" />
-                        <!-- derivedIssuerEditKind, NOT derivedIssuerKind.
-                             The edit preview falls back to the kind already
-                             stored when the year span says nothing, which is
-                             what the server does on PUT and what keeps
-                             British Colonial out of 'modern'. -->
+                        <!-- Falls back to the stored kind when the years say nothing, as the server does. -->
                         <span class="reference-row__tag reference-row__tag--derived"
                           aria-live="polite">{{ derivedIssuerEditKind() }}</span>
                         <button type="button" class="secondary" [disabled]="issuerEditBusy()"
@@ -270,17 +220,7 @@
                           <span class="reference-row__years">{{ issuer.validFrom ?? '?' }}&ndash;{{ issuer.validTo ?? 'now' }}</span>
                         }
                       </span>
-                      <!-- Two numbers: removing an issuer and removing a
-                           denomination have different consequences, so the user
-                           needs both before deciding.
-                           BOTH ARE DERIVED, not read off the issuer record.
-                           `issuer.denominationCount` is the snapshot that
-                           arrived with the list and never came back down when
-                           a denomination was removed, which is what made
-                           Remove refuse forever. These two read the live
-                           lists, so the figure here and the rows under this
-                           issuer's heading on the next pane cannot
-                           disagree. -->
+                      <!-- Live denomination and coin counts, derived from the current lists. -->
                       <span class="reference-row__usage">
                         {{ issuerDenominationLabel(issuer.issuerId) }} &middot; {{ usageLabel(issuerCoinCount(issuer.issuerId)) }}
                       </span>
@@ -299,12 +239,7 @@
 
           <!-- Denominations -->
           @case ('denominations') {
-            <!-- ONE control, not two. 70 issuer groups is too many to
-                 scroll past to reach one of them, and with everything
-                 already folded a second "Collapse all" button would be a
-                 button that visibly does nothing. `expandAllControl()`
-                 reads the groups on screen and offers the half that would
-                 change something. -->
+            <!-- Single collapse/expand-all control; its label reflects the groups on screen. -->
             <div class="reference-form">
               <input type="search" class="reference-input" placeholder="Search all denominations&hellip;"
                 [ngModel]="denominationSearch()" (ngModelChange)="denominationSearch.set($event)"
@@ -316,9 +251,7 @@
             </div>
 
             <div class="reference-form reference-form--wrap">
-              <!-- The issuer picker comes FIRST, before the label, because
-                   choosing one is required and a form whose required field is
-                   last is a form people get wrong. -->
+              <!-- Issuer first, since it is required. -->
               <select class="reference-input reference-input--issuer"
                 [ngModel]="newDenominationIssuerId()"
                 (ngModelChange)="newDenominationIssuerId.set($event)"
@@ -345,10 +278,7 @@
             }
 
             @for (group of denominationGroups(); track group.heading) {
-              <!-- A collapsed group is CHROME, not content: the modifier
-                   strips its padding, its gap and its bottom border so 70
-                   folded headings are a list you can scan rather than a
-                   second scroll. -->
+              <!-- The collapsed modifier strips padding and borders so folded headings stay compact. -->
               <section class="issuer-group" [class.issuer-group--collapsed]="isCollapsed(group.heading)">
                 <button type="button" class="issuer-group__header"
                   [attr.aria-expanded]="!isCollapsed(group.heading)"
@@ -382,15 +312,7 @@
             }
           }
 
-          <!-- Unlinked coins
-
-               THE COUNT IS SHOWN EVEN WHEN IT IS ZERO. "Every coin has a
-               denomination" is a useful thing to be told, and a pane that
-               renders nothing is indistinguishable from one that is broken.
-
-               ONE GROUP IS OPEN AT A TIME, so one set of controls serves all
-               of them and the Apply button can never be pointed at a group
-               that is not on screen. -->
+          <!-- Unlinked coins. One group open at a time, so Apply always targets the visible group. -->
           @case ('unlinked') {
             <p class="reference-count">{{ unlinkedSummary() }}</p>
 
@@ -425,13 +347,8 @@
                       <p class="hint-text">Filed under: {{ group.countries.join(', ') }}</p>
                     }
 
-                    <!-- THE SHORTLIST AND THE FULL LIST ARE ONE CONTROL.
-                         When the app knows the candidates (an ambiguous name,
-                         or one that would link if asked again) they are the
-                         first group; the whole reference list follows, so a
-                         user who wants something else is never stuck with the
-                         app's suggestions. The option VALUE is the id, never
-                         the label — 'Crown' is British and Australian. -->
+                    <!-- Suggestions first, then the full list. Option values are ids, since labels
+                         can repeat across issuers. -->
                     <div class="reference-form reference-form--wrap">
                       <input type="search" class="reference-input" placeholder="Search denominations&hellip;"
                         aria-label="Search denominations"
@@ -458,11 +375,7 @@
                       </select>
                     </div>
 
-                    <!-- The two things the user has to be told about the list
-                         they are looking at. Identical reasoning to the
-                         editor's picker: a search that matched nothing falls
-                         back to the whole list, and a capped list is showing
-                         fewer rows than matched. -->
+                    <!-- Same hints as the editor's picker: no-match fallback and capped list. -->
                     @if (unlinkedPickerView().noMatches) {
                       <p class="hint-text">No match for &ldquo;{{ unlinkedPickerView().query }}&rdquo; &mdash; showing all</p>
                     } @else if (unlinkedPickerView().truncated) {
@@ -471,10 +384,7 @@
                       </p>
                     }
 
-                    <!-- OPT-IN, AND IT WILL NEVER BE DEFAULTED ON. This is
-                         the half of the fix that OVERWRITES a value already
-                         on the coin, so it stays the user's decision rather
-                         than the app's. -->
+                    <!-- Opt-in, since it overwrites the coin's existing Country. -->
                     @if (unlinkedPlan(); as plan) {
                       @if (plan.issuerName) {
                         <label class="unlinked-fix__option">
@@ -499,9 +409,7 @@
                       }
                     </div>
 
-                    <!-- WHICH COINS, by name. A bulk action with no list of
-                         what it will touch is a leap of faith, and this one
-                         rewrites a column on several rows at once. -->
+                    <!-- The coins this action will change. -->
                     <ul class="reference-list">
                       @for (coin of group.coins; track coin.coinId) {
                         <li class="reference-row">
@@ -514,8 +422,6 @@
                 }
               </section>
             } @empty {
-              <!-- The zero state, so an empty body is never mistaken for a
-                   broken one. -->
               <p class="empty-state">Nothing to fix here.</p>
             }
           }
@@ -547,14 +453,7 @@
             }
           }
 
-          <!-- Metal content
-
-               Moved here from the Settings dialog, which no longer edits
-               any reference list. Same shape as the three plain-string
-               panes above it, including the in-use badge and the
-               confirmation that quotes it - the Settings chips had
-               neither, so the move added the warning rather than only
-               changing the address. -->
+          <!-- Metal content -->
           @case ('metal-content') {
             <div class="reference-form">
               <input type="text" class="reference-input" placeholder="New metal, e.g. 90% Silver&hellip;"
@@ -586,15 +485,13 @@
                 (keydown.enter)="addCatalogFromDraft()" aria-label="New catalogue name" maxlength="60" />
               <button type="button" class="secondary" (click)="addCatalogFromDraft()">Add</button>
             </div>
-            @if (inv.catalogs().length > 0) {
+            @if (inv.activeCatalogs().length > 0) {
               <ul class="reference-list">
-                @for (catalog of inv.catalogs(); track catalog.catalogId) {
+                @for (catalog of inv.activeCatalogs(); track catalog.catalogId) {
                   <li class="reference-row">
                     <span class="reference-row__name">{{ catalog.name }}</span>
                     <span class="reference-row__usage">{{ usageLabel(catalogUsage(catalog.catalogId)) }}</span>
-                    <!-- RENAME EXISTS ONLY HERE. Categories, sets and mint
-                         marks are referenced by TEXT, so remove-and-re-add IS
-                         a rename for them. A catalogue is referenced BY ID. -->
+                    <!-- Rename only for catalogues: they are referenced by id, the text lists are not. -->
                     <button type="button" class="secondary small-button"
                       (click)="renameCatalog(catalog.catalogId, catalog.name)">Rename</button>
                     <button type="button" class="secondary small-button"

@@ -1,12 +1,6 @@
 /**
- * Tests for the two confirmation wrappers.
- *
- * The only interesting behaviour either of them has is WHAT HAPPENS WHEN
- * THERE IS NO DIALOG — under Node, under SSR, in a unit test — and the two
- * answer it in opposite directions on purpose. Getting that backwards is
- * silent: everything still compiles, every other test still passes, and the
- * coin editor quietly overwrites hand-typed weights in any environment
- * without `window.confirm`. So it is pinned here.
+ * Tests for the two confirmation wrappers, which deliberately default in
+ * opposite directions when no dialog is available.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { confirmAction, confirmOverwrite } from './confirm-action';

@@ -60,17 +60,9 @@ describe('CsvImportModal', () => {
 });
 
 /*
- * "IMPORT ONLY COINS I STILL OWN" IS NOT A QUICKEN FEATURE.
- *
- * It lived on the QIF dialog alone, which made it a property of one file
- * format rather than of the import. It is now offered here too, on the same
- * terms and with the same default (off), keyed on the same rule: a coin
- * counts as sold when it has a sold date, a sold price or a buyer.
- *
- * The rule's own edge cases -- a price of 0, a whitespace-only buyer -- are
- * covered in services/csv/sold-filter.spec.ts, which runs them through the
- * mapping. These are about the DIALOG: that the control exists, that it is
- * wired to the plan, and that the number on the button follows it.
+ * "Import only coins I still own" on this dialog: the control exists, is wired
+ * to the plan, and drives the button count. Rule edge cases are in
+ * services/csv/sold-filter.spec.ts.
  */
 describe('the sold filter on the CSV / Excel dialog', () => {
   beforeEach(() => {
@@ -157,8 +149,6 @@ describe('the sold tick box is actually on the dialog', () => {
   });
 
   it('says what counts as sold, from the module that decides it', () => {
-    // The sentence is interpolated rather than retyped, so the dialog
-    // cannot describe a rule the code does not apply.
     expect(TEMPLATE).toContain('soldRuleSentence');
   });
 
@@ -167,20 +157,7 @@ describe('the sold tick box is actually on the dialog', () => {
   });
 });
 
-/*
- * TWO MENU ENTRIES, ONE DIALOG.
- *
- * The Import menu used to carry a single "Excel or CSV" item. It now carries
- * "Excel" and "CSV" separately, because a user holding a spreadsheet should
- * find the word in a list rather than decode a compound label. What did NOT
- * split is this component: both doors open it, and from the mapping grid
- * down every rule -- auto-mapping, the 2-of-3 completeness check, the alloy
- * inference -- is shared. A second modal would be a second copy of those
- * rules, and the failure mode of two copies is that the same under-specified
- * row is accepted on one path and refused on the other.
- *
- * So `mode` may change what the dialog SAYS and never what it can READ.
- */
+/* Both Import menu entries open this dialog; `mode` changes the wording, never what it can read. */
 describe('CsvImportModal — which door it was opened through', () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
@@ -196,9 +173,6 @@ describe('CsvImportModal — which door it was opened through', () => {
   });
 
   it('suggests both formats whichever door was used', () => {
-    /* `accept` leads with the format the menu entry named and still lists
-     * the other. It is a hint to the operating system's file dialog, NOT a
-     * gate: handleFileSelection() routes on the extension. */
     const { modal } = createModal();
 
     expect(modal['acceptedExtensions']()).toContain('.xlsx');
@@ -206,10 +180,7 @@ describe('CsvImportModal — which door it was opened through', () => {
   });
 
   it('reads a CSV perfectly well through the Excel door', () => {
-    /* The property that makes one dialog safe. A user who picked the wrong
-     * menu entry is not told off; refusing a file this dialog can plainly
-     * read, in order to be right about a menu click, is pedantry at his
-     * expense. */
+    // A file from the "wrong" menu entry is still read.
     const { modal } = createModal();
     const csv = 'Coin Type,Denomination,Year\nMorgan Dollar,Dollar,1889\n';
     const file = new File([csv], 'coins.csv', { type: 'text/csv' });
@@ -223,10 +194,7 @@ describe('CsvImportModal — which door it was opened through', () => {
   });
 
   it('binds the heading and the accept list rather than hard-coding them', () => {
-    /* Read as text: there is no jsdom here. Comments are stripped first --
-     * the template explains the split at length and names both formats in
-     * that prose, so an assertion against the raw file would match the
-     * explanation and pass with the bindings removed. */
+    /* Comments stripped so template prose cannot satisfy an assertion. */
     const markup = readFileSync(join(__dirname, 'csv-import-modal.html'), 'utf8')
       .replace(/<!--[\s\S]*?-->/g, '');
 
@@ -237,14 +205,7 @@ describe('CsvImportModal — which door it was opened through', () => {
   });
 });
 
-/**
- * The 2-of-3 completeness rule on the CSV path.
- *
- * It has to hold on BOTH import paths: the backend refuses a coin with no
- * denomination (`400 denomination is required`), so an accepted-but-invalid
- * row becomes a record visible in the grid with no database row behind it,
- * and every later edit fails against an id the server has never seen.
- */
+/** The 2-of-3 completeness rule (Year / Coin Type / Denomination) on the CSV path. */
 describe('CsvImportModal completeness rule', () => {
   beforeEach(() => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
@@ -328,8 +289,7 @@ describe('CsvImportModal completeness rule', () => {
   });
 
   it('treats placeholder text as missing, not as a value', () => {
-    // isCoinDetailPresent rejects "-", "n/a", "unknown" and friends rather
-    // than merely testing truthiness.
+    // Placeholder values such as "-", "n/a" and "unknown" count as missing.
     const { modal, inv } = createModal();
     loadCsv(modal, inv, 'Year,Coin Type,Denomination\n1881,n/a,-\n');
 
@@ -341,17 +301,8 @@ describe('CsvImportModal completeness rule', () => {
 });
 
 /*
- * The alloy / weight inference on the CSV path.
- *
- * `mapRowToCoin` copies cells across and stops, so Metal, Composition, PM %,
- * PM weight and gross Weight are filled in afterwards. The inference is the
- * SAME function the Settings backfill uses (`pmFieldsToFill`), reached
- * through the SAME entry point the QIF import uses (`composePmFields`).
- * There is no second copy of the rules, so the paths cannot drift and the
- * deliberate refusals are inherited for free.
- *
- * The rule that matters most here: a value that came out of the user's file
- * always wins over one a table worked out.
+ * Alloy/weight inference on the CSV path (shared pmFieldsToFill). A value from
+ * the file always wins over an inferred one.
  */
 describe('CsvImportModal fills in metal and weight the file did not state', () => {
   beforeEach(() => {
@@ -383,15 +334,8 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('NEVER overwrites a value the file supplied', () => {
-    /* The user's spreadsheet says this double eagle weighs 33.1 g and is
-     * made of silver -- both disagree with the catalogue. They may have
-     * weighed it; a worn coin really is lighter. The import has no business
-     * arguing with either.
-     *
-     * (Only three of the five are mappable from a CSV at all: PM % and PM
-     * weight are not in CSV_MAPPABLE_FIELDS, so a file cannot state them and
-     * the inference always supplies them. The three that CAN come from a
-     * file are all asserted here.) */
+    /* The file's weight and metal disagree with the catalogue and must be kept.
+     * PM % and PM weight are not CSV-mappable, so only three fields are checked. */
     const { modal, inv } = createModal();
     loadCsv(
       modal,
@@ -408,8 +352,7 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('completes the gaps around a value the file did supply', () => {
-    // The commonest real shape: a file that lists the weight and nothing
-    // else about the metal. The weight survives; the rest is filled.
+    // A file that lists only the weight: it survives, the rest is filled.
     const { modal, inv } = createModal();
     loadCsv(modal, 'Year,Denomination,Weight (g)\n1927,$20,33.1\n');
 
@@ -422,10 +365,7 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('inherits the deliberate refusals rather than guessing', () => {
-    /* A bare "$1" dated 1855 is a 26.73 g silver dollar or a 1.672 g gold
-     * dollar and nothing in the row says which; a 1942 five-cent piece was
-     * struck in both cupronickel and 35% silver. pm-reference.ts answers
-     * nothing for both, and the CSV path must not invent a second opinion. */
+    /* Ambiguous coins (an 1855 "$1", a 1942 five-cent piece) are left blank. */
     const { modal, inv } = createModal();
     loadCsv(modal, 'Year,Denomination\n1855,$1\n1942,5¢\n');
 
@@ -439,8 +379,7 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('settles that same ambiguity when the file names the metal', () => {
-    // The file saying "Gold" is evidence, not a guess -- exactly what a QIF
-    // security name reading "G$1" is on the other path.
+    // A "Gold" metal column is used as a hint.
     const { modal, inv } = createModal();
     loadCsv(modal, 'Year,Denomination,Metal Content\n1855,$1,Gold\n');
 
@@ -464,9 +403,8 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('still manages the METAL alone when only the coin type gives it away', () => {
-    // "Dollar" is not a denomination pm-reference.ts knows -- it wants "$1".
-    // The coarse fallback reads the coin type instead, and gets the metal
-    // without pretending to know the weight.
+    // "Dollar" is not a known denomination; the coin-type fallback finds the
+    // metal but not the weight.
     const { modal, inv } = createModal();
     loadCsv(modal, 'Coin Type,Denomination,Year\nMorgan,Dollar,1881\n');
 
@@ -479,10 +417,7 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
   });
 
   it('reports how many coins gained something, for the summary line', () => {
-    /* Three rows: one the table can fill, one it deliberately refuses, and
-     * one that is not a coin at all. The third is there on purpose -- a
-     * CLEAN import closes the dialog and resets these counters, so the only
-     * way to read them back is a run that has something to report. */
+    /* Includes an invalid row so the dialog stays open and the counters can be read. */
     const { modal } = createModal();
     loadCsv(modal, 'Year,Denomination,Notes\n1927,$20,\n1942,5¢,\n,,just a note\n');
 
@@ -490,14 +425,12 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
 
     expect(modal['importedCount']()).toBe(2);
     expect(modal['csvExceptions']()).toHaveLength(1);
-    // Only the double eagle gained anything; the 1942 five-cent piece is one
-    // of pm-reference.ts's deliberate gaps.
+    // The 1942 five-cent piece is a deliberate gap in pm-reference.ts.
     expect(modal['enrichedCount']()).toBe(1);
   });
 
   it('leaves a rejected row completely untouched', () => {
-    // A row that fails the 2-of-3 rule is reported as the file wrote it; the
-    // inference runs only on rows that are actually being imported.
+    // Rejected rows are reported as written; inference runs only on accepted rows.
     const { modal, inv } = createModal();
     loadCsv(modal, 'Year,Notes\n1927,found in a drawer\n');
 
@@ -510,20 +443,9 @@ describe('CsvImportModal fills in metal and weight the file did not state', () =
 });
 
 /**
- * The value-aware `Date` column, from a real file all the way to the
- * dropdown the user sees.
- *
- * The classifier and the mapper are tested on their own; this block proves
- * the modal actually HANDS THEM THE CELLS. `csvFieldMapping` is set in two
- * different places -- once when a CSV is loaded, once every time a worksheet
- * is ticked -- so wiring up only one of them passes every service-level unit
- * test while leaving the other path wrong.
- *
- * The behaviour: a `Date` column of coin years maps to Year, saving the user
- * a dropdown. A `Date` column of calendar dates maps to NOTHING and is left
- * for them to answer, because the file does not say whether it is the
- * purchase date, the sale date or the day they catalogued it, and a wrong
- * guess writes 2024 into the Year of an 1881 Morgan.
+ * A `Date` column is mapped by its values, on both the CSV and workbook paths:
+ * coin years map to Year; calendar dates are left unmapped because their
+ * meaning is unknown.
  */
 describe('CsvImportModal — a `Date` column is decided by its values', () => {
   beforeEach(() => {
@@ -554,15 +476,12 @@ describe('CsvImportModal — a `Date` column is decided by its values', () => {
     ));
 
     expect(modal['csvFieldMapping']()['Date']).toBeUndefined();
-    // ...and the rest of the file still maps, so the cost is one dropdown.
     expect(modal['csvFieldMapping']()['Coin Type']).toBe('coinType');
     expect(modal['csvFieldMapping']()['Grade']).toBe('grade');
   });
 
   it('leaves an .xlsx Date column of real Excel date cells blank', async () => {
-    // Serial 45678 is 21 January 2025. The cell carries a date number
-    // format, so the parser hands back a `Date` and the TYPE settles it
-    // without anyone having to read the rendering.
+    // Serial 45678 (21 Jan 2025) with a date format: the cell type settles it.
     const { modal } = createModal();
     await loadFile(modal, new File(
       [buildSimpleXlsx('Silver', ['Coin Type', 'Date', 'Grade'], [
@@ -591,11 +510,8 @@ describe('CsvImportModal — a `Date` column is decided by its values', () => {
   });
 
   it('pools the evidence across every ticked worksheet', async () => {
-    // One mapping covers all the ticked tabs, so the `Date` column has to be
-    // judged on all of their values at once. Gold's Date column is coin
-    // years; Ledger's is purchase dates. Together they are a mix, which is
-    // not something to guess at. Untick the ledger and the remaining tab is
-    // unambiguous again.
+    // One mapping covers all ticked tabs: years on one tab and dates on the
+    // other are ambiguous; unticking the ledger resolves it.
     const { modal } = createModal();
     await loadFile(modal, new File(
       [buildXlsxWorkbook([

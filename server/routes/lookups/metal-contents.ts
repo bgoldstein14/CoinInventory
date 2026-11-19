@@ -1,14 +1,8 @@
 /**
- * routes/lookups/metal-contents.ts — the MetalContents reference table.
+ * The MetalContents reference table: the metal-content options ("90% Silver",
+ * "Copper-Nickel", ...) for the coin form. Read-only; the list is seeded.
  *
- * This is the canonical list of metal-content descriptions ("90% Silver",
- * "Copper-Nickel", ...) that the coin edit form offers in its dropdown. It is
- * read-only over HTTP: the list is seeded by setup-database.sql, so there is
- * no POST/PUT/DELETE here.
- *
- * Mounted (via routes/lookups/index.ts) at /api:
- *
- *   GET /metalcontents  -> the names, in the curated SortOrder
+ *   GET /metalcontents  names, in curated SortOrder
  */
 
 import { Router, Request, Response } from 'express';

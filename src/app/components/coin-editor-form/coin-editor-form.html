@@ -1,54 +1,31 @@
 <div class="detail-editor">
-  <!-- ROW 1: the coin's identity. Year, Coin Type, Denomination and Mint mark
-       share the first line. The column widths are set in
-       coin-editor-form.scss on `.detail-editor__row--top` rather than with
-       per-field max-widths, so the four controls are sized as one decision
-       instead of four that have to be kept in step. -->
+  <!-- Row 1: Year, Coin Type, Denomination, Mint mark. Widths are set on .detail-editor__row--top. -->
   <div class="detail-editor__row detail-editor__row--top">
-    <!-- `(change)` ON TOP OF `(ngModelChange)` — the two are not duplicates.
-         `ngModelChange` fires per keystroke and is what SAVES. `change` is the
-         native event, fired once the box loses focus with a different value in
-         it, and is what re-runs the automatic metal / weight fill. Running
-         that per keystroke would infer from half-typed years and write into
-         the record while the caret is still in it. See the comment on
-         `onKeyFieldCommitted` in coin-editor-form.ts, and pm-autofill.ts. -->
+    <!-- (ngModelChange) saves per keystroke; (change) fires on blur and re-runs the metal/weight autofill.
+         Two-line textareas so text like "155-135 BC" wraps; Enter doesn't add a line break. -->
     <label class="detail-field detail-field--year">
       <span>Year</span>
-      <input
-        type="text"
+      <textarea
+        rows="2"
         [ngModel]="coin().year ?? ''"
-        (ngModelChange)="updateSelectedCoin('year', $event)"
+        (ngModelChange)="updateSelectedCoin('year', singleLine($event))"
+        (keydown.enter)="$event.preventDefault()"
         (change)="onKeyFieldCommitted('year')"
-      />
+      ></textarea>
     </label>
 
     <label class="detail-field detail-field--coin-type">
       <span>Coin Type</span>
-      <input
+      <textarea
+        rows="2"
         [ngModel]="coin().coinType"
-        (ngModelChange)="updateSelectedCoin('coinType', $event)"
+        (ngModelChange)="updateSelectedCoin('coinType', singleLine($event))"
+        (keydown.enter)="$event.preventDefault()"
         (change)="onKeyFieldCommitted('coinType')"
-      />
+      ></textarea>
     </label>
 
-    <!-- THE DENOMINATION PICKER. A search box above a grouped <select>; all
-         of the reasoning lives in denomination-picker.ts. Two things worth
-         knowing before editing this markup:
-
-           THE SEARCH BOX IS NOT A COIN FIELD. It writes nothing. It is a
-           local signal precisely so that typing in it re-runs only the cheap
-           half of the picker.
-
-           THE SELECT'S VALUE IS NOT coin().denomination. Two translations sit
-           in front of it, answering different questions:
-             denominationSelectValue() — "which OPTION is this coin on?" The
-               id (never the label: 'Crown' is British and Australian) when
-               the coin has one, otherwise the row its recorded text resolves
-               to. Shown, never saved.
-             denominationMode.selectValue(...) — "is the custom box open?" If
-               it is, this substitutes the sentinel so the closed select still
-               reads "Other" while the coin stores the user's own wording.
-               See custom-option-mode.ts. -->
+    <!-- Denomination picker (see denomination-picker.ts). The search box only filters; it never writes to the coin. -->
     <label class="detail-field detail-field--denomination">
       <span>Denom.</span>
       <input
@@ -59,39 +36,15 @@
         [ngModel]="denominationQuery()"
         (ngModelChange)="onDenominationSearch($event)"
       />
-      <!-- BOTH CONTROLS CARRY THEIR OWN aria-label, and that is not
-           belt-and-braces. A wrapping <label> associates with the FIRST
-           labelable control inside it, so the visible "Denom." caption would
-           name the search box and leave the select — the one control on this
-           line that actually edits the coin — with no accessible name at
-           all. -->
+      <!-- A wrapping <label> names only its first control, so the select needs its own aria-label. -->
       <select
         aria-label="Denomination"
         [ngModel]="denominationMode.selectValue(denominationSelectValue())"
         (ngModelChange)="onDenominationSelected($event)"
       >
         <option value="">(select)</option>
-        <!-- The groups come from denominationView(). Three guarantees, none
-             of them obvious:
-
-               * THE LIST IS NEVER EMPTY. A blank country, one this app cannot
-                 place, one with no denominations on file, or a search that
-                 matches nothing — all of them fall back to showing
-                 everything, grouped by issuer.
-               * THE COIN'S OWN DENOMINATION IS ALWAYS HERE, exactly once. If
-                 it falls outside the country bias, or the search box would
-                 have filtered it away, it comes back in its own labelled
-                 group marked with a dot. A <select> whose value matches no
-                 option renders BLANK, and the user reads a blank as "this
-                 field was cleared".
-               * THE COUNTRY ONLY ORDERS THE LIST. Every issuer is always
-                 reachable — a US collector with one Mexican coin must be
-                 able to find 8 Reales without editing Country first.
-
-             `track $index` rather than the heading or the id. Angular throws
-             on duplicate track keys, and the list is rebuilt wholesale on
-             every change anyway, so there is nothing for a stable key to
-             save. -->
+        <!-- The coin's own denomination is always listed (a <select> with no matching option renders blank).
+             Track by $index: keys can repeat and the list is rebuilt on every change. -->
         @for (group of denominationView().groups; track $index) {
           <optgroup [label]="group.heading">
             @for (option of group.options; track $index) {
@@ -102,16 +55,10 @@
             }
           </optgroup>
         }
-        <!-- The sentinel never reaches a coin: onDenominationSelected()
-             turns it into "open the custom box" and nothing else. -->
+        <!-- The sentinel only opens the custom box; it is never saved. -->
         <option [value]="CUSTOM_OPTION_SENTINEL">Other…</option>
       </select>
-      <!-- The two things the user has to be told about the list they are
-           looking at, and NEITHER may be left silent. A search that matched
-           nothing falls back to the whole list, so without this line the user
-           would believe their typo matched every denomination they own. A
-           capped list is showing fewer rows than matched, so without this
-           line they would believe the rest do not exist. -->
+      <!-- Tell the user when the list fell back to everything or was capped. -->
       @if (denominationView().noMatches) {
         <small class="detail-field__note">No match for “{{ denominationView().query }}” — showing all</small>
       } @else if (denominationView().truncated) {
@@ -133,21 +80,13 @@
             <option [value]="mm.label" [title]="mm.description">{{ mm.label }}</option>
           }
         }
-        <!-- Shown as "Other…" rather than "Other" because the mint mark lookup
-             table contains a genuine mint mark whose label is literally
-             "Other" (the catch-all for oddities like O/S). The ellipsis is
-             what distinguishes "type your own" from that real code. -->
+        <!-- "Other…" (with ellipsis) is distinct from the real mint mark labelled "Other". -->
         <option [value]="CUSTOM_OPTION_SENTINEL">Other…</option>
       </select>
     </label>
   </div>
 
-  <!-- CUSTOM "OTHER" BOXES. Visibility is driven by the custom-mode signal,
-       NEVER by the field's value. These boxes are bound straight to the coin
-       field like any other text input, which is what makes typing in them
-       work: a keystroke changes the value, and the value has no say in
-       whether the box exists. Gating the @if on the field's own value is the
-       bug custom-option-mode.ts exists to prevent. -->
+  <!-- Custom "Other" boxes. Visibility follows the custom-mode signal, not the field value, so typing doesn't hide the box. -->
   @if (denominationMode.isCustom()) {
     <label class="detail-field detail-field--full">
       <span>Custom denomination</span>
@@ -156,35 +95,23 @@
         (ngModelChange)="updateSelectedCoin('denomination', $event)"
         (change)="onKeyFieldCommitted('denomination')"
       />
-      <!-- WHAT THIS BOX MEANS. Not only "the user typed something the list
-           does not offer", but also "this arrived by import and nothing could
-           be made of it", and the state a coin is left in when its
-           denomination is deleted. So the box is no longer an oddity and it
-           needs to say what the rest of the app will show for this coin.
-
-           The string comes from denominationDisplay() — the ONE place that
-           rule is written. Its spec greps src/ and fails the build if any
-           other file builds it, because two copies are a FORK, not a
-           duplicate: the same coin then reads two ways on two screens with
-           nothing failing. -->
       <small class="detail-field__note">Shows as {{ denominationDisplayText() }}</small>
     </label>
   }
 
   @if (mintMarkMode.isCustom()) {
-    <label class="detail-field detail-field--full">
+    <label class="detail-field detail-field--full detail-field--custom-mint-mark">
       <span>Custom mint mark</span>
-      <input
+      <textarea
+        rows="2"
         [ngModel]="coin().mintMark"
-        (ngModelChange)="updateSelectedCoin('mintMark', $event)"
-      />
+        (ngModelChange)="updateSelectedCoin('mintMark', singleLine($event))"
+        (keydown.enter)="$event.preventDefault()"
+      ></textarea>
     </label>
   }
 
-  <!-- ================= GRADE LINE =================
-       Certification company sits in front of the grade, because the two are
-       read together ("PCGS MS64"). The certification NUMBER deliberately stays
-       down with the other reference data further below. -->
+  <!-- Grade line: certification company is read together with the grade ("PCGS MS64"). -->
   <div class="detail-editor__row detail-editor__row--grade">
     <label class="detail-field detail-field--compact detail-field--cert-company">
       <span>Certification Co.</span>
@@ -200,10 +127,12 @@
       <div class="detail-grade-line">
         <input
           [ngModel]="coin().grade"
-          (ngModelChange)="updateSelectedCoin('grade', $event)"
+          (ngModelChange)="onGradeChanged($event)"
         />
-        <label class="cac-inline-toggle">
-          <input type="checkbox" [checked]="coin().hasCacSticker ?? false" (change)="toggleCacSticker()" />
+        <!-- CAC only applies to a graded coin. -->
+        <label class="cac-inline-toggle" [class.cac-inline-toggle--disabled]="!hasGrade(coin().grade)"
+          [title]="hasGrade(coin().grade) ? '' : 'Enter a grade first'">
+          <input type="checkbox" [checked]="coin().hasCacSticker ?? false" [disabled]="!hasGrade(coin().grade)" (change)="toggleCacSticker()" />
           <span>CAC</span>
         </label>
       </div>
@@ -215,17 +144,8 @@
       <span>Variety</span>
       <input [ngModel]="coin().variety" (ngModelChange)="updateSelectedCoin('variety', $event)" />
     </label>
-    <!-- Country stays a TEXT box, with a datalist of suggestions bolted on.
-         Not a <select>: this column may already hold anything at all, and a
-         select with no matching option renders blank — which would look like
-         the field had been emptied and would lose the value on the next save.
-         With a datalist the known countries drop down and type-ahead, and
-         anything else is still accepted exactly as typed.
-
-         Whatever is typed here narrows the Denomination dropdown above, via
-         the pattern matching in services/coin-countries.ts: 'GB', 'uk',
-         'British' and 'Great Britain' all mean the same thing to it. Text it
-         cannot place simply leaves the dropdown showing everything. -->
+    <!-- Free text with suggestions: existing values can be anything, and a <select> would show unknown ones as blank.
+         The country also narrows the Denomination list (services/coin-countries.ts). -->
     <label class="detail-field">
       <span>Country</span>
       <input
@@ -259,17 +179,7 @@
     </label>
   </div>
 
-  <!-- Status and Storage: "do I have it" and "where is it".
-       They share a row because they are the two questions about the owner's
-       RELATIONSHIP to the coin rather than about the coin itself; everything
-       above this point describes the object.
-
-       The Status select has NO "(none)" option, unlike Category and Set above
-       it. A coin is always in one of the five states, and an absent value
-       means 'owned' everywhere else in the app -- offering an empty choice
-       here would invite the user to clear a field that cannot be empty and
-       then wonder which of the five he had actually chosen. See
-       types/collection-status.ts. -->
+  <!-- Status has no "(none)" option: an absent status means "owned". -->
   <div class="detail-editor__row">
     <label class="detail-field">
       <span>Status</span>
@@ -297,11 +207,7 @@
   <div class="detail-editor__row detail-editor__row--metadata">
     <label class="detail-field detail-field--compact">
       <span>Metal</span>
-      <!-- Goes through its own handler, not straight to updateSelectedCoin:
-           picking a Metal is often the one thing that lets the reference table
-           answer at all (an 1855 "$1" is a gold dollar or a silver dollar and
-           nothing else in the record says which), so this select also re-runs
-           the metal / weight fill. See onMetalContentSelected. -->
+      <!-- Metal can decide the reference lookup, so selecting it re-runs the metal/weight fill. -->
       <select [ngModel]="coin().metalContent ?? ''" (ngModelChange)="onMetalContentSelected($event)">
         <option value="">(none)</option>
         @for (m of metalContentOptions(); track m) { <option [value]="m">{{ m }}</option> }
@@ -309,11 +215,7 @@
     </label>
     <label class="detail-field detail-field--composition">
       <span>Composition</span>
-      <!-- Composition is both an INPUT to the inference (the coarse metal
-           fallback reads it) and one of the five fields the inference WRITES.
-           Committing it therefore re-runs the fill — but the fill is forbidden
-           from writing this field back, because the user has just stated it in
-           their own words. See `changed` in pm-autofill.ts. -->
+      <!-- Composition feeds the autofill; the fill never overwrites it (see pm-autofill.ts). -->
       <input
         [ngModel]="coin().composition"
         (ngModelChange)="updateSelectedCoin('composition', $event)"
@@ -322,30 +224,11 @@
     </label>
   </div>
 
-  <!-- NUMERIC FIELDS. Every number box below uses the `appNumericField`
-       directive rather than an `[ngModel]`/`(ngModelChange)` format-and-parse
-       pair. Such a pair reformats the text on every keystroke and throws the
-       caret to the end of the line; the directive leaves the text completely
-       alone while the box has focus and only normalises it on blur.
-
-       `decimals` is the only thing that varies per field, which is exactly why
-       this is one mechanism rather than one fix per input.
-       See directives/numeric-field.ts. -->
+  <!-- appNumericField reformats only on blur, so the caret is not moved while typing. -->
   <div class="detail-editor__row detail-editor__row--bottom-metrics">
     <label class="detail-field detail-field--weight">
       <span>Weight (g)</span>
-      <!-- GRAMS, to five decimals. Two things to know about this field:
-
-           1. This is the coin's GROSS weight — the whole coin, alloy and all.
-              PM Weight (g) next to it is the PURE precious metal inside it.
-              Melt value uses PM Weight, never this field.
-
-           2. Five decimals, deliberately, matching PM Weight (g) and the
-              DECIMAL(12,5) column behind it. Do not trim them: a troy-ounce
-              equivalent shown beside the gram figure (bullion is still quoted
-              and traded in troy ounces, 31.1034768 g each) is only right in
-              its own fifth decimal if the gram value keeps five — one step of
-              the fifth ounce decimal is 0.000311 g. -->
+      <!-- Gross weight in grams; 5 decimals to match the DECIMAL(12,5) column. Melt uses PM Weight. -->
       <input
         [appNumericField]="coin().weight ?? 0"
         [decimals]="5"
@@ -354,10 +237,6 @@
     </label>
     <label class="detail-field detail-field--pm-weight">
       <span>PM Weight (g)</span>
-      <!-- Five decimals here too. A gram figure for a fractional coin is
-           small enough that trailing zeros matter: 0.11250 g reads very
-           differently from 0.1125, and a type="number" input cannot show
-           them at all. -->
       <input
         [appNumericField]="coin().pmWeightGrams ?? 0"
         [decimals]="5"
@@ -374,14 +253,14 @@
     </label>
   </div>
 
-  <!-- VALUE AND MELT, AND NOTHING ELSE ON THIS ROW.
-       `Price` used to lead this row. It is `purchasePrice`, i.e. what the
-       coin COST, and it now lives in the Transactions section below under
-       its proper name, Cost, next to the date it was paid on. Value (what
-       the coin is worth today) and Melt (what the metal in it is worth) are
-       facts about the coin rather than about a deal, so they stay exactly
-       where they were. -->
   <div class="detail-editor__row detail-editor__row--pricing">
+    <label class="detail-field detail-field--compact detail-field--cert-number">
+      <span>Cert. Number</span>
+      <input
+        [ngModel]="coin().certNumber"
+        (ngModelChange)="updateSelectedCoin('certNumber', $event)"
+      />
+    </label>
     <label class="detail-field detail-field--money">
       <span>Value</span>
       <input
@@ -392,123 +271,49 @@
         (numericValueChange)="updateNumericField('currentValue', $event)"
       />
     </label>
-    <!-- Melt value sits directly after Value, where it is useful: on its own
-         "$412.63" means little, but beside what the coin is actually valued at
-         it answers the question that makes melt worth tracking — is this coin
-         worth more than the metal in it?
-
-         It is NOT an input. It is worked out from the coin's PM Weight (g) and
-         Metal Content against the latest spot prices, so it is rendered as
-         read-only text in a field-shaped box rather than something you can
-         type into.
-
-         It shows "—", never "$0.00", when melt cannot be worked out: a missing
-         weight or a missing spot price means UNKNOWN, not worthless. The
-         tooltip says which. -->
+    <!-- Read-only melt value from PM Weight and spot price; shows "—" when it cannot be worked out. -->
     <div class="detail-field detail-field--money detail-field--readonly" [title]="meltValueHint()">
       <span>Melt</span>
       <output class="readonly-value">{{ meltValueDisplay() }}</output>
     </div>
   </div>
 
-  <div class="detail-editor__row detail-editor__row--certs">
-    <label class="detail-field detail-field--compact detail-field--cert-number">
-      <span>Certification Number</span>
-      <!-- NO INLINE WIDTH HERE. This input used to carry
-           `style="width: 125%"`, which made it a quarter wider than its own
-           grid cell; the surplus spilled into the Catalogue cell beside it,
-           and because the Catalogue <select> comes later in the document it
-           painted on top of the overflowing box. Slab numbers are 7-10
-           characters, so the width is set from the data in
-           coin-editor-form.scss alongside every other field width. -->
-      <input
-        [ngModel]="coin().certNumber"
-        (ngModelChange)="updateSelectedCoin('certNumber', $event)"
-      />
-    </label>
-
-    <!-- The catalogue reference: "Sear 6819". Two controls, one idea. They
-         are on the CERTIFICATION row deliberately: both lines answer "what
-         does an outside authority call this coin?" -- the slab number is what
-         the grading service calls it, the catalogue reference is what the
-         standard reference work calls it. For an ancient coin, which has no
-         year, no denomination and no grade, the catalogue reference is
-         frequently the ONLY identification there is.
-
-         ENTERING A REFERENCE LOOKS NOTHING UP. No year, no type, no
-         composition, and there is deliberately no button promising it later.
-         Of the catalogues in the picker only RIC and Crawford have an open
-         machine-readable source, and the three reached for first -- Sear,
-         Hendin, Krause -- have none at all.
-    -->
-    <label class="detail-field detail-field--compact detail-field--catalog">
-      <span>Catalogue</span>
-      <!-- Inactive catalogues are filtered out, matching the mint mark
-           dropdown above: a removed catalogue must not be offered again. A
-           coin still POINTING at a removed one keeps its attribution and
-           still reads "Sear 6819" in the grid -- catalogNameById() answers
-           for inactive rows on purpose -- it simply cannot be re-picked. -->
-      <select
-        [ngModel]="catalogIdForSelect()"
-        (ngModelChange)="onCatalogSelected($event)"
-      >
-        <option value="">(none)</option>
-        @for (catalog of activeCatalogs(); track catalog.catalogId) {
-          <option [value]="catalog.catalogId">{{ catalog.name }}</option>
-        }
-      </select>
-    </label>
-
-    <label class="detail-field detail-field--compact detail-field--catalog-number">
-      <span>Catalogue Number</span>
-      <!-- SIZED TO THE DATA, NOT TO THE COLUMN. The widest real references
-           are "II.1 234" and "RRC 44/5" at eight characters, and the width is
-           set in the stylesheet beside the other field widths rather than
-           inline here.
-
-           maxlength IS the column, though: 50, bound from
-           CATALOG_NUMBER_MAX_LENGTH so the input cannot accept a value SQL
-           Server would reject (error 8152) or the driver would silently
-           truncate. The two numbers are different on purpose -- the box
-           LOOKS small and still holds anything the column does. -->
-      <input
-        type="text"
-        [attr.maxlength]="CATALOG_NUMBER_MAX_LENGTH"
-        placeholder="6819"
-        [ngModel]="coin().catalogNumber ?? ''"
-        (ngModelChange)="updateSelectedCoin('catalogNumber', $event)"
-      />
-    </label>
-  </div>
-
-  <!-- `Purchase date` used to be here, on a row of its own with a hidden
-       spacer beside it. It has moved into the Transactions section below, so
-       that the date and the price paid on it are read together. -->
+  <!-- Catalogue references (e.g. "Sear 6819"); the grid shows Sear first. -->
+  <fieldset class="detail-catalog-refs">
+    <legend>Catalogue references</legend>
+    @for (ref of catalogRefs(); track $index) {
+      <div class="detail-catalog-refs__row">
+        <!-- Active catalogues only, plus this row's own catalogue if it was removed. -->
+        <select
+          class="detail-catalog-refs__catalog"
+          aria-label="Catalogue"
+          [ngModel]="catalogIdForSelect(ref)"
+          (ngModelChange)="updateCatalogRef($index, { catalogId: $event })"
+        >
+          <option value="">(none)</option>
+          @for (option of catalogOptionsFor(ref); track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+        <input
+          type="text"
+          class="detail-catalog-refs__number"
+          aria-label="Catalogue number"
+          [attr.maxlength]="CATALOG_NUMBER_MAX_LENGTH"
+          placeholder="6819"
+          [ngModel]="ref.catalogNumber"
+          (ngModelChange)="updateCatalogRef($index, { catalogNumber: $event })"
+        />
+        <button type="button" class="secondary detail-catalog-refs__remove"
+          aria-label="Remove reference" (click)="removeCatalogRef($index)">&times;</button>
+      </div>
+    }
+    <button type="button" class="secondary small-button" (click)="addCatalogRef()">Add reference</button>
+  </fieldset>
 </div>
 
-<!-- ================= THE TRANSACTIONS SECTION =================
-     Optional: shown only when Settings > "Show transactions section in
-     details" is on. It replaces the old Transactions TABLE, which had its
-     own rows, its own ids and its own endpoints; there is one purchase and
-     at most one sale per coin now and they are ordinary coin fields.
-
-     *** IT SITS ABOVE THE NOTES BLOCK, NOT BELOW IT, AND THAT IS NOT
-     COSMETIC. *** The two blocks each contain a notes box. Putting the
-     transaction one last would leave the coin's own Notes stranded in the
-     middle of the deal record and make the final box on the panel the one
-     the user is least likely to want. Read top to bottom the panel now goes:
-     the coin -> the deal -> what you want to remember about the coin.
-
-     *** THE TWO NOTES BOXES MUST NEVER READ AS TWO OF THE SAME THING. ***
-     Four things keep them apart, and none of them is redundant:
-       1. different captions — "Notes about this purchase or sale" against
-          "Notes about the coin itself". Neither is the bare word "Notes".
-       2. a one-line hint under each caption saying what belongs in it.
-       3. different sizes. The transaction box is the taller of the two, as
-          asked for: it is the one that gets paragraphs.
-       4. different surroundings. This one is inside a titled, tinted card;
-          the coin's note is on the plain panel background outside it.
-     If you are changing either box, change it so all four still hold. -->
+<!-- Transactions section (optional, from Settings). Kept above the coin's notes; the two notes
+     boxes are deliberately captioned, sized and styled differently. -->
 @if (showTransactions()) {
   <section class="detail-transactions" aria-labelledby="coin-transaction-heading">
     <h3 id="coin-transaction-heading">Transactions</h3>
@@ -518,10 +323,6 @@
 
     <div class="detail-transactions__row">
       <label class="detail-field detail-field--money">
-        <!-- "Cost", not "Price". Same column as before (PurchasePrice) and
-             the same `prefix`/`group` money formatting; the caption says
-             what the number IS, next to the date it was paid on, rather
-             than leaving "Price" to be confused with Value above. -->
         <span>Cost</span>
         <input
           [appNumericField]="coin().purchasePrice"
@@ -552,10 +353,6 @@
     </div>
 
     <div class="detail-transactions__row">
-      <!-- Sold price and Sold date are the SAME columns the grid and the
-           status rules already read (SoldPrice / SoldDate). They were never
-           editable anywhere before; the sale half of the deal record is
-           where they belong, and "Sold to" is meaningless without them. -->
       <label class="detail-field detail-field--money">
         <span>Sold for</span>
         <input
@@ -599,8 +396,7 @@
   </section>
 }
 
-<!-- THE COIN'S OWN NOTE. Not the deal's — see the block above, which is
-     rendered before this one on purpose. -->
+<!-- The coin's own notes. -->
 <div class="detail-notes">
   <label>
     <span class="detail-notes-label">Notes about the coin itself</span>

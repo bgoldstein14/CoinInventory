@@ -1,27 +1,17 @@
-// Styles for the detail sidebar FRAME: the action buttons and the draft
-// note. Everything inside the frame — the editable grid, the Transactions
-// card and the Notes box — is CoinEditorForm and is styled there.
+// Detail sidebar frame: action buttons and draft note. The form itself is
+// styled in coin-editor-form.scss.
 @use '../../styles/controls' as *;
 @use '../../styles/panel' as *;
 
-// Keep the component host out of the layout: `<aside class="panel
-// detail-panel">` must remain a direct child of the `.main-content` grid for
-// the two-column layout to work.
+// Keep the host out of layout so the aside stays a direct child of the
+// .main-content grid.
 :host { display: contents; }
 
 // ---- Detail panel ----
 
-// The panel is a height-capped flex column inside an app that is locked to one
-// viewport (`:host { height: 100dvh; overflow: hidden }` in _base.scss), so
-// nothing outside it can ever scroll. That makes the overflow rule here the
-// only thing deciding whether content past the cap is REACHABLE or merely
-// CLIPPED.
-//
-// It must not be `overflow: hidden`. The flex children below default to
-// `min-height: auto` and so refuse to shrink below their content; the column
-// then overruns its cap and the surplus is cut off with no way to scroll to
-// it. Notes is last in the stack and was the visible casualty, but the
-// transaction history underneath it was being clipped the same way.
+// The app is locked to one viewport, so this panel must scroll its own
+// overflow; `overflow: hidden` would clip content (flex children default to
+// min-height: auto).
 .detail-panel {
   position: sticky;
   top: 12px;
@@ -33,21 +23,42 @@
   min-height: 0;
 }
 
-// The header holds only the action buttons. `justify-content` must stay
-// `flex-end`: with a single child, `space-between` would pin the buttons to
-// the LEFT edge.
+// Show images on the left, the close × in the top-right corner.
 .detail-header {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 8px;
   margin-bottom: 10px;
 }
 
-.detail-header-actions {
+// A plain × in the corner, like a window's close button.
+.detail-close {
+  background: none;
+  border: none;
+  box-shadow: none;
+  font-size: 1.4rem;
+  line-height: 1;
+  color: #8a7a63;
+  cursor: pointer;
+  padding: 2px 8px;
+  margin-right: -6px;
+  border-radius: 6px;
+
+  &:hover {
+    background: #f0e8dc;
+    color: #2c1c0e;
+    transform: none;
+    box-shadow: none;
+  }
+}
+
+// Pushed to the bottom of the panel when the form is short.
+.detail-footer {
   display: flex;
-  gap: 6px;
-  flex-shrink: 0;
+  justify-content: flex-start;
+  margin-top: auto;
+  padding-top: 10px;
 }
 
 // ---- Valuation summary ----
@@ -81,26 +92,8 @@
   }
 }
 
-// ---- Transaction history and original image files: BOTH REMOVED ----
-//
-// This file used to carry `.detail-transactions`, `.transaction-list`, the
-// `.txn-*` chips, `.add-transaction-form`, `.detail-image-paths`,
-// `.image-path-list` and `.image-path-empty`. The history list and its
-// add-a-transaction row went with the Transactions table; the original-file
-// list was removed from the panel at the owner’s request.
-//
-// The Transactions SECTION that replaced the history is a card of coin
-// fields in CoinEditorForm, and its styles live in coin-editor-form.scss
-// beside the Notes box it has to stay distinguishable from.
-
-// ---- "Needs a Denomination before it can be saved" ----
-//
-// A coin that is still being typed is an EXPECTED state, so this reads as a
-// note rather than a failure: the same warm brown as the grid's "Unsaved"
-// chip, no icon, no border box. It replaces nothing the user did wrong.
-//
-// Only `--failed` — a save the server was asked for and refused — goes red,
-// because that one really is an error the user cannot fix by typing.
+// ---- Draft note ----
+// Warm brown for an unsaved coin; red only for a save the server refused.
 
 .detail-draft-note {
   margin: 0 0 10px;
@@ -120,8 +113,6 @@
 }
 
 // ---- Responsive & print ----
-// On a narrow screen the sidebar stops being sticky and just flows with the
-// page; on paper it is dropped entirely.
 
 @media (max-width: 900px) {
   .detail-panel { position: static; max-height: none; }

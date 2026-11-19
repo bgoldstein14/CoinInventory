@@ -1,22 +1,12 @@
 /**
- * BUG: a newly added image showed as a broken thumbnail until the grid was
- * reloaded.
- *
- * The grid's row thumbnail is `<img src="/api/coins/<id>/thumbnail">`, and
- * that URL used to depend on nothing but the coin id. Attaching a photo
- * paints the new `imagePaths` array on screen immediately but only PUTs it a
- * second later, so the browser requested the thumbnail while the server still
- * had no image, got a 404, and never asked again — the element, and the URL,
- * were unchanged by the save that followed.
- *
- * These tests pin the three halves of the fix:
- *   1. the registry only moves when the SERVER confirms an image write,
- *   2. CoinEditor bumps it from the success handler of a create/update that
- *      carried `imagePaths`, and from nowhere else,
- *   3. ApiService turns a non-zero revision into a different URL while
- *      leaving revision 0 byte-identical to what it has always produced (so
- *      an unchanged coin still revalidates with a 304 rather than
- *      re-downloading).
+ * A newly added photo must not leave a broken grid thumbnail. Attaching a photo
+ * paints it at once but PUTs it a second later, so the first thumbnail request
+ * 404s, and browsers never retry an unchanged URL. Tested:
+ *   1. the revision registry only moves when the server confirms an image write;
+ *   2. CoinEditor bumps it only from the success handler of a create/update
+ *      carrying `imagePaths`;
+ *   3. ApiService gives a different URL for a non-zero revision and the bare URL
+ *      for revision 0 (so unchanged coins still revalidate with a 304).
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { of, throwError } from 'rxjs';
@@ -32,10 +22,8 @@ const PHOTO = 'data:image/jpeg;base64,AAA';
 const SECOND_PHOTO = 'data:image/jpeg;base64,BBB';
 
 /**
- * The real ApiService with a stub HttpClient — `coinThumbnailUrl` builds a
- * string and makes no request, so nothing else is needed. Constructed the
- * same way api.service.spec.ts does it, for the same reason: importing
- * Angular's HTTP testing module here would drag in the XHR backend.
+ * The real ApiService with a stub HttpClient (`coinThumbnailUrl` makes no
+ * request), constructed as in api.service.spec.ts to avoid the XHR backend.
  */
 function realApiService(): ApiService {
   const http = { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() };
@@ -120,7 +108,7 @@ describe('CoinEditor bumps the revision only when the server confirms', () => {
 
     inv.updateCoin('c1', { imagePaths: [PHOTO] });
 
-    // The row already shows the photo, but the PUT has not even left yet.
+    // The row shows the photo, but the PUT hasn't been sent yet.
     expect(coinThumbnailRevisions.revisionOf('c1')).toBe(0);
   });
 
@@ -203,8 +191,8 @@ describe('the end-to-end sequence the owner hit', () => {
     inv.addCoins([{ id: 'c1', denomination: 'Dollar', year: '1921', imagePaths: [] } as never]);
     await vi.advanceTimersByTimeAsync(0);
 
-    // The user attaches a photo. The row repaints at once and the browser
-    // asks for THIS url while the server still has nothing: a 404.
+    // The user attaches a photo; the browser requests this URL before the server
+    // has the image (a 404).
     inv.updateCoin('c1', { imagePaths: [PHOTO] });
     const urlRequestedTooEarly = api.coinThumbnailUrl('c1', coinThumbnailRevisions.revisionOf('c1'));
 
@@ -212,8 +200,7 @@ describe('the end-to-end sequence the owner hit', () => {
     await vi.advanceTimersByTimeAsync(1000);
     const urlAfterTheSave = api.coinThumbnailUrl('c1', coinThumbnailRevisions.revisionOf('c1'));
 
-    // Before the fix these two were the same string, which is exactly why
-    // nothing re-requested the picture and the thumbnail stayed broken.
+    // The URL must change after the save so the browser requests the photo again.
     expect(urlAfterTheSave).not.toBe(urlRequestedTooEarly);
   });
 });

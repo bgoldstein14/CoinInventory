@@ -1,21 +1,9 @@
  /*
- * denomination-link.spec.ts — the CSV and Excel import path, linking
- * ---- WHAT IS UNDER TEST ----
- * `CsvService.mapRowToCoin` is where a spreadsheet row becomes a coin, and
- * since migration 011 a coin carries BOTH the text the file gave and a link
- * to the Denominations row it names (design §4.1, §6). Excel is not a second
- * path: `.xlsx` sheets converge on this same mapper below the mapping grid,
- * so what is proved here is proved for both.
- *
- * ---- THE THREE THINGS THAT MUST STAY TRUE ----
- *   1. THE TEXT IS NEVER TOUCHED. Not trimmed into a label, not replaced by
- *      the row it resolved to, not cleared when it resolves to nothing. It
- *      is the only surviving record of what the file said (§4.1) and the
- *      input to a later, smarter resolver.
- *   2. UNRESOLVED IS NORMAL. No warning, no rejection, no invented
- *      denomination. The coin imports and reads `Other (8 Reales)`.
- *   3. THE COUNTRY IS THE ROW'S OWN. Resolution is scoped by it before it
- *      widens, so feeding a constant would silently change which coins link.
+  * Denomination linking in `CsvService.mapRowToCoin` (shared by CSV and Excel).
+  * A coin keeps the text the file gave and may also link to a Denominations row.
+  *   1. The text is never changed.
+  *   2. Unresolved is normal: no warning or rejection; the coin reads e.g. `Other (8 Reales)`.
+  *   3. Resolution is scoped by the row's own country.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -44,15 +32,12 @@ describe('mapRowToCoin links the denomination it was given', () => {
     const coin = mapRow({ coinType: 'Morgan Dollar', denomination: 'Dollar', year: '1881' });
 
     expect(coin.denominationId).toBe(dollar!.denominationId);
-    // NOT '$1'. The label is what the id means; the text is what the file
-    // said, and rewriting it here would destroy the evidence §4.1 exists to
-    // keep.
+    // Not '$1': the text stays what the file said.
     expect(coin.denomination).toBe('Dollar');
   });
 
   it('folds spellings through the existing alias layer', () => {
-    // '3CS', 'Trime' and 'Three Cent Silver' are one denomination. The
-    // alias table already knew that; nothing here re-states it.
+    // '3CS', 'Trime' and 'Three Cent Silver' are one denomination (via the alias table).
     const trime = seedDenomination('United States', '3CS');
     for (const spelling of ['3CS', 'Trime', 'Three Cent Silver', '3cs']) {
       const coin = mapRow({ denomination: spelling, year: '1861' });
@@ -62,24 +47,21 @@ describe('mapRowToCoin links the denomination it was given', () => {
   });
 
   it('uses the COUNTRY COLUMN of the row, not a constant', () => {
-    /* The assertion that catches a hard-coded country, and the pair matters
-     * more than either half. 'Penny' is a label under Australia, New Zealand
-     * and Ireland: scoped to one of them it is unambiguous and must link;
-     * unscoped it has no right answer and must not. */
+    // 'Penny' exists under Australia, New Zealand and Ireland: scoped to one it
+    // links; unscoped it must not.
     const australian = seedDenomination('Australia', 'Penny');
     expect(australian, 'the seed should carry an Australian Penny').toBeTruthy();
 
     expect(mapRow({ denomination: 'Penny', country: 'Australia', year: '1920' }).denominationId)
       .toBe(australian!.denominationId);
 
-    // No Country column at all: the mapper's own default, 'United States',
-    // which strikes no Penny. Three issuers do, so the id stays null.
+    // No Country column: defaults to 'United States', which has no Penny; three
+    // other issuers do, so no link.
     expect(mapRow({ denomination: 'Penny', year: '1920' }).denominationId).toBeNull();
   });
 
   it('widens past the country rather than giving up', () => {
-    // Only Peru struck a 100 Soles, so a row filed under the United States
-    // still links. This is the case design §5 widens for.
+    // Only Peru struck a 100 Soles, so a row filed under the United States still links.
     const soles = seedDenomination('Peru', '100 Soles');
     const coin = mapRow({ denomination: '100 Soles', country: 'United States', year: '1967' });
     expect(coin.denominationId).toBe(soles!.denominationId);
@@ -88,8 +70,7 @@ describe('mapRowToCoin links the denomination it was given', () => {
 
 describe('an unlinked row is a normal import, not a problem', () => {
   it('imports an ambiguous value with its text and no link', () => {
-    // Six issuers struck an 8 Reales. Guessing one would file the coin
-    // under an issuer the owner never chose, invisibly and permanently.
+    // Six issuers struck an 8 Reales; no guess.
     const coin = mapRow({ denomination: '8 Reales', country: 'United States', year: '1753' });
     expect(coin.denominationId).toBeNull();
     expect(coin.denomination).toBe('8 Reales');
@@ -102,12 +83,8 @@ describe('an unlinked row is a normal import, not a problem', () => {
   });
 
   it('counts both as accepted rows — unresolved never blocks an import', () => {
-    /* THE RULE THIS PROTECTS. The 2-of-3 completeness rule decides what is
-     * imported; resolution decides only whether there is a link. Wiring the
-     * second into the first would reject several hundred perfectly good
-     * rows per file, and the "import anyway" override was deliberately
-     * removed precisely because the completeness rule is the only gate
-     * there is. */
+    // Resolution never affects whether a row is imported; only the 2-of-3
+    // completeness rule does.
     const headers = ['Denomination', 'Year'];
     const mapping = { Denomination: 'denomination', Year: 'year' };
     const plan = planImport(
@@ -129,8 +106,7 @@ describe('an unlinked row is a normal import, not a problem', () => {
 
 describe('without a lookup list', () => {
   it('maps exactly as it always did', () => {
-    // The lookup has not arrived from the server, or a caller predates this
-    // argument. Nothing links, nothing fails, and the text is intact.
+    // No lookup (not loaded yet): nothing links, nothing fails, text intact.
     const coin = csv.mapRowToCoin(['Dollar', '1881'], ['Denomination', 'Year'], {
       Denomination: 'denomination',
       Year: 'year'
@@ -139,8 +115,6 @@ describe('without a lookup list', () => {
     expect(coin.denominationId).toBeNull();
   });
 });
-
-/* ---- THE PREVIEW'S COUNT ---- */
 
 describe('planImport reports how many rows linked', () => {
   const headers = ['Denomination', 'Year'];
@@ -156,8 +130,8 @@ describe('planImport reports how many rows linked', () => {
     const result = plan([
       ['Dollar', '1881'],      // links
       ['3CS', '1861'],         // links
-      ['8 Reales', '1753'],    // ambiguous — no link
-      ['', '1881']             // rejected by the 2-of-3 rule, not counted at all
+      ['8 Reales', '1753'],    // ambiguous, no link
+      ['', '1881']             // rejected by the 2-of-3 rule, not counted
     ]);
 
     expect(result.acceptedCount).toBe(3);
@@ -182,34 +156,19 @@ describe('planImport reports how many rows linked', () => {
   });
 
   it('reads zero when the whole column is wrong, which is the point of showing it', () => {
-    // A `Grade` column mapped onto Denomination. Every row still imports if
-    // it has 2 of 3, and nothing warns -- but the count says 0, which is
-    // the cheap signal that the mapping is wrong while it is still cheap to
-    // fix.
+    // A Grade column mapped onto Denomination imports but links nothing; the
+    // count of 0 flags the bad mapping.
     const result = plan([['MS63', '1881'], ['VF30', '1943']]);
     expect(result.acceptedCount).toBe(2);
     expect(result.linkedDenominations).toBe(0);
   });
 });
 
-/* ---- COST ---- */
-
 describe('a 2,000-row spreadsheet does not re-read the lookup table', () => {
   it('reads the lookup the same number of times for 10 rows and for 2,000', () => {
-    /* A DETERMINISTIC COST ASSERTION, NOT A TIMING ONE.
-     *
-     * `resolveDenomination`'s first act is to fold EVERY row it is given
-     * through the alias table. Called the naive way, 2,000 spreadsheet rows
-     * against 1,161 denominations is 2.3 million folds -- and the CSV
-     * preview re-plans on every change to the mapping grid, so that cost
-     * sits on the keystroke path, not just behind the Import button.
-     *
-     * Counting the reads of every lookup row's `label` proves the index is
-     * built once and reused: the SAME number of reads for ten rows as for
-     * two thousand. How many reads one build costs is an implementation
-     * detail and is deliberately not asserted -- what matters is that the
-     * number does not grow with the file. A timing assertion would say the
-     * same thing less clearly and would flake on a loaded machine. */
+    // Counts reads of each lookup row's `label` to prove the resolver index is
+    // built once: the same reads for 10 rows as for 2,000. (The preview re-plans
+    // on every mapping change.) Deterministic rather than a timing assertion.
     function countingLookup(): { rows: Denomination[]; reads: () => number } {
       let reads = 0;
       const rows = SEED_DENOMINATIONS.map(row => {
@@ -246,8 +205,7 @@ describe('a 2,000-row spreadsheet does not re-read the lookup table', () => {
     expect(big.acceptedCount).toBe(2000);
     expect(big.linkedDenominations).toBe(1000);
 
-    // Non-vacuity: the lookup really was read, so an index that read
-    // nothing at all could not pass this by scoring zero twice.
+    // Non-vacuity: the lookup really was read.
     expect(small.reads()).toBeGreaterThanOrEqual(SEED_DENOMINATIONS.length);
     // 200x the rows, the same work against the lookup table.
     expect(large.reads()).toBe(small.reads());

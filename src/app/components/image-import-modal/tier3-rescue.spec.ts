@@ -1,29 +1,8 @@
 /*
- * WHAT THIS FILE PROVES: that tier 3 -- the read-only "not imported" list --
- * has a way back in, WITHOUT having become a queue and WITHOUT the matcher
- * having been made braver. Both halves matter, so the file is in two parts:
- *
- *   1. THE HATCH WORKS. A skipped row can be rescued from the matcher's own
- *      ranked candidates, or from the free-text CoinLookup search when there
- *      are no candidates at all; it then travels the ordinary attach path.
- *
- *   2. THE HATCH COSTS NOTHING. A row nobody touches stays skipped and
- *      writes nothing; the control is opt-in, so no panel exists until it is
- *      clicked; the read-only list keeps its paging; and the TIER ASSIGNMENT
- *      ITSELF is identical before and after any amount of rescuing.
- *
- * WHY THE TIER-ASSIGNMENT TEST IS WRITTEN THE WAY IT IS. It asserts that
- * tiers do not CHANGE, rather than that specific files land in specific
- * tiers. The four-attribute bar and the grade-equivalence rule behind it are
- * owned by services/image-matching/near-match.ts and tuned there; pinning
- * exact tier membership here would fail every time that rule is legitimately
- * adjusted. What this spec guards is that an escape hatch bolted onto the
- * review screen cannot reach back and alter how the matcher classified
- * anything -- hence the before/after snapshot.
- *
- * The fixtures rely only on a filename carrying NO GRADE AT ALL, a hard
- * "absence is not agreement" failure, unaffected by how forgiving the
- * comparison of two PRESENT grades is.
+ * Tier 3 "Attach anyway": a skipped row can be rescued from the matcher's ranked
+ * candidates or from the free-text search, an untouched row stays skipped, and
+ * rescuing never changes any file's tier (checked with a before/after snapshot
+ * rather than pinning exact tiers, which belong to near-match.ts).
  */
 
 import 'fake-indexeddb/auto';
@@ -47,8 +26,7 @@ const stubEncoder = (file: File) => Promise.resolve({
   storedBytes: 250_000
 });
 
-/** The session is `protected` on the component; reach it the same way the
- *  sibling spec does rather than widening the API for the tests' benefit. */
+/** Reaches the protected session through a cast. */
 function sess(modal: ImageImportModal): BatchImportSession {
   return (modal as unknown as { session: BatchImportSession }).session;
 }
@@ -91,18 +69,11 @@ function tierMap(modal: ImageImportModal): Record<string, string> {
   return tiers;
 }
 
-/* THE FIXTURE: the worst case, in miniature.
- *
- * "1881 Morgan Dollar NGC 2599001.jpg" is verbatim from the share. Against a
- * matching Morgan record it scores very highly -- 97% on the real inventory --
- * and the near-match bar still refuses it, because the FILENAME STATES NO
- * GRADE and absence is never agreement. Under a strictly button-less tier 3
- * the right coin would be sitting at the top of a ranked list nobody can
- * see. */
+/* Fixture: scores highly against a Morgan record, but the filename states no
+ * grade, so the near-match bar refuses it. */
 const MORGAN_NO_GRADE = '1881 Morgan Dollar NGC 2599001.jpg';
 
-/** A camera-default name: tier 3 with NO candidates at all, so the ranked list
- *  has nothing to offer and only the free-text search can place it. */
+/** A camera-default name: tier 3 with no candidates, so only the search can place it. */
 const CAMERA_NAME = 'IM000025.JPG';
 
 describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
@@ -113,21 +84,9 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
   /** The inventory used throughout: one well-filled Morgan, one unrelated coin. */
   function stockInventory(inv: InventoryService) {
     return {
-      /* TWO 1881 Morgan dollars, which is what makes this the interesting
-       * case:
-       *
-       *   - both records are COMPLETE, grade included; it is the FILENAME
-       *     that states no grade, which is why the four-attribute bar
-       *     refuses it (absence is never agreement);
-       *   - two equally good fits means the auto-assign gates refuse it as
-       *     well, so it is not quietly attached either.
-       *
-       * The result is the dead end this feature exists for: a very
-       * high-scoring photo, a ranked list that holds the right coin, and
-       * nothing on screen that could reach it. Neither record carries the
-       * cert number from the filename - if one did, that would be an
-       * independent strong attribute and the gates would attach the file
-       * outright, which is the opposite of the case under test. */
+      /* Two complete 1881 Morgan records: the filename's missing grade fails the
+             * near-match bar, and two equal fits fail the auto-assign gates. Neither
+             * record has the filename's cert number, which would attach it outright. */
       morgan: addCoin(inv, {
         coinType: 'Morgan', denomination: 'Dollar', year: '1881',
         mintMark: 'S', grade: 'MS63'
@@ -140,7 +99,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     };
   }
 
-  /* 1. THE HATCH IS OPT-IN */
+  /* 1. Opt-in */
 
   it('shows no control state and asks nothing until the user opens a row', async () => {
     const { modal, inv } = createModal();
@@ -153,8 +112,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
       .toEqual([CAMERA_NAME, MORGAN_NO_GRADE].sort());
     expect(sess(modal).imageReviews().every(r => r.decision === 'skipped')).toBe(true);
 
-    // Nothing is open, so the template renders no panel for any row. This is
-    // the whole "stays a report, not a queue" guarantee, in one assertion.
+    // Nothing is open, so no rescue panel is rendered.
     expect(sess(modal).rescueOpen().size).toBe(0);
     expect(sess(modal).isRescueOpen(MORGAN_NO_GRADE)).toBe(false);
     expect(sess(modal).outstandingCount()).toBe(0);
@@ -180,7 +138,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(rowFor(modal, MORGAN_NO_GRADE).decision).toBe('skipped');
   });
 
-  /* 2. RESCUE VIA THE MATCHER'S OWN RANKED CANDIDATES */
+  /* 2. Rescue via the matcher's ranked candidates */
 
   it('rescues a skipped row from the ranked candidates the matcher already produced', async () => {
     const { modal, inv } = createModal();
@@ -190,8 +148,6 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 
     const before = rowFor(modal, MORGAN_NO_GRADE);
     expect(before.result.tier).toBe('not-imported');
-    // The point of the whole feature: the right coin IS in the list, ranked
-    // first, and before this work nothing on screen showed it.
     expect(before.result.candidates.length).toBeGreaterThan(0);
     expect(before.result.candidates.map(c => c.coinId)).toContain(morgan.id);
     expect(before.result.candidates[0].score).toBeGreaterThan(0.5);
@@ -203,8 +159,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(after.decision).toBe('confirmed');
     expect(after.selected).toBe(true);
     expect(after.selectedCoinId).toBe(before.result.candidates[0].coinId);
-    // The matcher's own score is kept: the user overrode the BAR, not the
-    // arithmetic, and the score is the most useful thing we know here.
+    // The matcher's score is kept: the user overrode the bar, not the score.
     expect(after.confidence).toBe(before.result.candidates[0].score);
     expect(after.selectionReason).toContain('Attached anyway');
     expect(sess(modal).attachCount()).toBe(1);
@@ -217,9 +172,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     stockInventory(inv);
 
     await selectFiles(modal, [MORGAN_NO_GRADE]);
-    // A stale or hand-crafted id must attach nothing. The guard matters
-    // because the ids come out of the DOM: the only coins this control may
-    // ever reach are the ones the matcher itself ranked for THIS file.
+    // Ids come from the DOM, so only coins ranked for this file may be attached.
     expect(rowFor(modal, MORGAN_NO_GRADE).result.candidates.map(c => c.coinId))
       .not.toContain('no-such-coin');
     sess(modal).rescueWithCandidate(MORGAN_NO_GRADE, 'no-such-coin');
@@ -228,7 +181,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(sess(modal).attachCount()).toBe(0);
   });
 
-  /* 3. RESCUE VIA THE FREE-TEXT SEARCH (reusing CoinLookup) */
+  /* 3. Rescue via the free-text search (CoinLookup) */
 
   it('rescues a row with no candidates at all using the CoinLookup search', async () => {
     const { modal, inv } = createModal();
@@ -238,14 +191,10 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 
     const row = rowFor(modal, CAMERA_NAME);
     expect(row.result.tier).toBe('not-imported');
-    // Nothing ranked, so the candidate list cannot help; the search is the
-    // only honest option for this row.
     expect(row.result.candidates).toEqual([]);
 
     sess(modal).openRescue(CAMERA_NAME);
 
-    // This is CoinLookup, unchanged and reused: per-row term, capped results,
-    // every typed word has to appear in the coin's label.
     sess(modal).coins.setTerm(CAMERA_NAME, 'p');
     expect(sess(modal).coins.results(CAMERA_NAME)).toEqual([]);   // under 2 chars = noise
 
@@ -259,8 +208,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(after.decision).toBe('confirmed');
     expect(after.selected).toBe(true);
     expect(after.selectedCoinId).toBe(peace.id);
-    // Stated outright rather than picked off a ranked list, so confidence 1 -
-    // the same convention the ordinary manual assignment uses.
+    // Chosen by the user, so confidence 1, as with ordinary manual assignment.
     expect(after.confidence).toBe(1);
     expect(after.selectionReason).toContain('Attached anyway');
     expect(sess(modal).attachCount()).toBe(1);
@@ -269,7 +217,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(sess(modal).coins.term(CAMERA_NAME)).toBe('');
   });
 
-  /* 4. UNDO, AND WHAT AN UNTOUCHED ROW DOES */
+  /* 4. Undo, and untouched rows */
 
   it('puts a rescued row straight back to skipped on Undo', async () => {
     const { modal, inv } = createModal();
@@ -281,8 +229,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 
     sess(modal).resetDecision(MORGAN_NO_GRADE);
 
-    // Undo on a tier-3 row means "back to how the IMPORTER left it", which is
-    // skipped - not 'review', which would quietly add it to a queue.
+    // Undo returns a tier-3 row to skipped, not to 'review'.
     const undone = rowFor(modal, MORGAN_NO_GRADE);
     expect(undone.decision).toBe('skipped');
     expect(undone.selectedCoinId).toBeNull();
@@ -298,8 +245,6 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     await selectFiles(modal, [MORGAN_NO_GRADE, CAMERA_NAME]);
     await sess(modal).applyConfirmedMatches();
 
-    // The whole batch was tier 3 and nothing was clicked, so the import is a
-    // no-op: no coin written, nothing attached, and every file reported.
     expect(updateSpy).not.toHaveBeenCalled();
     expect(inv.inventory().every(c => c.imagePaths.length === 0)).toBe(true);
     const summary = sess(modal).summary()!;
@@ -316,9 +261,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 
     await sess(modal).applyConfirmedMatches();
 
-    // Same route as a tier-2 confirmation: the row is simply 'confirmed' with
-    // a coin, and attach-runner's ordinary filter picks it up. There is no
-    // second attach path anywhere in this feature.
+    // Rescued rows use the ordinary attach path, like a tier-2 confirmation.
     expect(inv.inventory().find(c => c.id === morgan.id)!.imagePaths).toHaveLength(1);
     expect(inv.inventory().find(c => c.id === peace.id)!.imagePaths).toHaveLength(0);
 
@@ -329,7 +272,7 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     expect(summary.skipped).toBe(1);
   });
 
-  /* 5. THE SUMMARY SENTENCE AT THE TOP OF THE SCREEN */
+  /* 5. Summary sentence */
 
   it('moves a rescued photo out of "skipped" and into "will be attached"', async () => {
     const { modal, inv } = createModal();
@@ -351,20 +294,16 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     // Reported as skipped only if it really will be skipped.
     expect(after.skipped).toBe(2);
     expect(after.rescued).toBe(1);
-    // The read-only LIST is unchanged in length - the row is still in it, it
-    // just reads as a decision now.
+    // The list keeps the row; it just reads as a decision now.
     expect(after.notImportedTotal).toBe(3);
-    // The sub-counts are drawn from the still-skipped rows only.
-    // Gold Coins.JPG (a group shot) and IM000025.JPG (a camera-default name)
-    // are both vetoed as "not a single coin"; the rescued Morgan has left the
-    // skipped counts altogether.
+    // Sub-counts use only still-skipped rows: Gold Coins.JPG and IM000025.JPG
+        // are both "not a single coin".
     expect(after.skippedNotACoin).toBe(2);
     expect(after.skippedNoMatch).toBe(0);
-    // And the counters agree with what the attach run will actually do.
     expect(after.willAttach).toBe(sess(modal).readyToAttach().length);
   });
 
-  /* 6. PAGING */
+  /* 6. Paging */
 
   it('keeps the read-only list paged at 25 when a row on the page is rescued', async () => {
     const { modal, inv } = createModal();
@@ -379,19 +318,18 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 
     sess(modal).rescueWithSearch(names[3], peace.id);
 
-    // The rescued row keeps its tier, so it keeps its position: the list is
-    // still 60 long, still shows 25, and the rescued row has not jumped out
-    // from under the cursor into another section.
+    // The rescued row keeps its tier and its position in the list.
     expect(sess(modal).notImported()).toHaveLength(60);
     expect(modal['visibleNotImported']()).toHaveLength(25);
-    expect(modal['visibleNotImported']()[3].fileName).toBe(names[3]);
+    // Pages are of photo sets; camera names never group, so one file each.
+    expect(modal['visibleNotImported']()[3].leadFileName).toBe(names[3]);
     expect(modal['rescuedLabels']()[names[3]]).toContain('Peace');
 
     modal['showMoreSkipped']();
     expect(modal['visibleNotImported']()).toHaveLength(50);
   });
 
-  /* 7. THE CONSTRAINT: THE BAR DOES NOT MOVE */
+  /* 7. Rescuing never changes the tier assignment */
 
   it('does not change the tier assignment of a single file, however much is rescued', async () => {
     const { modal, inv } = createModal();
@@ -412,30 +350,24 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
       sess(modal).imageReviews().map(r => [r.fileName, r.result.status])
     );
 
-    // Rescue both kinds of tier-3 row, by both routes.
     sess(modal).openRescue(MORGAN_NO_GRADE);
     sess(modal).rescueWithCandidate(MORGAN_NO_GRADE, morgan.id);
     sess(modal).openRescue(CAMERA_NAME);
     sess(modal).rescueWithSearch(CAMERA_NAME, peace.id);
 
-    // THE LOAD-BEARING ASSERTION: the escape hatch is a UI override,
-    // not a loosening of the matcher. Every file is classified exactly as it
-    // was, and the matcher's own verdict (`status`) is untouched as well.
+    // The rescue is a UI override, not a loosening of the matcher: tiers and
+        // the matcher's own status are unchanged.
     expect(tierMap(modal)).toEqual(before);
     expect(Object.fromEntries(
       sess(modal).imageReviews().map(r => [r.fileName, r.result.status])
     )).toEqual(statusBefore);
 
-    // The matcher still refuses to name a coin on a rescued row: the coin
-    // lives on the user's DECISION, never on the match result.
+    // The coin lives on the user's decision, never on the match result.
     expect(rowFor(modal, MORGAN_NO_GRADE).result.matchedRecordId).toBeNull();
     expect(rowFor(modal, CAMERA_NAME).result.matchedRecordId).toBeNull();
-    // ...and the skip reason is still recorded, so the row can still explain
-    // itself in the read-only list.
     expect(rowFor(modal, MORGAN_NO_GRADE).result.skipReason).toBeTruthy();
 
-    // The auto-assign gates are likewise untouched: tier 1 by tier and tier 1
-    // by status still describe exactly the same set of files.
+    // The auto-assign gates are untouched too.
     expect(sess(modal).autoMatches()).toEqual(sess(modal).matchedImages());
     expect(sess(modal).matchedImages().map(r => r.fileName)).toEqual(['mercury_dime_1945.jpg']);
   });
@@ -461,9 +393,8 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
     const nearFile = '1881 Morgan Dollar PCGS MS63 - Obverse.jpg';
     expect(rowFor(modal, nearFile).result.tier).toBe('near');
 
-    // The rescue functions are gated on tier 'not-imported' precisely so they
-    // cannot be used to sidestep tier 2's "only candidates that passed the
-    // near-match test" dropdown rule, or to re-point a tier-1 row.
+    // Rescue is gated on tier 'not-imported', so it cannot bypass tier 2's
+        // dropdown rule or re-point a tier-1 row.
     sess(modal).rescueWithCandidate(nearFile, morganS.id);
     expect(rowFor(modal, nearFile).selectedCoinId).toBeNull();
     expect(rowFor(modal, nearFile).decision).toBe('review');
@@ -488,24 +419,9 @@ describe('tier 3 — the opt-in "Attach anyway" escape hatch', () => {
 });
 
 /*
- * PART 3 -- THE ROWS THAT GET NO HATCH, AND THE LINE THAT PROTECTS THEM.
- *
- * Counterfeits and multi-coin shots are the one group tier 3 does NOT offer
- * to rescue. The policy for both: never automatically attach, and never
- * OFFER as attachable in the automated import. Everything in PART 1 and
- * PART 2 above is exactly that offer, so these tests are the mirror image:
- * the same controls, asserted absent.
- *
- * THE OTHER HALF IS EQUALLY LOAD-BEARING, AND IT IS WHY THIS IS NOT SIMPLY
- * "HIDE THE ROW". The restriction stops at the automated run. A manual
- * attach is unconditional: no picture file is ever off limits to a user who
- * chooses to attach it to a coin, even when its name has nothing to do with
- * that coin -- it may be an article about it, or a fake the user keeps as an
- * inventory record on purpose.
- *
- * So the asymmetry below -- withheld by the importer, freely available by
- * hand -- is the requirement itself, and it is the thing a future change is
- * most likely to break silently. Both sides are pinned.
+ * Part 3: rows with no "Attach anyway". Multi-coin shots are listed but never
+ * offered by the automated import, while a manual attach of any file stays
+ * available. Both sides are tested.
  */
 
 /** Verbatim from the share. Complete, valid descriptor; the coin is a fake. */
@@ -529,10 +445,8 @@ describe('tier 3 — photos the automated import will not offer', () => {
       genuine1861: addCoin(inv, {
         coinType: 'Three Cent Silver', denomination: '3CS', year: '1861', grade: 'XF'
       }),
-      /* And a counterfeit held as an inventory record. It is an ordinary
-       * coin row — adding one by hand is allowed — and the only thing
-       * different about it is that the automated matcher will not consider
-       * it. */
+      /* A counterfeit held as an ordinary inventory record; only the automated
+             * matcher ignores it. */
       fakeRecord: addCoin(inv, {
         coinType: 'Three Cent Silver FAKE', denomination: '3CS', year: '1861', grade: 'XF45'
       })
@@ -545,26 +459,23 @@ describe('tier 3 — photos the automated import will not offer', () => {
 
     await selectFiles(modal, [COUNTERFEIT_PHOTO, COLLAGE_PHOTO, MORGAN_NO_GRADE]);
 
-    for (const file of [COUNTERFEIT_PHOTO, COLLAGE_PHOTO]) {
+    // Counterfeit photos are ordinary rows and may be rescued.
+    expect(sess(modal).canRescue(COUNTERFEIT_PHOTO)).toBe(true);
+
+    for (const file of [COLLAGE_PHOTO]) {
       const row = rowFor(modal, file);
 
-      // VISIBLE. Nothing silently disappears; this is the whole reason the
-      // rule is "do not offer" rather than "do not list".
+      // Still listed, so nothing silently disappears.
       expect(sess(modal).notImported().map(r => r.fileName), file).toContain(file);
       expect(row.result.skipReason, `${file} reason`).toBeTruthy();
 
-      // ...but with no hatch. `canRescue` is what the template branches on.
+      // `canRescue` is what the template branches on.
       expect(sess(modal).canRescue(file), `${file} canRescue`).toBe(false);
-      // And no ranked list behind it either, so even a rendered panel would
-      // have nothing in it.
       expect(row.result.candidates, `${file} candidates`).toEqual([]);
     }
 
-    /* The ordinary tier-3 row in the same run is untouched: this is a rule
-     * about two kinds of photo, not a weakening of the hatch itself. Note it
-     * keeps its hatch even though this inventory holds no Morgan for it, so
-     * it has no ranked candidates either — what is withdrawn above is the
-     * OFFER, and an empty candidate list is not the same thing. */
+    /* The ordinary tier-3 row keeps its "Attach anyway" even with no ranked
+         * candidates: what is withheld above is the offer itself. */
     expect(rowFor(modal, MORGAN_NO_GRADE).result.tier).toBe('not-imported');
     expect(sess(modal).canRescue(MORGAN_NO_GRADE)).toBe(true);
   });
@@ -573,15 +484,14 @@ describe('tier 3 — photos the automated import will not offer', () => {
     const { modal, inv } = createModal();
     const { genuine1860 } = threeCentInventory(inv);
 
-    await selectFiles(modal, [COUNTERFEIT_PHOTO, COLLAGE_PHOTO]);
+    await selectFiles(modal, [COLLAGE_PHOTO]);
 
-    for (const file of [COUNTERFEIT_PHOTO, COLLAGE_PHOTO]) {
-      // Opening is a no-op, so a stale click cannot even reveal the panel.
+    for (const file of [COLLAGE_PHOTO]) {
+      // Opening is a no-op, so a stale click cannot reveal the panel.
       sess(modal).openRescue(file);
       expect(sess(modal).isRescueOpen(file), `${file} isRescueOpen`).toBe(false);
 
-      // And both rescue paths refuse. The template already hides the link;
-      // these guards are the same rule where it cannot be bypassed.
+      // Both rescue paths refuse too, behind the hidden link.
       sess(modal).rescueWithCandidate(file, genuine1860.id);
       sess(modal).rescueWithSearch(file, genuine1860.id);
 
@@ -592,11 +502,9 @@ describe('tier 3 — photos the automated import will not offer', () => {
     expect(sess(modal).attachCount()).toBe(0);
   });
 
-  it('keeps a counterfeit RECORD out of the automated candidate pool', async () => {
-    /* The same rule pointing the other way, and the reason it is needed: a
-     * GENUINE 1861 3CS photograph must not land on the record
-     * "1861 3CS - XF45 - FAKE". The real collection holds five genuine 1861
-     * 3CS records and three counterfeit ones, so the collision is live. */
+  it('keeps a counterfeit RECORD away from a genuine photograph', async () => {
+    /* A genuine 1861 3CS photo must not land on the counterfeit
+         * "1861 3CS - XF45 - FAKE" record. */
     const { modal, inv } = createModal();
     const { genuine1861, fakeRecord } = threeCentInventory(inv);
 
@@ -611,19 +519,15 @@ describe('tier 3 — photos the automated import will not offer', () => {
 
     expect(reachable, 'the fake record must be unreachable automatically')
       .not.toContain(fakeRecord.id);
-    // The genuine record of the same date and grade is still perfectly
-    // reachable, so this is a filter and not a blanket refusal.
+    // The genuine record is still reachable: a filter, not a blanket refusal.
     expect(reachable).toContain(genuine1861.id);
   });
 
-  /* THE OTHER SIDE OF THE LINE: EVERYTHING MANUAL STILL WORKS */
+  /* Manual routes still work */
 
   it('still finds a FAKE record in the free-text coin search', () => {
-    /* The single most likely way to break the policy by accident. The
-     * exclusion lives in `buildCoinSignatures`, which only the automated
-     * matcher calls; implement it one level lower — in the inventory service,
-     * or in `searchCoins` — and the fake vanishes from the manual search too,
-     * which is the route the whole policy depends on. */
+    /* The exclusion lives in `buildCoinSignatures`, which only the automated
+         * matcher calls; moving it lower would hide fakes from manual search too. */
     const { modal, inv } = createModal();
     const { fakeRecord } = threeCentInventory(inv);
     const matching = new ImageMatchingService();
@@ -631,29 +535,20 @@ describe('tier 3 — photos the automated import will not offer', () => {
     const hits = searchCoins(inv.inventory(), 'fake', coin => matching.describeCoin(coin));
 
     expect(hits.map(c => c.id), 'a fake must stay findable by hand').toContain(fakeRecord.id);
-    // ...and it is a normal inventory row in every other respect.
     expect(inv.inventory().map(c => c.id)).toContain(fakeRecord.id);
     expect(sess(modal).imageReviews()).toHaveLength(0);
   });
 
   it('lets any file whatsoever be attached to any coin by hand', async () => {
-    /* No picture file is ever off limits to a manual attach, however
-     * irrelevant its name. So this runs the three worst cases through the
-     * by-hand path: a counterfeit, a collage, and a scan that is not a
-     * photograph of a coin at all (an article about one, say).
-     *
-     * `assignCoin` is the import screen's own by-hand path and is NOT gated
-     * on the tier, which is what makes it the right thing to assert here. The
-     * per-coin image gallery is a separate route again and never consults the
-     * matcher at all, so it cannot be affected by any of this. */
+    /* Any file can be attached by hand. `assignCoin` is the import screen's
+         * manual path and is not gated on tier. */
     const { modal, inv } = createModal();
     const { genuine1860, fakeRecord } = threeCentInventory(inv);
 
     await selectFiles(modal, [COUNTERFEIT_PHOTO, COLLAGE_PHOTO, UNRELATED_PHOTO]);
 
     for (const file of [COUNTERFEIT_PHOTO, COLLAGE_PHOTO, UNRELATED_PHOTO]) {
-      // The file was read and listed in the first place — no marker may make
-      // a file invisible or unselectable.
+      // No marker may make a file invisible or unselectable.
       expect(rowFor(modal, file), `${file} is present`).toBeTruthy();
 
       sess(modal).reassignImageMatch(file, genuine1860.id);
@@ -662,15 +557,154 @@ describe('tier 3 — photos the automated import will not offer', () => {
       expect(row.selectedCoinId, `${file} attached by hand`).toBe(genuine1860.id);
       expect(row.decision, `${file} decision`).toBe('confirmed');
       expect(row.selected, `${file} ticked`).toBe(true);
-      // Stated by the user, so confidence is 1 by definition — the matcher's
-      // opinion of the pairing does not enter into it.
+      // Chosen by the user, so confidence is 1.
       expect(row.confidence, `${file} confidence`).toBe(1);
     }
 
     expect(sess(modal).attachCount()).toBe(3);
 
-    // And a fake RECORD is just as available by hand as any other coin.
     sess(modal).reassignImageMatch(COUNTERFEIT_PHOTO, fakeRecord.id);
     expect(rowFor(modal, COUNTERFEIT_PHOTO).selectedCoinId).toBe(fakeRecord.id);
+  });
+});
+
+/*
+ * Part 4: photo sets. In tier 3 one row's "Attach anyway" and Undo cover every
+ * shot of a coin; in tier 2 an answer carries to the set's untouched members,
+ * including one (typically the slab label) that landed in tier 3.
+ */
+describe('photo sets — one decision for every shot of one coin', () => {
+  beforeEach(() => {
+    (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
+  });
+
+  const MORGAN_SET = [
+    '1881 Morgan Dollar NGC 2599001 - Obverse.jpg',
+    '1881 Morgan Dollar NGC 2599001 - Reverse.jpg',
+    '1881 Morgan Dollar NGC 2599001 - Slab Label.jpg',
+    '1881 Morgan Dollar NGC 2599001 - Obverse 2.jpg'
+  ];
+
+  function twoMorgans(inv: InventoryService) {
+    return {
+      morgan: addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'S', grade: 'MS63' }),
+      morganAlt: addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'O', grade: 'MS64' })
+    };
+  }
+
+  it('lists the four shots of one coin as ONE tier-3 row', async () => {
+    const { modal, inv } = createModal();
+    twoMorgans(inv);
+    await selectFiles(modal, MORGAN_SET);
+
+    expect(sess(modal).notImported()).toHaveLength(4);
+    const sets = sess(modal).notImportedSets();
+    expect(sets).toHaveLength(1);
+    expect(sets[0].descriptor).toBe('1881 Morgan Dollar NGC 2599001');
+    expect(sets[0].rows).toHaveLength(4);
+  });
+
+  it('attaches the whole set with one "Attach anyway", and Undo takes it all back', async () => {
+    const { modal, inv } = createModal();
+    const { morgan } = twoMorgans(inv);
+    await selectFiles(modal, MORGAN_SET);
+
+    const lead = sess(modal).notImportedSets()[0].leadFileName;
+    sess(modal).openRescue(lead);
+    sess(modal).rescueWithCandidate(lead, morgan.id);
+
+    for (const file of MORGAN_SET) {
+      expect(rowFor(modal, file).selectedCoinId, file).toBe(morgan.id);
+      expect(rowFor(modal, file).decision, file).toBe('confirmed');
+    }
+    expect(sess(modal).attachCount()).toBe(4);
+    expect(sess(modal).isRescueOpen(lead)).toBe(false);
+
+    sess(modal).resetPhotoSet(lead);
+    for (const file of MORGAN_SET) {
+      expect(rowFor(modal, file).selectedCoinId, file).toBeNull();
+      expect(rowFor(modal, file).decision, file).toBe('skipped');
+    }
+    expect(sess(modal).attachCount()).toBe(0);
+  });
+
+  it('attaches the whole set from the free-text search too', async () => {
+    const { modal, inv } = createModal();
+    const { morganAlt } = twoMorgans(inv);
+    await selectFiles(modal, MORGAN_SET);
+
+    const lead = sess(modal).notImportedSets()[0].leadFileName;
+    sess(modal).rescueWithSearch(lead, morganAlt.id);
+    expect(sess(modal).attachCount()).toBe(4);
+  });
+
+  /* Tier 2: two 1881-S/O PCGS MS63 Morgans differing only by mint mark make
+   * every side a near match; the label shot may land in either tier. */
+  const NEAR_SET = [
+    '1881 Morgan Dollar PCGS MS63 - Obverse.jpg',
+    '1881 Morgan Dollar PCGS MS63 - Reverse.jpg',
+    '1881 Morgan Dollar PCGS MS63 - Label.jpg'
+  ];
+
+  function ambiguousMorgans(inv: InventoryService) {
+    return {
+      morganS: addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'S', grade: 'MS63', certCompany: 'PCGS' }),
+      morganO: addCoin(inv, { coinType: 'Morgan', denomination: 'Dollar', year: '1881', mintMark: 'O', grade: 'MS63', certCompany: 'PCGS' })
+    };
+  }
+
+  it('carries a tier-2 Attach on one photo to the rest of its set', async () => {
+    const { modal, inv } = createModal();
+    ambiguousMorgans(inv);
+    await selectFiles(modal, NEAR_SET);
+
+    sess(modal).acceptNearMatch(NEAR_SET[0]);
+    const coinId = rowFor(modal, NEAR_SET[0]).selectedCoinId;
+    expect(coinId).toBeTruthy();
+
+    for (const file of NEAR_SET) {
+      expect(rowFor(modal, file).selectedCoinId, file).toBe(coinId);
+      expect(rowFor(modal, file).decision, file).toBe('confirmed');
+    }
+    expect(sess(modal).outstandingCount()).toBe(0);
+  });
+
+  it('carries a different coin picked from the dropdown to the rest of the set', async () => {
+    const { modal, inv } = createModal();
+    const { morganS, morganO } = ambiguousMorgans(inv);
+    await selectFiles(modal, NEAR_SET);
+
+    const suggested = rowFor(modal, NEAR_SET[0]).result.nearMatch!.suggestedCoinId;
+    const other = suggested === morganS.id ? morganO.id : morganS.id;
+    sess(modal).chooseNearCandidate(NEAR_SET[0], other);
+
+    for (const file of NEAR_SET) {
+      expect(rowFor(modal, file).selectedCoinId, file).toBe(other);
+    }
+  });
+
+  it('never overrides a set member the user already answered', async () => {
+    const { modal, inv } = createModal();
+    ambiguousMorgans(inv);
+    await selectFiles(modal, NEAR_SET);
+
+    sess(modal).skipImage(NEAR_SET[1]);
+    sess(modal).acceptNearMatch(NEAR_SET[0]);
+
+    expect(rowFor(modal, NEAR_SET[1]).decision).toBe('skipped');
+    expect(rowFor(modal, NEAR_SET[1]).selectedCoinId).toBeNull();
+  });
+
+  it('pulls a tier-3 set member (the label) in behind a tier-2 Attach', async () => {
+    const { modal, inv } = createModal();
+    ambiguousMorgans(inv);
+    // The obverse names the coin; the label must follow whatever tier it lands in.
+    const files = ['1881 Morgan Dollar PCGS MS63 - Obverse.jpg', '1881 Morgan Dollar PCGS MS63 - Slab Label.jpg'];
+    await selectFiles(modal, files);
+
+    sess(modal).acceptNearMatch(files[0]);
+    const coinId = rowFor(modal, files[0]).selectedCoinId;
+    expect(rowFor(modal, files[1]).selectedCoinId).toBe(coinId);
+    expect(sess(modal).attachCount()).toBe(2);
   });
 });

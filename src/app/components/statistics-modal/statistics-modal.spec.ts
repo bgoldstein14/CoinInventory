@@ -1,17 +1,7 @@
 /*
- * WHAT CAN AND CANNOT BE TESTED HERE
- *
- * This suite runs under Node with NO jsdom, so nothing renders. That is the
- * reason the component is a THIN RENDERER: every number it draws comes from a
- * pure module under services/statistics/, each with its own spec, and every
- * geometric coordinate from chart-geometry.ts.
- *
- * What is left for this file is the wiring, and the wiring is where the
- * honesty rules are most easily lost — it is the layer that turns a `null`
- * into text. A component that renders `melt.total` through a currency pipe
- * prints "$0.00" for an unknown no matter how carefully the module below it
- * returned null. So the tests that matter most here check that an unknown
- * reaches the screen as a dash and brings its explanation with it.
+ * Component wiring tests (Node, no jsdom). The figures are tested in the
+ * services/statistics specs; these check that unknowns reach the screen as
+ * "—" with their coverage note.
  */
 
 import 'fake-indexeddb/auto';
@@ -52,7 +42,7 @@ describe('StatisticsModal', () => {
     (globalThis as unknown as { indexedDB: IDBFactory }).indexedDB = new IDBFactory();
   });
 
-  // --- The empty collection — the state a brand-new user opens this on ---
+  // --- Empty collection ---
   describe('with an empty collection', () => {
     it('does not throw, and leads with no coins', () => {
       const { modal } = createModal([]);
@@ -75,7 +65,7 @@ describe('StatisticsModal', () => {
     });
   });
 
-  // --- Unknowns must survive the trip to the screen ---
+  // --- Unknown figures ---
   describe('an unknown figure reaches the screen as a dash, with a reason', () => {
     it('prints a dash for melt value when no spot prices are loaded', () => {
       const { modal } = createModal([
@@ -111,7 +101,7 @@ describe('StatisticsModal', () => {
     });
   });
 
-  // --- Gain and loss — never colour alone ---
+  // --- Gain and loss ---
   describe('unrealised gain and loss', () => {
     it('signs a gain and marks it as a gain', () => {
       const { modal } = createModal([statsCoin({ purchasePrice: 100, currentValue: 175 })]);
@@ -240,7 +230,7 @@ describe('StatisticsModal', () => {
     });
   });
 
-  // --- Hover and keyboard — a tooltip enhances, it never gates ---
+  // --- Hover and keyboard ---
   describe('the bar readout', () => {
     const coins = [
       statsCoin({ denomination: 'Dime', currentValue: 10 }),
@@ -353,8 +343,6 @@ describe('StatisticsModal', () => {
     });
 
     it('always states that value over time is not stored, however good the data', () => {
-      // This note is unconditional on purpose: the absence of a second line
-      // on the chart is otherwise indistinguishable from a bug.
       const { modal } = createModal(coins);
       expect(modal['valueHistoryNote']().toLowerCase()).toContain('current value');
     });

@@ -1,38 +1,17 @@
 /**
- * transactions-section.spec.ts — the deal record, and the two notes boxes.
+ * Tests for the optional Transactions section in the coin editor and for keeping its notes
+ * box distinct from the coin's own Notes. Cost and Purchase Date live inside the section,
+ * which sits above Notes. Text scan of the templates, since the suite has no DOM.
  *
- * WHAT CHANGED AND WHY THIS FILE EXISTS
- * The Transactions TABLE was dropped. A coin has one purchase and at most
- * one sale, so the money, the dates, the two counterparties and the deal's
- * note are columns on Coins and are edited here, in an optional section
- * inside the coin editor.
- *
- * That move put TWO notes boxes next to each other on one panel — the
- * coin's own Notes and the deal's — and the owner said plainly that they
- * must not read as two of the same thing. Everything below exists to keep
- * that true, plus the two placement rules that came with the same request:
- * Cost and Purchase Date belong INSIDE the section, and the section sits
- * ABOVE the Notes block.
- *
- * WHY A TEXT SCAN. Vitest runs under plain Node with no jsdom, so nothing
- * here can render the component. What it can do is pin the decisions, which
- * are all expressible in the template text.
- *
- * *** COMMENTS ARE STRIPPED BEFORE EVERY ASSERTION. *** The template's own
- * comment block explains this section at length and names most of the
- * strings asserted below; against raw file text those comments would satisfy
- * the assertions and the tests would pass with the markup deleted. The
- * stripper is `/<!--[\s\S]*?-->/g` — `[\s\S]`, not `[sS]`. That exact typo
- * silently disabled four assertions in this repo, because `[sS]` matches the
- * two LETTERS s and S and therefore never spans a newline, so only one-line
- * comments were removed.
+ * Comments are stripped before every assertion so explanatory prose cannot satisfy them.
+ * The stripper must span newlines; the [sS] typo once left multi-line comments in.
  */
 
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-/** Everything between `<!--` and `-->`, which is where the reasoning lives. */
+/** Removes HTML comments. */
 function stripHtmlComments(html: string): string {
   return html.replace(/<!--[\s\S]*?-->/g, '');
 }
@@ -55,11 +34,7 @@ const PANEL_TEMPLATE = stripHtmlComments(
   readFileSync(join(PANEL_DIR, 'coin-detail-panel.html'), 'utf8')
 );
 
-/**
- * Guard on the guard. If the stripper ever stops working — the `[sS]` typo
- * being the way that happens — every "the template contains X" assertion
- * below turns into "the file contains X", which the prose satisfies.
- */
+/** Checks the stripper itself; if it failed, assertions below could match comment prose. */
 describe('the comment stripper actually strips', () => {
   it('removes a comment that spans several lines', () => {
     const stripped = stripHtmlComments('<p>a</p><!--\n  Cost\n  Purchase Date\n-->\n<p>b</p>');
@@ -76,13 +51,12 @@ describe('the comment stripper actually strips', () => {
 describe('the transactions section holds the whole deal', () => {
   it('is gated on the existing "show transactions" preference', () => {
     expect(TEMPLATE).toContain('@if (showTransactions()) {');
-    // And the panel hands it down rather than rendering the section itself.
+    // The panel passes the flag down rather than rendering the section.
     expect(PANEL_TEMPLATE).toContain('[showTransactions]="showTransactions()"');
   });
 
   it('carries Cost, bound to the coin’s purchase price', () => {
-    // "Cost" is the owner's word for PurchasePrice. The field used to be
-    // called "Price" and sat beside Value, where the two read as rivals.
+    // "Cost" is the caption for purchasePrice.
     expect(TEMPLATE).toContain('<span>Cost</span>');
     expect(TEMPLATE).toContain('[appNumericField]="coin().purchasePrice"');
     expect(TEMPLATE).toContain("updateNumericField('purchasePrice', $event)");
@@ -94,9 +68,7 @@ describe('the transactions section holds the whole deal', () => {
   });
 
   it('carries both counterparties, one per side of the deal', () => {
-    // One "dealer" string could not describe a coin bought from one dealer
-    // and later sold to another. That was the whole argument for keeping a
-    // transactions table; two fields answer it instead.
+    // Separate purchase and sale counterparties.
     expect(TEMPLATE).toContain('<span>Purchased from</span>');
     expect(TEMPLATE).toContain("updateSelectedCoin('purchasedFrom', $event)");
     expect(TEMPLATE).toContain('<span>Sold to</span>');
@@ -109,13 +81,10 @@ describe('the transactions section holds the whole deal', () => {
   });
 
   it('no longer offers Price or a stray Purchase date row outside it', () => {
-    // Exactly one of each. A second copy would be a second control writing
-    // the same column, and the two would disagree the moment one was edited.
+    // Exactly one control per column.
     expect(TEMPLATE).not.toContain('<span>Price</span>');
     expect(TEMPLATE).not.toContain('<span>Purchase date</span>');
-    // One control each. Counted on the WRITE, which is what a duplicate
-    // control would also have to carry: the Cost box legitimately names
-    // `purchasePrice` twice (once to read it, once to write it).
+    // Counted on the write binding: the Cost box names purchasePrice twice (read and write).
     expect(TEMPLATE.match(/updateNumericField\('purchasePrice'/g) ?? []).toHaveLength(1);
     expect(TEMPLATE.match(/coin\(\)\.purchasePrice/g) ?? []).toHaveLength(1);
     expect(TEMPLATE.match(/'purchaseDate'/g) ?? []).toHaveLength(1);
@@ -125,8 +94,7 @@ describe('the transactions section holds the whole deal', () => {
     expect(TEMPLATE).toContain('<span>Value</span>');
     expect(TEMPLATE).toContain('<span>Melt</span>');
     expect(TEMPLATE).toContain('detail-editor__row--pricing');
-    // Both still OUTSIDE the optional section: they describe the coin, not a
-    // deal, and must not vanish when the preference is off.
+    // Value and Melt stay outside the optional section.
     const sectionStart = TEMPLATE.indexOf('@if (showTransactions()) {');
     expect(TEMPLATE.indexOf('<span>Value</span>')).toBeLessThan(sectionStart);
     expect(TEMPLATE.indexOf('<span>Melt</span>')).toBeLessThan(sectionStart);
@@ -143,8 +111,7 @@ describe('the transactions section sits ABOVE the notes block', () => {
   });
 
   it('puts the deal’s notes box before the coin’s notes box', () => {
-    // The ordering that actually matters: read top to bottom the panel goes
-    // the coin -> the deal -> what you want to remember about the coin.
+    // Order: coin fields, then the transaction, then the coin's notes.
     expect(TEMPLATE.indexOf("'transactionNotes'")).toBeLessThan(
       TEMPLATE.indexOf("updateSelectedCoin('notes', $event)")
     );
@@ -175,7 +142,7 @@ describe('the two notes boxes cannot be read as the same field', () => {
   });
 
   it('makes the transaction notes box the LARGER of the two', () => {
-    // Asked for explicitly: the deal's note is the one that gets paragraphs.
+    // The transaction notes box is the taller one.
     const dealHeight = STYLES.match(
       /\.detail-transaction-notes textarea \{[\s\S]*?min-height:\s*(\d+)px/
     );
@@ -186,8 +153,7 @@ describe('the two notes boxes cannot be read as the same field', () => {
   });
 
   it('puts only one of them inside a titled card', () => {
-    // The fourth cue: the deal's note is inside a bordered, tinted section
-    // with its own heading; the coin's note is on the plain panel.
+    // The transaction notes sit inside a tinted, titled section.
     expect(TEMPLATE).toContain('<h3 id="coin-transaction-heading">Transactions</h3>');
     expect(STYLES).toContain('.detail-transactions {');
   });
@@ -202,16 +168,14 @@ describe('what the detail panel no longer renders', () => {
   });
 
   it('has no Original image files section', () => {
-    // Removed at the owner's request. The DATA is untouched — CoinImages
-    // .SourcePath is still written and still served by GET /api/images/file
-    // — so this is about the panel and nothing else.
+    // Removed from the panel only; the source path data is still stored and served.
     expect(PANEL_TEMPLATE).not.toContain('detail-image-paths');
     expect(PANEL_TEMPLATE).not.toContain('app-coin-image-path-link');
     expect(PANEL_TEMPLATE).not.toContain('Original image files');
   });
 
   it('still opens, closes and deletes', () => {
-    // The frame is all that is left; losing any of it would strand the user.
+    // The remaining frame must stay intact.
     expect(PANEL_TEMPLATE).toContain('closeRequested.emit()');
     expect(PANEL_TEMPLATE).toContain('deleteRequested.emit()');
     expect(PANEL_TEMPLATE).toContain('images().toggleImageGallery()');

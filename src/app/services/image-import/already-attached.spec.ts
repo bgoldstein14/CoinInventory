@@ -1,18 +1,7 @@
  /*
- * already-attached.spec.ts
- *
- * THE BUG THIS EXISTS TO PREVENT
- *
- * Adding a few coin images to a folder that has already been imported makes
- * the program try to import every image in it again, even though most of the
- * coins already have images attached.
- *
- * Re-importing a folder where 290 of 300 photos were already attached read,
- * decoded and re-saved all 300. These are the rules that cut that to 10.
- *
- * The thing being tested is deliberately a pure function over plain data: the
- * index is built from what POST /api/coins/image-source-paths returns, so it
- * can be exercised here without an HTTP mock, a browser or a canvas.
+ * Re-importing a folder must skip photos already attached to the coin. The
+ * index is built from POST /api/coins/image-source-paths data, so no HTTP or
+ * DOM is needed.
   */
 
 import { describe, expect, it } from 'vitest';
@@ -38,9 +27,7 @@ describe('buildAttachedPathIndex', () => {
   });
 
   it('drops null and blank paths instead of indexing them', () => {
-    // Every image imported before the SourcePath column existed has no path.
-    // Indexing those as an empty string would make every path-less candidate
-    // look "already attached" and silently skip real photos.
+    // Indexing "" would make every path-less candidate look already attached.
     const index = buildAttachedPathIndex({
       morgan: ['', '   ', 'D:\\pics\\a.jpg']
     });
@@ -56,9 +43,7 @@ describe('buildAttachedPathIndex', () => {
 
 describe('chunkCoinIds', () => {
   it('keeps a request under the server s cap', () => {
-    // The server rejects more than MAX_COIN_IDS_PER_REQUEST with a 400, and
-    // because this lookup fails open a 400 means "import everything again" —
-    // the original bug, triggered by exactly the largest imports.
+    // Over the cap the server returns 400, and the lookup fails open.
     const ids = Array.from({ length: MAX_COINS_PER_SOURCE_PATH_REQUEST + 1 }, (_, i) => `c${i}`);
     const chunks = chunkCoinIds(ids);
 
@@ -116,35 +101,27 @@ describe('isAlreadyAttached', () => {
   });
 
   it('does not match the same filename under a different folder', () => {
-    // The library has an "Obverse" shot in nearly every subfolder, so a
-    // filename-only comparison would skip hundreds of genuinely new photos.
     expect(
       isAlreadyAttached(index, 'morgan', 'D:\\Coin Pictures\\Proofs\\1881-S Morgan - Obverse.jpg')
     ).toBe(false);
   });
 
   it('does not match a path belonging to a DIFFERENT coin', () => {
-    // The question is "already on THIS coin", not "already in the database".
-    // The same photo legitimately attaches to two coins.
+    // The same photo may legitimately attach to two coins.
     expect(
       isAlreadyAttached(index, 'peace', 'D:\\Coin Pictures\\Business Strikes\\1881-S Morgan - Obverse.jpg')
     ).toBe(false);
   });
 
   it('never matches when the candidate has no path at all', () => {
-    // An import with no base folder records sourcePath: null for everything.
-    // That is a legitimate, long-standing mode, and "unknown" must mean
-    // "attach it", not "we have seen it before".
+    // Imports without a base folder record a null path; unknown means attach.
     expect(isAlreadyAttached(index, 'morgan', null)).toBe(false);
     expect(isAlreadyAttached(index, 'morgan', '')).toBe(false);
     expect(isAlreadyAttached(index, 'morgan', '   ')).toBe(false);
   });
 
   it('answers false for a coin the index knows nothing about', () => {
-    // FAILING OPEN IS THE RULE HERE. If the bulk lookup could not run, the
-    // index is empty and every photo is attached — exactly the behaviour the
-    // import had before this feature. Skipping photos on no evidence would be
-    // data loss dressed up as a convenience.
+    // Fails open: if the lookup couldn't run, every photo is attached.
     expect(isAlreadyAttached(index, 'unknown-coin', 'D:\\pics\\a.jpg')).toBe(false);
     expect(isAlreadyAttached(new Map(), 'morgan', 'D:\\pics\\a.jpg')).toBe(false);
   });

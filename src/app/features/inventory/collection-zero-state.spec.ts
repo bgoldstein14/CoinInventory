@@ -1,16 +1,5 @@
 /*
- * THE RULE THESE TESTS ENFORCE
- *
- *   "No coins yet. Add one manually or import from a QIF/CSV file." may be
- *   said in EXACTLY ONE situation: the coin list has arrived AND it was
- *   empty. In every other situation the app does not know the collection is
- *   empty, so it does not get to say so — telling a user with a full
- *   collection they have none, and inviting them to import, duplicates
- *   everything they own.
- *
- * Same rule as `computeMeltValue` returning null rather than $0.00 — a
- * visible blank beats a silently wrong answer — extended from numbers to
- * status.
+ * "No coins yet" may only be shown once the coin list has arrived and is empty.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -32,8 +21,7 @@ describe('collectionZeroState — while the collection is still loading', () => 
   });
 
   it('DOES NOT invite an import — the harmful half of the original bug', () => {
-    // A user who acts on that invitation while the coins are in flight ends
-    // up importing them a second time.
+    // Importing while coins are in flight would duplicate them.
     const state = collectionZeroState(LOADING, 0, 0);
     const spoken = `${state.message} ${state.hint ?? ''}`;
 
@@ -43,9 +31,7 @@ describe('collectionZeroState — while the collection is still loading', () => 
   });
 
   it('is still loading even when the app has not started connecting yet', () => {
-    // There is a moment between the App being constructed and hydrate()
-    // setting `connecting`. "We have not got your coins" is true throughout
-    // it; "you have no coins" is not.
+    // The moment between App construction and hydrate() starting.
     expect(collectionZeroState({ loaded: false, failed: false }, 0, 0).kind).toBe('loading');
   });
 });
@@ -60,9 +46,7 @@ describe('collectionZeroState — when loading failed', () => {
   });
 
   it('points at the banner rather than repeating the error', () => {
-    // The banner at the top of the window carries the real message and the
-    // Retry button; two different wordings of the same failure on one screen
-    // is how a user ends up unsure whether it is one problem or two.
+    // The banner carries the real message and the Retry button.
     expect(collectionZeroState(FAILED, 0, 0).hint).toMatch(/top of the window/i);
   });
 });
@@ -86,8 +70,6 @@ describe('collectionZeroState — when filters hid everything', () => {
   });
 
   it('is chosen on the coin COUNT, not on the filter settings', () => {
-    // The grid does not have to tell this module anything about filters:
-    // "there are coins, none of them are showing" is the whole definition.
     expect(collectionZeroState(LOADED, 1, 0).kind).toBe('filtered');
   });
 });
@@ -101,20 +83,12 @@ describe('collectionZeroState — when there is nothing to say', () => {
   });
 
   it('says nothing even mid-load, if rows from a previous load are showing', () => {
-    // A retry after a successful load: the old rows stay on screen and the
-    // grid must not grow a "Loading…" row underneath them.
+    // A retry after a successful load keeps the old rows on screen.
     expect(collectionZeroState(LOADING, 105, 105).kind).toBe('none');
   });
 });
 
-/*
- * The aggregate screens — Statistics and the Reports summary — have no
- * "filtered to nothing" case; they have a worse one. Computed over an empty
- * array, their hero figure reads "$0.00" and the Reports summary says the
- * collection holds 0 coins. That is the same lie as "No coins yet", told in
- * numbers — and on the Reports screen it sits one button from a document
- * that could go to an insurer.
- */
+/* Statistics and Reports would show $0.00 totals before the coins arrive. */
 describe('collectionNotReadyNotice', () => {
   it('suppresses the figures while the collection is still loading', () => {
     expect(collectionNotReadyNotice(LOADING)).toBe('Loading your collection…');
@@ -129,8 +103,7 @@ describe('collectionNotReadyNotice', () => {
   });
 
   it('gets out of the way once the coins are in hand', () => {
-    // Including a genuinely empty collection: $0.00 across an empty
-    // collection is a true statement, and the screens may make it.
+    // Including a genuinely empty collection, where $0.00 is true.
     expect(collectionNotReadyNotice(LOADED)).toBeNull();
   });
 });

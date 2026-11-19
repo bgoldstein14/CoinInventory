@@ -1,65 +1,25 @@
  /*
  * base-folder-check.ts — refuse an import whose paths resolve to nothing.
  *
- * THE BUG THIS EXISTS TO PREVENT
+ * A directory picker only supplies paths relative to the chosen folder; the
+ * absolute prefix comes from the base-folder text box (see source-path.ts).
+ * If that box holds the wrong root, every stored path is dead. Before writing,
+ * a sample of the paths is checked via POST /api/images/exists.
  *
- * An import can stamp every row with a path under a folder the user never
- * picked -- inventing directories that do not exist.
+ * Rules:
+ *   1. Only a total failure blocks. The files were just picked, so a wrong
+ *      root fails every path; a few failures are individual and don't block.
+ *   2. Fails open: if the check can't run, the import proceeds.
+ *   3. No base folder is not an error; paths are simply not recorded.
  *
- * Nothing is made up. A browser never tells JavaScript where a file really
- * lives (the long version is in source-path.ts); a directory picker supplies
- * only `webkitRelativePath`, the path RELATIVE to the chosen folder. The
- * absolute prefix therefore comes from exactly one place -- the base-folder
- * text box -- so if that box is left holding the wrong root, the real
- * subfolder names are glued onto it and all of it resolves to nothing.
- *
- * WHY THE EXISTING DEFENCE WAS NOT ENOUGH
- *
- * The import screen already renders a live example of the path about to be
- * stored (`BaseFolderState.preview`), built from the first selected file. That
- * is a good idea and it stays. But it is ADVISORY:
- *
- *     A path valid on the wrong machine is the single most expensive mistake
- *     that screen can make, because it does not fail loudly -- it stamps
- *     every imported row with a location that resolves to nothing.
- *
- * A hint the user is under no obligation to read is not a defence against a
- * silent 1,700-row mistake.
- * silent 1,700-row mistake. So the paths that WOULD be written are now checked
- * against the disk first, through the same `POST /api/images/exists` endpoint
- * the inventory grid already uses to cross out missing files, and an import
- * that would record nothing but dead paths is refused.
- *
- * THE THREE RULES THAT KEEP THIS FROM BECOMING ITS OWN BUG
- *
- * 1. ONLY A TOTAL FAILURE BLOCKS. The user picked these files moments ago, so
- *    they exist. If the root is wrong, EVERY path fails. A few failures mean
- *    something individual happened and is not grounds to refuse the rest.
- *
- * 2. IT FAILS OPEN. If the check itself cannot run, the import proceeds. This
- *    is a safety net, not a dependency: blocking a legitimate import because a
- *    diagnostic endpoint hiccupped would leave the user with no way forward at
- *    all, which is worse than the bug being prevented.
- *
- * 3. AN ABSENT BASE FOLDER IS NOT AN ERROR. Importing without recording paths
- *    is a legitimate, long-standing choice — `sourcePathForFile` returns null
- *    and the screen shows its own warning. That path must stay open.
- *
- * Plain functions with an injected probe rather than an ApiService dependency,
- * for the same reason `import-base-folder.ts` takes an `AppFolderProvider`:
- * this stays unit-testable under Node with no DOM and no HTTP mock.
+ * The probe is injected so this stays testable without HTTP or a DOM.
   */
 
 import { sourcePathForFile } from './source-path';
 
 /**
- * How many of the selected files are checked.
- *
- * One request, capped well under the endpoint's own 500-path limit. Five is
- * enough because of rule 1 above: the failure this detects is all-or-nothing,
- * so a handful of samples distinguishes it as reliably as a thousand would,
- * and the check has to be cheap enough to run on every import without anyone
- * noticing it.
+ * How many of the selected files are checked. The failure is all-or-nothing
+ * (rule 1), so a few samples are enough.
  */
 export const MAX_SAMPLED_PATHS = 5;
 
@@ -79,22 +39,13 @@ export interface BaseFolderVerdict {
   checked: string[];
 }
 
-/**
- * How existence is established. Resolves to a `path -> boolean` map, exactly
- * the shape `POST /api/images/exists` returns.
- */
+/** Resolves to a `path -> boolean` map, as `POST /api/images/exists` returns. */
 export type PathExistenceProbe = (paths: string[]) => Promise<Record<string, boolean>>;
 
 /**
- * The absolute paths that WOULD be stored for a sample of the selection.
- *
- * WHY THE SAMPLE IS SPREAD AND NOT THE FIRST N
- * A selection arrives in directory order, so the first five files are usually
- * all in the same subfolder. Checking those would verify one corner of the
- * tree and pronounce the whole import sound. Spreading across the selection
- * touches the start, the end and the middle for the same cost.
- *
- * De-duplicated AFTER building, so repeated paths cannot eat the cap.
+ * The absolute paths that would be stored for a sample of the selection.
+ * Spread across the selection, since the first few files are usually in one
+ * subfolder. De-duplicated.
  */
 export function samplePathsToVerify(baseFolder: string, files: readonly File[]): string[] {
   if (!baseFolder || baseFolder.trim().length === 0) return [];
@@ -120,11 +71,8 @@ export function samplePathsToVerify(baseFolder: string, files: readonly File[]):
 }
 
 /**
- * Decide whether this import may write paths.
- *
- * Returns `ok: false` in exactly one circumstance — paths were checked and
- * every single one came back explicitly unreadable. Everything else, including
- * every kind of failure of the check itself, returns `ok: true`.
+ * Decide whether this import may write paths. `ok: false` only when every
+ * checked path came back explicitly unreadable.
  */
 export async function verifyBaseFolder(
   baseFolder: string,
@@ -144,13 +92,11 @@ export async function verifyBaseFolder(
   try {
     results = await probe(checked);
   } catch {
-    // Rule 2. Deliberately swallowed — see the header.
+    // Rule 2: fail open.
     return { ok: true, reason: 'check-failed', checked };
   }
 
-  // A path ABSENT from the response is unknown, not missing. The endpoint keys
-  // its answer by path and drops anything it could not use, so reading a
-  // missing key as `false` would refuse a perfectly good import.
+  // A path absent from the response is unknown, not missing.
   const anyReadable = checked.some(path => results[path] !== false);
 
   return anyReadable
@@ -159,12 +105,8 @@ export async function verifyBaseFolder(
 }
 
 /**
- * The message to show the user, or null when there is nothing to say.
- *
- * It names a REAL path rather than describing the problem abstractly. Being
- * told "the folder may be wrong" invites the user to decide it probably is not;
- * being shown `C:\dev\coin-inventory\Half Dollars\1875 20c - Obverse.jpg` when
- * the photos are on `D:` makes the mistake self-evident at a glance.
+ * The message to show the user, or null. Names a real failing path so the
+ * mistake is obvious.
  */
 export function verdictMessage(verdict: BaseFolderVerdict): string | null {
   if (verdict.ok) return null;

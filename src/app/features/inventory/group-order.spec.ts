@@ -1,14 +1,5 @@
-/*
- * Putting the group headings in the owner's order.
- *
- * Everything under test here is pure, which is the point: the suite runs
- * under Node with no jsdom, so a rule that lived inside a drag handler could
- * not be tested at all — and a drag handler is the one part of this app a
- * test can never reach.
- *
- * The four decisions the feature turns on each have their own describe block
- * below, in the order they are argued at the top of group-order.ts.
- */
+// User-defined group heading order. The DECISION blocks follow the rules
+// listed at the top of group-order.ts.
 import { describe, expect, it, vi } from 'vitest';
 import {
   GroupOrders,
@@ -73,8 +64,6 @@ describe('a dragged order overrides the alphabet', () => {
   });
 
   it('drops a group below the one it was dragged onto when it is dragged DOWN', () => {
-    // Dragging France onto Mexico means "France goes where Mexico is", which
-    // in a downward drag is after it, not one slot short of the pointer.
     const list = groups('France', 'Germany', 'Mexico');
     const move = moveGroupToTarget(list, undefined, 'France', 'Mexico');
 
@@ -132,10 +121,7 @@ describe('DECISION 2 — groups a filter hides, and groups that turn up later', 
   });
 
   it('does NOT evict a hidden group when a move is made while it is hidden', () => {
-    /* THE BUG THIS EXISTS TO PREVENT. Search for "m", drag Mexico above
-     * France, clear the search: a move computed against only the visible
-     * headings would have rewritten the saved order as those two names and
-     * thrown Peru's placement away. */
+    // Peru is hidden by a filter; the move must keep its saved slot.
     const saved = ['Mexico', 'Peru', 'France'];
     const visible = groups('France', 'Mexico');
     const move = moveGroupToTarget(visible, saved, 'France', 'Mexico');
@@ -146,8 +132,7 @@ describe('DECISION 2 — groups a filter hides, and groups that turn up later', 
   });
 
   it('appends a group nobody has placed AFTER the placed ones, not at the top', () => {
-    // Canada was imported this morning. A brand-new heading jumping in front
-    // of a hand-built list is the most annoying of the three options.
+    // Canada has never been placed.
     const list = groups('Canada', 'France', 'Mexico');
     expect(labelsOf(applyGroupOrder(list, ['Mexico', 'France'])))
       .toEqual(['Mexico', 'France', 'Canada']);
@@ -193,7 +178,6 @@ describe('DECISION 3 — the empty bucket stays last', () => {
   });
 
   it('stays last even when a saved order names it first', () => {
-    // The saved blob can say anything; the pin is not negotiable.
     const list = groupsWithEmptyBucket('France', 'Mexico');
     expect(labelsOf(applyGroupOrder(list, ['(No Country)', 'Mexico', 'France'])))
       .toEqual(['Mexico', 'France', '(No Country)']);
@@ -246,11 +230,7 @@ describe('the keyboard move', () => {
   });
 
   it('reaches the top in as many presses as there are places, and stops there', () => {
-    /* Pressed repeatedly, as a user does. Each press is computed against
-     * what is ON SCREEN at the time — the store re-derives `coinGroups()`
-     * after every move — so the list is re-ordered between presses here too;
-     * computing a second press against the pre-move list is a bug this loop
-     * exists to catch. */
+    // Each press is computed against the re-ordered list, as the store does.
     const list = groups('Austria', 'France', 'Mexico');
     let order: readonly string[] | undefined = undefined;
     let presses = 0;
@@ -346,18 +326,13 @@ describe('remembering an order, and surviving what was remembered', () => {
   });
 
   it('drops an order for a column that can no longer be grouped by', () => {
-    // `source` was removed from the grid; `currentValue` is numeric and never
-    // was groupable. Neither order can ever be applied again.
+    // `source` is not a grid column; `currentValue` is numeric.
     expect(restoreGroupOrders({ orders: { source: ['eBay'], currentValue: ['10'] } }))
       .toEqual({});
     expect(serializeGroupOrders({ source: ['eBay'] })).toEqual({});
   });
 
   it('KEEPS a heading that no longer names any group — and that must not throw or empty the grid', () => {
-    /* The rule inventory-filter-persistence.ts set: stale state degrades.
-     * There is no way to tell "this country was deleted" from "a filter is
-     * hiding it" at restore time, and the cost of being wrong is an
-     * arrangement thrown away, so the name is kept and simply skipped. */
     const restored = restoreGroupOrders({ orders: { country: ['Atlantis', 'Mexico'] } });
     expect(restored['country']).toEqual(['Atlantis', 'Mexico']);
 

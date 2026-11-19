@@ -1,51 +1,20 @@
 /*
  * image-storage-settings.ts — the two photo settings, and what they mean.
  *
- * ================= 1. THE STORAGE MODE =================
+ * Storage mode:
+ *   'stored'     (default) a downscaled copy is kept in the database, with the
+ *                original's location recorded alongside.
+ *   'referenced' only the location is kept; views read the file from disk via
+ *                `GET /api/images/file?path=…`.
+ * The stored copy is what survives the original being moved or deleted; a
+ * referenced photo becomes a dead path. Changing the mode affects only future
+ * imports; existing photos are not converted.
  *
- * 'stored'     the picture is downscaled and kept in the database, with the
- *              original's location recorded alongside it. THE DEFAULT, and
- *              what the app has always done.
- * 'referenced' only the location is kept. The database does not carry the
- *              picture; every view of that photo reads the file off disk
- *              through `GET /api/images/file?path=…`.
+ * Maximum size: `maxStoredImageBytes` limits the stored copy, not the user's
+ * file (see encode-budget.ts). It has no effect in 'referenced' mode.
  *
- * *** THIS IS A DATA DECISION, NOT A PERFORMANCE TOGGLE. ***
- * The downscaled copy is not a cache. Design §4.4 keeps originals as
- * references, so for a STORED photo the copy in the database is the only
- * thing that survives the user moving, renaming or deleting the original —
- * and §4.9 records that as the reason the copies are kept in the database at
- * all. A REFERENCED photo has no such safety net: move the folder and the
- * app has nothing but a dead path. That is the trade the user is being
- * offered (and it is the trade the Settings screen spells out), the payment
- * for it being a database that stays small and an import that does not read
- * a single byte.
- *
- * WHAT CHANGING THE MODE DOES TO PHOTOS ALREADY IMPORTED: NOTHING.
- * It applies to photos imported from now on. Pictures already in the
- * database stay there, referenced photos stay referenced, and nothing is
- * deleted, converted or re-read. Anything else would be destructive on a
- * radio button — switching to 'referenced' would have to throw away pictures
- * whose originals may no longer exist, and switching to 'stored' would have
- * to re-read gigabytes off the share without progress or cancellation.
- * Converting what already exists is the §4.9a backfill, a separate job that
- * is deliberately NOT built here.
- *
- * ================= 2. THE MAXIMUM SIZE =================
- *
- * `maxStoredImageBytes` is the size of the COPY THIS APP STORES, not of the
- * user's file. See encode-budget.ts for why it is enforced by re-encoding
- * rather than by rejecting anything, and why the default never bites.
- *
- * It has no effect at all in 'referenced' mode, because nothing is stored.
- *
- * ================= WHERE THESE LIVE =================
- *
- * In the existing `StorageKeys.AppSettings` object, NOT in a key of their
- * own: that object is already persisted and already shared by the Settings
- * modal and the import's base folder. Every writer therefore has to
- * READ-MODIFY-WRITE, exactly as import-base-folder.ts does — building a
- * fresh object here would silently delete the other writers' values.
+ * Both live in the shared `StorageKeys.AppSettings` object, so writers must
+ * read-modify-write to preserve other preferences.
  */
 
 import { AppSettings, ImageStorageMode } from '../../features/app-settings';
@@ -53,35 +22,25 @@ import { StorageService, StorageKeys } from '../storage.service';
 
 export type { ImageStorageMode };
 
-/** What the app has always done: keep a downscaled copy in the database. */
+/** Default: keep a downscaled copy in the database. */
 export const DEFAULT_IMAGE_STORAGE_MODE: ImageStorageMode = 'stored';
 
 /**
- * The default size budget: 1 MB per stored photo.
- *
- * WHY THIS NUMBER IS "TODAY'S BEHAVIOUR" RATHER THAN 250 KB.
- * The existing pipeline is capped in PIXELS, not bytes: 1600 px on the long
- * edge at quality 0.85, which *averages* about 250 KB. Average is not
- * maximum — a detailed 1600 px JPEG at that quality tops out around 1 MB —
- * so a 250 KB default would quietly re-compress a good share of every
- * import and would NOT be today's behaviour. 1 MB sits just above the
- * ceiling of what the existing encoder can produce, so at the default every
- * photo is stored exactly as it is stored today, and the setting only ever
- * does something when the user deliberately lowers it.
+ * The default size budget: 1 MB per stored photo. A 1600 px / q0.85 JPEG
+ * averages ~250 KB but tops out around 1 MB, so at this default the budget
+ * never forces re-compression; it only applies when the user lowers it.
  */
 export const DEFAULT_MAX_STORED_IMAGE_BYTES = 1024 * 1024;
 
 /**
- * The cap the owner asked for: 10 MB. Not negotiable in the UI and enforced
- * here as well, because the number arrives from a text box and from a
- * settings object written by an older build.
+ * Upper limit: 10 MB. Enforced here too, since the value can come from a text
+ * box or an older settings object.
  */
 export const MAX_STORED_IMAGE_BYTES_CAP = 10 * 1024 * 1024;
 
 /**
- * The floor: 64 KB. Below this a 640 px JPEG cannot be met either, so the
- * setting would stop meaning anything and every photo would be stored over
- * budget. Refusing the value is clearer than accepting one that cannot work.
+ * Lower limit: 64 KB. Below this even the smallest ladder rung (640 px)
+ * can't fit, so every photo would be over budget.
  */
 export const MIN_STORED_IMAGE_BYTES = 64 * 1024;
 
@@ -98,23 +57,16 @@ export const DEFAULT_IMAGE_STORAGE_SETTINGS: ImageStorageSettings = {
 };
 
 /**
- * Anything that is not exactly 'referenced' is 'stored'.
- *
- * Deliberately biased: 'stored' is the mode that cannot lose a photograph,
- * so a corrupt or unrecognised saved value must land there rather than
- * quietly importing the next 300 photos as bare paths.
+ * Anything that is not exactly 'referenced' is 'stored', the mode that
+ * cannot lose a photograph.
  */
 export function normalizeImageStorageMode(value: unknown): ImageStorageMode {
   return value === 'referenced' ? 'referenced' : 'stored';
 }
 
 /**
- * Bring a saved or typed size budget into range.
- *
- * Anything unusable — a string, NaN, undefined, a value from a build that
- * did not have this setting — becomes the default rather than the floor:
- * "I cannot read this" must mean "behave as the app always has", not
- * "squeeze every photo to 64 KB".
+ * Bring a saved or typed size budget into range. Unusable values become the
+ * default, not the floor.
  */
 export function clampMaxStoredImageBytes(value: unknown): number {
   const bytes = typeof value === 'number' ? value : Number(value);
@@ -134,11 +86,8 @@ export function imageStorageSettingsFrom(settings: AppSettings | null | undefine
 }
 
 /**
- * Read both settings.
- *
- * Best-effort like the rest of StorageService: with no storage, or a storage
- * that throws, the import runs on the defaults — which is the behaviour the
- * app had before this feature, and the safe end of both settings.
+ * Read both settings. Best-effort: with no storage, or storage that throws,
+ * the defaults are used.
  */
 export async function loadImageStorageSettings(
   storage?: StorageService
@@ -153,11 +102,8 @@ export async function loadImageStorageSettings(
 }
 
 /**
- * Persist both settings, leaving every other preference alone.
- *
- * READ-MODIFY-WRITE — see the header. The spread must come first so the two
- * values here win while the base folder and the transactions preference
- * survive.
+ * Persist both settings, leaving every other preference alone
+ * (read-modify-write; the spread comes first so these values win).
  */
 export async function saveImageStorageSettings(
   storage: StorageService,
